@@ -1,0 +1,211 @@
+site_name: GPU Sandbox on AWS
+site_description: On-policy RL post-training with GPU reward sandboxes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU) on Amazon EKS and SageMaker HyperPod
+site_url: https://daekeun-ml.github.io/gpu-sandbox-on-aws/
+repo_url: https://github.com/daekeun-ml/gpu-sandbox-on-aws
+repo_name: daekeun-ml/gpu-sandbox-on-aws
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  language: ko
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+  features:
+    # navigation.instant is left out: it breaks the i18n plugin's contextual language switch.
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+    - navigation.sections
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+    - search.suggest
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: ko
+          default: true
+          name: 한국어
+          build: true
+        - locale: en
+          name: English
+          build: true
+          nav_translations:
+            홈: Home
+            "초심자 가이드": "Beginner guide"
+            시작하기 전에: Before you begin
+            01 AI가 만든 코드를 격리하는 이유: 01 Why AI-generated code needs isolation
+            02 컨테이너와 샌드박스: 02 Containers and sandboxes
+            03 GPU까지 격리하려면: 03 Isolating the GPU too
+            04 강화학습과 샌드박스: 04 Reinforcement learning and sandboxes
+            05 직접 해 보기: 05 Try it yourself
+            06 multi-turn 에이전트와 Agent Sandbox: 06 Multi-turn agents and Agent Sandbox
+            학습 코스 고르기: Choose a learning path
+            시작하기: Getting started
+            개념: Concepts
+            01 GPU 샌드박스가 필요한 경우: 01 When the sandbox needs a GPU
+            02 격리 런타임 비교: 02 Isolation runtimes
+            03 On-policy RL과 샌드박스: 03 On-policy RL with sandboxes
+            04 플랫폼과 인스턴스 선택: 04 Platforms and instances
+            05 상황별 선택 가이드: 05 Decision guide
+            06 Agent Sandbox로 확장: 06 Extending with Agent Sandbox
+            "핸즈온 (Getting Started)": "Hands-on (Getting started)"
+            00 전체 흐름: 00 Overview
+            01 클러스터와 이미지: 01 Cluster and images
+            02 gVisor GPU 샌드박스: 02 gVisor GPU sandboxes
+            03 Kata 샌드박스 (CLH, QEMU): 03 Kata sandboxes (CLH, QEMU)
+            04 샌드박스 풀 배포와 검증: 04 Deploy and verify sandbox pools
+            05 On-policy GRPO 학습: 05 On-policy GRPO training
+            06 학습 중 샌드박스 업데이트: 06 Updating the sandbox during training
+            07 HyperPod 시나리오: 07 HyperPod scenario
+            08 런타임 벤치마크: 08 Runtime benchmark
+            09 데모 사이트 (CloudFront): 09 Demo site (CloudFront)
+            10 c8i 단독 저비용 경로: 10 CPU-only path on c8i
+            11 multi-turn 에피소드 실습: 11 Multi-turn episodes
+            99 정리: 99 Cleanup
+            Production Ready: Production ready
+            00 아키텍처: 00 Architecture
+            01 용량과 노드 관리: 01 Capacity and nodes
+            02 보안: 02 Security
+            03 Gateway와 샌드박스 풀: 03 Gateway and pools
+            04 Reward 무결성: 04 Reward integrity
+            05 샌드박스 버전 관리: 05 Sandbox versioning
+            06 veRL로 확장: 06 Scaling with veRL
+            07 Observability와 운영: 07 Observability and operations
+            08 비용: 08 Cost
+            09 CDK로 프로비저닝: 09 Provisioning with CDK
+            참고: Reference
+            용어 사전: Glossary
+            저장소 구조: Repository map
+            설정 값: Configuration
+            문제 해결: Troubleshooting
+            자주 하는 오해: Misconceptions
+            검증된 사실과 출처: Verified facts and sources
+            참고 자료 모음: All references
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  # Bare URLs in the reference tables become clickable links.
+  - pymdownx.magiclink
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - 홈: index.md
+  - "초심자 가이드":
+      - 시작하기 전에: beginner/index.md
+      - 01 AI가 만든 코드를 격리하는 이유: beginner/01_why_sandbox.md
+      - 02 컨테이너와 샌드박스: beginner/02_container_vs_sandbox.md
+      - 03 GPU까지 격리하려면: beginner/03_gpu_sandbox.md
+      - 04 강화학습과 샌드박스: beginner/04_rl_and_sandbox.md
+      - 05 직접 해 보기: beginner/05_hands_on.md
+      - 06 multi-turn 에이전트와 Agent Sandbox: beginner/06_multi_turn_agent.md
+  - 학습 코스 고르기: learning_paths.md
+  - 시작하기: getting_started.md
+  - 개념:
+      - 01 GPU 샌드박스가 필요한 경우: concepts/01_why_gpu_sandbox.md
+      - 02 격리 런타임 비교: concepts/02_isolation_runtimes.md
+      - 03 On-policy RL과 샌드박스: concepts/03_onpolicy_rl_with_sandboxes.md
+      - 04 플랫폼과 인스턴스 선택: concepts/04_platforms_and_instances.md
+      - 05 상황별 선택 가이드: concepts/05_decision_guide.md
+      - 06 Agent Sandbox로 확장: concepts/06_agent_sandbox.md
+  - "핸즈온 (Getting Started)":
+      - 00 전체 흐름: handson/00_overview.md
+      - 01 클러스터와 이미지: handson/01_cluster_and_images.md
+      - 02 gVisor GPU 샌드박스: handson/02_gvisor.md
+      - 03 Kata 샌드박스 (CLH, QEMU): handson/03_kata.md
+      - 04 샌드박스 풀 배포와 검증: handson/04_sandbox_pools.md
+      - 05 On-policy GRPO 학습: handson/05_grpo_training.md
+      - 06 학습 중 샌드박스 업데이트: handson/06_sandbox_update.md
+      - 07 HyperPod 시나리오: handson/07_hyperpod.md
+      - 08 런타임 벤치마크: handson/08_benchmark.md
+      - 09 데모 사이트 (CloudFront): handson/09_demo_site.md
+      - 10 c8i 단독 저비용 경로: handson/10_cpu_only.md
+      - 11 multi-turn 에피소드 실습: handson/11_multi_turn.md
+      - 99 정리: handson/99_cleanup.md
+  - Production Ready:
+      - 00 아키텍처: production/00_architecture.md
+      - 01 용량과 노드 관리: production/01_capacity_and_nodes.md
+      - 02 보안: production/02_security.md
+      - 03 Gateway와 샌드박스 풀: production/03_gateway_and_pools.md
+      - 04 Reward 무결성: production/04_reward_integrity.md
+      - 05 샌드박스 버전 관리: production/05_sandbox_updates.md
+      - 06 veRL로 확장: production/06_scaling_with_verl.md
+      - 07 Observability와 운영: production/07_observability_and_operations.md
+      - 08 비용: production/08_cost.md
+      - 09 CDK로 프로비저닝: production/09_cdk.md
+  - 참고:
+      - 용어 사전: reference/glossary.md
+      - 저장소 구조: reference/repository_map.md
+      - 설정 값: reference/configuration.md
+      - 문제 해결: reference/troubleshooting.md
+      - 자주 하는 오해: reference/faq.md
+      - 검증된 사실과 출처: reference/sources.md
+      - 참고 자료 모음: reference/references.md
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/daekeun-kim
+      name: LinkedIn
+    - icon: fontawesome/brands/github
+      link: https://github.com/daekeun-ml
+      name: GitHub
+    - icon: simple/huggingface
+      link: https://huggingface.co/daekeun-ml
+      name: Hugging Face
+
+strict: true
+
+validation:
+  anchors: warn
+  unrecognized_links: warn

@@ -1,0 +1,33 @@
+# NVIDIA k8s-device-plugin v0.20.1 for container-mode GPU nodes (trainer and gVisor).
+#   helm repo add nvdp https://nvidia.github.io/k8s-device-plugin
+#   helm install nvdp nvdp/nvidia-device-plugin --version 0.20.1 -n kube-system \
+#     -f infra/gpu/nvidia-device-plugin-values.yaml
+#
+# CDI (cdi-cri) is the injection path gVisor documents: the plugin hands containerd CDI device
+# names, containerd edits the OCI spec, and runsc sees /dev/nvidia* and enables nvproxy.
+# runc pods (the trainer) work the same way. The EKS AL2023 NVIDIA AMI ships the driver and
+# nvidia-container-toolkit but no device plugin (as of AMI v20261107).
+#
+# After install, scripts/04_install_gpu_stack.sh sets
+# CDI_DISABLE_HOOKS=disable-device-node-modification on the DaemonSet: the chart has no value for
+# the plugin's --cdi-disable-hooks flag, and runsc cannot run that CDI hook (it reads
+# /proc/driver/nvidia/params before the container has a /proc).
+deviceListStrategy: cdi-cri
+nvidiaDriverRoot: /
+
+# Only nodes labeled for CDI: our EC2 GPU nodes and the B2 HyperPod sandbox instance group (its
+# KubernetesConfig sets the label and a taint that the HyperPod chart's own plugin does not
+# tolerate). Other HyperPod nodes get the plugin from the HyperPod Helm chart, and the Kata GPU
+# node uses the GPU Operator's sandbox device plugin.
+nodeSelector:
+  gpusandbox/device-plugin: cdi
+# The chart's default affinity requires NFD labels; the nodeSelector above is enough.
+affinity: {}
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+  - key: gpusandbox/role
+    operator: Exists
+    effect: NoSchedule

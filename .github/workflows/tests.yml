@@ -1,0 +1,45 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Install (CPU torch)
+        run: |
+          uv venv --python 3.14
+          uv pip install --index-url https://download.pytorch.org/whl/cpu torch numpy
+          uv pip install -e ".[dev,gateway]" shellcheck-py cfn-lint
+      - name: Unit, harness and manifest tests
+        run: uv run --no-sync python -m pytest -q
+      - name: Shell scripts
+        run: uv run --no-sync shellcheck -S warning -x scripts/*.sh scripts/kata/*.sh scripts/ops/*.sh scripts/hyperpod/*.sh scripts/extensions/*.sh infra/*/*.sh infra/kata/experimental-clh-gpu/*.sh infra/hyperpod/lifecycle/*.sh infra/hyperpod/ami/*.sh demo/*.sh cdk/*.sh
+      - name: Demo site (CloudFormation template and script syntax)
+        run: |
+          uv run --no-sync cfn-lint demo/infra/site.yaml
+          node --check demo/site/app.js
+
+  cdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Install CDK libraries
+        run: |
+          uv venv --python 3.14
+          uv pip install -r cdk/requirements.txt pytest
+      - name: Synthesize offline with cdk-nag and assert the security defaults
+        working-directory: cdk
+        run: uv run --no-sync python -m pytest -q tests

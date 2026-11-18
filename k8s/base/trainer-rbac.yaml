@@ -1,0 +1,35 @@
+# Identities that may call the sandbox API. They need no Kubernetes RBAC at all: the sandbox
+# verifies their projected tokens (audience gpu-sandbox) offline, and the pods disable the
+# default API token mount.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grpo-trainer
+  namespace: rl-trainer
+automountServiceAccountToken: false
+---
+# Used by scripts/ops/verify.sh for isolation checks and golden evaluations.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sandbox-probe
+  namespace: rl-trainer
+automountServiceAccountToken: false
+---
+# Multi-turn episode Job (scripts/extensions/agent_sandbox.sh episodes). The one account here
+# with Kubernetes RBAC: the sandbox-claims Role in k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml.
+# Only that Job's pod spec opts in to an API token; other pods using this account get none.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sandbox-episode
+  namespace: rl-trainer
+automountServiceAccountToken: false
+---
+# Sandbox pods run with this account and never get an API token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gpu-sandbox
+  namespace: sandbox
+automountServiceAccountToken: false

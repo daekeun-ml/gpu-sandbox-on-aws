@@ -1,0 +1,40 @@
+# Warm capacity for slow-to-boot sandbox nodes (pattern from the AWS China blog on EKS +
+# Kata + Cloud Hypervisor). A bare-metal node takes minutes to join and kata-deploy needs
+# more minutes to install, so a low-priority placeholder keeps one spare node running.
+# When a sandbox pod needs room, the scheduler preempts the placeholder in seconds and
+# Karpenter starts a new spare in the background.
+#
+# The placeholder asks for CPU and memory only, so it never pins a GPU; size it so that it
+# fills most of one node of the target NodePool.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kata-metal-warm-placeholder
+  namespace: sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: kata-metal-warm-placeholder}
+  template:
+    metadata:
+      labels: {app: kata-metal-warm-placeholder}
+    spec:
+      priorityClassName: gpu-sandbox-warm-placeholder
+      terminationGracePeriodSeconds: 0
+      automountServiceAccountToken: false
+      nodeSelector:
+        karpenter.sh/nodepool: sandbox-kata-gpu
+      tolerations:
+        - {key: gpusandbox/role, operator: Equal, value: sandbox-kata, effect: NoSchedule}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests: {cpu: "60", memory: 200Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}

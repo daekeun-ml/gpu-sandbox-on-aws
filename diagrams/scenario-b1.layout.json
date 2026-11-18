@@ -1,0 +1,271 @@
+{
+  "title": "Scenario B1: HyperPod trainer with gVisor GPU sandboxes on EKS nodes",
+  "groups": [
+    {
+      "id": "g_operator_access",
+      "label": "Operator access",
+      "cols": [
+        1,
+        2
+      ],
+      "lanes": [
+        1
+      ]
+    },
+    {
+      "id": "g_eks_control_plane",
+      "label": "EKS control plane",
+      "cols": [
+        3
+      ],
+      "lanes": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "g_hyperpod_trainer_ml_g6_2xlarge",
+      "label": "HyperPod trainer ml.g5.2xlarge",
+      "cols": [
+        4
+      ],
+      "lanes": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "g_sandbox_gvisor_nodes_g6_xlarge_x2",
+      "label": "sandbox-gvisor nodes g5.xlarge x2",
+      "cols": [
+        5
+      ],
+      "lanes": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "g_shared_services",
+      "label": "Shared services",
+      "cols": [
+        3
+      ],
+      "lanes": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "id": "g_egress",
+      "label": "Egress",
+      "cols": [
+        6
+      ],
+      "lanes": [
+        2
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "operator",
+      "label": "Operator workstation",
+      "icon": "client",
+      "outside": true,
+      "col": 0,
+      "lane": 1
+    },
+    {
+      "id": "ssm",
+      "label": "SSM Session Manager",
+      "icon": "systems_manager_session_manager",
+      "group": "g_operator_access",
+      "col": 1,
+      "lane": 1
+    },
+    {
+      "id": "access",
+      "label": "Access instance t4g.nano",
+      "icon": "t4g_instance",
+      "group": "g_operator_access",
+      "col": 2,
+      "lane": 1
+    },
+    {
+      "id": "eks",
+      "label": "EKS 1.36 private API",
+      "icon": "eks",
+      "group": "g_eks_control_plane",
+      "col": 3,
+      "lane": 1
+    },
+    {
+      "id": "kms",
+      "label": "KMS secrets key",
+      "icon": "key_management_service",
+      "group": "g_eks_control_plane",
+      "col": 3,
+      "lane": 0
+    },
+    {
+      "id": "trainer",
+      "label": "HyperPod GRPO trainer",
+      "icon": "sagemaker",
+      "group": "g_hyperpod_trainer_ml_g6_2xlarge",
+      "col": 4,
+      "lane": 1
+    },
+    {
+      "id": "sbx_v1",
+      "label": "gvisor pool v1",
+      "icon": "container_1",
+      "group": "g_sandbox_gvisor_nodes_g6_xlarge_x2",
+      "col": 5,
+      "lane": 1
+    },
+    {
+      "id": "sbx_v2",
+      "label": "gvisor pool v2",
+      "icon": "container_1",
+      "group": "g_sandbox_gvisor_nodes_g6_xlarge_x2",
+      "col": 5,
+      "lane": 0
+    },
+    {
+      "id": "ecr",
+      "label": "ECR repositories",
+      "icon": "ecr",
+      "group": "g_shared_services",
+      "col": 3,
+      "lane": 4
+    },
+    {
+      "id": "cw",
+      "label": "CloudWatch Logs",
+      "icon": "cloudwatch_2",
+      "group": "g_shared_services",
+      "col": 3,
+      "lane": 2
+    },
+    {
+      "id": "nat",
+      "label": "NAT gateway",
+      "icon": "nat_gateway",
+      "group": "g_egress",
+      "col": 6,
+      "lane": 2
+    },
+    {
+      "id": "lcs",
+      "label": "S3 lifecycle scripts",
+      "icon": "s3",
+      "group": "g_shared_services",
+      "col": 3,
+      "lane": 3
+    },
+    {
+      "id": "hf",
+      "label": "Hugging Face Hub",
+      "icon": "internet",
+      "outside": true,
+      "col": 7,
+      "lane": 2
+    }
+  ],
+  "edges": [
+    {
+      "from": "operator",
+      "to": "ssm",
+      "num": 1,
+      "label": "kubectl tunnel"
+    },
+    {
+      "from": "ssm",
+      "to": "access",
+      "num": 2,
+      "label": "port forward"
+    },
+    {
+      "from": "access",
+      "to": "eks",
+      "num": 3,
+      "label": "HTTPS 443"
+    },
+    {
+      "from": "trainer",
+      "to": "lcs",
+      "num": 4,
+      "dashed": true,
+      "label": "boot script"
+    },
+    {
+      "from": "eks",
+      "to": "trainer",
+      "num": 5,
+      "dashed": true,
+      "label": "Job, active pool"
+    },
+    {
+      "from": "trainer",
+      "to": "nat",
+      "num": 6,
+      "label": "model pull"
+    },
+    {
+      "from": "nat",
+      "to": "hf",
+      "num": 7,
+      "label": "HTTPS"
+    },
+    {
+      "from": "trainer",
+      "to": "sbx_v1",
+      "num": 8,
+      "label": "kernel code"
+    },
+    {
+      "from": "trainer",
+      "to": "sbx_v2",
+      "num": 9,
+      "dashed": true,
+      "label": "after switch"
+    },
+    {
+      "from": "sbx_v1",
+      "to": "ecr",
+      "num": 10,
+      "dashed": true,
+      "label": "image pull"
+    },
+    {
+      "from": "operator",
+      "to": "ecr",
+      "num": 11,
+      "dashed": true,
+      "label": "image push"
+    },
+    {
+      "from": "operator",
+      "to": "lcs",
+      "num": 12,
+      "dashed": true,
+      "label": "script upload"
+    },
+    {
+      "from": "eks",
+      "to": "cw",
+      "num": 13,
+      "dashed": true,
+      "label": "control plane logs"
+    },
+    {
+      "from": "eks",
+      "to": "kms",
+      "num": 14,
+      "dashed": true,
+      "label": "encrypt secrets"
+    }
+  ]
+}

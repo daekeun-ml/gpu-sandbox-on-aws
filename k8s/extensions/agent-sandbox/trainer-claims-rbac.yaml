@@ -1,0 +1,24 @@
+# Lets the trainer (or an episode broker) claim and release sandboxes. Nothing else: no pods,
+# no secrets. Pods that use this account need a Kubernetes API token, unlike the hands-on
+# trainer, so prefer a small broker Deployment over giving the GPU trainer API access.
+# sandbox-episode is the multi-turn episode Job (job-multiturn.yaml.tpl), the only pod in this
+# repository that mounts such a token.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sandbox-claims
+  namespace: sandbox
+rules:
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: ["sandboxclaims"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sandbox-claims
+  namespace: sandbox
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: sandbox-claims}
+subjects:
+  - {kind: ServiceAccount, name: grpo-trainer, namespace: rl-trainer}
+  - {kind: ServiceAccount, name: sandbox-episode, namespace: rl-trainer}

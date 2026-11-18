@@ -1,0 +1,102 @@
+# 02 Containers and sandboxes
+
+**TL;DR** A sandbox runtime puts up one more wall between the container and the server kernel: gVisor builds it as "a fake kernel kept separately for each pod," and Kata as "a small VM started separately for each pod."
+
+## Pain points
+
+A container only makes files and processes look separate and shares the kernel underneath with the server, so one weakness in the kernel becomes a weakness of every container. The alternatives come with many names too (runc, gVisor, Kata, Firecracker, QEMU, Cloud Hypervisor), and it is confusing which is an alternative to which, and which goes inside which. To choose, you also need to know what you lose when the wall gets thicker (speed, compatibility, the servers you can use).
+
+![a: containers A, B and C share one server kernel, so one kernel weakness puts A, B and C at risk. b: a Sentry or a VM kernel stands in front of the server kernel for each container, adding one more wall in front of A, B and C](../images/figures/beginner-02_container_vs_sandbox.svg)
+
+*Takeaway: With one kernel, a kernel weakness spreads to every container. A sandbox runtime keeps a Sentry or a VM kernel for each pod and puts one more wall between the container and the server kernel.*
+
+
+## Why
+
+- **Once you understand the kernel, the rest follows.** In the end, the difference between the three runtimes is "what gets inserted on the path where code asks the kernel for things."
+- **We start with an analogy, and also point out where the analogy is wrong.**
+- **We look at the cost with real measurements.** The numbers are from part 2 of the blog, which compared a regular container and gVisor on the same node.
+
+**Before you start:** If you look at the list of risks in [chapter 01](01_why_sandbox.md) first, you will see more clearly "what the wall blocks."
+
+??? note "Terms (expand if a word is new)"
+    - **Kernel:** The core of the operating system. It manages files, memory, the network, and devices.
+    - **System call (syscall):** The window through which a program asks the kernel for things like "open this file" or "give me memory."
+    - **Container, runc:** A container is a set of processes bundled so they look separate. runc is the container runtime that Kubernetes uses by default.
+    - **namespace, cgroup:** Linux features that limit what a process can see (namespace) and how much it can use (cgroup).
+    - **VM (virtual machine), microVM:** A computer made in software, with its own separate kernel. A microVM is a small VM that includes only the devices it really needs, so it starts fast.
+    - **Hypervisor:** A program that creates and runs VMs (QEMU, Cloud Hypervisor, Firecracker).
+    - **KVM:** The piece of Linux that lets it use the CPU's virtualization features. On a server it shows up as `/dev/kvm`.
+    - **RuntimeClass:** A Kubernetes setting that chooses which runtime a pod starts with.
+
+## What sharing the kernel means
+
+To read a file or send something over the network, a program must ask the kernel (a system call). A regular container (runc) only splits "what it can see" and "how much it can use" with namespaces and cgroups. The kernel that takes the requests is still the server's one kernel.
+
+In part 1 of the blog, typing `uname -r` (show the kernel version) inside a container on the same node showed the node's kernel version (`6.18.51-120.162.amzn2023`) under runc and `4.19.0-gvisor` under gVisor (blog measurement, EKS 1.36). A program inside gVisor talks to a kernel that gVisor imitates.
+
+## Three walls
+
+![Three panels with the same structure. a runc: code in the pod reaches the server kernel directly with system calls (wall: namespace, cgroup). b gVisor: a Sentry, one per pod, takes the system calls inside the pod and passes only a necessary few to the server kernel. c Kata: the kernel inside the VM, one per pod, takes them, and the path to the server kernel crosses the KVM boundary (wall: hardware virtualization)](../images/figures/beginner-02_container_vs_sandbox--three-walls.svg)
+
+*Takeaway: runc reaches the server kernel directly, gVisor has a Sentry kept for each pod take the calls instead, and Kata keeps a separate VM, with its own kernel, for each pod.*
+
+
+**If we compare it to buildings**
+
+- **runc is a shared house.** The rooms are separate, but everyone shares the kitchen and the plumbing (the kernel). If one pipe bursts, every room is affected.
+- **gVisor is a front desk kept separately for each unit.** Most of a resident's requests are handled directly by that unit's own desk (Sentry), and only a necessary few are passed on to the building's management office (the server kernel), so the paths that reach the office directly shrink a lot.
+- **Kata is a small detached house built separately for each pod.** Each house has its own management office (the kernel inside the VM), and the boundary between houses is guarded by hardware virtualization (KVM).
+
+The analogy is wrong in places too. gVisor still sends a reduced set of calls to the server kernel, and Kata's VM runs on the same server, so weaknesses in the hypervisor remain.
+
+| Item | runc | gVisor | Kata |
+|---|---|---|---|
+| Kernel the code asks | Server kernel | Sentry kept for each pod (user-space kernel) | Kernel of the VM started for each pod |
+| Wall | namespace, cgroup | Sentry handles system calls instead | Hardware virtualization (KVM) boundary |
+| Server requirement | None | None (runs on a regular VM) | `/dev/kvm`: bare metal or an instance with nested virtualization turned on |
+| Where it slows down | Almost nowhere | Work with many system calls | Time to start the VM, attaching devices |
+| GPU | Used as is | Checks driver calls and forwards them | Hands the whole GPU to the VM ([chapter 03](03_gpu_sandbox.md)) |
+
+## The cost of the wall: real numbers
+
+Part 2 of the blog compared runc and gVisor on the same node (EKS 1.36, `m7i.xlarge`). Below are the blog's measurements, not values that this repository measured.
+
+| Task | runc | gVisor | Difference |
+|---|---|---|---|
+| CPU-only repeated calculation | 0.144 s | 0.146 s | Almost the same |
+| 200,000 system calls (`getppid`) | 0.035 s | 0.444 s | About 12.5 times |
+| Creating 1,000 files | 0.041 s | 0.195 s | About 4.7 times |
+| Running Python 5 times | 0.206 s | 0.399 s | About 1.9 times |
+
+The more system calls code makes, the slower it gets, and the blog says the cost of one system call went from about 0.18 µs to 2.2 µs. Grading GPU kernels in this repository is mostly GPU computation, so we expect this effect to be relatively small (inference).
+
+## Choosing a runtime per pod
+
+In Kubernetes, you choose a runtime per pod with `RuntimeClass`, so pods in one cluster can use runc, gVisor or Kata. This repository keeps one sandbox image and one set of server code and compares the three runtimes by changing only the `RuntimeClass` name.
+
+!!! question "❓ Misconception: Using Agent Sandbox makes isolation stronger"
+    Agent Sandbox is a management tool that starts sandboxes ahead of time (warm pool) and lends them out. The actual isolation is decided by the `RuntimeClass` underneath. The production case in part 3 of the blog (Ably) also uses Agent Sandbox with regular containers (runc) and plans to evaluate microVMs.
+
+!!! question "❓ Misconception: If it does not show up in the server's `ps`, it is safe"
+    Processes inside gVisor do not show up in `ps` on the server. But part 1 of the blog states that it did not test container escape attacks. "Cannot be seen" and "cannot get out" are different things.
+
+## In one line
+
+- A regular container shares the server kernel, and a sandbox runtime puts up one more wall in between.
+- gVisor builds the wall with a Sentry for each pod, and Kata with a VM for each pod. The thicker the wall, the more server requirements and cost you take on.
+
+## Next
+
+In [03 Isolating the GPU too](03_gpu_sandbox.md), we look at why a GPU makes things harder.
+
+??? note "References"
+    | Topic | Link |
+    |---|---|
+    | AI agent sandbox, EKS isolation part 1 (experiment comparing runc and gVisor) | https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-1/ |
+    | Same series, part 2 (system call cost measurements) | https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/ |
+    | Kubernetes RuntimeClass | https://kubernetes.io/docs/concepts/containers/runtime-class/ |
+    | gVisor | https://github.com/google/gvisor |
+    | Kata Containers | https://github.com/kata-containers/kata-containers |
+
+    All sources: [this page in All references](../reference/references.md#ref-beginner-02-container-vs-sandbox)

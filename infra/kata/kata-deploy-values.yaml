@@ -1,0 +1,58 @@
+# kata-deploy 4.3.1 Helm values (as of 2026-11; re-verify before upgrading).
+#   helm install kata-deploy oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy \
+#     --version 4.3.1 -n kube-system -f infra/kata/kata-deploy-values.yaml
+#
+# Runtime classes installed by this file:
+#   kata-qemu-nvidia-gpu  Kata + QEMU with NVIDIA GPU passthrough (cold-plug VFIO). The only
+#                         GPU path Kata supports upstream. Go shim, because runtime-rs GPU
+#                         cold-plug needs IOMMUFD, which AL2023 kernels do not enable.
+#   kata-qemu             Kata + QEMU without devices (CPU sandboxes, comparison baseline).
+#   kata-clh              Kata + Cloud Hypervisor without devices (CPU sandboxes). Upstream
+#                         marks CLH GPU support as unsupported; see
+#                         infra/kata/experimental-clh-gpu/ for an opt-in experiment.
+
+# "job" (the chart default) installs only on nodes that exist at install time. Node groups
+# here scale from zero, so run as a DaemonSet that also covers nodes added later.
+deploymentMode: daemonset
+k8sDistribution: k8s
+
+# Only nodes labelled for Kata, and tolerate their dedicated-node taint.
+nodeSelector:
+  gpusandbox/role: sandbox-kata
+tolerations:
+  - key: gpusandbox/role
+    operator: Equal
+    value: sandbox-kata
+    effect: NoSchedule
+
+shims:
+  disableAll: true
+  qemu:
+    enabled: true
+    supportedArches: [amd64]
+    allowedHypervisorAnnotations: []
+  clh:
+    enabled: true
+    supportedArches: [amd64]
+    allowedHypervisorAnnotations: []
+  qemu-nvidia-gpu:
+    enabled: true
+    supportedArches: [amd64]
+    allowedHypervisorAnnotations: []
+    containerd:
+      snapshotter: ""
+    nvrc:
+      enableDCGM: false
+    runtimeClass:
+      # Set by the GPU Operator's cc-manager when confidential computing is off (T4 has none).
+      nodeSelector:
+        nvidia.com/cc.ready.state: "false"
+
+defaultShim:
+  amd64: qemu
+
+runtimeClasses:
+  enabled: true
+  createDefault: false
+  # Keep RuntimeClass.overhead so the scheduler accounts for each VM's own memory and CPU.
+  overheadEnabled: true

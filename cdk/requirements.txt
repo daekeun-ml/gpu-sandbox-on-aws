@@ -1,0 +1,6 @@
+# Pinned as of 2026-11 (re-verify before deploying). Node.js 22 or 24 LTS is needed by jsii.
+# The CDK CLI must read this library's cloud assembly: aws-cdk-lib 2.277.0 needs CLI >= 2.1148.2,
+# which was not on npm yet on 2026-11-14, so this pins 2.276.0 (works with CLI 2.1148.1).
+aws-cdk-lib==2.276.0
+constructs==10.8.1
+cdk-nag==3.0.2

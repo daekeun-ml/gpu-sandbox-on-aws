@@ -1,0 +1,349 @@
+# 05 On-policy GRPO 학습
+
+**TL;DR** `Qwen/Qwen2.5-Coder-1.5B-Instruct`(LoRA)를 A10G 한 장에서 GRPO로 학습합니다. `reward_batch` 로그로 샌드박스 채점을 포함한 on-policy 루프가 끝까지 실행되는지 확인합니다.
+
+## 기존 Pain Point
+
+rollout 생성(vLLM)과 policy 학습을 A10G 24 GB 한 장에서 함께 하려면, 두 작업이 GPU 메모리를 번갈아 써야 합니다. 작은 모델은 학습 초기에 올바른 Triton 커널을 거의 생성하지 못합니다. 그래서 맞으면 1, 틀리면 0인 reward를 쓰면 group의 completion 8개가 모두 0점이 되고, advantage도 0이라 학습 신호가 없어요. 샌드박스 pod가 다른 평가를 처리 중이거나 장애가 나서 채점하지 못한 completion까지 0점으로 처리하면, policy가 인프라 문제 때문에 낮은 reward를 받습니다. 학습 도중 샌드박스 버전을 바꾼다면([06](06_sandbox_update.md)) 어느 batch를 어느 버전이 채점했는지도 로그에 기록해야 합니다.
+
+![a: 맞으면 1, 틀리면 0인 reward로 샌드박스가 group 하나(completion 8개)를 채점합니다. 올바른 커널이 하나도 없으면 8개 모두 0점이라 advantage가 0이 되고 학습 신호가 없습니다. pod가 바쁘거나 장애가 나서 채점에 실패해도 0점이 되므로, policy가 인프라 문제 때문에 낮은 reward를 받습니다. b: 부분 점수(0.1, 0.15, 0.3, 0.4)를 쓰면 0.3과 0.1의 차이도 학습 신호가 됩니다. sandbox_error는 None으로 처리되어 group baseline에서 제외되므로 policy가 낮은 reward를 받지 않습니다.](../images/figures/handson-05_grpo_training.svg)
+
+*그림 요약: 0과 1만 있는 reward에서는 올바른 커널이 없는 group의 advantage가 0이 되어 학습 신호가 없고, 채점 실패를 0점으로 처리하면 policy가 인프라 문제로 낮은 reward를 받습니다. 부분 점수를 쓰면 group 안의 점수 차이가 학습 신호가 되고, sandbox_error는 None으로 처리되어 group baseline에서 제외됩니다.*
+
+
+## Why
+
+- **strictly on-policy가 기본입니다.** 생성한 batch 하나로 optimizer step을 정확히 한 번 실행합니다. 같은 GPU를 쓰는 vLLM(colocate)은 학습하는 동안 sleep mode로 GPU 메모리를 해제해요.
+- **reward는 부분 점수가 있는 세 component로 구성되고, `sandbox_error`는 0점으로 처리하지 않고 제외합니다.** 세 함수가 모두 `None`을 반환하면 그 completion은 group baseline 계산에서 제외됩니다.
+- **batch마다 채점한 풀을 로그에 기록합니다.** `{"event": "reward_batch", ...}` 줄에 runtime, version, routing_revision, served_versions, status 집계가 들어갑니다.
+
+**사전 지식:** [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)을 마쳐야 합니다. GRPO와 버전 고정은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, reward 설계는 [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있어요.
+
+??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
+    - **GRPO**: prompt 하나에 completion을 여러 개(group) 생성하고, group 평균보다 reward가 높은 completion이 더 자주 생성되도록 학습하는 RL 알고리즘입니다.
+    - **on-policy, strictly on-policy**: 현재 policy가 방금 생성한 데이터로만 학습하는 방식이고, strictly는 생성한 batch를 optimizer step 한 번에만 쓰고 버린다는 뜻입니다.
+    - **rollout, completion, group**: 모델이 prompt에 답을 생성하는 과정, 그렇게 나온 답 하나, 같은 prompt에서 나온 답 묶음(여기서는 8개)입니다.
+    - **advantage**: 한 completion의 reward가 group 평균보다 얼마나 높은지를 나타내는 값입니다.
+    - **LoRA**: 모델 가중치 전체 대신 작은 어댑터 행렬만 학습하는 방법입니다. 메모리 사용량이 크게 줄어듭니다.
+    - **vLLM colocate, sleep mode**: 생성 엔진 vLLM을 trainer와 같은 GPU에서 실행하는 모드와, 학습하는 동안 vLLM이 쓰던 GPU 메모리를 잠시 해제하는 기능입니다.
+    - **reference model, KL**: 학습 중인 모델이 학습 전 모델과 얼마나 달라졌는지 측정할 때 쓰는 기준 모델과, 그 차이를 나타내는 값입니다. 여기서는 `beta`가 0이라 쓰지 않습니다.
+    - **importance sampling 보정**: 생성 엔진과 학습 모델의 수치 차이로 생기는 분포 차이를 확률 비율로 보정하는 방법입니다.
+    - **Job, emptyDir**: 작업이 끝나면 완료 상태가 되는 Kubernetes 리소스와, pod가 삭제되면 함께 삭제되는 임시 볼륨입니다.
+    - **OOM**: GPU 메모리가 부족해 프로세스가 실패하는 것(out of memory)입니다.
+
+!!! warning "검증 상태"
+    실습 계정에서 2026-11-18에 trainer `g5.2xlarge`로 5 step run(`scripts/07_run_grpo.sh 5`, us-west-2)을 실행했고, Job이 Complete로 끝났습니다. 그 출력은 아래 "확인할 것"에 반영했어요. 기본값인 60 step run은 AWS에서 실행하지 않았습니다. 메모리와 비용 수치는 측정값이 아니라 설정값과 계산값입니다. 로컬에서는 TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)이 2 step까지 실행됐고, reward 함수와 routing은 `pytest`로 확인했어요.
+
+## 시작 전 확인
+
+- [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)에서 `scripts/ops/verify.sh gvisor`가 통과했습니다. routing table의 active 기본값은 `gvisor/v1`입니다.
+- 시나리오 A 클러스터에 `trainer` 노드 그룹(`g5.2xlarge`, A10G 1장)이 있습니다. HyperPod에서 학습하려면 [07 HyperPod 시나리오](07_hyperpod.md)를 따르세요.
+- `scripts/config.env`에 `TRAINER_IMAGE_URI`와 `SANDBOX_AUDIENCE`(기본 `gpu-sandbox`)가 있습니다. 하나라도 비면 스크립트가 멈춰요.
+
+## 실행
+
+학습 Job을 만들고 로그를 실시간으로 출력합니다.
+
+```bash
+scripts/07_run_grpo.sh        # 60 optimizer steps (default)
+scripts/07_run_grpo.sh 20     # shorter run
+```
+
+| 순서 | 스크립트 동작 |
+|---|---|
+| 1 | `RUN_ID`(기본 `date +%Y%m%d-%H%M%S`), `MAX_STEPS`(첫 번째 인자, 기본 60), `MODEL_ID`(기본 `Qwen/Qwen2.5-Coder-1.5B-Instruct`)를 정합니다. |
+| 2 | `k8s/trainer/job-grpo.yaml.tpl`을 렌더링해 `rl-trainer` namespace에 Job `grpo-${RUN_ID}`를 만듭니다. |
+| 3 | pod가 Ready가 될 때까지 최대 30분 기다립니다. |
+| 4 | 로그에서 `"event"`, `loss`, `Error`, `Traceback`이 들어간 줄만 걸러 실시간으로 출력합니다. Ctrl-C는 로그 출력만 멈추고 학습은 계속됩니다. |
+
+**확인할 것:** 아래 순서로 줄이 나옵니다(예시 형태, 값은 실행마다 다름). 이미지 pull과 모델 다운로드 때문에 첫 줄 뒤 몇 분 동안 출력이 없을 수 있어요.
+
+```text
+job.batch/grpo-20261113-101500 created
+[hh:mm:ss] job grpo-20261113-101500 submitted; following logs (Ctrl-C stops following, not training)
+pod/grpo-20261113-101500-xxxxx condition met
+{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
+{"event": "reward_batch", "batch": 1, "global_step": 0, "runtime": "gvisor", "version": "v1", ...}
+{'loss': ..., 'reward': ..., 'rewards/format_reward/mean': ..., ...}
+...
+{'train_runtime': ..., ...}
+{"event": "done", "output": "/outputs/grpo/final", "reward_batches": <int>}
+CUDA Error: invalid argument at /workspace/csrc/cumem_allocator.cpp:249
+```
+
+실습 계정에서 2026-11-18에 실행한 5 step run(`MAX_STEPS=5`, `g5.2xlarge`)에서는 step마다 `reward_batch`가 하나씩 나왔고, `status`에 `ok`, `wrong_answer`, `compile_error`, `runtime_error`가 섞여 있었습니다. `train_runtime`은 약 401초였어요. `done` 뒤에 vLLM이 종료하면서 마지막 줄의 `CUDA Error`를 출력했지만, Job은 그대로 Complete(exit 0)로 끝났습니다. 그러니 이 줄이 보이면 Job 상태로 성공 여부를 판단하세요.
+
+**문제가 생기면:** pod가 Pending이거나 `status`가 대부분 `sandbox_error`이거나 OOM이 나면, 끝의 "확인 방법" 표와 [문제 해결](../reference/troubleshooting.md)의 "학습" 항목을 보세요.
+
+`RUN_ID`와 `MODEL_ID`는 `scripts/config.env`에 없는 변수라 환경 변수로 바꿀 수 있습니다. `RUN_ID`는 Job 이름에 들어가므로 소문자, 숫자, 하이픈만 쓰세요.
+
+로그를 다시 보려면 스크립트가 출력한 Job 이름으로 다음 명령을 실행합니다(필터 없는 전체 로그).
+
+```bash
+kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
+```
+
+**확인할 것:** 위와 같은 JSON 이벤트와 TRL dict 줄 외에 모델 로딩과 vLLM 초기화 로그도 출력됩니다.
+
+## Job manifest에서 볼 부분
+
+| 필드 | 값 | 이유 |
+|---|---|---|
+| pod label | `gpusandbox/client: "true"` | sandbox namespace의 NetworkPolicy `allow-clients-to-sandbox-api`는 `rl-trainer` namespace에서 이 label이 붙은 pod의 연결만 8000 포트로 허용합니다. label이 없으면 NetworkPolicy가 연결을 차단해 completion이 전부 sandbox_error가 됩니다. |
+| `automountServiceAccountToken` | `false` | Kubernetes API 토큰이 없습니다. trainer는 Kubernetes API를 호출하지 않고, 샌드박스용 토큰만 따로 받습니다. |
+| projected token | audience `${SANDBOX_AUDIENCE}`, `expirationSeconds: 3600`, `/var/run/secrets/gpusandbox/token` | 샌드박스 pod는 audience가 이 값이고 subject가 허용 목록(`system:serviceaccount:rl-trainer:grpo-trainer` 등)에 있는 토큰만 허용합니다. kubelet이 같은 경로의 파일을 교체하고, 클라이언트는 요청마다 파일을 다시 읽습니다. |
+| routing ConfigMap | `sandbox-routing`을 `/etc/gpusandbox/routing` 디렉터리로 마운트 (subPath 아님) | subPath로 마운트하면 ConfigMap 변경이 반영되지 않습니다. [06](06_sandbox_update.md)의 버전 전환을 실행 중인 pod에 반영하려면 디렉터리로 마운트해야 합니다. |
+| resources | CPU 7, memory 28Gi, `nvidia.com/gpu: 1` | `g5.2xlarge`(8 vCPU, 32 GiB)에서 시스템용 자원을 남긴 값입니다. |
+| `/dev/shm` | memory emptyDir 8Gi | 컨테이너 기본 공유 메모리가 작아서 따로 할당합니다. |
+| `/outputs`, `/cache` | emptyDir | checkpoint(20 step마다, 최대 2개)와 HF 캐시는 pod가 삭제되면 함께 삭제됩니다. |
+| `backoffLimit`, `ttlSecondsAfterFinished` | `0`, `86400` | 실패하면 다시 시도하지 않고, 끝난 Job은 24시간 뒤 삭제됩니다. |
+| `PYTORCH_CUDA_ALLOC_CONF` | `expandable_segments:True` | 메모리 단편화를 줄입니다. |
+
+!!! note "학습 결과 보존"
+    LoRA adapter와 `sandbox_metrics.jsonl`은 emptyDir에 저장되므로, 컨테이너가 종료되면 `kubectl cp`로도 가져올 수 없습니다(파이프라인 확인용이라 그대로 둠). JSON 이벤트는 stdout에도 출력되므로, Job이 삭제되기 전(완료 후 24시간)에 아래 명령으로 저장하세요. adapter를 보존하려면 `/outputs`에 공유 스토리지를 마운트하세요([Production 06 veRL로 확장](../production/06_scaling_with_verl.md)).
+
+    ```bash
+    kubectl -n rl-trainer logs "job/grpo-<RUN_ID>" | grep '"event"' > grpo-events.jsonl
+    ```
+
+    **확인할 것:** `wc -l grpo-events.jsonl`이 0보다 큰 줄 수를 출력하고, 첫 줄이 `{"event": "routing", ...}`입니다.
+
+## train_grpo.py 기본값
+
+| 인자 | 기본값 | 의미 |
+|---|---|---|
+| `--model` | `Qwen/Qwen2.5-Coder-1.5B-Instruct` | Apache-2.0, gated 아님 |
+| `--max-level` | `2` | 난이도 0~2 task 9개 |
+| `--repeats` | `64` | task당 dataset row 수 (9 × 64 = 576 rows) |
+| `--num-generations` | `8` | prompt당 completion 수 (GRPO group 크기) |
+| `--per-device-batch` | `4` | micro-batch당 completion 수 |
+| `--grad-accum` | `4` | optimizer step당 micro-batch 수 |
+| `--max-completion-length` | `768` | TRL 기본값 512보다 깁니다 (커널 코드와 설명) |
+| `--learning-rate` | `1e-5` | LoRA 권장값 (TRL GRPOConfig 기본값은 1e-6) |
+| `--lora-r`, `--lora-alpha` | `32`, `64` | `target_modules="all-linear"` |
+| `--vllm-gpu-memory-utilization` | `0.35` | TRL 기본값은 0.3 |
+| `--vllm-max-model-length` | `2048` | prompt와 completion 합계 |
+| `--reward-weights` | `0.1,1.0,0.5` | format, correctness, speedup |
+| `--allow-torch-only` | 꺼짐 | 켜면 Triton 없이 맞힌 completion도 correctness 1.0과 speedup을 받습니다 |
+| `--runtime` | 없음 | routing table의 active runtime 대신 쓸 runtime |
+| `--save-steps`, `--seed` | `20`, `42` | checkpoint 간격, dataset shuffle과 GRPOConfig seed |
+
+```text
+generation batch = per-device batch 4 x processes 1 x steps_per_generation 4 = 16 completions
+16 completions / num_generations 8      = 2 prompts (2 GRPO groups) per optimizer step
+60 steps x 2 prompts                    = 120 prompts out of 576 dataset rows
+```
+
+TRL은 generation batch가 `num_generations`로 나누어떨어지지 않으면 시작하지 않습니다. 스크립트는 GRPOConfig에서 `use_vllm=True`, `vllm_mode="colocate"`, `vllm_enable_sleep_mode=True`, `logging_steps=1`, `report_to="none"`만 지정하고 나머지는 TRL 기본값을 씁니다. 아래 기본값은 로컬 TRL 1.18.0의 `GRPOConfig`로 확인했으므로, TRL 버전을 바꾸면 다시 확인하세요.
+
+| TRL 기본값 | 값 | 의미 |
+|---|---|---|
+| `steps_per_generation`, `num_iterations` | `gradient_accumulation_steps`, `1` | 생성한 batch는 optimizer step 한 번에만 씁니다 |
+| `beta` | `0.0` | reference model을 로드하지 않습니다 (KL 항 없음) |
+| `loss_type`, `scale_rewards` | `"dapo"`, `"group"` | group 안에서 reward를 정규화합니다 |
+| `vllm_importance_sampling_correction` | `True` | vLLM과 학습 모델의 수치 차이를 importance sampling으로 보정합니다 |
+| `gradient_checkpointing`, `bf16` | `True`, `True` | GRPOConfig가 TrainingArguments와 다르게 설정하는 기본값 |
+
+## 한 step의 흐름
+
+```mermaid
+sequenceDiagram
+    participant V as vLLM (colocate, 같은 A10G)
+    participant T as GRPOTrainer (LoRA)
+    participant R as KernelRewards
+    participant S as 샌드박스 풀 (routing의 active)
+    T->>V: 깨우기, 현재 가중치로 2 prompts x 8 completions 생성
+    V-->>T: completion 16개
+    T->>R: format, correctness, speedup reward 함수 호출
+    R->>R: 코드 추출과 정책 검사 (trainer 쪽)
+    R->>S: routing snapshot 하나로 batch 평가
+    S-->>R: verdict (status, speedup, sandbox_version)
+    R-->>T: reward 3종 (sandbox_error면 None)
+    T->>T: group 상대 advantage, LoRA 업데이트 한 번
+    T->>V: 다음 생성 전에 가중치 동기화
+```
+
+*그림 요약: 한 step 안에서 생성, 채점, 업데이트가 차례로 한 번씩 일어나므로, 샌드박스 평가 시간이 그대로 step 시간에 포함됩니다.*
+
+TRL은 세 reward 함수를 따로 호출합니다. `KernelRewards`가 task, prompt, completion 텍스트의 해시를 키로 verdict를 캐시하므로, 샌드박스 평가는 completion마다 한 번만 실행됩니다.
+
+## Reward 구성
+
+`src/gpusandbox/rewards.py`의 세 component입니다.
+
+- **format**: 마지막 코드 블록이 파싱되고 최상위 `class ModelNew`를 정의하면 1.0, 아니면 0.0입니다.
+- **correctness**: 샌드박스 status에 따라 단계별 점수를 줍니다(아래 표).
+- **speedup**: status가 `ok`이고 custom Triton kernel이 실제로 실행됐을 때만 `0.5 + 0.5 × clamp(log2(speedup), -1, 2)`를 줍니다. 0.5배는 0.0, 1배는 0.5, 2배는 1.0, 4배 이상은 1.5입니다.
+
+| sandbox status | correctness | 비고 |
+|---|---|---|
+| `ok` + custom Triton kernel | 1.0 | |
+| `ok`, Triton kernel 없음 | 0.3 | `--allow-torch-only`면 1.0 |
+| `wrong_answer` | 0.2 | 실행은 됐지만 값이 틀림 (timed output 불일치 포함) |
+| `runtime_error` | 0.05 | Triton은 첫 launch 때 컴파일하므로 커널 컴파일 오류도 이 status로 분류됩니다 |
+| `compile_error`, `timeout`, `policy_violation`, 코드 없음 | 0.0 | |
+| `sandbox_error` | None | 세 component 모두 None |
+
+합계는 각 component에 가중치 0.1, 1.0, 0.5를 곱해 더한 값입니다.
+
+| 결과 | format | correctness | speedup | 합계 |
+|---|---|---|---|---|
+| 코드 블록 없음, 문법 오류, ModelNew 없음 | 0 | 0 | 0 | 0.0 |
+| `compile_error`, `timeout`, 그 밖의 `policy_violation` | 1 | 0 | 0 | 0.1 |
+| `runtime_error` | 1 | 0.05 | 0 | 0.15 |
+| `wrong_answer` | 1 | 0.2 | 0 | 0.3 |
+| `ok`, Triton 없음 | 1 | 0.3 | 0 | 0.4 |
+| `ok` + Triton, 0.5배 이하 | 1 | 1.0 | 0.0 | 1.1 |
+| `ok` + Triton, 1배 | 1 | 1.0 | 0.5 | 1.35 |
+| `ok` + Triton, 4배 이상 | 1 | 1.0 | 1.5 | 1.85 |
+| `sandbox_error` | None | None | None | 제외 (advantage 0) |
+
+부분 점수가 있으므로, 실행은 되지만 틀린 코드(0.3)와 실행되지 않는 코드(0.1)의 차이도 학습 신호가 돼요. TRL 문서에 따르면 reward 함수가 None을 반환하면 그 값은 reward 계산에서 제외됩니다.
+
+## 로그 읽는 법
+
+로그에는 두 종류의 줄이 함께 출력됩니다. 첫째는 TRL이 step마다 출력하는 Python dict입니다(`loss` 키가 있어 스크립트 필터를 통과).
+
+| TRL 지표 | 의미 |
+|---|---|
+| `rewards/format_reward/mean`, `rewards/correctness_reward/mean`, `rewards/speedup_reward/mean` | component별 평균 (None인 completion은 제외) |
+| `reward`, `reward_std` | 가중합 reward의 평균과 표준편차 |
+| `frac_reward_zero_std` | reward 표준편차가 0인 비율. 1에 가까우면 group 안 completion이 모두 같은 점수라 학습 신호가 거의 없습니다 |
+| `completions/mean_length`, `completions/clipped_ratio` | completion 길이, 768 token에서 잘린 비율. 잘리면 코드 블록이 닫히지 않아 format이 0이 됩니다 |
+| `entropy`, `clip_ratio/*`, `sampling/importance_sampling_ratio/*` | policy 엔트로피, clipping 비율, vLLM 보정 비율 |
+| `loss`, `grad_norm`, `learning_rate` | 일반 학습 지표. `beta`가 0이라 `kl`은 기록되지 않습니다 |
+
+둘째는 이 저장소 코드가 출력하는 JSON 이벤트로, `/outputs/grpo/sandbox_metrics.jsonl`에도 기록돼요.
+
+```text
+{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
+{"event": "reward_batch", "batch": <int>, "global_step": <int>, "runtime": "gvisor", "version": "v1",
+ "served_versions": {"v1": <int>}, "routing_revision": <int>, "n": <int>, "status": {"<status>": <int>, ...},
+ "pass_rate": <float>, "custom_kernel_rate": <float>, "mean_speedup": <float or null>,
+ "eval_p50_s": <float>, "eval_p95_s": <float or null>, "batch_wall_s": <float>, "ts": <float>}
+{"event": "done", "output": "/outputs/grpo/final", "reward_batches": <int>}
+```
+
+| `reward_batch` 필드 | 의미 |
+|---|---|
+| `batch`, `global_step` | 몇 번째 reward batch인지, 채점할 때 trainer의 `global_step`(완료된 optimizer step 수) |
+| `runtime`, `version` | 이 batch가 고정한 routing snapshot |
+| `served_versions` | 실제로 응답한 샌드박스가 보고한 버전별 개수. 정상이면 key가 `version` 하나뿐입니다 |
+| `routing_revision` | routing table 내용이 바뀔 때마다 1씩 늘어납니다 |
+| `n`, `status` | 이 batch에서 샌드박스로 보낸 completion의 수와 status별 개수. 코드 없음, trainer 쪽 정책 위반, 캐시 hit은 포함되지 않습니다 |
+| `pass_rate`, `custom_kernel_rate` | `n` 중 `ok` 비율, custom Triton kernel이 실제로 실행된 비율 |
+| `mean_speedup` | `ok`인 completion(커널 여부 무관)의 speedup 평균, 없으면 null |
+| `eval_p50_s`, `eval_p95_s`, `batch_wall_s` | 샌드박스 서버가 측정한 평가 시간의 p50/p95, trainer가 batch 전체를 기다린 시간 |
+
+샌드박스로 보낸 completion이 없는 step에는 `reward_batch` 줄이 없습니다. 버전 전환 때의 `sandbox_version_switch` 이벤트는 [06](06_sandbox_update.md)에서 다뤄요.
+
+## 1.5B 모델에서 기대할 것
+
+이 에셋은 on-policy 루프가 끝까지 실행되는지 확인하는 용도이고, 학습 곡선이 개선된다고 보장하지 않습니다.
+
+| level | task |
+|---|---|
+| 0 | `vector_add`, `relu_bias`, `scaled_residual` |
+| 1 | `silu_mul`, `gelu_tanh`, `row_sum_sq` |
+| 2 | `row_softmax`, `rms_norm`, `layer_norm` |
+| 3 (기본 제외) | `matmul_bias_relu` (float16) |
+
+tasks 모듈 주석은 level 0을 작은 모델도 대부분 풀 수 있는 sanity level로 설명합니다. 그래서 0보다 큰 reward는 level 0에서 먼저 나올 가능성이 크고(추론), 정답 커널이 드문 level 2는 reward가 희소해 `frac_reward_zero_std`가 높을 수 있어요. 기본 60 step의 prompt 120개(task당 평균 13개 정도)는 추세를 판단하기에 적은 양일 수 있습니다.
+
+진단할 때는 `reward_batch`가 step마다 나오는지, `sandbox_error`가 드문지, format reward가 0보다 큰지, `wrong_answer`와 `runtime_error` 비율이 어떻게 변하는지, `ok` + custom kernel이 한 번이라도 나오는지를 차례로 확인합니다.
+
+## 옵션 바꾸기
+
+`MODEL_ID`에는 오픈 라이선스 모델만 쓰세요(`Qwen2.5-Coder-3B-Instruct`는 비상업 라이선스 qwen-research라 제외, 7B는 Production 트랙). GPU 관련 설정은 기본 모델에 맞춘 값이므로, 다른 모델은 짧은 run으로 먼저 확인하세요.
+
+```bash
+MODEL_ID=<open-license-model-id> scripts/07_run_grpo.sh 20
+```
+
+**확인할 것:** 기본 실행과 같은 형태의 로그가 나오고, Job이 OOM 없이 20 step을 마칩니다.
+
+`07_run_grpo.sh`는 `--max-steps`, `--model`, `--output-dir`, `--metrics-file`만 전달하므로, 다른 인자(`--max-level`, `--allow-torch-only`, batch 크기 등)는 로컬 사본의 `k8s/trainer/job-grpo.yaml.tpl` `args` 목록에 추가하세요.
+
+```yaml
+          args:
+            - --output-dir=/outputs/grpo
+            - --max-steps=${MAX_STEPS}
+            - --model=${MODEL_ID}
+            - --metrics-file=/outputs/grpo/sandbox_metrics.jsonl
+            - --max-level=0              # added: level-0 tasks only (denser reward)
+            # - --allow-torch-only       # credit for correct PyTorch-only answers
+```
+
+`--max-level 0`은 task를 3개로 줄여 reward를 덜 희소하게 만듭니다. `--allow-torch-only`는 PyTorch만으로 맞힌 completion에도 만점을 주므로 학습 과제 자체가 바뀝니다. 파이프라인 점검용으로만 쓰세요.
+
+## A10G 24 GB 메모리 계산
+
+아래 표는 설정값으로 계산한 추정치입니다.
+
+| 항목 | 대략의 크기 | 근거 |
+|---|---|---|
+| policy 모델 가중치 (bf16) | 약 3 GB | 1.5B 파라미터 × 2 bytes |
+| vLLM 할당분 | 최대 약 8.4 GB | `vllm_gpu_memory_utilization` 0.35 × 24 GB. vLLM이 따로 로드한 가중치 사본(약 3 GB)과 KV cache |
+| LoRA adapter, gradient, optimizer state | 1 GB 미만 (추정) | rank 32 adapter만 학습하고 base 가중치는 고정 |
+| activation, logits, 여유 | 나머지 약 12 GB | per-device batch 4 × (prompt + 최대 768 token), gradient checkpointing 기본 켜짐 |
+
+sleep mode가 vLLM의 가중치와 cache를 해제해 확보한 메모리는 backward 계산에 쓰입니다. 그 대신 vLLM을 다시 깨울(wake up) 때 host와 device 사이의 전송 시간이 추가로 듭니다(TRL 문서). OOM이 나면 아래 순서로 설정값을 줄이세요.
+
+1. `--per-device-batch 2 --grad-accum 8`: 두 값의 곱을 16으로 유지하므로 step당 prompt 수는 그대로입니다.
+2. `--max-completion-length 512`: 잘림 비율(`completions/clipped_ratio`)이 함께 오르는지 확인합니다.
+3. `--vllm-gpu-memory-utilization 0.3`: KV cache가 줄어 생성이 느려질 수 있습니다.
+
+7B 모델은 bf16 가중치만 약 15 GB이고, colocate 모드에서는 학습 모델과 vLLM이 각각 가중치를 로드하므로 A10G 24 GB 한 장에는 들어가지 않을 것입니다(추론).
+
+## 적용 범위와 한계
+
+학습 곡선, step 시간, 메모리 사용량은 측정하지 않았습니다. 관찰한 시간은 실습 계정의 5 step run 한 번에서 나온 `train_runtime`과 Job 전체 시간뿐이고, 기본 60 step run은 실행하지 않았어요. 검증 범위는 위 "검증 상태" 상자에 있습니다.
+
+## 소요 시간과 비용
+
+기본 60 step run의 소요 시간은 측정하지 않았습니다. 실습 계정에서 2026-11-18에 실행한 5 step run은 이미지 pull과 모델 다운로드를 포함해 Job 전체가 약 12분 걸렸어요. 시간이 걸리는 단계는 첫 실행의 trainer 이미지 pull(`vllm/vllm-openai:v0.33.0` 기반이라 큼), 매 실행의 모델 다운로드(`HF_HOME`이 emptyDir), vLLM 초기화, step마다의 생성, 샌드박스 평가, 학습이에요.
+
+| 노드 | 수 | USD/시간 |
+|---|---|---|
+| trainer `g5.2xlarge` | 1 | 1.212 |
+| sandbox-gvisor `g5.xlarge` | 2 | 2.012 |
+| system `m6i.large` | 2 | 0.192 |
+| EC2 노드 합계 | | 3.416 |
+
+EKS control plane, NAT gateway, EBS 요금은 별도입니다. `g4dn.metal` 노드가 실행 중이면 시간당 7.824 USD가 추가로 나와요(us-east-1과 us-west-2 온디맨드 요금). 학습 뒤에는 [01 클러스터와 이미지](01_cluster_and_images.md)의 "소요 시간과 비용" 명령으로 GPU 노드 그룹을 0으로 줄이거나 [99 정리](99_cleanup.md)로 삭제하세요.
+
+## 확인 방법
+
+1. `kubectl -n rl-trainer get pods -l job-name=grpo-<RUN_ID>`의 출력에서 pod 상태가 Running입니다.
+2. 첫 JSON 줄이 `{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", ...}`입니다.
+3. step마다 TRL dict 줄과 `reward_batch` 줄이 나오고, `served_versions`의 key가 `version` 하나뿐이며, `status`의 대부분이 `sandbox_error`가 아닙니다.
+4. 학습이 끝나면 `{"event": "done", "output": "/outputs/grpo/final", ...}`이 나오고 Job이 Complete가 됩니다. 그 뒤에 나오는 vLLM 종료 오류(`cumem_allocator.cpp:249`)는 실습 계정의 5 step run에서도 나왔고, 그때도 Job은 Complete였어요.
+
+| 증상 | 가능한 원인 | 확인 |
+|---|---|---|
+| `status`가 대부분 `sandbox_error` | NetworkPolicy label, token audience, 풀 Ready 상태 | `scripts/ops/verify.sh gvisor`, [문제 해결](../reference/troubleshooting.md)의 "학습"과 "401, 403 응답" 항목 |
+| `reward_batch` 줄이 드묾 | 대부분의 completion이 코드 블록 없음이나 trainer 쪽 정책 위반이라 샌드박스로 보낸 completion이 없음 | `rewards/format_reward/mean`, `completions/clipped_ratio` |
+| CUDA OOM | 메모리 예산 초과 | 위 메모리 절의 순서대로 줄이기 |
+| pod가 Pending | trainer 노드가 없거나 GPU가 등록되지 않음 | `kubectl get nodes -L gpusandbox/role`, `scripts/04_install_gpu_stack.sh` 출력 |
+
+!!! question "❓ 오해: 샌드박스가 채점하지 못한 completion은 0점으로 학습된다"
+    `sandbox_error`는 세 component가 모두 None이라 advantage가 0이므로, policy가 인프라 장애 때문에 낮은 reward를 받지 않아요. 다만 `sandbox_error`가 많으면 학습 신호가 줄어드니 `reward_batch`의 `status`를 확인하세요.
+
+!!! question "❓ 오해: reward가 오르지 않으면 파이프라인이 고장 난 것이다"
+    1.5B 모델로 60 step만 학습하면 reward가 거의 변하지 않아도 이상하지 않습니다. 파이프라인이 고장 났다고 볼 수 있는 경우는 `reward_batch` 줄이 없거나, `sandbox_error`가 대부분이거나, `served_versions`가 `version`과 다를 때입니다. 이 세 가지에 문제가 없으면 루프는 정상적으로 실행되고 있어요.
+
+!!! question "❓ 오해: strictly on-policy면 생성 분포와 학습 분포가 완전히 같다"
+    strictly on-policy는 생성한 batch를 optimizer step 한 번에만 쓴다는 뜻입니다. TRL 문서에 따르면 vLLM 생성과 학습 모델의 수치 차이로 off-policy 성분이 생기고, TRL 1.18.0은 기본 설정으로 이 차이를 importance sampling으로 보정해요(`sampling/importance_sampling_ratio/*` 지표).
+
+학습이 정상적으로 실행되면 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)에서 샌드박스를 v1에서 v2로 바꿔 보세요. 같은 학습을 HyperPod에서 실행하려면 [07 HyperPod 시나리오](07_hyperpod.md)를 보세요.
+
+??? note "참고 자료"
+    | 주제 | 링크 |
+    |---|---|
+    | TRL GRPO Trainer (지표, colocate, sleep mode, None reward) | https://huggingface.co/docs/trl/grpo_trainer |
+    | TRL 저장소 | https://github.com/huggingface/trl |
+    | 기본 모델 (Apache-2.0) | https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct |
+    | KernelBench (ModelNew 계약) | https://github.com/ScalingIntelligence/KernelBench |
+    | Amazon EC2 가속 컴퓨팅 인스턴스 (A10G, T4) | https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html |
+
+    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-05-grpo-training)

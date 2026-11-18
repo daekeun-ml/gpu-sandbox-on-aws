@@ -1,0 +1,35 @@
+{
+  "components": {
+    "operator": "drawn",
+    "ssm": "drawn",
+    "access": "drawn",
+    "eks": "drawn",
+    "kms": "drawn",
+    "sim": "drawn",
+    "sbx_v1": "drawn",
+    "sbx_v2": "drawn",
+    "sbx_gvisor": "drawn",
+    "sbx_qemu": "drawn",
+    "ecr": "drawn",
+    "cw": "drawn",
+    "vpc": "not drawn",
+    "nat": "not drawn",
+    "iam": "not drawn",
+    "routing": "not drawn",
+    "katadeploy": "not drawn"
+  },
+  "relationships": {
+    "operator → ssm": "primary",
+    "ssm → access": "primary",
+    "access → eks": "primary",
+    "eks → sim": "primary",
+    "sim → sbx_v1": "primary",
+    "sim → sbx_v2": "primary",
+    "sim → sbx_gvisor": "primary",
+    "sim → sbx_qemu": "primary",
+    "sbx_v1 → ecr": "aux",
+    "operator → ecr": "aux",
+    "eks → cw": "aux",
+    "eks → kms": "aux"
+  }
+}

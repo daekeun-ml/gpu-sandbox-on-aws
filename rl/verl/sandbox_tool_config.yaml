@@ -1,0 +1,40 @@
+# veRL 0.9.1 tool config for multi-turn kernel episodes (rl/verl/sandbox_tool.py).
+# Pass it with actor_rollout_ref.rollout.multi_turn.tool_config_path=<this file>; the full set of
+# keys is in the sandbox_tool.py docstring. Schema as read by verl/tools/tool_registry.py
+# (v0.9.1): tools[].class_name, tools[].config with type: native, tools[].tool_schema in OpenAI
+# function format. Everything else under config is passed to KernelSandboxTool as is.
+tools:
+  # Imported by module name: the directory of sandbox_tool.py must be on PYTHONPATH.
+  - class_name: sandbox_tool.KernelSandboxTool
+    config:
+      type: native
+      # Created by scripts/extensions/agent_sandbox.sh pool <runtime>; one sandbox per running
+      # trajectory, and on GPU pools each idle sandbox holds a GPU.
+      warm_pool: kernel-eval-gvisor
+      namespace: sandbox
+      # Submissions per episode; keep multi_turn.max_assistant_turns at least this high.
+      max_turns: 3
+      # A custom Triton kernel is needed for full credit (false only on CPU pools).
+      require_triton: true
+      # veRL cuts tool responses at multi_turn.max_tool_response_length (default 256).
+      max_feedback_chars: 240
+      # Release a sandbox when its trajectory made no call for this long (plain tool_agent
+      # loop); must exceed the longest generation between two turns.
+      idle_release_s: 600
+      # SandboxClaim shutdownTime: the controller deletes a claim left behind by a dead worker.
+      claim_lifetime_s: 3600
+      ready_timeout_s: 600
+    tool_schema:
+      type: function
+      function:
+        name: submit_kernel
+        description: >-
+          Evaluate a complete Python module that defines class ModelNew in the GPU sandbox.
+          Returns the verdict (status, flags, speedup, error); submit again to improve it.
+        parameters:
+          type: object
+          properties:
+            code:
+              type: string
+              description: The full module source, including imports and the Triton kernels.
+          required: ["code"]

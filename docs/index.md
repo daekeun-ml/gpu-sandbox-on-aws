@@ -1,0 +1,86 @@
+# GPU Sandbox on AWS
+
+**TL;DR** 모델이 쓴 GPU 코드를 격리된 GPU 샌드박스에서 실행해 reward를 매기는 on-policy RL post-training 환경을 구축하는 가이드입니다. Amazon EKS와 SageMaker HyperPod에서 세 가지 격리 런타임으로 구성하는 핸즈온과 Production 설계를 다룹니다.
+
+<div class="grid cards" markdown>
+
+-   :material-sprout:{ .lg .middle } **처음이에요**
+
+    ---
+
+    샌드박스, 격리 런타임, 강화학습을 처음 접하는 분을 위한 가이드입니다. 각 개념이 무엇이고 왜 필요한지 그림으로 먼저 설명하고, 실제 화면을 보며 샌드박스를 직접 띄워 봅니다.
+
+    [:octicons-arrow-right-24: 초심자 가이드로 시작](beginner/index.md)
+
+-   :material-rocket-launch:{ .lg .middle } **경험이 있어요**
+
+    ---
+
+    Kubernetes, gVisor나 Kata, GRPO를 다뤄 본 분을 위한 코스 안내입니다. 목적과 예산에 맞는 코스를 골라 바로 핸즈온이나 Production 설계를 시작합니다.
+
+    [:octicons-arrow-right-24: 학습 코스 고르기](learning_paths.md)
+
+</div>
+
+## 기존 Pain Point
+
+코드를 실행해 채점하는 RL(RLVR)은 대부분 CPU 샌드박스로 충분하지만, **reward 자체를 GPU에서 측정하는 과제**(CUDA나 Triton 커널이 얼마나 빨라졌는지를 보상으로 삼는 경우)는 샌드박스 안에 GPU가 필요합니다. 이 경우 policy(학습 중인 모델)가 쓴 신뢰할 수 없는 코드가 GPU 드라이버를 호출하는데, 일반 컨테이너(runc)는 호스트 커널과 드라이버를 그대로 공유해요. Firecracker 기반 샌드박스(E2B 등)에는 GPU를 VM에 연결할 장치가 없고, gVisor와 Kata는 GPU를 연결하는 방식이 서로 달라서 쓸 수 있는 AWS 인스턴스부터 확인해야 합니다. 며칠씩 진행되는 on-policy 학습 도중 샌드박스 이미지나 채점 harness를 고치다가 같은 GRPO group 안에 버전이 섞이면 advantage가 잘못 계산됩니다.
+
+![a: policy가 쓴 커널 코드가 runc 컨테이너에서 실행되어 host 커널과 GPU 드라이버를 그대로 공유합니다. 학습 중에 이미지나 harness를 바꾸면 한 GRPO group 안에 v1과 v2의 reward가 섞여 advantage가 잘못 계산됩니다. b: 코드와 host 커널 사이에 RuntimeClass로 선택한 gVisor 또는 Kata가 있습니다. 배치(또는 group) 단위로 한 버전만 채점하므로 reward가 일관되게 유지됩니다.](images/figures/index.svg)
+
+*그림 요약: 일반 컨테이너에서는 모델이 쓴 코드가 host 커널과 드라이버를 공유하고, 학습 중 버전이 섞이면 같은 group 안의 reward를 서로 비교할 수 없게 됩니다. 격리 런타임을 RuntimeClass로 선택하고 배치(또는 group) 단위로 버전을 고정하면 reward가 일관되게 유지됩니다.*
+
+
+## Why
+
+- **세 런타임을 같은 이미지, 같은 API로 비교합니다.** `RuntimeClass`만 바꿔 gVisor(nvproxy), Kata + QEMU(VFIO GPU passthrough), Kata + Cloud Hypervisor를 선택합니다. Kata + GPU에 `g4dn.metal`이 필요한 이유, `.metal` 없이 nested virtualization으로 실행할 수 있는 범위, HyperPod 노드의 custom AMI는 표로 정리했어요.
+- **on-policy 학습을 멈추지 않고 샌드박스를 업데이트합니다.** blue/green 풀, golden 제출물 parity 검사, 배치(또는 group) 단위 버전 고정으로 reward 일관성을 유지해요.
+- **reward 무결성까지 다룹니다.** KernelBench 계열에서 보고된 reward hacking(추가 CUDA stream, 결과 캐싱, "벤치마크 때만 틀리기", lazy tensor)을 harness 설계로 막고, harness로 막지 못하는 위험은 문서에 명시합니다.
+
+## 만드는 것
+
+![왼쪽은 학습 노드(EC2 GPU 노드 또는 HyperPod 노드)이고, 그 안에서 policy 모델과 vLLM이 GRPO로 on-policy 학습을 합니다(g5.2xlarge 또는 ml.g5.2xlarge). 오른쪽은 EC2 노드의 GPU 샌드박스 풀입니다. gVisor + nvproxy(g5.xlarge, A10G), Kata + QEMU(g4dn.metal, T4), Kata + Cloud Hypervisor(CPU 계층, c8i, nested virt, GPU는 실험적)의 세 풀이 같은 이미지를 쓰고, 런타임은 RuntimeClass로 선택합니다. 커널 코드는 group 단위로 버전을 고정해 풀로 보내고, 풀은 정확성과 speedup을 돌려줍니다.](images/figures/index--what-we-build.svg)
+
+*그림 요약: policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 세 런타임의 GPU 샌드박스 풀에 전달되고, 풀이 측정한 정확성과 speedup이 reward로 쓰입니다.*
+
+| 시나리오 | 학습 위치 | GPU 샌드박스 위치 | 언제 |
+|---|---|---|---|
+| A. EC2 자체 운영 | EKS의 EC2 GPU 노드 (`g5.2xlarge`) | 같은 클러스터의 EC2 노드 | 모든 구성 요소를 직접 제어하고 싶을 때 |
+| B1. HyperPod (기본) | HyperPod 인스턴스 그룹 (`ml.g5.2xlarge`) | HyperPod를 연결한 같은 EKS 클러스터의 EC2 노드 | 장시간 학습에 HyperPod의 노드 자동 교체와 job 재시작이 필요할 때 |
+| B2. HyperPod (실험) | HyperPod 인스턴스 그룹 | 드라이버를 바꾼 custom AMI로 만든 HyperPod 인스턴스 그룹에서 실행하는 gVisor | 샌드박스 노드에도 HyperPod 노드 복구가 필요할 때 (custom AMI를 직접 관리, AWS에서 미실행) |
+| C. c8i 단독 (GPU 없음) | 없음 (모델 없는 reward 루프) | `c8i.2xlarge` 한 대의 CPU 샌드박스 (gVisor, Kata + CLH, Kata + QEMU) | GPU 쿼터 없이, 컴퓨트 시간당 약 0.57 USD로 런타임 비교와 버전 교체를 먼저 익히고 싶을 때 ([핸즈온 10](handson/10_cpu_only.md)) |
+
+!!! tip "읽는 순서"
+    - **무엇부터 할지 모르겠다면** → [학습 코스 고르기](learning_paths.md)에서 질문 몇 개로 코스를 고르세요(무료 코스부터 안내합니다).
+    - **바로 실습하려면** → [시작하기](getting_started.md)의 로컬 smoke test를 마친 뒤 [핸즈온 00 전체 흐름](handson/00_overview.md)으로 진행하세요.
+    - **런타임 차이가 헷갈린다면** → [02 격리 런타임 비교](concepts/02_isolation_runtimes.md)의 [AWS에서 각 런타임을 실행할 수 있는 위치](concepts/02_isolation_runtimes.md#aws에서-각-런타임을-실행할-수-있는-위치) 표
+    - **고객 상황에 맞는 조합을 골라야 한다면** → [05 상황별 선택 가이드](concepts/05_decision_guide.md)
+    - **용어가 낯설다면** → [용어 사전](reference/glossary.md)
+
+## 트랙 구성
+
+| 트랙 | 목적 | 범위 |
+|---|---|---|
+| [핸즈온 (Getting Started)](handson/00_overview.md) | 하루 안에 세 런타임과 on-policy 루프를 직접 확인 | CDK 스택(private API endpoint)과 SSM 터널, TRL GRPO(1.5B, LoRA, vLLM colocate), 샌드박스 v1에서 v2로 무중단 교체 |
+| [Production Ready](production/00_architecture.md) | 운영 환경 설계와 확장 | Karpenter NodePool, sandbox gateway, 보안 위협 모델, reward 무결성, veRL on KubeRay, observability, 비용 |
+| [Agent Sandbox 확장](concepts/06_agent_sandbox.md) | multi-turn 에피소드마다 전용 샌드박스 | kubernetes-sigs/agent-sandbox의 SandboxTemplate, SandboxWarmPool, SandboxClaim. gVisor와 Kata 모두 RuntimeClass로 선택 |
+| [데모 사이트](handson/09_demo_site.md) | 실행 기록을 브라우저에서 재생 | 비공개 S3 + CloudFront(OAC, HTTPS, 보안 헤더). 방문자 요청은 클러스터나 GPU로 전달되지 않음 |
+
+## 검증 상태
+
+!!! warning "직접 확인해야 하는 범위"
+    AWS에서 끝까지 실행해 본 것은 시나리오 C뿐입니다(2026-11-14, 실습 계정 us-west-2에서 CDK 배포, Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`), 삭제). 실습 계정에서 2026-11-18에는 시나리오 A의 gVisor 경로도 실행했어요(us-west-2). 이미지 빌드, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 5 step GRPO, `08_cleanup.sh --images`입니다. 나머지 AWS 단계(시나리오 A의 `ops/rollout.sh`, `ops/bench.sh`, Kata GPU, HyperPod B1과 B2, 데모 배포 등)는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요. 가격과 버전 같은 수치는 직접 측정한 값이 아니라 공식 문서와 공개 자료에서 가져온 값입니다. 로컬 테스트의 확인 범위는 [시작하기](getting_started.md)에 있어요.
+
+!!! warning "비용"
+    GPU 노드는 노드 그룹을 지울 때까지 과금되고, `g4dn.metal`은 시간당 약 7.8 USD입니다(us-east-1과 us-west-2 온디맨드 요금). 실습을 마치면 [99 정리](handson/99_cleanup.md)를 반드시 실행하세요.
+
+!!! note "기준 시점: 2026-11"
+    이 가이드의 가격(온디맨드 요금), 버전(gVisor 릴리스, Kata, NVIDIA 드라이버 지원 목록, EKS와 HyperPod 지원 버전), 리전과 서비스 지원 범위는 2026-11 기준입니다. 이 값들은 자주 바뀌므로 배포 전에 공식 문서에서 다시 확인하세요. 각 페이지에는 이 안내를 반복하지 않습니다. 확인할 항목과 링크는 [검증된 사실과 출처](reference/sources.md)에 모았습니다.
+
+## Disclaimer
+
+이 가이드는 저자의 개인 견해와 조사 결과를 정리한 것으로, 저자가 재직 중인 회사의 공식 문서나 입장을 대변하지 않습니다. 내용이 공식 문서와 다르면 공식 문서가 우선합니다.
+
+## License
+
+코드와 문서는 [MIT](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/LICENSE)이고, 모델 라이선스는 별개입니다. 기본 모델 `Qwen/Qwen2.5-Coder-1.5B-Instruct`와 Production 예시의 `Qwen/Qwen2.5-Coder-7B-Instruct`는 Apache-2.0이고, `Qwen2.5-Coder-3B-Instruct`는 비상업 라이선스라 이 에셋에서 쓰지 않습니다.

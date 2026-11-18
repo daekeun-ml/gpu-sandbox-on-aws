@@ -1,0 +1,21 @@
+# Two namespaces with different trust levels.
+#   sandbox     runs model-written code. Pod Security "restricted" is enforced.
+#   rl-trainer  runs the trainer (trusted code, but it downloads models, so not restricted).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    gpusandbox/trust: untrusted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rl-trainer
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    gpusandbox/trust: trusted

@@ -1,0 +1,101 @@
+{
+  "concepts-01_why_gpu_sandbox": {
+    "page": "docs/concepts/01_why_gpu_sandbox.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "두 패널 그림입니다. a: 후보 커널 코드를 CPU 전용 샌드박스로 보내면 GPU에서 측정하는 과제를 채점할 수 없습니다. GPU 샌드박스로 보내면 네 가지 위험이 생깁니다. 신뢰할 수 없는 코드가 GPU 드라이버에 접근하고, 이전 평가의 상태가 다음 평가에 남고, 샌드박스마다 GPU 1개가 필요해 비용이 늘고, 측정을 속여 reward를 얻을 수 있습니다. b: 이 에셋은 CPU에서 형식과 AST 정책을 먼저 검사해, 위반은 GPU 실행 전에 판정합니다. GPU 샌드박스 pod는 pod당 GPU 1개와 평가 1개를 쓰고, gVisor 또는 Kata가 노드를 보호합니다. 실행마다 새 프로세스 트리와 캐시를 쓰고, GPU로는 정확성과 timing만 측정하며, host clock timing과 출력 checksum 비교로 측정 조작을 막습니다.",
+    "alt_en": "Two panels. a: candidate kernel code sent to a CPU-only sandbox cannot be scored on tasks measured on a GPU; sent to a GPU sandbox it brings four risks: untrusted code reaches the GPU driver, state leaks into the next evaluation, one GPU per sandbox raises cost, and the policy fools the measurement for reward. b: this asset checks format and the AST policy on CPU first so violations get a verdict before the GPU, and in a GPU sandbox pod with one GPU and one evaluation, gVisor or Kata protects the node, each run gets a new process tree and caches, the GPU measures only correctness and timing, and host clock timing with output checksums counters measurement cheating.",
+    "takeaway_ko": "CPU 샌드박스로는 GPU 과제를 채점할 수 없고, GPU를 연결하면 드라이버 노출, 상태 오염, 비용 증가, 측정 조작의 위험이 생깁니다. 이 에셋은 CPU에서 먼저 검사하고, 네 가지 위험마다 대응 방법을 둡니다.",
+    "takeaway_en": "A CPU sandbox cannot score the task and attaching a GPU brings driver exposure, state contamination, cost and measurement cheating, so this asset filters on CPU first and pairs each risk with a countermeasure."
+  },
+  "concepts-01_why_gpu_sandbox--two-tier": {
+    "page": "docs/concepts/01_why_gpu_sandbox.md",
+    "section": "두 계층 패턴: CPU에서 거르고 GPU에서 측정합니다",
+    "replaces": "C[\"completion\"] --> F{\"코드 블록 있음<br/>AST 정책 통과\"}",
+    "alt_ko": "trainer 프로세스(CPU) 안에서 completion이 KernelRewards로 전달되고, KernelRewards가 코드 블록을 추출해 AST 정책 검사(check_source)를 합니다. 코드 블록이 없거나 정책을 위반하면 샌드박스를 호출하지 않고 no_code 또는 policy_violation verdict가 됩니다. 검사를 통과한 코드는 선택 사항인 CPU 계층(정적 검사, nvcc 컴파일, c8i의 Kata + CLH, 점선 테두리)을 거쳐 GPU 계층(정확성 + timing, gVisor 또는 Kata + QEMU)으로 가고, GPU 계층이 verdict를 냅니다.",
+    "alt_en": "Inside the trainer process (CPU), a completion goes to KernelRewards for code block extraction and the AST policy check (check_source). Without a code block or with a policy violation it gets a no_code or policy_violation verdict with no sandbox call. If it passes, it goes through the optional CPU tier (static checks, nvcc compile, Kata + CLH on c8i, dashed outline) to the GPU tier (correctness + timing, gVisor or Kata + QEMU), which returns the verdict.",
+    "takeaway_ko": "코드가 없거나 정책을 위반한 completion은 GPU 샌드박스를 호출하기 전에 CPU에서 판정되고, GPU 샌드박스는 정확성과 timing만 측정합니다.",
+    "takeaway_en": "Answers without code or with a policy violation get their verdict before reaching a GPU, and the GPU sandbox only measures correctness and timing."
+  },
+  "concepts-01_why_gpu_sandbox--rl-loop": {
+    "page": "docs/concepts/01_why_gpu_sandbox.md",
+    "section": "RL 루프",
+    "replaces": "D[\"데이터셋<br/>과제 prompt\"] --> G[\"vLLM 생성<br/>prompt마다 completion 8개\"]",
+    "alt_ko": "시계 방향 루프입니다. 데이터셋의 과제 prompt마다 vLLM이 completion 8개를 생성합니다. trainer가 CPU에서 코드 추출과 AST 정책 검사를 한 뒤, GPU 1개가 할당된 샌드박스 pod로 보냅니다. pod 안에서는 untrusted child가 후보 코드를 실행하고, trusted parent가 그 출력을 reference와 timing으로 판정해 verdict를 냅니다. 이어서 reward 3요소(format, correctness, speedup) 계산, GRPO의 group 기준 advantage 계산, LoRA 업데이트(optimizer step 1회)를 거치고, 점선 화살표의 가중치 동기화로 생성 단계로 돌아갑니다.",
+    "alt_en": "A clockwise loop. vLLM generates 8 completions per task prompt from the dataset, the trainer extracts code and checks the AST policy on CPU, then sends it to a sandbox pod with one GPU. Inside the pod an untrusted child runs the candidate and a trusted parent judges its outputs with the reference and timing and returns the verdict. Then come the three-part reward (format, correctness, speedup), the group-relative GRPO advantage and the LoRA update (one optimizer step), and a dashed weight sync arrow returns to generation.",
+    "takeaway_ko": "샌드박스는 생성 단계와 업데이트 단계 사이에 있습니다. 그래서 채점이 느리면 학습 전체가 느려지고, 채점이 틀리면 학습이 잘못된 방향으로 진행됩니다.",
+    "takeaway_en": "The sandbox sits between generation and update, so slow or wrong scoring slows down or skews the whole training run."
+  },
+  "concepts-02_isolation_runtimes": {
+    "page": "docs/concepts/02_isolation_runtimes.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "세 열을 비교한 그림입니다. gVisor + GPU는 허용된 ioctl만 host 드라이버로 전달하고 /dev/kvm이 필요 없어서, g5.xlarge 같은 일반 GPU VM에서 동작합니다. Kata + GPU는 GPU를 VM에 직접 할당(VFIO)해 guest 드라이버를 쓰고, /dev/kvm, IOMMU, GPU를 소유한 host가 필요해 g4dn.metal에서만 동작합니다. 이 조합에서 upstream이 지원하는 hypervisor는 QEMU뿐이고 Cloud Hypervisor는 지원하지 않습니다(두 칸은 빨간색). Kata CPU 전용은 GPU를 쓰지 않고, nested virtualization이 /dev/kvm을 제공하므로 2026-02부터 c8i.2xlarge 같은 VM에서 Cloud Hypervisor와 QEMU 모두로 동작합니다.",
+    "alt_en": "Three columns. gVisor + GPU forwards only allowed ioctls to the host driver and needs no /dev/kvm, so it runs on regular GPU VMs such as g5.xlarge. Kata + GPU passes the whole GPU into the VM (VFIO) and uses the guest driver; it needs /dev/kvm, an IOMMU and a host that owns the GPU, so it runs only on g4dn.metal, and upstream supports only QEMU there, not Cloud Hypervisor (both cells in red). Kata CPU only has no GPU; nested virtualization provides /dev/kvm, so since 2026-02 it runs on VMs such as c8i.2xlarge with both Cloud Hypervisor and QEMU.",
+    "takeaway_ko": "gVisor와 Kata는 GPU를 연결하는 방식이 다릅니다. `.metal` 인스턴스가 필요한 조합은 Kata + GPU뿐이고, 이 조합에서 upstream이 지원하는 hypervisor는 QEMU입니다.",
+    "takeaway_en": "gVisor and Kata take different GPU paths, only Kata + GPU needs `.metal`, and there the hypervisor upstream supports is QEMU."
+  },
+  "concepts-02_isolation_runtimes--gpu-paths": {
+    "page": "docs/concepts/02_isolation_runtimes.md",
+    "section": "GPU 경로 두 가지",
+    "replaces": "subgraph G[\"gVisor + nvproxy (g6.xlarge, 일반 VM)\"]",
+    "alt_ko": "같은 다섯 줄 구조로 그린 두 패널입니다. a gVisor + nvproxy(g5.xlarge): pod(gVisor) 경계 안에 후보 코드(CUDA 사용자 공간 라이브러리), Sentry(사용자 공간 커널, systrap 플랫폼), nvproxy(드라이버 버전별 ioctl allowlist)가 있습니다. 그 아래 host에는 host NVIDIA 드라이버 580.178.04(proprietary, GSP off)와 A10G가 있습니다. b Kata + QEMU(g4dn.metal): guest VM 경계 안에 후보 코드와 guest kernel + guest NVIDIA 드라이버(kata-deploy 제공, open 615.71.09)가 있습니다. host 쪽에서는 VFIO passthrough(IOMMU가 DMA를 VM 안으로 제한)를 거쳐 T4에 바로 연결되고(host는 vfio-pci만 bind), host에는 NVIDIA 드라이버가 없습니다.",
+    "alt_en": "Two panels with the same five rows. a gVisor + nvproxy (g5.xlarge): inside the pod (gVisor) boundary are the candidate code (CUDA user-space libraries), the Sentry (user-space kernel, systrap platform) and nvproxy (ioctl allowlist per driver version); below, on the host, are the host NVIDIA driver 580.178.04 (proprietary, GSP off) and the A10G. b Kata + QEMU (g4dn.metal): inside the guest VM boundary are the candidate code and the guest kernel + guest NVIDIA driver (shipped by kata-deploy, open 615.71.09); on the host, VFIO passthrough (IOMMU confines DMA to the VM) leads straight to the T4 (the host binds only vfio-pci), with no NVIDIA driver on the host.",
+    "takeaway_ko": "gVisor에서는 후보 코드의 GPU 명령이 허용 목록을 거쳐 host 드라이버로 전달되므로 host 드라이버를 공유합니다. Kata에서는 GPU가 VM에 직접 할당되어 VM 안의 guest 드라이버만 사용합니다.",
+    "takeaway_en": "With gVisor the candidate shares the host driver through an allowlist; with Kata the GPU moves into the VM and only the guest driver touches it."
+  },
+  "concepts-03_onpolicy_rl_with_sandboxes": {
+    "page": "docs/concepts/03_onpolicy_rl_with_sandboxes.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "두 패널 그림입니다. a: prompt 하나에서 나온 group에서 completion A는 v1이 채점해 1.85점, A와 같은 코드인 completion B는 v2가 채점해 1.35점을 받고, 정답인 completion C는 pod 장애로 0점을 받습니다. group 평균과 비교하는 advantage에 버전 차이와 인프라 잡음이 섞입니다(빨간색). b(TRL): A와 B를 모두 v1이 채점해 둘 다 1.85점이고, C는 sandbox_error로 None이 되어 점선으로 표시됩니다. advantage에는 policy 차이만 반영되고, C는 baseline에서 제외됩니다.",
+    "alt_en": "Two panels. a: in the group of one prompt, completion A scored by v1 gets 1.85, completion B with the same code scored by v2 gets 1.35, and the correct completion C gets zero from a pod failure, so the advantage against the group mean mixes in version gaps and infrastructure noise (red). b (TRL): A and B are both scored by v1 at 1.85, C becomes None from sandbox_error (dashed), and the advantage reflects only policy differences with C left out of the baseline.",
+    "takeaway_ko": "같은 코드가 채점 버전에 따라 다른 점수를 받고 인프라 장애가 0점으로 기록되면, advantage에 policy 차이가 아니라 버전 차이와 인프라 장애가 반영됩니다. 그래서 한 group은 한 버전으로 채점하고, 인프라 오류는 None으로 처리해 제외합니다(TRL).",
+    "takeaway_en": "When the same code scores differently by version and infrastructure failures enter as zeros, the advantage reflects versions and infrastructure, so one group is scored by one version and infrastructure errors are left out as None (TRL)."
+  },
+  "concepts-03_onpolicy_rl_with_sandboxes--version-swap": {
+    "page": "docs/concepts/03_onpolicy_rl_with_sandboxes.md",
+    "section": "학습 중 샌드박스 업데이트",
+    "replaces": "A[\"1. v2 배포<br/>(트래픽 없음)\"] --> B[\"2. v2 검증",
+    "alt_ko": "두 줄로 된 타임라인입니다. 위 줄은 운영자가 실행하는 버전 교체 스크립트 scripts/ops/rollout.sh의 단계입니다. 1 v2 배포(트래픽 없음), 2 v2 검증(격리 증거, golden verdict), 3 parity(v1과 v2의 golden 결과 일치 확인) 순서로 진행합니다. parity가 실패하면 v1을 유지하고 v2에는 트래픽을 보내지 않습니다. 통과하면 4 routing 전환(다음 reward batch부터 v2), 5 --finish(v1을 0으로 축소하고 롤백용으로 보존)로 진행합니다. 아래 줄은 trainer가 reward batch마다 routing snapshot을 한 번 가져오는 batch 칸입니다. 4단계 아래의 점선(약 1분 안에 반영)을 기준으로 왼쪽은 v1 batch, 오른쪽은 v2 batch입니다. 진행 중이던 batch는 v1에서 끝나고 sandbox_version_switch가 기록됩니다. 맨 아래 화살표는 시간 축이며, 그동안 학습은 멈추지 않습니다.",
+    "alt_en": "A two-lane timeline. The top lane holds the steps of the operator's version switch script scripts/ops/rollout.sh: 1 deploy v2 (no traffic), 2 verify v2 (isolation evidence, golden verdicts), 3 parity (golden results of v1 and v2 match; on failure keep v1 and v2 gets no traffic), on pass 4 switch routing (v2 from the next reward batch), and 5 --finish (scale v1 to 0, kept for rollback). The bottom lane shows reward batches, each with one routing snapshot; a dashed line under step 4 (reaches pods within about a minute) marks the boundary between v1 batches on the left and v2 batches on the right, the batch in progress finishes on v1, and sandbox_version_switch is logged. An arrow at the bottom is time, with training not stopping.",
+    "takeaway_ko": "v2는 검증과 parity를 통과한 뒤에만 트래픽을 받고, 전환은 reward batch 경계에서 일어납니다. 전환 전이나 어느 단계에서 실패한 경우에는 v1이 계속 채점합니다.",
+    "takeaway_en": "v2 receives traffic only after verification and parity, the switch lands on a reward batch boundary, and v1 keeps scoring until then or if any step fails."
+  },
+  "concepts-04_platforms_and_instances": {
+    "page": "docs/concepts/04_platforms_and_instances.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "두 패널 그림입니다. a: EKS 클러스터의 HyperPod 인스턴스 그룹에 trainer(ml.g5.2xlarge)와 샌드박스를 함께 둡니다. gVisor 샌드박스는 드라이버 595.91.07을 nvproxy가 지원하지 않아(unknown) 실행되지 않고, Kata 샌드박스는 ml.*.metal과 nested virtualization이 없어 실행되지 않습니다(빨간색). b B1: 같은 EKS 클러스터에서 trainer만 HyperPod 인스턴스 그룹에 두고, gVisor 샌드박스(g5.xlarge)와 Kata 샌드박스(GPU는 g4dn.metal, CPU는 c8i.2xlarge)는 EC2 노드 그룹에 둡니다.",
+    "alt_en": "Two panels. a: putting the trainer (ml.g5.2xlarge) and the sandboxes together in the HyperPod instance group of an EKS cluster fails: the gVisor sandbox because driver 595.91.07 is unknown, the Kata sandbox because there is no ml.*.metal and no nested virtualization (red). b B1: in the same EKS cluster only the trainer sits in the HyperPod instance group, and the gVisor sandbox (g5.xlarge) and the Kata sandbox (g4dn.metal for GPU, c8i.2xlarge for CPU) sit in EC2 node groups.",
+    "takeaway_ko": "HyperPod 노드에서는 gVisor 샌드박스와 Kata 샌드박스를 모두 실행할 수 없습니다. 그래서 B1은 trainer만 HyperPod에 두고, 샌드박스는 같은 클러스터의 EC2 노드에 둡니다.",
+    "takeaway_en": "gVisor and Kata are both blocked on HyperPod nodes, so B1 puts only the trainer on HyperPod and keeps the sandboxes on EC2 nodes in the same cluster."
+  },
+  "concepts-05_decision_guide": {
+    "page": "docs/concepts/05_decision_guide.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "격리 경계와 측정 GPU를 두 축으로 한 표입니다. VM 경계와 T4 조합은 g4dn.metal의 Kata + QEMU(VFIO)로 가능합니다. VM 경계와 최신 GPU(L4, L40S, H100) 조합은 EC2에 없습니다(빨간색). 사용자 공간 커널 경계와 T4 조합은 g4dn의 gVisor이며, 이 에셋에서는 검증하지 않았습니다. 사용자 공간 커널 경계와 최신 GPU 조합은 G/P 계열 VM(g5, g6, g6e, p5)의 gVisor + nvproxy로 가능합니다. AWS 관리형 격리인 Nitro Sandboxes와 EKS isolated pods는 출시 시점에 CPU 전용이라 두 GPU 열 모두에서 쓸 수 없습니다(GPU passthrough 미지원, 빨간색).",
+    "alt_en": "A grid of isolation boundary against measurement GPU. VM boundary with T4 works as Kata + QEMU on g4dn.metal (VFIO); VM boundary with a current GPU (L4, L40S, H100) is not on EC2 (red). User-space kernel boundary with T4 is gVisor on g4dn, unverified in this asset; with a current GPU it is gVisor + nvproxy on G/P family VMs (g5, g6, g6e, p5). AWS managed isolation, Nitro Sandboxes and EKS isolated pods, spans both GPU columns as CPU only at launch with no GPU passthrough (red).",
+    "takeaway_ko": "GPU 샌드박스로 바로 쓸 수 있는 조합은 `g4dn.metal`의 Kata + QEMU와 G/P 계열 VM의 gVisor + nvproxy 두 가지입니다. VM 경계와 최신 GPU 조합은 EC2에 없고, Nitro Sandboxes와 EKS isolated pods는 출시 시점에 GPU를 지원하지 않습니다.",
+    "takeaway_en": "Two combinations are ready to use as GPU sandboxes; a VM boundary with a current GPU does not exist on EC2, and Nitro Sandboxes do not support GPUs at launch."
+  },
+  "concepts-05_decision_guide--decision-tree": {
+    "page": "docs/concepts/05_decision_guide.md",
+    "section": "결정 트리",
+    "replaces": "A{\"샌드박스 안에서 GPU 필요\"} -->|아니오| B{\"관리형 서비스 선호\"}",
+    "alt_ko": "왼쪽에 위에서 아래로 이어지는 결정 단계가 있고, 오른쪽에 결과 여섯 개가 있습니다. 샌드박스 안에서 GPU가 필요 없을 때 관리형 서비스를 선호하면 AgentCore Code Interpreter 또는 Nitro Sandboxes, EKS isolated pods(CPU 전용)를 쓰고, 선호하지 않으면 c8i의 Kata + CLH(nested virtualization)를 씁니다. GPU가 필요하고 관리형 GPU 샌드박스를 선호하면 서드파티 서비스(예: Modal, gVisor 기반, 이 에셋 범위 밖)를 씁니다. 관리형을 선호하지 않고 VM 경계(서로 다른 고객의 적대적 코드)가 필요 없으면 G/P 계열 VM의 gVisor + nvproxy(g5 A10G, g6 L4, g6e L40S, p5 H100)를 씁니다. VM 경계가 필요하고 T4에서 측정한 timing으로 충분하면 g4dn.metal의 Kata + QEMU(VM 경계 + VFIO)를 씁니다. 충분하지 않으면 EC2에 VM 경계와 최신 GPU 조합이 없으므로, gVisor와 보완 통제로 위험을 수용하거나 요구 사항을 다시 검토합니다(빨간색). 이 에셋이 구성하는 세 조합은 파란색입니다.",
+    "alt_en": "A decision ladder running down the left with six outcomes on the right. If no GPU is needed inside the sandbox and you prefer a managed service: AgentCore Code Interpreter or Nitro Sandboxes, EKS isolated pods (CPU only); otherwise Kata + CLH on c8i (nested virtualization). If a GPU is needed and you prefer a managed GPU sandbox: a third-party service (for example Modal, gVisor-based, out of scope). Otherwise, without a VM boundary requirement: gVisor + nvproxy on G/P family VMs (g5 A10G, g6 L4, g6e L40S, p5 H100). With a VM boundary and T4 acceptable for measurement: Kata + QEMU on g4dn.metal (VM boundary + VFIO); if T4 is not acceptable, EC2 has no VM boundary + current GPU combination, so accept the risk with gVisor + compensating controls or revisit the requirements (red). The three combinations this asset builds are blue.",
+    "takeaway_ko": "GPU와 VM 경계가 모두 필요할 때 EC2에서 Kata로 쓸 수 있는 GPU는 `g4dn.metal`의 T4뿐입니다. reward에 쓰는 timing을 T4에서 측정해도 되면 Kata를 쓰고, 배포할 GPU(L4, H100 등)에서 측정해야 하면 gVisor를 보완 통제와 함께 씁니다.",
+    "takeaway_en": "When you need both a GPU and a VM boundary, the only GPU Kata can use on EC2 is the T4 in `g4dn.metal`. If measuring reward timing on a T4 is acceptable, choose Kata; if you must measure on the GPU you deploy to (L4, H100 and so on), choose gVisor and apply compensating controls."
+  },
+  "concepts-06_agent_sandbox": {
+    "page": "docs/concepts/06_agent_sandbox.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "두 패널 그림입니다. a reward 풀: 에피소드 하나에서 turn 1 제출은 pod A의 GPU 1로, turn 2 수정 제출은 pod B의 GPU 2로 전송됩니다. 두 pod 모두 요청이 끝나면 상태를 삭제합니다. 에피소드마다 샌드박스를 새로 생성하는 점선 경로에서는 Kata GPU VM이 처음 Ready가 될 때까지 몇 분이 걸립니다(빨간색). b Agent Sandbox: 에피소드가 SandboxClaim을 생성하면 SandboxWarmPool이 대기 중인 Sandbox를 할당합니다. 이 풀의 Sandbox는 미리 기동되어 egress 차단을 확인한 뒤 Ready가 된 상태입니다. turn 1과 turn 2는 모두 claim한 샌드박스 하나로 전송됩니다(같은 GPU, 작업 공간 유지, 격리는 RuntimeClass gVisor 또는 Kata).",
+    "alt_en": "Two panels. a reward pools: in one episode the turn 1 submission goes to pod A on GPU 1 and the turn 2 revised submission to pod B on GPU 2, and both remove their state after the request; the dashed fresh-start-per-episode path makes a Kata GPU VM take minutes to first Ready (red). b Agent Sandbox: the episode creates a SandboxClaim, the SandboxWarmPool, started ahead and Ready after the egress check, hands over a waiting Sandbox, and turn 1 and turn 2 both go to that one claimed sandbox (same GPU, workspace kept, isolation from the RuntimeClass, gVisor or Kata).",
+    "takeaway_ko": "reward 풀에서는 한 에피소드의 turn이 서로 다른 pod와 GPU에서 실행되고 상태도 유지되지 않습니다. Agent Sandbox에서는 warm pool에서 claim한 샌드박스 하나를 에피소드가 끝날 때까지 쓰므로, 에피소드마다 Kata GPU VM을 새로 시작하느라 몇 분씩 기다리지 않아도 됩니다.",
+    "takeaway_en": "In the reward pools the turns of one episode scatter across pods and GPUs and keep no state, and a fresh start per episode makes Kata GPU wait minutes, while Agent Sandbox keeps one sandbox claimed from a warm pool for the whole episode."
+  }
+}

@@ -1,0 +1,65 @@
+# NVIDIA GPU Operator v26.7.2 values for Kata GPU passthrough (as of 2026-11).
+#   helm install gpu-operator nvidia/gpu-operator --version v26.7.2 -n gpu-operator \
+#     --create-namespace -f infra/kata/gpu-operator-values.yaml
+#
+# The operator only manages the Kata GPU node (label nvidia.com/gpu.workload.config=
+# vm-passthrough): it binds the T4s to vfio-pci (vfio-manager) and advertises them as
+# nvidia.com/pgpu (kata sandbox device plugin). Container-mode GPU nodes (trainer, gVisor) are
+# labelled nvidia.com/gpu.deploy.operands=false and use the EKS AMI driver plus our own
+# device plugin, so every container-mode operand is also disabled here.
+sandboxWorkloads:
+  enabled: true
+  defaultWorkload: container
+  mode: kata
+
+# T4 has no confidential computing. With "on", cc-manager exits on T4 and the
+# kata-qemu-nvidia-gpu RuntimeClass (nodeSelector nvidia.com/cc.ready.state=false) never
+# matches the node.
+ccManager:
+  defaultMode: "off"
+
+nfd:
+  enabled: true
+  nodefeaturerules: true
+
+cdi:
+  enabled: true
+
+driver:
+  enabled: false        # VM passthrough: the host must not load the NVIDIA driver
+toolkit:
+  enabled: false
+devicePlugin:
+  enabled: false
+dcgmExporter:
+  enabled: false
+gfd:
+  enabled: false
+migManager:
+  enabled: false
+vgpuDeviceManager:
+  enabled: false
+
+vfioManager:
+  enabled: true
+kataSandboxDevicePlugin:
+  enabled: true
+
+daemonsets:
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+    - key: gpusandbox/role
+      operator: Exists
+      effect: NoSchedule
+
+node-feature-discovery:
+  worker:
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: gpusandbox/role
+        operator: Exists
+        effect: NoSchedule

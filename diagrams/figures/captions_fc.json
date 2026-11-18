@@ -1,0 +1,56 @@
+{
+  "handson-00_overview": {
+    "page": "docs/handson/00_overview.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: 놓치기 쉬운 네 가지와 그 결과입니다. 03_build_push_images.sh나 05_setup_namespaces_auth.sh를 건너뛰면 config.env 에러가 나고 pod가 Ready가 되지 않습니다. G and VT 쿼터를 올리지 않으면 02_create_cluster.sh에서 노드 그룹 생성이 실패합니다. 어느 단계가 노드를 켜는지 모르면 실습 뒤에도 노드 요금이 나갑니다. GPU와 무관한 설정 실수를 시간당 7.824 USD인 g4dn.metal에서 디버깅하게 됩니다. b: 이 핸즈온의 대응입니다. 번호 순서대로 실행하면 빈 값이나 __SET_ME__가 있을 때 스크립트가 중단됩니다. 02_create_cluster.sh 전에 실행하는 사전 확인(01_check_prereqs.sh)이 G and VT 쿼터를 조회합니다(읽기 전용). 끝나면 실행하는 정리(08_cleanup.sh)가 확인 단어를 입력받은 뒤 과금 리소스를 모두 해제합니다. Kata GPU 노드 추가(kata/gpu_nodes.sh)보다 Kata CPU 노드 추가(kata/cpu_nodes.sh)를 먼저 실행해 c8i.2xlarge에서 리허설하면 g4dn.metal은 GPU passthrough 확인에만 씁니다.",
+    "alt_en": "a: four things that are easy to miss. Skipping 03_build_push_images.sh or 05_setup_namespaces_auth.sh gives a config.env error and pods that never turn Ready, an unraised G and VT quota makes node group creation in 02_create_cluster.sh fail, not knowing which step starts which node keeps nodes billing after you finish, and GPU-unrelated mistakes get debugged on g4dn.metal at 7.824 USD per hour. b: running in number order, scripts stop at an empty or __SET_ME__ value; running the prerequisite check (01_check_prereqs.sh) before 02_create_cluster.sh reads the G and VT quota; running the cleanup (08_cleanup.sh) when done releases every billable resource after a typed confirmation word; running the Kata CPU node step (kata/cpu_nodes.sh) before the Kata GPU node step (kata/gpu_nodes.sh) rehearses on c8i.2xlarge so g4dn.metal is used only for GPU passthrough",
+    "takeaway_ko": "실행 순서, G and VT 쿼터, 과금되는 노드, 디버깅에 쓸 노드 중 하나라도 놓치면 실습보다 오류 처리와 비용 관리에 시간이 더 듭니다. 이 핸즈온은 번호 순서 실행, 사전 확인(`01_check_prereqs.sh`), 정리(`08_cleanup.sh`), `c8i.2xlarge` 리허설로 네 가지를 각각 처리합니다.",
+    "takeaway_en": "Miss the order, the quota, a running node or the node you debug on, and you spend more time on debugging and cost control than on the exercise. Number order, the prerequisite check (`01_check_prereqs.sh`), the cleanup (`08_cleanup.sh`) and a `c8i.2xlarge` rehearsal handle each one."
+  },
+  "handson-01_cluster_and_images": {
+    "page": "docs/handson/01_cluster_and_images.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: 기본값으로 만든 EKS 클러스터에서는 인터넷의 누구나 public endpoint로 EKS API에 접속을 시도할 수 있습니다(IAM 인증은 그대로 적용됩니다). IMDS hop limit이 2 이상인 노드에서는 pod 안의 코드가 IMDS(169.254.169.254)에 요청해 노드의 인스턴스 자격 증명을 얻을 수 있습니다. b: CDK 스택은 private endpoint만 켜서 인터넷에서 EKS API로 접속하는 경로를 없애고, 작업 PC는 SSM 터널로 접속합니다. 노드는 IMDSv2 필수와 hop limit 1로 설정되어 pod가 IMDS 응답을 받지 못합니다.",
+    "alt_en": "a: in an EKS cluster created with defaults, the internet can try the EKS API on the public endpoint (IAM auth still applies), and on a node with IMDS hop limit 2 or more, code in a pod reaches the node instance credentials through IMDS 169.254.169.254. b: the CDK stack enables only the private endpoint, so the internet path is closed and the work PC connects through an SSM tunnel, and nodes require IMDSv2 with hop limit 1, so the pod gets no IMDS response",
+    "takeaway_ko": "기본 설정의 EKS 클러스터에서는 인터넷에서 클러스터 API로 접속을 시도할 수 있고, pod 안의 코드가 노드 자격 증명을 얻을 수 있습니다. CDK 스택은 private endpoint만 켜고 IMDS hop limit을 1로 설정해 두 경로를 모두 차단합니다.",
+    "takeaway_en": "With these settings left in place, there is a way from the internet to the cluster API and from code in a pod to the node's credentials. The CDK stack enables only the private endpoint and sets the IMDS hop limit to 1, which closes both."
+  },
+  "handson-02_gvisor": {
+    "page": "docs/handson/02_gvisor.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: runc 노드에서는 nvidia-container-runtime hook이 GPU를 컨테이너에 주입합니다. gVisor 노드에서는 Sentry가 syscall을 처리하므로 같은 hook을 쓸 수 없고, sandbox 컨테이너에 GPU를 연결할 경로가 없습니다. 또 AMI 교체로 드라이버 버전이 바뀌어 nvproxy가 지원하지 않는 버전이 되면 샌드박스가 시작되지 않을 수 있습니다. b: runc trainer 노드와 gVisor 노드 모두 같은 device plugin(cdi-cri)이 CDI 장치를 할당하고, runsc가 nvproxy를 켭니다. g5(A10G) 노드의 proprietary 드라이버 580.178.04(GSP off)는 버전이 gVisor 지원 목록에 있으므로 샌드박스가 시작됩니다. 드라이버 버전이 목록과 일치하지 않으면 pod가 Ready가 되지 않습니다(fail closed).",
+    "alt_en": "a: on a runc node the nvidia-container-runtime hook injects the GPU, but on a gVisor node the Sentry receives syscalls, the same hook does not apply and the sandbox container has no path for the devices; an AMI change to a driver version nvproxy does not know keeps the sandbox from starting. b: the same device plugin (cdi-cri) hands CDI devices to both the runc trainer node and the gVisor node, where runsc turns on nvproxy, and the g5 (A10G) node's proprietary driver 580.178.04 (GSP off) is a version on the gVisor support list, so the sandbox starts and a mismatch is never Ready (fail closed)",
+    "takeaway_ko": "runc에서 GPU를 연결하던 hook 방식은 gVisor에서 쓸 수 없고, 드라이버 버전이 nvproxy 지원 목록에서 벗어나면 샌드박스가 시작되지 않을 수 있습니다. CDI로 장치를 컨테이너에 연결하고 지원 목록에 있는 드라이버만 쓰면 sandbox 컨테이너가 GPU를 쓸 수 있고, 버전이 맞지 않으면 pod가 Ready가 되지 않습니다(fail closed).",
+    "takeaway_en": "The way runc attaches GPUs does not work under gVisor, and a driver version change can make nvproxy block the sandbox from starting. With devices handed over through CDI and only a driver on the support list, the sandbox container gets its GPU and a mismatch fails closed."
+  },
+  "handson-03_kata": {
+    "page": "docs/handson/03_kata.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: kata-deploy와 containerd drop-in, RuntimeClass와 NetworkPolicy, node guard와 부팅 시간처럼 GPU와 무관한 설정과 GPU passthrough(VFIO, IOMMU)를 모두 g4dn.metal(시간당 7.824 USD)에서 확인합니다. g4dn.metal은 Kata VM에 GPU를 직접 할당할 수 있는 유일한 x86 NVIDIA 인스턴스입니다. b: GPU와 무관한 설정은 nested virtualization(/dev/kvm)을 지원하는 c8i.2xlarge(시간당 0.37484 USD)에서 먼저 확인하고, GPU passthrough만 IOMMU AMI로 시작한 g4dn.metal에서 확인합니다.",
+    "alt_en": "a: settings unrelated to the GPU (kata-deploy and containerd drop-ins, RuntimeClasses and NetworkPolicy, node guard and boot time) and GPU passthrough (VFIO, IOMMU) are all checked on g4dn.metal (7.824 USD per hour), the only x86 NVIDIA instance that can hand a GPU to a Kata VM. b: the GPU-unrelated settings are checked first on c8i.2xlarge (0.37484 USD per hour) with nested virtualization (/dev/kvm), and only GPU passthrough on g4dn.metal booted from the IOMMU AMI",
+    "takeaway_ko": "AWS에서 Kata VM에 GPU를 직접 할당할 수 있는 x86 NVIDIA 인스턴스는 `g4dn.metal` 하나뿐이라, GPU와 무관한 디버깅까지 시간당 7.824 USD인 노드에서 하게 됩니다. GPU와 무관한 확인을 `c8i.2xlarge`(시간당 0.37484 USD)에서 먼저 하면 `g4dn.metal`에서는 GPU passthrough만 확인하면 됩니다.",
+    "takeaway_en": "`g4dn.metal` is the only x86 NVIDIA instance on AWS that can hand a GPU to a Kata VM, so even GPU-unrelated debugging lands on a 7.824 USD per hour node. Checking the GPU-unrelated parts on `c8i.2xlarge` (0.37484 USD per hour) first leaves only GPU passthrough for `g4dn.metal`."
+  },
+  "handson-04_sandbox_pools": {
+    "page": "docs/handson/04_sandbox_pools.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: 서버와 같은 샌드박스 pod에서 실행되는 후보 코드가 pod에 둔 token과 API key를 읽습니다. 정책이 적용되기 전 default-allow 상태에서는 IMDS와 API server에 접속할 수 있고, 항상 허용되는 노드 IP를 통해 노드 kubelet(포트 10250)에도 접속할 수 있습니다. b: pod에는 비밀이 아닌 JWKS 공개 키만 있어 읽어 갈 비밀이 없습니다. IMDS와 API server 접근은 default-deny와, 차단을 확인한 뒤에만 Ready가 되는 readiness가 차단합니다. 노드 kubelet 접근은 node guard와 readiness의 차단 확인이 차단합니다.",
+    "alt_en": "a: candidate code running in the same sandbox pod as the server reads the token and API key in the pod, reaches IMDS and the API server while the pod is default-allow before policies apply, and reaches the node kubelet on port 10250 through the always-allowed node IP. b: the pod holds only JWKS public keys, which are not a secret, so there is nothing to steal; default-deny and a readiness that passes only after the block is checked stop the path to IMDS and the API server, and node guard plus the readiness check stop the path to the node kubelet",
+    "takeaway_ko": "후보 코드는 같은 pod의 비밀, 정책이 적용되기 전의 네트워크, 노드 IP 예외를 통해 다른 리소스에 접근할 수 있습니다. 샌드박스 pod에는 비밀 대신 공개 키(JWKS)만 두고, 네트워크 차단을 직접 확인한 pod만 Ready가 됩니다.",
+    "takeaway_en": "Secrets in the same pod, the network before policies apply, and the node IP exception are all paths candidate code can reach. The sandbox keeps only public keys (JWKS) instead of secrets, and only a pod that has checked the blocks itself turns Ready."
+  },
+  "handson-05_grpo_training": {
+    "page": "docs/handson/05_grpo_training.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: 맞으면 1, 틀리면 0인 reward로 샌드박스가 group 하나(completion 8개)를 채점합니다. 올바른 커널이 하나도 없으면 8개 모두 0점이라 advantage가 0이 되고 학습 신호가 없습니다. pod가 바쁘거나 장애가 나서 채점에 실패해도 0점이 되므로, policy가 인프라 문제 때문에 낮은 reward를 받습니다. b: 부분 점수(0.1, 0.15, 0.3, 0.4)를 쓰면 0.3과 0.1의 차이도 학습 신호가 됩니다. sandbox_error는 None으로 처리되어 group baseline에서 제외되므로 policy가 낮은 reward를 받지 않습니다.",
+    "alt_en": "a: with a reward of 1 if correct and 0 otherwise, when the sandbox scores one group of 8 completions and there is no correct kernel, all 8 score 0, the advantage is 0 and there is no learning signal; when a pod is busy or dead, the failed scoring also gets 0 and the policy is punished for an infrastructure problem. b: with partial credit (0.1, 0.15, 0.3, 0.4), even the gap between 0.3 and 0.1 is a learning signal, and sandbox_error returns None, so the completion is left out of the group baseline and not punished",
+    "takeaway_ko": "0과 1만 있는 reward에서는 올바른 커널이 없는 group의 advantage가 0이 되어 학습 신호가 없고, 채점 실패를 0점으로 처리하면 policy가 인프라 문제로 낮은 reward를 받습니다. 부분 점수를 쓰면 group 안의 점수 차이가 학습 신호가 되고, sandbox_error는 None으로 처리되어 group baseline에서 제외됩니다.",
+    "takeaway_en": "A 0-or-1 reward removes the learning signal, and scoring failures as 0 sends the policy a wrong signal. Partial credit turns differences inside a group into a learning signal, and sandbox_error returns None and is left out of the group baseline."
+  }
+}

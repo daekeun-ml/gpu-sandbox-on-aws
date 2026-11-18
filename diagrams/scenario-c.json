@@ -1,0 +1,186 @@
+{
+  "title": "Scenario C: CPU-only sandboxes on one nested-virtualization c8i node",
+  "layout": "auto",
+  "groups": [
+    {
+      "id": "g_operator_access",
+      "label": "Operator access"
+    },
+    {
+      "id": "g_eks_control_plane",
+      "label": "EKS control plane"
+    },
+    {
+      "id": "g_system_nodes_m6i_large_x2",
+      "label": "system nodes m6i.large x2"
+    },
+    {
+      "id": "g_sandbox_kata_cpu_node_c8i_2xlarge",
+      "label": "sandbox-kata-cpu node c8i.2xlarge"
+    },
+    {
+      "id": "g_registry",
+      "label": "Registry"
+    },
+    {
+      "id": "g_shared_services",
+      "label": "Shared services"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "operator",
+      "label": "Operator workstation",
+      "icon": "client",
+      "outside": true
+    },
+    {
+      "id": "ssm",
+      "label": "SSM Session Manager",
+      "icon": "systems_manager_session_manager",
+      "group": "g_operator_access"
+    },
+    {
+      "id": "access",
+      "label": "Access instance t4g.nano",
+      "icon": "t4g_instance",
+      "group": "g_operator_access"
+    },
+    {
+      "id": "eks",
+      "label": "EKS 1.36 private API",
+      "icon": "eks",
+      "group": "g_eks_control_plane"
+    },
+    {
+      "id": "kms",
+      "label": "KMS secrets key",
+      "icon": "key_management_service",
+      "group": "g_eks_control_plane"
+    },
+    {
+      "id": "sim",
+      "label": "simulate and probe Jobs",
+      "icon": "container_1",
+      "group": "g_system_nodes_m6i_large_x2"
+    },
+    {
+      "id": "sbx_v1",
+      "label": "kata-clh-cpu pool v1",
+      "icon": "container_1",
+      "group": "g_sandbox_kata_cpu_node_c8i_2xlarge"
+    },
+    {
+      "id": "sbx_v2",
+      "label": "kata-clh-cpu pool v2",
+      "icon": "container_1",
+      "group": "g_sandbox_kata_cpu_node_c8i_2xlarge"
+    },
+    {
+      "id": "sbx_gvisor",
+      "label": "gvisor-cpu pool v1",
+      "icon": "container_1",
+      "group": "g_sandbox_kata_cpu_node_c8i_2xlarge"
+    },
+    {
+      "id": "sbx_qemu",
+      "label": "kata-qemu-cpu pool v1",
+      "icon": "container_1",
+      "group": "g_sandbox_kata_cpu_node_c8i_2xlarge"
+    },
+    {
+      "id": "ecr",
+      "label": "ECR repositories",
+      "icon": "ecr",
+      "group": "g_registry"
+    },
+    {
+      "id": "cw",
+      "label": "CloudWatch Logs",
+      "icon": "cloudwatch_2",
+      "group": "g_shared_services"
+    }
+  ],
+  "edges": [
+    {
+      "from": "operator",
+      "to": "ssm",
+      "num": 1,
+      "label": "kubectl tunnel"
+    },
+    {
+      "from": "ssm",
+      "to": "access",
+      "num": 2,
+      "label": "port forward"
+    },
+    {
+      "from": "access",
+      "to": "eks",
+      "num": 3,
+      "label": "HTTPS 443"
+    },
+    {
+      "from": "eks",
+      "to": "sim",
+      "num": 4,
+      "dashed": true,
+      "label": "Job, active pool"
+    },
+    {
+      "from": "sim",
+      "to": "sbx_v1",
+      "num": 5,
+      "label": "golden code"
+    },
+    {
+      "from": "sim",
+      "to": "sbx_v2",
+      "num": 6,
+      "dashed": true,
+      "label": "after switch"
+    },
+    {
+      "from": "sim",
+      "to": "sbx_gvisor",
+      "num": 7,
+      "dashed": true,
+      "label": "probe, bench"
+    },
+    {
+      "from": "sim",
+      "to": "sbx_qemu",
+      "num": 8,
+      "dashed": true,
+      "label": "probe, bench"
+    },
+    {
+      "from": "sbx_v1",
+      "to": "ecr",
+      "num": 9,
+      "dashed": true,
+      "label": "image pull"
+    },
+    {
+      "from": "operator",
+      "to": "ecr",
+      "num": 10,
+      "dashed": true,
+      "label": "image push"
+    },
+    {
+      "from": "eks",
+      "to": "cw",
+      "num": 11,
+      "dashed": true,
+      "label": "control plane logs"
+    },
+    {
+      "from": "eks",
+      "to": "kms",
+      "num": 12,
+      "dashed": true,
+      "label": "encrypt secrets"
+    }
+  ]
+}

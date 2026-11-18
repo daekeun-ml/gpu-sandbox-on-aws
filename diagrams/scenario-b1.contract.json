@@ -1,0 +1,38 @@
+{
+  "components": {
+    "operator": "drawn",
+    "ssm": "drawn",
+    "access": "drawn",
+    "eks": "drawn",
+    "kms": "drawn",
+    "trainer": "drawn",
+    "sbx_v1": "drawn",
+    "sbx_v2": "drawn",
+    "ecr": "drawn",
+    "cw": "drawn",
+    "nat": "drawn",
+    "lcs": "drawn",
+    "hf": "drawn",
+    "vpc": "not drawn",
+    "sysng": "not drawn",
+    "iam": "not drawn",
+    "routing": "not drawn",
+    "hpaddon": "not drawn"
+  },
+  "relationships": {
+    "operator → ssm": "primary",
+    "ssm → access": "primary",
+    "access → eks": "primary",
+    "trainer → lcs": "primary",
+    "eks → trainer": "primary",
+    "trainer → nat": "primary",
+    "nat → hf": "primary",
+    "trainer → sbx_v1": "primary",
+    "trainer → sbx_v2": "primary",
+    "sbx_v1 → ecr": "aux",
+    "operator → ecr": "aux",
+    "operator → lcs": "aux",
+    "eks → cw": "aux",
+    "eks → kms": "aux"
+  }
+}

@@ -1,0 +1,71 @@
+/* 표 안의 긴 URL이 줄바꿈되지 않아 표가 오른쪽으로 삐져나가는 문제를 막습니다.
+   (근거 표의 URL이 최대 107자. 공백이 없어 브라우저가 줄을 못 나눕니다.)
+   URL 텍스트 자체는 그대로 두고, 표시만 여러 줄로 흘립니다. */
+.md-typeset table:not([class]) td,
+.md-typeset table:not([class]) th {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 표가 화면보다 넓으면 표 자체를 가로 스크롤합니다(본문은 밀리지 않게).
+   Material 기본값이지만, 위 줄바꿈으로 대부분 해결되고 이건 최후 방어입니다. */
+.md-typeset .md-typeset__table {
+  display: block;
+  overflow-x: auto;
+}
+
+/* 인라인 코드(`option.tensor_parallel_degree` 같은 긴 식별자)도 같은 이유로 처리.
+   Material 기본값은 word-break:break-word 인데, 이건 '단어 경계'만 끊습니다. 공백도
+   하이픈도 없는 식별자는 한 단어로 취급돼 끊기지 않고 표를 밀어냅니다.
+   그래서 anywhere 를 !important 로 덮어씁니다(표 안 code 는 특히 자주 넘칩니다). */
+/* pre 안의 code는 제외합니다. 코드블록은 Material이 가로 스크롤로 처리하는데,
+   여기에 줄바꿈을 강제하면 셸 명령이 중간에서 꺾여 복사와 읽기가 어려워지고, 긴 줄이
+   컨테이너를 밀어내 본문 전체가 오른쪽으로 흐릅니다(실측: 174자 EAGLE3 설정 줄). */
+.md-typeset :not(pre) > code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 표 안의 code 는 셀 폭이 좁아 더 공격적으로 끊어야 합니다. */
+/* 표 안의 인라인 code 는 셀 폭이 좁아 더 공격적으로 끊습니다. 여기도 pre 는 제외합니다
+   (표 셀 안에 코드블록이 들어가는 경우가 있고, 그건 셀 안에서 스크롤돼야 합니다). */
+.md-typeset table:not([class]) td :not(pre) > code,
+.md-typeset table:not([class]) th :not(pre) > code {
+  word-break: break-all;
+}
+
+/* 표 헤더에만 옅은 회색을 깔아 본문 행과 구분합니다. Material 기본값은 흰 배경 +
+   굵은 글씨뿐이어서, 이 문서처럼 표가 많으면 헤더가 첫 데이터 행처럼 읽힙니다.
+   본문 행은 줄무늬 없이 단색으로 둡니다(헤더 경계만 필요한 것이고, 줄무늬까지
+   더하면 셀 안의 admonition/코드와 배경이 겹쳐 지저분해집니다). */
+.md-typeset table:not([class]) th {
+  background-color: #f0f1f3;
+  color: var(--md-default-fg-color);
+  border-bottom: 2px solid var(--md-default-fg-color--lightest);
+  font-weight: 600;
+}
+
+/* 다크 모드에 같은 회색을 깔면 배경보다 밝아져 헤더가 튀어 보입니다.
+   테마 변수로 살짝만 띄웁니다(스킴을 바꿔도 따라옵니다). */
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background-color: var(--md-default-fg-color--lightest);
+}
+
+/* 바깥 테두리를 없애고 행 구분선만 남깁니다. Material 기본값은 표 전체를
+   `border: .05rem solid` + `border-radius`로 감싸는데, 컬럼이 2~3개인 표는
+   폭이 좁아서 그 테두리가 내용을 가둔 작은 상자처럼 보입니다(이 문서에는 2열
+   표가 많습니다). 구분선은 헤더 아래 경계와 행 사이 `border-top`으로 이미
+   충분하므로, 가두는 선만 걷어냅니다.
+   `display: inline-block`은 그대로 둡니다. 이것이 표를 내용 폭에 맞추고
+   `overflow: auto`로 넓은 표를 가로 스크롤시키는 장치라, table로 바꾸면 긴 표가
+   본문을 밀어냅니다(위 가로 스크롤 규칙이 기대는 지점입니다). */
+.md-typeset table:not([class]) {
+  border: none;
+  border-radius: 0;
+}
+
+/* 첫 행의 `border-top`은 헤더 아래 경계선과 겹쳐 선이 두 겹으로 보입니다.
+   헤더가 있는 표에서만 제거합니다(헤더 없는 표는 첫 행 선이 위 경계 역할). */
+.md-typeset table:not([class]) thead + tbody tr:first-child td {
+  border-top: none;
+}

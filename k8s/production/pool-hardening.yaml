@@ -1,0 +1,43 @@
+# Production extras for the sandbox namespace.
+#
+# 1) Sandbox pools outrank the placeholder pods that keep warm capacity (below).
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gpu-sandbox-pool
+value: 100000
+globalDefault: false
+description: GPU sandbox pools; preempts warm-capacity placeholders.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gpu-sandbox-warm-placeholder
+value: -10
+globalDefault: false
+description: Placeholder pods that hold spare sandbox nodes; first to be preempted.
+---
+# 2) Voluntary disruptions (node drains, Karpenter consolidation) take at most one sandbox
+#    pod of a pool at a time.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gpu-sandbox-pools
+  namespace: sandbox
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gpu-sandbox
+---
+# 3) Cap what the namespace can ask for, so a runaway Deployment cannot take every GPU.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: gpu-sandbox-quota
+  namespace: sandbox
+spec:
+  hard:
+    requests.nvidia.com/gpu: "16"
+    requests.nvidia.com/pgpu: "8"
+    pods: "64"

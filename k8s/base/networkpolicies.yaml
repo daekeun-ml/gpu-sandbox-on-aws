@@ -1,0 +1,36 @@
+# Network boundary of the sandbox namespace.
+# Requires a NetworkPolicy enforcer. On EKS this is the VPC CNI with network policy enabled
+# (the CDK stack, cdk/gpusandbox_cdk/stack.py, sets enableNetworkPolicy for the vpc-cni add-on).
+#
+# 1) Nothing goes in or out by default: no DNS, no IMDS, no internet, no Kubernetes API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: sandbox
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+# 2) Only pods labelled as sandbox clients in the trainer namespace may call the sandbox API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-clients-to-sandbox-api
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: gpu-sandbox
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rl-trainer
+          podSelector:
+            matchLabels:
+              gpusandbox/client: "true"
+      ports:
+        - protocol: TCP
+          port: 8000

@@ -1,0 +1,27 @@
+# Local configuration with account-specific values
+scripts/config.env
+.routing.json
+bench-*.jsonl
+
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# MkDocs output
+site/
+
+# Tool state
+.omc/state/
+.omc/sessions/
+.DS_Store
+
+# Assistant working notes (research briefs, state)
+.omc/
+
+# CDK
+cdk/cdk.out/
+cdk/cdk.context.json

@@ -1,0 +1,74 @@
+{
+  "production-00_architecture": {
+    "page": "docs/production/00_architecture.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: 핸즈온 구성을 그대로 확장하면 네 가지 문제가 생깁니다. trainer 프로세스가 각자 빈 pod를 판단해 요청이 샌드박스 pod A에 몰리고, 503 재시도가 늘어납니다. veRL reward worker는 샘플마다 따로 routing하므로 한 group 안에서 v1과 v2가 섞일 수 있습니다. 노드 그룹 desired 값을 수동으로 조정하면 GPU 노드 수가 부하와 맞지 않습니다(계속 실행되거나 늦게 증설). scripts/ops/sync_jwks.sh를 수동으로 실행하는 방식에서는 서명 키가 바뀌면 모든 요청이 거부됩니다(fail closed). b: Production에서는 trainer가 sandbox gateway만 호출하고, gateway가 pod마다 평가 1건만 보냅니다. batch 스냅샷과 group_key pin으로 group마다 한 버전을 씁니다. Karpenter NodePool은 노드 수를 0부터 limits 안에서 수요에 맞춰 조정합니다(g4dn.metal은 warm 한 대). jwks-sync CronJob은 매시 17분에 ConfigMap을 갱신해 서명 키 회전을 반영합니다.",
+    "alt_en": "a: scaled up as is, the hands-on setup lets every trainer process pick a free pod alone, so requests pile onto sandbox pod A (more 503 retries); the veRL reward worker routes each sample separately, so v1 and v2 can mix inside one group; node group desired values set by hand leave GPU nodes idle or growing too late; and scripts/ops/sync_jwks.sh run by hand means every request is rejected when the signing key changes. b: in production the trainers call only the sandbox gateway, which sends one evaluation per pod and keeps one version per group with a batch snapshot and group_key pins; Karpenter NodePools follow demand from zero (one warm g4dn.metal); and the jwks-sync CronJob patches the ConfigMap hourly at :17 to follow key rotation",
+    "takeaway_ko": "핸즈온 구성을 그대로 확장하면 같은 pod에 요청이 몰리고, group 안에서 버전이 섞일 수 있으며, 노드 수와 서명 키를 수동으로 관리해야 합니다. Production에서는 gateway가 pod 선택과 버전 고정을, Karpenter NodePool이 노드 수 조정을, jwks-sync CronJob이 서명 키 갱신을 맡습니다.",
+    "takeaway_en": "Every caller picks pods on its own, so requests pile onto the same pod, per-sample scoring does not pin the version, and nodes and signing keys handled by hand do not follow load or key rotation. Production hands these to the gateway, Karpenter NodePools and the jwks-sync CronJob."
+  },
+  "production-00_architecture--overview": {
+    "page": "docs/production/00_architecture.md",
+    "section": "전체 구성",
+    "replaces": "subgraph TR[\"rl-trainer: trainer NodePool (g6e, p5) 또는 HyperPod 인스턴스 그룹\"]",
+    "alt_ko": "rl-trainer namespace(trainer NodePool g6e, p5 또는 HyperPod 인스턴스 그룹)의 TRL ranks(Job)와 veRL Ray workers(RayCluster)는 aud가 gpu-sandbox-gateway인 토큰으로 sandbox-gateway namespace(system 노드)의 sandbox gateway만 호출합니다. sandbox gateway는 TokenReview, routing, group pin, pod당 요청 1건, recycling을 처리합니다. gateway는 aud가 gpu-sandbox인 토큰으로 sandbox namespace의 풀을 호출합니다. 풀은 sandbox-kata-qemu-v1(kata-qemu-nvidia-gpu), sandbox-gvisor-v1, v2(gvisor), sandbox-kata-clh-cpu-v1(kata-clh)이고, warm placeholder가 metal 노드 한 대를 확보해 둡니다. 풀 아래에는 Karpenter NodePool sandbox-kata-gpu(g4dn.metal), sandbox-gvisor(g5.xlarge, g5.2xlarge), sandbox-kata-cpu(c8i, m8i, r8i)가 있습니다. 점선은 Kubernetes API 호출입니다. gateway는 TokenReview와 draining pod 삭제를 호출하고, jwks-sync CronJob은 JWKS 읽기와 ConfigMap patch를 호출합니다.",
+    "alt_en": "TRL ranks (Job) and veRL Ray workers (RayCluster) in the rl-trainer namespace (trainer NodePool g6e, p5 or a HyperPod instance group) call only the sandbox gateway in the sandbox-gateway namespace (system nodes), with tokens of audience gpu-sandbox-gateway; the gateway does TokenReview, routing, group pins, one request per pod and recycling. With tokens of audience gpu-sandbox the gateway calls the pools of the sandbox namespace: sandbox-kata-qemu-v1 (kata-qemu-nvidia-gpu), sandbox-gvisor-v1, v2 (gvisor) and sandbox-kata-clh-cpu-v1 (kata-clh), while a warm placeholder holds a metal node. Below the pools sit the Karpenter NodePools sandbox-kata-gpu (g4dn.metal), sandbox-gvisor (g5.xlarge, g5.2xlarge) and sandbox-kata-cpu (c8i, m8i, r8i). Dashed lines are Kubernetes API calls: TokenReview and deleting draining pods from the gateway, reading JWKS and patching the ConfigMap from the jwks-sync CronJob",
+    "takeaway_ko": "trainer는 gateway만 호출하고, 샌드박스 pod를 호출하는 것은 gateway 하나뿐입니다.",
+    "takeaway_en": "Trainers call only the gateway, and the gateway is the only caller that reaches sandbox pods."
+  },
+  "production-01_capacity_and_nodes": {
+    "page": "docs/production/01_capacity_and_nodes.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: metal 노드(sandbox-kata-gpu)에서는 reward batch가 도착한 뒤에 g4dn.metal 부팅, kata-deploy, vfio-pci 바인딩이 진행되어 수 분이 걸리고, batch는 그동안 대기합니다. gVisor 노드(sandbox-gvisor)에서는 al2023@latest의 AMI 자동 갱신(drift 교체)으로 nvproxy가 지원하지 않는 드라이버가 설치될 수 있습니다. 그러면 GPU 초기화가 실패해 샌드박스가 Ready가 되지 않고 풀 용량이 0이 됩니다. b: metal에서는 우선순위 -10인 warm placeholder가 선점되어 종료되고, 샌드박스 pod는 이미 실행 중인 노드에 배치됩니다. Karpenter는 새 예비 노드를 추가합니다. gVisor에서는 AMI를 al2023@v20261107로 고정하고, CI에서 nvproxy list-supported-drivers로 지원 여부를 확인해 통과할 때만 AMI와 GVISOR_RELEASE를 함께 승격합니다.",
+    "alt_en": "a: on the metal node (sandbox-kata-gpu) a reward batch arrives, the g4dn.metal then spends minutes booting, installing kata-deploy and binding vfio-pci, and the batch waits; on the gVisor node (sandbox-gvisor) an automatic AMI update through al2023@latest brings a driver unknown to nvproxy, GPU initialization fails, sandboxes never become Ready and pool capacity drops to 0. b: on metal a warm placeholder with priority -10 is preempted and steps aside, the sandbox pods run on a node that is already up and Karpenter adds a new spare; on gVisor the AMI is pinned to al2023@v20261107, CI checks support with nvproxy list-supported-drivers, and the AMI and GVISOR_RELEASE are raised together only when it passes",
+    "takeaway_ko": "부팅이 느린 metal 노드를 수요가 생긴 뒤에 시작하면 batch가 기다려야 하고, AMI 자동 갱신은 gVisor 풀 용량을 0으로 만들 수 있습니다. metal은 warm placeholder로 한 대를 미리 확보하고, AMI와 gVisor 버전은 함께 고정한 뒤 CI 확인을 통과할 때만 올립니다.",
+    "takeaway_en": "Slow metal started on demand makes batches wait, and an automatic AMI update can drop the gVisor pool to zero capacity. A warm placeholder keeps one metal node ready, and the AMI and gVisor are pinned together and raised only after CI confirms support."
+  },
+  "production-02_security": {
+    "page": "docs/production/02_security.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 NVIDIA 드라이버를 그대로 공유합니다. 또 pod 안의 ServiceAccount token과 시크릿을 읽고, NetworkPolicy와 관계없이 허용되는 자기 노드 IP의 로컬 서비스에 접속하며, 같은 pod에서 이어서 실행되는 다음 평가에 남은 프로세스, 캐시, GPU 상태를 넘깁니다. b: 샌드박스 pod(gVisor 또는 Kata)에서는 네 경로를 각각 다른 통제로 차단합니다. 커널 경로는 gVisor Sentry 또는 Kata VM이 차단하고(gVisor는 호스트 드라이버를 공유), 토큰과 시크릿은 pod에 넣지 않습니다. 노드 경로는 노드 가드와 readiness 확인이, 다음 평가 경로는 프로세스 정리, 요청별 캐시, pod 재활용이 차단합니다.",
+    "alt_en": "a: candidate code in an unhardened runc pod shares the host kernel and NVIDIA driver directly, reads the ServiceAccount token and secrets in the pod, reaches node-local services on its own node IP, which is allowed regardless of NetworkPolicy, and passes leftover processes, caches and GPU state to the next evaluation in the same pod. b: in a sandbox pod (gVisor or Kata) the four paths are stopped by gVisor Sentry or a Kata VM (gVisor still shares the host driver), no token or secrets mounted, the node guard with the readiness check, and process reaping, per-request caches and pod recycling",
+    "takeaway_ko": "하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 드라이버, pod 안의 자격 증명, 자기 노드, 다음 평가에 모두 접근할 수 있습니다. 샌드박스 pod에서는 계층마다 이 중 한 경로를 차단합니다.",
+    "takeaway_en": "Candidate code in an unhardened runc pod can reach the host kernel and driver, the credentials in the pod, its own node and the next evaluation, and each layer closes one of these paths."
+  },
+  "production-02_security--threat-model": {
+    "page": "docs/production/02_security.md",
+    "section": "위협 모델",
+    "replaces": "C[\"후보 코드\"] --> P[\"자식 프로세스<br/>env allowlist, 요청별 캐시, timeout\"]",
+    "alt_ko": "학습 중인 policy가 만든 후보 코드를 다섯 겹의 통제가 둘러쌉니다. 안쪽부터 자식 프로세스(env allowlist, 요청별 캐시, timeout), pod(non-root, 읽기 전용 root FS, capability 없음, 토큰 없음), 런타임(gVisor Sentry 또는 Kata VM, 격리 경계로 강조), 노드(전용 taint, 노드 가드, IMDS hop 1), 네트워크(기본 거부, gateway만 ingress) 순서입니다.",
+    "alt_en": "Candidate code written by the policy in training sits inside five nested layers of controls. From the inside out: child process (env allowlist, per-request caches, timeout), pod (non-root, read-only root FS, no capabilities, no token), runtime (gVisor Sentry or Kata VM, highlighted as the isolation boundary), node (dedicated taint, node guard, IMDS hop 1) and network (default deny, gateway-only ingress)",
+    "takeaway_ko": "후보 코드는 다섯 겹의 통제 안에서 실행되므로, 한 겹의 통제가 실패해도 바깥쪽 통제가 계속 적용됩니다.",
+    "takeaway_en": "Candidate code runs inside five layers of controls, and if one layer fails the outer layers remain."
+  },
+  "production-03_gateway_and_pools": {
+    "page": "docs/production/03_gateway_and_pools.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: TRL rank 0과 veRL reward worker가 각자 샌드박스 pod A를 빈 pod로 판단해 같은 pod로 요청을 보내고, 503 응답과 재시도가 발생합니다. group 17의 샘플 1은 v1로, routing 전환 뒤에 보낸 샘플 2는 v2로 채점되어 같은 group이 서로 다른 버전으로 채점됩니다. b: 네 요청이 모두 sandbox gateway 하나를 거칩니다. gateway가 in-flight 요청 수를 한곳에서 집계해 pod A와 pod B에 동시 1건씩 보내고, group_key pin으로 두 샘플을 첫 샘플의 버전인 v1로 채점합니다(group pin, TTL 900초).",
+    "alt_en": "a: TRL rank 0 and a veRL reward worker each see sandbox pod A as free and send to the same pod, which answers 503 and makes them retry; sample 1 of group 17 is scored by v1 and sample 2, after a routing switch, by v2, so one group spans two versions. b: all four requests pass one sandbox gateway, which counts in-flight requests in one place and sends one at a time to pod A and pod B, and its group_key pin scores both samples with the pinned version v1 (group pin, TTL 900 s)",
+    "takeaway_ko": "호출자마다 따로 pod를 고르면 같은 pod에 요청이 몰리고, 샘플마다 따로 routing하면 한 group이 두 버전으로 채점됩니다. gateway 하나가 in-flight 요청 수를 집계하고 group을 첫 샘플의 버전에 고정해 두 문제를 해결합니다.",
+    "takeaway_en": "Callers that pick pods on their own collide on the same pod, and scoring samples separately lets one group span two versions. One gateway counts in-flight requests and pins each group to its first sample's version."
+  },
+  "production-04_reward_integrity": {
+    "page": "docs/production/04_reward_integrity.md",
+    "section": "기존 Pain Point",
+    "replaces": "pain",
+    "alt_ko": "a: 후보 코드(ModelNew)가 채점 코드와 같은 Python 프로세스에서 실행되면 harness의 timer와 reference, 비교 함수를 바꿔치기할 수 있습니다. 추가 stream, 캐시, lazy 출력으로 측정 구간을 조작해, 더 빠른 커널 없이 높은 reward를 받습니다. b: 후보 코드는 신뢰하지 않는 자식 프로세스에서만 실행됩니다. timer 교체는 정적 정책의 속성 대입 거부로 막고, reference와 비교 함수는 부모 프로세스에만 보관합니다. 측정 구간은 synchronize, 새 입력, checksum으로 보호합니다.",
+    "alt_en": "a: candidate code (ModelNew) in the same Python process as the scoring code replaces the harness timer and the reference and comparison, and games the timed window with an extra stream, caching and lazy outputs, earning a high reward without a faster kernel. b: candidate code runs only in an untrusted child process; the static policy's ban on attribute writes protects the timer, the reference and comparison live in the parent only, and synchronize, new inputs and checksums protect the timed window",
+    "takeaway_ko": "후보 코드가 채점 코드와 같은 프로세스에서 실행되면, 더 빠른 커널을 쓰지 않고 측정 코드와 비교 코드를 바꿔 reward를 얻을 수 있습니다. 후보 코드를 자식 프로세스로 분리하고 측정 절차를 고정해 이 경로를 차단합니다.",
+    "takeaway_en": "A candidate in the same process as the scoring code can earn reward by changing the measurement and the comparison instead of writing a faster kernel. Moving the candidate into a child process and fixing the measurement closes each path."
+  },
+  "production-04_reward_integrity--two-process": {
+    "page": "docs/production/04_reward_integrity.md",
+    "section": "두 프로세스 구조",
+    "replaces": "S[\"샌드박스 서버 (uvicorn)<br/>torch를 import하지 않음\"] --> P1",
+    "alt_ko": "torch를 import하지 않는 샌드박스 서버(uvicorn)가 요청마다 새 프로세스를 시작합니다. 신뢰하는 부모 evaluate.py가 1. 정적 정책 검사(AST, check_source)와 2. 요청마다 새 seed 생성(정확성 seed, timing seed)을 한 뒤, 후보 코드와 seed를 신뢰하지 않는 자식 runner.py에 전달합니다(env allowlist, 새 session, timeout). 자식은 3. 후보 ModelNew를 실행해 seed별 출력을 저장하고, timing과 checksum을 runner.json에 씁니다. seed별 출력과 runner.json은 크기 제한과 타입 검사를 거쳐 부모로 돌아옵니다. 부모는 4. 같은 seed로 만든 reference 출력과 비교하고(weights_only=True로 읽기), 5. reference timing과 timed 출력 checksum을 비교하고, 6. 자식 프로세스 트리가 끝난 뒤 verdict JSON을 작성합니다. 자식에게는 reference 출력과 토큰 같은 pod env가 없습니다.",
+    "alt_en": "The sandbox server (uvicorn), which never imports torch, starts a new process per request. The trusted parent evaluate.py runs 1. the static policy (AST, check_source) and 2. draws fresh correctness and timing seeds, then hands the candidate code and seeds to the untrusted child runner.py with an env allowlist, a new session and a timeout. The child runs 3. the candidate ModelNew, saves outputs per seed and writes timings and checksums to runner.json. Outputs per seed and runner.json come back to the parent through a size limit and type checks, and the parent 4. compares them with reference outputs on the same seeds (read with weights_only=True), 5. times the reference and compares the timed output checksums, and 6. writes the verdict JSON after the child tree ends. The child never gets reference outputs or pod env such as tokens",
+    "takeaway_ko": "후보 코드가 접근할 수 있는 것은 자식 프로세스와 그 출력 파일뿐이고, reference 계산, 시간 비교, verdict 작성은 부모 프로세스에서만 합니다.",
+    "takeaway_en": "Candidate code reaches only the child process and its output files; the reference computation, the timing comparison and the verdict live in the parent process alone."
+  }
+}
