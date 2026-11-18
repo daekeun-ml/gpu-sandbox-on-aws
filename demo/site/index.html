@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPU Sandbox on AWS: Replay Demo</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="title-row">
+        <h1 data-i18n="title"></h1>
+        <button id="lang" type="button" aria-label="language">EN</button>
+      </div>
+      <p class="lede" data-i18n="lede"></p>
+      <p class="source"><span data-i18n="sourceLabel"></span> <span id="source"></span></p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section>
+      <h2 data-i18n="s1"></h2>
+      <p class="hint" data-i18n="s1hint"></p>
+      <div id="pools" class="cards"></div>
+    </section>
+
+    <section>
+      <h2 data-i18n="s2"></h2>
+      <p class="hint" data-i18n="s2hint"></p>
+      <div class="picker">
+        <label for="golden" data-i18n="pick"></label>
+        <select id="golden"></select>
+      </div>
+      <div class="split">
+        <div>
+          <h3 data-i18n="task"></h3>
+          <p id="task-desc"></p>
+          <pre id="reference" class="code"></pre>
+          <h3 data-i18n="candidate"></h3>
+          <pre id="candidate" class="code"></pre>
+        </div>
+        <div>
+          <h3 data-i18n="verdicts"></h3>
+          <div id="verdicts"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 data-i18n="s3"></h2>
+      <p class="hint" data-i18n="s3hint"></p>
+      <ol id="timeline" class="timeline"></ol>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p data-i18n="footer"></p>
+      <p><a href="https://daekeun-ml.github.io/gpu-sandbox-on-aws/" data-i18n="guide"></a>
+         | <a href="https://github.com/daekeun-ml/gpu-sandbox-on-aws" data-i18n="repo"></a></p>
+    </div>
+  </footer>
+</body>
+</html>

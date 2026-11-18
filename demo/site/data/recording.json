@@ -1,0 +1,403 @@
+{
+ "schema": 1,
+ "recorded_at": "2026-11-13T12:29:39Z",
+ "source": "Local CPU smoke run on a laptop (127.0.0.1, no gVisor or Kata, no GPU). Golden submissions stand in for model completions.",
+ "device": "cpu",
+ "tasks": {
+  "relu_bias": {
+   "description": "Add a per-column bias vector to a 2-D activation and apply ReLU.",
+   "input_spec": "x: float32[4096, 4096], b: float32[4096]",
+   "reference": "class Model(nn.Module):\n    def forward(self, x: torch.Tensor, b: torch.Tensor) -> torch.Tensor:\n        return torch.relu(x + b)\n"
+  }
+ },
+ "goldens": [
+  {
+   "name": "relu_bias_torch_only",
+   "task_id": "relu_bias",
+   "code": "import torch\nfrom torch import nn\n\n\nclass ModelNew(nn.Module):\n    def forward(self, x, b):\n        return torch.clamp_min(x + b, 0.0)\n",
+   "expect_status": "ok"
+  },
+  {
+   "name": "relu_bias_wrong",
+   "task_id": "relu_bias",
+   "code": "import torch\nfrom torch import nn\n\n\nclass ModelNew(nn.Module):\n    def forward(self, x, b):\n        return x + b\n",
+   "expect_status": "wrong_answer"
+  },
+  {
+   "name": "relu_bias_benchmark_cheat",
+   "task_id": "relu_bias",
+   "code": "import torch\nfrom torch import nn\n\n\nclass ModelNew(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.calls = 0\n\n    def forward(self, x, b):\n        self.calls += 1\n        if self.calls > 3:\n            return torch.zeros_like(x)\n        return torch.relu(x + b)\n",
+   "expect_status": "wrong_answer"
+  },
+  {
+   "name": "read_host_file",
+   "task_id": "relu_bias",
+   "code": "import torch\nfrom torch import nn\n\nSECRET = open(\"/etc/hostname\").read()\n\n\nclass ModelNew(nn.Module):\n    def forward(self, x, b):\n        return torch.relu(x + b)\n",
+   "expect_status": "policy_violation"
+  }
+ ],
+ "pools": [
+  {
+   "runtime": "local-cpu v1",
+   "info": {
+    "runtime": "local-cpu",
+    "sandbox_version": "v1",
+    "kernel_release": "25.6.0",
+    "gpu": null,
+    "egress_blocked": true
+   },
+   "results": {
+    "relu_bias_torch_only": {
+     "status": "ok",
+     "correct": true,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": 0.8547,
+     "ref_ms": 0.003917,
+     "cand_ms": 0.004583,
+     "flags": [],
+     "violations": [],
+     "error": "",
+     "duration_s": 1.8772,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "local-cpu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.3,
+      "speedup": 0.0,
+      "total": 0.4
+     },
+     "expected_status": "ok"
+    },
+    "relu_bias_wrong": {
+     "status": "wrong_answer",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [],
+     "error": "values differ beyond tolerance",
+     "duration_s": 1.8863,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "local-cpu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.2,
+      "speedup": 0.0,
+      "total": 0.3
+     },
+     "expected_status": "wrong_answer"
+    },
+    "relu_bias_benchmark_cheat": {
+     "status": "wrong_answer",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [
+      "timed_output_mismatch"
+     ],
+     "violations": [],
+     "error": "timed iteration 0 output mismatch",
+     "duration_s": 2.0199,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "local-cpu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.2,
+      "speedup": 0.0,
+      "total": 0.3
+     },
+     "expected_status": "wrong_answer"
+    },
+    "read_host_file": {
+     "status": "policy_violation",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [
+      "line 4: builtin 'open' is not allowed"
+     ],
+     "error": "",
+     "duration_s": 0.069,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "local-cpu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.0,
+      "speedup": 0.0,
+      "total": 0.1
+     },
+     "expected_status": "policy_violation"
+    }
+   }
+  },
+  {
+   "runtime": "local-cpu v2",
+   "info": {
+    "runtime": "local-cpu",
+    "sandbox_version": "v2",
+    "kernel_release": "25.6.0",
+    "gpu": null,
+    "egress_blocked": true
+   },
+   "results": {
+    "relu_bias_torch_only": {
+     "status": "ok",
+     "correct": true,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": 0.7402,
+     "ref_ms": 0.003917,
+     "cand_ms": 0.005292,
+     "flags": [],
+     "violations": [],
+     "error": "",
+     "duration_s": 2.0528,
+     "sandbox_version": "v2",
+     "harness_version": "1",
+     "runtime": "local-cpu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.3,
+      "speedup": 0.0,
+      "total": 0.4
+     },
+     "expected_status": "ok"
+    },
+    "relu_bias_wrong": {
+     "status": "wrong_answer",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [],
+     "error": "values differ beyond tolerance",
+     "duration_s": 1.9635,
+     "sandbox_version": "v2",
+     "harness_version": "1",
+     "runtime": "local-cpu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.2,
+      "speedup": 0.0,
+      "total": 0.3
+     },
+     "expected_status": "wrong_answer"
+    },
+    "relu_bias_benchmark_cheat": {
+     "status": "wrong_answer",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [],
+     "error": "values differ beyond tolerance",
+     "duration_s": 1.9145,
+     "sandbox_version": "v2",
+     "harness_version": "1",
+     "runtime": "local-cpu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.2,
+      "speedup": 0.0,
+      "total": 0.3
+     },
+     "expected_status": "wrong_answer"
+    },
+    "read_host_file": {
+     "status": "policy_violation",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [
+      "line 4: builtin 'open' is not allowed"
+     ],
+     "error": "",
+     "duration_s": 0.0615,
+     "sandbox_version": "v2",
+     "harness_version": "1",
+     "runtime": "local-cpu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.0,
+      "speedup": 0.0,
+      "total": 0.1
+     },
+     "expected_status": "policy_violation"
+    }
+   }
+  }
+ ],
+ "training": [
+  {
+   "event": "reward_batch",
+   "batch": 1,
+   "global_step": 1,
+   "runtime": "local-cpu",
+   "version": "v1",
+   "served_versions": {
+    "v1": 3
+   },
+   "routing_revision": 1,
+   "n": 3,
+   "status": {
+    "ok": 1,
+    "wrong_answer": 2
+   },
+   "pass_rate": 0.3333,
+   "custom_kernel_rate": 0.0,
+   "mean_speedup": 0.9439,
+   "eval_p50_s": 1.87,
+   "eval_p95_s": 1.87,
+   "batch_wall_s": 5.985,
+   "ts": 1794572939.138
+  },
+  {
+   "event": "reward_batch",
+   "batch": 2,
+   "global_step": 2,
+   "runtime": "local-cpu",
+   "version": "v1",
+   "served_versions": {
+    "v1": 3
+   },
+   "routing_revision": 1,
+   "n": 3,
+   "status": {
+    "ok": 1,
+    "wrong_answer": 2
+   },
+   "pass_rate": 0.3333,
+   "custom_kernel_rate": 0.0,
+   "mean_speedup": 0.6242,
+   "eval_p50_s": 1.869,
+   "eval_p95_s": 1.869,
+   "batch_wall_s": 5.646,
+   "ts": 1794572944.785
+  },
+  {
+   "event": "reward_batch",
+   "batch": 3,
+   "global_step": 3,
+   "runtime": "local-cpu",
+   "version": "v1",
+   "served_versions": {
+    "v1": 3
+   },
+   "routing_revision": 1,
+   "n": 3,
+   "status": {
+    "ok": 1,
+    "wrong_answer": 2
+   },
+   "pass_rate": 0.3333,
+   "custom_kernel_rate": 0.0,
+   "mean_speedup": 0.5148,
+   "eval_p50_s": 1.897,
+   "eval_p95_s": 1.897,
+   "batch_wall_s": 5.674,
+   "ts": 1794572950.46
+  },
+  {
+   "event": "sandbox_version_switch",
+   "from": "local-cpu/v1",
+   "to": "local-cpu/v2",
+   "routing_revision": 2,
+   "global_step": 4,
+   "ts": 1794572956.042
+  },
+  {
+   "event": "reward_batch",
+   "batch": 4,
+   "global_step": 4,
+   "runtime": "local-cpu",
+   "version": "v2",
+   "served_versions": {
+    "v2": 3
+   },
+   "routing_revision": 2,
+   "n": 3,
+   "status": {
+    "ok": 1,
+    "wrong_answer": 2
+   },
+   "pass_rate": 0.3333,
+   "custom_kernel_rate": 0.0,
+   "mean_speedup": 0.6394,
+   "eval_p50_s": 1.85,
+   "eval_p95_s": 1.85,
+   "batch_wall_s": 5.581,
+   "ts": 1794572956.042
+  },
+  {
+   "event": "reward_batch",
+   "batch": 5,
+   "global_step": 5,
+   "runtime": "local-cpu",
+   "version": "v2",
+   "served_versions": {
+    "v2": 3
+   },
+   "routing_revision": 2,
+   "n": 3,
+   "status": {
+    "ok": 1,
+    "wrong_answer": 2
+   },
+   "pass_rate": 0.3333,
+   "custom_kernel_rate": 0.0,
+   "mean_speedup": 0.9483,
+   "eval_p50_s": 1.939,
+   "eval_p95_s": 1.939,
+   "batch_wall_s": 5.783,
+   "ts": 1794572961.826
+  },
+  {
+   "event": "reward_batch",
+   "batch": 6,
+   "global_step": 6,
+   "runtime": "local-cpu",
+   "version": "v2",
+   "served_versions": {
+    "v2": 3
+   },
+   "routing_revision": 2,
+   "n": 3,
+   "status": {
+    "ok": 1,
+    "wrong_answer": 2
+   },
+   "pass_rate": 0.3333,
+   "custom_kernel_rate": 0.0,
+   "mean_speedup": 1.165,
+   "eval_p50_s": 1.858,
+   "eval_p95_s": 1.858,
+   "batch_wall_s": 5.586,
+   "ts": 1794572967.413
+  }
+ ]
+}

@@ -12,7 +12,7 @@ build/
 dist/
 
 # MkDocs output
-site/
+/site/
 
 # Tool state
 .omc/state/
