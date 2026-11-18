@@ -32,8 +32,8 @@ gVisor runs on A10G (`g5.xlarge`) and Kata QEMU on T4 (`g4dn.metal`), so side-by
     - **Pool claim**: taking one sandbox from a pool of sandboxes started in advance (a warm pool).
     - **JSONL**: a file format with one JSON object per line.
 
-!!! warning "The numbers on this page are not measurements from this repository"
-    The author did not run this benchmark on AWS, and the results table below is a blank template for you to fill in. The reference numbers are public sources from other machines, other versions and other measurement windows, so do not use them as predictions for this environment.
+!!! warning "The results table is one run in a practice account"
+    The values in "Results template" below come from the author's run of this benchmark in a practice account (us-west-2, EKS 1.36) on 2026-11-18. Other node layouts, versions or image cache states give other values, so read them together with the measurement conditions. The "Published reference numbers" are public sources from other machines, other versions and other measurement windows, so do not use them as predictions for this environment.
 
 ## Before you begin
 
@@ -116,7 +116,7 @@ The 3 warmup and 20 timed iterations are the server defaults (`HARNESS_WARMUP`, 
 | Comparison | Conditions | Metrics to look at |
 |---|---|---|
 | Kata CLH CPU vs Kata QEMU CPU | Same `c8i.2xlarge` node (nested virtualization), same image, same golden. Only the hypervisor differs | Cold start, `eval_p50_s`, `eval_p95_s` |
-| Kata QEMU vs Kata CLH GPU (experimental) | Same `g4dn.metal`, same T4 | The metrics above and `ref_ms_median`. CLH GPU is not supported upstream, so a failure is not surprising |
+| Kata QEMU vs Kata CLH GPU (experimental) | Same `g4dn.metal`, same T4 | The metrics above and `ref_ms_median`. CLH GPU is not supported upstream, and on 2026-11-18 its VM never started, so it was not measured |
 | gVisor (A10G) | This repository has no runc baseline on the same A10G | The values themselves, and the same pool measured at another time |
 | gVisor CPU vs Kata CPU | Same `c8i.2xlarge` node, same image, same golden. Only the isolation method differs (user-space kernel vs VM). Scenario C in [10 CPU-only path on c8i](10_cpu_only.md) brings up all three pools together | Cold start, `eval_p50_s`, `eval_p95_s` |
 | Pools with different GPU types | A10G vs T4 | Do not use them to compare overhead. Treat speedups as per-GPU numbers only |
@@ -150,24 +150,55 @@ scripts/ops/bench.sh
 
 **What to look for:** the second command ends with `deployment "sandbox-kata-qemu-v1" successfully rolled out`, and the `kata-qemu` cold start lines of the third command show the new pod names.
 
+The values in the results table below (pass 2) were measured after restarting every pool this way.
+
 With `maxSurge: 0`, pods are replaced one at a time, and in a pool with one pod per node, such as gVisor, the new pod starts only after the old one releases the GPU. To measure another pool, replace `kata-qemu` in the Deployment name with that runtime's name (for example `gvisor`).
 
 **If it fails:** if the second command times out, see the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md), and for Kata also the "Kata" section.
 
 ## Results template
 
-Fill in the values you measure, and record the measurement conditions so results can be compared later.
+The table below holds the values measured in the practice account on 2026-11-18 (pass 2, images cached). When you measure yourself, record the same columns and measurement conditions so the results can be compared later.
 
 | runtime | Instance (GPU) | Ready pods | cold start (s, median over pods) | eval p50 (s) | eval p95 (s) | throughput (eval/s) | throughput per pod | median speedup | median ref_ms |
 |---|---|---|---|---|---|---|---|---|---|
-| `gvisor` | `g5.xlarge` (A10G) | | | | | | | | |
-| `kata-qemu` | `g4dn.metal` (T4) | | | | | | | | |
-| `kata-clh` (experimental) | `g4dn.metal` (T4) | | | | | | | | |
-| `gvisor-cpu` | `c8i.2xlarge` (CPU, systrap) | | | | | | | n/a | |
-| `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | | | | | | | n/a | |
-| `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | | | | | | | n/a | |
+| `gvisor` | `g5.2xlarge` (A10G) | 1 | 16 | 9.416 | 9.546 | 0.106 | 0.106 | 1.752 | 0.5797 |
+| `kata-qemu` | `g4dn.metal` (T4) | 4 | 30.5 (30, 30, 31, 36) | 12.17 | 13.412 | 0.317 | 0.079 | 1.788 | 1.1533 |
+| `kata-clh` (experimental) | `g4dn.metal` (T4) | 0 | not measured: the VM never started (`create container timeout`) | | | | | | |
+| `gvisor-cpu` | `c8i.2xlarge` (CPU, systrap) | 1 | 11 | 3.76 | 3.851 | 0.263 | 0.263 | n/a | 0.0062 |
+| `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.225 | 4.317 | 0.234 | 0.234 | n/a | 0.0062 |
+| `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.058 | 4.139 | 0.244 | 0.244 | n/a | 0.0061 |
 
-Measurement conditions: date, Region, `requests`, `IMAGE_TAG`, gVisor release, Kata version, EKS AMI version, the node's NVIDIA driver, and whether the image was cached.
+- **The gVisor row ran on `g5.2xlarge`.** The default `g5.xlarge` had no On-Demand capacity at the time, so `g5.2xlarge` was used: the same A10G with more vCPU and memory.
+- **Throughput per pod** is the throughput divided by the number of Ready pods (`kata-qemu`: 0.317 / 4 = 0.079).
+- **The CPU pools' speedup** has measured values in the JSONL (0.86 to 0.92), but stays n/a, as the template marks it.
+- In both passes, every pool returned `ok` for 32 of 32 requests.
+
+Measurement conditions (record the same items when you measure):
+
+- **Date and Region:** 2026-11-18, practice account in us-west-2, EKS 1.36
+- **Requests and image:** `scripts/ops/bench.sh 32` (32 per pool), `IMAGE_TAG` v1. Golden `relu_bias_triton` for the GPU pools, `relu_bias_torch_only` for the CPU pools
+- **Versions:** gVisor `release-20261109.0`, Kata 4.3.1 (kata-deploy chart 4.3.1), GPU Operator v26.7.2, NVIDIA device plugin 0.20.1
+- **EKS AMI:** the system, gVisor and Kata CPU nodes ran `1.36.5-20261112` (AL2023, host kernel `6.18.62-127.179.amzn2023`, containerd 2.3.7). The Kata GPU node ran the custom AMI that `infra/kata/build-iommu-ami.sh` baked from the EKS AL2023 1.36 standard AMI with `intel_iommu=on iommu=pt`
+- **NVIDIA drivers:** the gVisor host loaded the proprietary module 580.178.04 (GSP off). The Kata guest image is `kata-ubuntu-resolute-nvidia-gpu-615.71.09.image` (guest driver 615.71.09), and the guest kernel reports `6.18.56-nvidia-gpu`
+- **Node layout:** gVisor on one `g5.2xlarge` (`GVISOR_NODES=1`), Kata GPU on one `g4dn.metal` (`kata-qemu` with 4 replicas), Kata CPU on one `c8i.2xlarge` (`KATA_CPU_REPLICAS=1`, so 1 replica per CPU pool)
+- **Image cache:** pass 2. After pass 1 right after deploy, every pool was restarted with `kubectl -n sandbox rollout restart` and measured with the images already cached on the nodes
+
+**The cold starts of pass 1 (right after deploy) are left out of the table.** The image cache state differed per pool, and time unrelated to the runtime is mixed in.
+
+- `gvisor-cpu` 141 s: includes the first image pull on the c8i node
+- `kata-qemu` about 1235 s: includes about 20 minutes of failed VM starts before the `vfio_iommu_type1` fix in [03 Kata sandboxes](03_kata.md)
+- `gvisor` 15 s: its image was already on the node from the 04 smoke test
+- `kata-clh-cpu` 21 s, `kata-qemu-cpu` 20 s
+
+??? note "Evaluation metrics of pass 1 (for reference)"
+    | runtime | eval p50 (s) | eval p95 (s) | throughput (eval/s) | median speedup | median ref_ms |
+    |---|---|---|---|---|---|
+    | `gvisor` | 9.482 | 9.699 | 0.105 | 1.754 | 0.5796 |
+    | `kata-qemu` | 10.694 | 12.469 | 0.342 | 1.791 | 1.1524 |
+    | `gvisor-cpu` | 3.691 | 3.75 | 0.267 | 0.859 | 0.0062 |
+    | `kata-clh-cpu` | 4.105 | 4.155 | 0.242 | 0.899 | 0.0061 |
+    | `kata-qemu-cpu` | 3.902 | 3.987 | 0.254 | 0.92 | 0.0061 |
 
 This command summarizes the JSONL with one line per pool. Replace the file name with the `results:` path from the script's last line.
 
@@ -185,6 +216,15 @@ PY
 
 **What to look for:** one line per measured pool, in the order runtime, ok, requests, p50, p95, throughput, median speedup, median ref_ms. Copy these values into the template above.
 
+### Observations (2026-11-18)
+
+These are observations from the run above, not general conclusions.
+
+- **Same c8i node, same image and golden:** eval p50 was 3.76 s for `gvisor-cpu`, 4.058 s for `kata-qemu-cpu` and 4.225 s for `kata-clh-cpu`. The cold start with cached images was 10 to 11 s for all three. These come from nested virtualization, so use them only as a relative comparison on this node.
+- **Cold start of the GPU pools:** 16 s for gVisor (A10G), 30 to 36 s per pod for Kata QEMU (T4). The GPUs differ (A10G vs T4), so by the rule in "How to interpret the results" this difference is not an overhead comparison.
+- **Per-GPU values:** the median `ref_ms` was 0.58 ms on A10G and 1.15 ms on T4, and the speedup was 1.75 on A10G and 1.79 on T4.
+- **There is still no runc baseline.** gVisor's overhead cannot be computed from this run either.
+
 ## Published reference numbers
 
 | Source | Numbers | Conditions and limits |
@@ -198,15 +238,16 @@ This hands-on starts pods in advance with Deployments, so the counterpart of the
 
 ## Scope and limits
 
+- **The results table comes from one deployment.** It was measured twice in the practice account on 2026-11-18, right after deploy (pass 1) and after restarting the pools (pass 2), and the table shows pass 2. The replica counts also differed from the defaults (`gvisor` 1, each CPU pool 1).
 - **No runc baseline.** So gVisor's overhead cannot be computed directly.
-- **Kata CLH GPU is not supported upstream,** so the experimental `kata-clh` pool may produce no results.
+- **Kata CLH GPU is not supported upstream.** On 2026-11-18 the VM of the experimental `kata-clh` pool never started (`create container timeout`), even with the artifact paths filled in, so it was not measured (stage 3 of [03 Kata sandboxes](03_kata.md)).
 - **Nested virtualization results are for relative comparison.**
 - **Cold start has a 1-second resolution.** Kubernetes timestamps are in seconds, so sub-second differences are invisible.
 - **Only v1 pools are measured.** `v1` is fixed in the script's label selector and the Service address; measuring v2 means changing both.
 
 ## Time and cost
 
-The benchmark is one Job per pool, so it should be short next to the time the nodes stay up (not measured). The cost is the node charges meanwhile, and `g4dn.metal` at 7.824 USD per hour is the largest (us-east-1 and us-west-2 On-Demand). `c8i.2xlarge` is 0.37484 USD per hour (same basis). When you are done, scale the GPU node groups to zero or delete them as described in [99 Cleanup](99_cleanup.md).
+The benchmark is one Job per pool. In pass 2 on 2026-11-18 the evaluation window (computed as 32 ÷ throughput) was about 100 s (`kata-qemu`) to about 300 s (`gvisor`) per pool, and about 13 minutes for all five pools; Job creation, the cold start output and the pool restarts are not included. The cost is the node charges meanwhile, and `g4dn.metal` at 7.824 USD per hour is the largest (us-east-1 and us-west-2 On-Demand). `g5.2xlarge`, used for the gVisor node, is 1.212 USD per hour and `c8i.2xlarge` 0.37484 USD per hour (same basis). When you are done, scale the GPU node groups to zero or delete them as described in [99 Cleanup](99_cleanup.md).
 
 ## How to verify
 

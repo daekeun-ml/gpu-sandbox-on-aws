@@ -168,7 +168,8 @@ The site sits in a private S3 bucket with Block Public Access on and is read onl
 ## Validation status
 
 - **Run on AWS:** only scenario C was run end to end (2026-11-14, CDK deploy, adding the Kata CPU node (`kata/cpu_nodes.sh`) and delete in a practice account in us-west-2). In the practice account on 2026-11-18, the scenario A gVisor path was also run (us-west-2): the image build, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1` with `ops/verify.sh gvisor v1`, a 5-step GRPO run on `g5.2xlarge` and `08_cleanup.sh --images`.
-- **Not run on AWS:** `ops/rollout.sh` in scenario A, `ops/bench.sh`, Kata GPU, HyperPod B1 and B2. Confirm these steps with the checks on each hands-on page.
+- **Also run on AWS (2026-11-18):** Kata GPU (Kata + QEMU on `g4dn.metal`, T4) and Kata CPU, `ops/bench.sh` on five pools, and the public demo site (CloudFront with WAF). The measurements are in [08 Runtime benchmark](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/08_benchmark/).
+- **Not run on AWS:** `ops/rollout.sh` during training (scenario A), the 60-step default training run, HyperPod B1 and B2, and the experimental Kata CLH GPU (attempted; the VM did not start). Confirm these steps with the checks on each hands-on page.
 - **Numbers:** prices and versions come from official documentation and public material, not measurements.
 
 ## Cost

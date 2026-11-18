@@ -276,7 +276,8 @@ flowchart LR
     - **2026-11-14:** 저자가 실습 계정(us-west-2)에서 시나리오 C의 CDK 스택을 두 번 배포하고 삭제하면서 Kata CPU 노드 추가(`kata/cpu_nodes.sh`)까지 실행했습니다. 위 표의 `02_create_cluster.sh`(시나리오 C)와 `kata/cpu_nodes.sh` 신호가 이때의 실제 출력입니다.
     - **2026-11-18:** 실습 계정(us-west-2)에서 `03_build_push_images.sh`(이미지 세 개), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1개)과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images`를 실행했습니다. smoke pod의 `cuda ok: NVIDIA A10G 2048.0`과 `ops/verify.sh` 통과는 이때 확인한 것입니다.
     - **클러스터를 만든 방법 (2026-11-18):** GPU 노드 그룹을 포함한 처음 생성이 `InsufficientInstanceCapacity`로 전부 롤백됐습니다. 그래서 system 노드만 있는 구성(`02_create_cluster.sh --hyperpod-b2`)으로 먼저 만들고, `CHANGE_SCENARIO=1`로 B1(gVisor 노드 그룹 추가)과 A(trainer 추가)로 차례로 업데이트했어요.
-    - **실행하지 않은 것:** 시나리오 A의 `ops/rollout.sh`, `ops/bench.sh`, Kata GPU(`g4dn.metal`의 Kata VFIO), HyperPod B1과 B2(HyperPod 클러스터 생성부터). 이 단계의 신호는 스크립트 코드를 보고 적은 것입니다.
+    - **2026-11-18 (계속):** 같은 날 다른 클러스터에서 `kata/gpu_nodes.sh`(IOMMU AMI, GPU Operator, `pgpu=8`), `kata/cpu_nodes.sh`, `kata-qemu`와 CPU 풀 세 개의 `ops/verify.sh`, 다섯 개 풀의 `ops/bench.sh`를 실행했습니다([08](08_benchmark.md), [03](03_kata.md)).
+    - **실행하지 않은 것:** 학습 중의 `ops/rollout.sh`(시나리오 A), HyperPod B1과 B2(HyperPod 클러스터 생성부터), 실험용 Kata CLH GPU(시도했지만 VM이 시작되지 않음). 이 단계의 신호는 스크립트 코드를 보고 적은 것입니다.
 
     로컬(CPU, AWS 없음)에서는 `pytest` 94개 테스트(매니페스트 렌더링과 user data 포함)와 `cdk/tests`의 CDK 테스트 18개를 통과했습니다. AWS 단계는 각 페이지의 "확인할 것"으로 직접 검증하세요.
 

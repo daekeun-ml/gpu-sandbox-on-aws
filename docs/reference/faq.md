@@ -181,7 +181,7 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
     사이트는 Block Public Access를 켠 private S3 bucket에 있고, CloudFront만 Origin Access Control로 이 bucket을 읽습니다. 저장소에 포함된 녹화에는 노트북 CPU 풀에서 만들었다는 표시가 있고, GPU 클러스터에서 만든 녹화로 교체해 쓰도록 되어 있습니다. 자세히: [09 데모 사이트 (CloudFront)](../handson/09_demo_site.md)
 
 !!! question "❓ 오해: 이 가이드의 수치는 이 저장소가 AWS에서 측정한 값이다"
-    **실제:** 아닙니다. 가격, 버전, 지연 같은 수치는 공식 문서와 공개 자료에서 가져왔고, AWS 단계는 저자가 end-to-end로 실행하지 않았습니다. 실습 계정에서 2026-11-18에 시나리오 A의 gVisor 경로(`03`부터 `08`까지)를 `g5`로 실행했지만, `ops/bench.sh`는 실행하지 않아 런타임별 지연과 speedup은 측정하지 않았어요.
+    **실제:** 아닙니다. 가격, 버전, 지연 같은 수치는 공식 문서와 공개 자료에서 가져왔고, AWS 단계는 저자가 end-to-end로 실행하지 않았습니다. 실습 계정에서 2026-11-18에 시나리오 A의 gVisor 경로(`03`부터 `08`까지)를 `g5`로 실행했고, 같은 날 다섯 개 풀(gVisor A10G, Kata QEMU T4, CPU 런타임 세 개)의 `ops/bench.sh`도 한 번 측정했어요. 그 값은 [08 런타임 벤치마크](../handson/08_benchmark.md)에 측정 조건과 함께 있고, 그 밖의 수치는 여전히 공식 문서와 공개 자료의 값입니다.
 
     로컬에서 확인한 것은 CPU에서 실행하는 pytest 테스트와 TRL GRPO dry run(2 step)이에요. 런타임별 지연과 speedup이 필요하면 `scripts/ops/bench.sh`로 직접 측정하세요. 출처와 검증 수준은 [검증된 사실과 출처](sources.md)에 모았습니다. 자세히: [홈](../index.md), [08 런타임 벤치마크](../handson/08_benchmark.md)
 

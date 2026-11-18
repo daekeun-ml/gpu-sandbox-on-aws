@@ -32,8 +32,8 @@ gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, �
 | 블로그의 측정값 | 다른 사람이 다른 환경에서 측정한 값 | AWS 기술 블로그 2부의 warm pool claim 약 55 ms, AWS China 블로그의 cold start 약 3 s |
 | 추론 | 근거에서 이끌어 낸 판단, 미검증 | NodeConfig `imports`가 kata-deploy drop-in을 유지하는 효과 |
 | AWS에서 저자가 실행 | 실습 계정에서 실제로 실행하고 출력을 확인 | 시나리오 C의 CDK 배포와 삭제, SSM 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`)의 세 런타임 smoke pod(2026-11-14) |
-| 실습 계정에서 실행 (2026-11-18) | us-west-2 실습 계정에서 실행하고 출력을 확인 | 시나리오 A의 `02_create_cluster.sh`(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 갱신), `03_build_push_images.sh`(이미지 3개), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1)과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images` |
-| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 시나리오 A의 `ops/rollout.sh`, `ops/bench.sh`, B1, B2(`ml.g5` 포함), HyperPod 생성, `g4dn.metal`의 Kata VFIO(Kata GPU) |
+| 실습 계정에서 실행 (2026-11-18) | us-west-2 실습 계정에서 실행하고 출력을 확인(데모 사이트는 us-east-1) | 시나리오 A의 `02_create_cluster.sh`(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 갱신), `03_build_push_images.sh`(이미지 3개), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1)과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images`. 같은 날 다른 클러스터 구성(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가)에서: `g4dn.metal`의 Kata GPU(`kata/gpu_nodes.sh`, `kata-qemu` replica 4, `ops/verify.sh kata-qemu v1`), `ops/bench.sh 32`(GPU 풀 2개와 CPU 풀 3개, 2회 측정), 데모 사이트(recorder pod의 `record`, `demo/deploy.sh`와 외부 점검) |
+| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 학습 중의 시나리오 A `ops/rollout.sh`, 기본값 60 step 학습, `ml.g5`의 HyperPod B1과 B2(HyperPod 생성 포함), 실험용 CLH GPU(시도했지만 VM이 시작되지 않음) |
 
 ## 이 저장소에서 확인한 것
 
@@ -60,7 +60,7 @@ python -m pytest -q
 | `tests/test_demo.py` | 데모 CloudFormation 템플릿(private bucket, `AWS:SourceArn` 조건이 붙은 CloudFront 허용, TLS가 아닌 요청 거부, HTTPS 리디렉션과 보안 헤더), 외부 리소스와 HTML 주입이 없는 정적 사이트, 녹화 스키마와 reward 일관성 |
 | `cdk/tests/test_stack.py` | synth한 CDK 템플릿: private endpoint(public은 /32 opt-in만), `0.0.0.0/0` inbound 없음, 모든 launch template의 IMDSv2와 hop limit 1과 볼륨 암호화, 시나리오별 노드 그룹, c8i의 nested virtualization, Kata GPU 노드 그룹의 IOMMU AMI, 시나리오마다 cdk-nag 통과 |
 
-TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 셸 스크립트는 shellcheck 검사를 통과했습니다(저자 기록, 2026-11). AWS 단계 중에서는 시나리오 C의 CDK 배포, 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 삭제를 실습 계정에서 실행했습니다(2026-11-14). 시나리오 A의 gVisor 경로는 실습 계정에서 2026-11-18에 실행했어요(us-west-2, `g5.xlarge`와 `g5.2xlarge`, 학습은 5 step). 실행한 스크립트는 위 표에 있습니다. 나머지는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
+TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 셸 스크립트는 shellcheck 검사를 통과했습니다(저자 기록, 2026-11). AWS 단계 중에서는 시나리오 C의 CDK 배포, 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 삭제를 실습 계정에서 실행했습니다(2026-11-14). 시나리오 A의 gVisor 경로는 실습 계정에서 2026-11-18에 실행했어요(us-west-2, `g5.xlarge`와 `g5.2xlarge`, 학습은 5 step). 같은 날 Kata GPU, 런타임 벤치마크, 데모 사이트도 실행했고, 결과는 [03 Kata 샌드박스](../handson/03_kata.md), [08 런타임 벤치마크](../handson/08_benchmark.md), [09 데모 사이트](../handson/09_demo_site.md)에 있습니다. 실행한 스크립트는 위 표에 있습니다. 나머지는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
 
 ## 배포 전 재확인 체크리스트
 

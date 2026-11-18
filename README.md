@@ -168,7 +168,8 @@ template은 label이 붙은 trainer pod의 8000번 ingress만 허용하고 egres
 ## 검증 상태
 
 - **AWS에서 실행한 것:** 시나리오 C만 끝까지 실행했습니다(2026-11-14, 실습 계정 us-west-2에서 CDK 배포, Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 삭제). 실습 계정에서 2026-11-18에는 시나리오 A의 gVisor 경로도 실행했어요(us-west-2). 이미지 빌드, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 5 step GRPO, `08_cleanup.sh --images`입니다.
-- **AWS에서 실행하지 않은 것:** 시나리오 A의 `ops/rollout.sh`, `ops/bench.sh`, Kata GPU, HyperPod B1과 B2. 이 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
+- **AWS에서 실행한 것 (2026-11-18, 계속):** Kata GPU(`g4dn.metal`의 Kata + QEMU, T4)와 Kata CPU, 다섯 개 풀의 `ops/bench.sh`, 공개 데모 사이트(CloudFront, WAF) 배포도 실행했습니다. 측정값은 [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)에 있어요.
+- **AWS에서 실행하지 않은 것:** 학습 중의 `ops/rollout.sh`(시나리오 A), 60 step 기본 학습, HyperPod B1과 B2, 실험용 Kata CLH GPU(시도했지만 VM이 시작되지 않음). 이 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
 - **수치:** 가격과 버전 같은 수치는 측정값이 아니라 공식 문서와 공개 자료의 값입니다.
 
 ## 비용
