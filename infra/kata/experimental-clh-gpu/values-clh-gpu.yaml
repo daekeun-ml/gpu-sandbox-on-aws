@@ -11,9 +11,10 @@
 #     --version 4.3.1 -n kube-system \
 #     -f infra/kata/kata-deploy-values.yaml -f infra/kata/experimental-clh-gpu/values-clh-gpu.yaml
 #
-# Before applying, replace the two artifact paths below. Cloud Hypervisor boots an
-# uncompressed vmlinux, while the NVIDIA guest kernel that kata-deploy ships for QEMU may only
-# exist compressed. List what the node has with:
+# The two artifact paths below are the links kata-deploy 4.3.1 installs (checked on a g4dn.metal
+# node on 2026-11-18): Cloud Hypervisor boots the uncompressed vmlinux, while the QEMU NVIDIA
+# runtime class boots the compressed vmlinuz. If another release names them differently, list
+# what the node has with:
 #   kubectl debug node/<kata-node> -it --image=public.ecr.aws/amazonlinux/amazonlinux:2023 \
 #     -- ls -l /host/opt/kata/share/kata-containers/
 # Then run infra/kata/experimental-clh-gpu/check-clh-gpu.sh to see whether CUDA initialises.
@@ -24,8 +25,8 @@ customRuntimes:
       baseConfig: "clh"
       dropIn: |
         [hypervisor.clh]
-        kernel = "/opt/kata/share/kata-containers/__NVIDIA_GUEST_VMLINUX__"
-        image = "/opt/kata/share/kata-containers/__NVIDIA_GUEST_IMAGE__"
+        kernel = "/opt/kata/share/kata-containers/vmlinux-nvidia-gpu.container"
+        image = "/opt/kata/share/kata-containers/kata-containers-nvidia-gpu.img"
         kernel_params = "cgroup_no_v1=all pci=realloc pci=nocrs pci=assign-busses"
         cold_plug_vfio = "root-port"
         default_memory = 8192

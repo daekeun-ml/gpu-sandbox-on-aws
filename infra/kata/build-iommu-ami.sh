@@ -24,6 +24,10 @@ user_data="$(cat <<'EOF'
 #!/bin/bash
 set -euo pipefail
 grubby --update-kernel=ALL --args="intel_iommu=on iommu=pt"
+# The AL2023 kernel builds the VFIO type1 IOMMU backend as a module (CONFIG_VFIO_IOMMU_TYPE1=m)
+# and nothing loads it, so QEMU fails with "failed to setup container for group N: No available
+# IOMMU models". Load it on every boot.
+echo vfio_iommu_type1 > /etc/modules-load.d/vfio-iommu-type1.conf
 # Remove per-instance state so instances launched from the image bootstrap from scratch.
 cloud-init clean --logs
 shutdown -h now
@@ -36,8 +40,20 @@ instance_id="$(aws ec2 run-instances --region "${AWS_REGION}" \
   --user-data "${user_data}" \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${CLUSTER_NAME}-iommu-ami-builder},{Key=project,Value=gpu-sandbox-on-aws}]" \
   --query 'Instances[0].InstanceId' --output text)"
+# Whatever happens next, do not leave the builder behind.
+trap 'aws ec2 terminate-instances --region "${AWS_REGION}" --instance-ids "${instance_id}" >/dev/null 2>&1 || true' EXIT
 log "builder instance ${instance_id}: waiting for it to apply kernel args and stop"
-aws ec2 wait instance-stopped --region "${AWS_REGION}" --instance-ids "${instance_id}"
+# Poll instead of "aws ec2 wait instance-stopped": that waiter treats "pending" as a terminal
+# failure, so it gives up when it starts before the instance is running.
+state=""
+for _ in $(seq 1 120); do
+  state="$(aws ec2 describe-instances --region "${AWS_REGION}" --instance-ids "${instance_id}" \
+    --query 'Reservations[0].Instances[0].State.Name' --output text)"
+  [[ "${state}" == "stopped" ]] && break
+  [[ "${state}" == "shutting-down" || "${state}" == "terminated" ]] && die "builder ${instance_id} ended in state ${state}"
+  sleep 15
+done
+[[ "${state}" == "stopped" ]] || die "builder ${instance_id} did not stop within 30 minutes (state ${state})"
 
 ami_name="eks-al2023-${K8S_VERSION}-iommu-$(date +%Y%m%d%H%M%S)"
 ami_id="$(aws ec2 create-image --region "${AWS_REGION}" --instance-id "${instance_id}" \
@@ -47,8 +63,7 @@ ami_id="$(aws ec2 create-image --region "${AWS_REGION}" --instance-id "${instanc
 log "creating ${ami_id} (${ami_name})"
 aws ec2 wait image-available --region "${AWS_REGION}" --image-ids "${ami_id}"
 
-log "terminating builder ${instance_id}"
-aws ec2 terminate-instances --region "${AWS_REGION}" --instance-ids "${instance_id}" >/dev/null
+log "terminating builder ${instance_id}"   # also done by the EXIT trap
 
 echo
 echo "Add to scripts/config.env:"

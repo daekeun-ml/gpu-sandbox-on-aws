@@ -35,7 +35,7 @@ Kata는 pod마다 가벼운 VM을 실행하므로 노드에 `/dev/kvm`이 있어
     - **`overhead.podFixed`**: VM 자체가 쓰는 메모리와 CPU를 scheduler가 pod 요청에 더하도록 RuntimeClass에 지정한 값입니다.
 
 !!! warning "이 페이지의 AWS 단계"
-    아래 Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)의 smoke pod 출력과 소요 시간은 저자가 2026-11-14 실습 계정(us-west-2, EKS 1.36, CDK 시나리오 C)에서 실제로 실행한 결과입니다. Kata GPU 노드 추가(`scripts/kata/gpu_nodes.sh`)와 Kata GPU 노드 그룹은 AWS에서 실행하지 않았고, 업스트림에서 검증된 조합도 아닙니다(아래 "적용 범위와 한계"). `kata/gpu_nodes.sh`의 "확인할 것"(스크립트 코드 기준의 기대 출력)은 실제 출력과 비교하세요.
+    아래 Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)의 smoke pod 출력과 소요 시간은 저자가 2026-11-14 실습 계정(us-west-2, EKS 1.36, CDK 시나리오 C)에서 실제로 실행한 결과입니다. Kata GPU 경로(IOMMU AMI 빌드, `scripts/kata/gpu_nodes.sh`, `g4dn.metal` 노드 그룹, `kata-qemu` 풀)는 2026-11-18 실습 계정(us-west-2, EKS 1.36)에서 실행했고, 2단계의 출력과 소요 시간은 그 실행에서 관찰한 값입니다. 이 실행에서 `vfio_iommu_type1` 모듈 문제와 AMI 빌더 문제를 찾아 스크립트를 고쳤어요(2단계). 업스트림에서 검증된 조합은 아니며(아래 "적용 범위와 한계"), 실험용 CLH GPU는 이 실행에서 VM이 시작되지 않았습니다(3단계).
 
 ## RuntimeClass 구성
 
@@ -46,7 +46,7 @@ Kata는 pod마다 가벼운 VM을 실행하므로 노드에 `/dev/kvm`이 있어
 | `kata-qemu-nvidia-gpu` | QEMU (Go shim) | T4 1개 (VFIO cold-plug) | `sandbox-kata-gpu` (`g4dn.metal`) | 10240Mi, 1 CPU | 지원 (T4는 업스트림 CI 대상 아님) |
 | `kata-clh-nvidia-gpu` | Cloud Hypervisor (실험) | T4 1개 | `sandbox-kata-gpu` | 10240Mi, 1 CPU (values 파일) | 미지원 |
 
-`overhead.podFixed`는 Kata 4.3.1 기준 값입니다. 업스트림 metrics CI(3.28.0, 측정 장비가 다르고 허용 오차가 큼)는 workload 시작까지의 부팅 시간을 CLH 0.39초, QEMU 0.71초로 보고합니다. 이 저장소에서 측정한 값은 아니므로 [08 런타임 벤치마크](08_benchmark.md)에서 직접 비교하세요.
+`overhead.podFixed`는 Kata 4.3.1 기준 값입니다. 업스트림 metrics CI(3.28.0, 측정 장비가 다르고 허용 오차가 큼)는 workload 시작까지의 부팅 시간을 CLH 0.39초, QEMU 0.71초로 보고합니다. 이 저장소에서 측정한 값은 아니며, 이 저장소의 측정값과 측정 방법은 [08 런타임 벤치마크](08_benchmark.md)에 있습니다.
 
 ## 1단계: nested virtualization으로 리허설 (`kata/cpu_nodes.sh`)
 
@@ -167,7 +167,7 @@ scripts/02_create_cluster.sh    # same option as your first run; type 'metal' to
 scripts/kata/gpu_nodes.sh       # second run: GPU Operator, kata-deploy, pgpu check
 ```
 
-**확인할 것 (첫 실행):** 약 10분 뒤 `Add to scripts/config.env:` 아래에 `export KATA_IOMMU_AMI_ID="ami-..."` 줄이 출력되고, `[error] add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`로 끝납니다. 이 에러는 정상 동작입니다.
+**확인할 것 (첫 실행):** 스크립트는 약 10분이라고 안내합니다(2026-11-18 실행에서는 빌더가 약 30초 뒤 멈췄고, AMI는 약 2분 뒤 available이 됨). 끝나면 `Add to scripts/config.env:` 아래에 `export KATA_IOMMU_AMI_ID="ami-..."` 줄이 출력되고, `[error] add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`로 끝납니다. 이 에러는 정상 동작입니다.
 
 **확인할 것 (`02_create_cluster.sh` 재실행):** `metal`을 입력하면 CDK가 `sandbox-kata-gpu` 노드 그룹과 그 launch template을 추가합니다. 이때부터 `g4dn.metal` 요금이 나갑니다. `kata/gpu_nodes.sh`의 두 번째 실행은 이 노드 그룹이 없으면 `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again ...`으로 멈춰요. Kata CPU 노드 추가(`kata/cpu_nodes.sh`)를 건너뛰어도 `kata/gpu_nodes.sh`가 kata-deploy를 설치합니다.
 
@@ -175,17 +175,23 @@ scripts/kata/gpu_nodes.sh       # second run: GPU Operator, kata-deploy, pgpu ch
 
 ```mermaid
 flowchart LR
-    A["SSM 파라미터<br/>EKS AL2023 standard AMI"] --> B["m6i.large 빌더<br/>grubby: intel_iommu=on iommu=pt<br/>cloud-init clean, shutdown"]
-    B --> C["stopped 대기<br/>create-image"] --> D["image-available 대기<br/>빌더 terminate"] --> E["KATA_IOMMU_AMI_ID 출력"]
+    A["SSM 파라미터<br/>EKS AL2023 standard AMI"] --> B["m6i.large 빌더<br/>grubby: intel_iommu=on iommu=pt<br/>modules-load.d: vfio_iommu_type1<br/>cloud-init clean, shutdown"]
+    B --> C["stopped가 될 때까지 상태 조회<br/>create-image"] --> D["image-available 대기<br/>빌더 terminate (EXIT trap)"] --> E["KATA_IOMMU_AMI_ID 출력"]
 ```
 
-*그림 요약: 커널 인자를 싼 빌더 인스턴스에서 AMI에 포함해 두므로, 비싼 `g4dn.metal`은 재부팅 없이 처음부터 IOMMU가 켜진 채로 뜹니다.*
+*그림 요약: 커널 인자와 모듈 설정을 싼 빌더 인스턴스에서 AMI에 포함해 두므로, 비싼 `g4dn.metal`은 재부팅 없이 처음부터 IOMMU가 켜진 채로 뜹니다.*
 
 1. SSM 파라미터 `/aws/service/eks/optimized-ami/${K8S_VERSION}/amazon-linux-2023/x86_64/standard/recommended/image_id`에서 NVIDIA가 아닌 standard AMI ID를 조회합니다(VM passthrough에서는 호스트가 NVIDIA 드라이버를 로드하면 안 됨).
-2. 클러스터의 첫 번째 서브넷(CDK 스택의 private subnet)에 `m6i.large` 빌더 인스턴스를 시작합니다(IMDSv2, hop limit 1). 빌더의 user data는 `grubby --update-kernel=ALL --args="intel_iommu=on iommu=pt"`로 커널 인자를 추가하고, `cloud-init clean --logs`로 인스턴스별 상태를 삭제한 뒤 인스턴스를 shutdown합니다.
-3. 빌더가 stopped 상태가 되면 `eks-al2023-${K8S_VERSION}-iommu-<타임스탬프>` 이름으로 AMI를 만들고, AMI를 쓸 수 있게 되면 빌더를 terminate합니다.
+2. 클러스터의 첫 번째 서브넷(CDK 스택의 private subnet)에 `m6i.large` 빌더 인스턴스를 시작합니다(IMDSv2, hop limit 1). 빌더의 user data는 `grubby --update-kernel=ALL --args="intel_iommu=on iommu=pt"`로 커널 인자를 추가하고, `/etc/modules-load.d/vfio-iommu-type1.conf`에 `vfio_iommu_type1`을 써서 부팅할 때마다 이 모듈이 로드되게 합니다. 그다음 `cloud-init clean --logs`로 인스턴스별 상태를 삭제하고 인스턴스를 shutdown합니다.
+3. 15초 간격으로 빌더 상태를 조회해 stopped가 될 때까지 최대 30분 기다립니다. 상태가 shutting-down이나 terminated가 되면 오류로 멈춥니다.
+4. `eks-al2023-${K8S_VERSION}-iommu-<타임스탬프>` 이름으로 AMI를 만들고, AMI를 쓸 수 있게 될 때까지 기다립니다. 스크립트가 성공하든 실패하든 EXIT trap이 빌더를 terminate합니다.
 
 AL2023 커널은 `CONFIG_INTEL_IOMMU_DEFAULT_ON`이 꺼져 있어서, `intel_iommu=on`이 커널 명령줄에 있어야 VFIO가 GPU를 VM에 직접 할당할 수 있습니다. `iommu=pt`는 호스트가 직접 쓰는 장치의 IOMMU 변환을 건너뛰게 합니다. 커널 인자는 인스턴스 타입과 무관해서 `m6i.large`에서 빌드해도 돼요.
+
+AL2023 커널은 VFIO type1 IOMMU backend도 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하는데, 2026-11-18의 `g4dn.metal` 노드에서는 아무것도 이 모듈을 로드하지 않았습니다. 이 모듈이 없으면 QEMU가 GPU를 연결하지 못해 Kata GPU pod가 시작되지 않습니다(아래 "pod가 `create container timeout`으로 멈출 때"). 그래서 2번 단계에서 `modules-load.d` 설정을 AMI에 넣습니다.
+
+!!! note "빌더 대기 방식 (2026-11-18 수정)"
+    이전 스크립트는 `aws ec2 wait instance-stopped`로 기다렸습니다. 이 waiter는 `pending` 상태를 terminal failure로 처리해서, 빌더가 아직 running이 되기 전에 `Waiter InstanceStopped failed ... "pending"`으로 바로 실패했어요. 이전 스크립트는 이렇게 중간에 멈추면 빌더를 terminate하지 않았습니다. 지금 스크립트는 위 3번처럼 상태를 직접 조회하고, EXIT trap으로 항상 빌더를 정리합니다. 이전 버전으로 실패한 적이 있다면 `<CLUSTER_NAME>-iommu-ami-builder` 이름의 인스턴스가 남아 있는지 확인하고 terminate하세요.
 
 ### sandbox-kata-gpu 노드 그룹
 
@@ -251,14 +257,14 @@ trainer와 gVisor 노드에는 `nvidia.com/gpu.deploy.operands=false` label이 �
 | T4 8개를 모두 쓸 때 | 메모리 8 x 26 = 208 GiB (노드 384 GiB), CPU 8 x (8 + 1) = 72 vCPU (노드 96 vCPU) |
 | 기본 replicas | 4 (`KATA_QEMU_REPLICAS`로 변경, T4 수만큼 최대 8) |
 
-overhead(10 GiB)가 limits에 포함되지 않는 `default_memory`(8 GiB)보다 크므로, scheduler가 예약하는 메모리가 VFIO가 실제로 pin하는 양보다 작아지지 않습니다. GPU VM은 부팅 전에 메모리를 모두 pin하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready 상태가 될 때까지 몇 분 걸릴 수 있습니다. 그래서 kubelet `runtimeRequestTimeout`을 20분으로 늘렸고, 샌드박스 Deployment의 startupProbe는 최대 10분 기다립니다([04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)).
+overhead(10 GiB)가 limits에 포함되지 않는 `default_memory`(8 GiB)보다 크므로, scheduler가 예약하는 메모리가 VFIO가 실제로 pin하는 양보다 작아지지 않습니다. GPU VM은 부팅 전에 메모리를 모두 pin하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready 상태가 될 때까지 몇 분 걸릴 수 있습니다(2026-11-18에는 이미지가 캐시된 상태에서 pod마다 30에서 36초, [08 런타임 벤치마크](08_benchmark.md)). 그래서 kubelet `runtimeRequestTimeout`을 20분으로 늘렸고, 샌드박스 Deployment의 startupProbe는 최대 10분 기다립니다([04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)).
 
 !!! note "보안 속성"
     IOMMU가 GPU의 DMA를 해당 VM의 메모리로 제한하므로, IOMMU를 끄는 unsafe noiommu 모드는 쓰지 않습니다. vfio-pci는 장치를 해제할 때 function(또는 bus)을 reset하고, T4는 `reset_method=bus`로 보고됐습니다(제3자 보고이며 NVIDIA의 보증이 아님).
 
 ### `kata/gpu_nodes.sh` 결과 확인
 
-**확인할 것 (두 번째 실행):** 스크립트는 Kata GPU 노드에 `nvidia.com/pgpu`가 등록될 때까지 최대 20분(20초 간격 60회) 기다린 뒤 결과를 출력합니다(예시 형태).
+**확인할 것 (두 번째 실행):** 스크립트는 Kata GPU 노드에 `nvidia.com/pgpu`가 등록될 때까지 최대 20분(20초 간격 60회) 기다린 뒤 아래 형태로 결과를 출력합니다. 2026-11-18 실행에서는 `pgpu=8`이 나왔고, GPU Operator 설치, kata-deploy upgrade, pgpu 대기까지 약 1분 걸렸습니다. kata-deploy upgrade는 실행 중인 CPU 풀을 재시작하지 않았어요.
 
 ```text
 [hh:mm:ss] waiting for the T4s to be advertised as nvidia.com/pgpu on ip-192-168-x-x.us-west-2.compute.internal
@@ -281,11 +287,37 @@ debug 셸에서 다음을 실행합니다.
 cat /proc/cmdline                      # expect intel_iommu=on iommu=pt
 ls /sys/kernel/iommu_groups | wc -l    # expect a non-zero number of IOMMU groups
 ls /sys/bus/pci/drivers/vfio-pci/      # expect the T4 PCI addresses once vfio-manager has run
+grep vfio_iommu_type1 /proc/modules    # expect one line: QEMU needs this VFIO IOMMU backend
 ```
 
-**확인할 것:** 첫째 명령 출력에 `intel_iommu=on iommu=pt`가 있고, 둘째 명령이 0보다 큰 수를 출력하고, 셋째 명령 출력에 `0000:..` 형태의 PCI 주소가 있으면 됩니다. 첫째 명령 출력에 커널 인자가 없으면 노드가 IOMMU AMI로 부팅되지 않은 것이에요. 확인이 끝나면 debug pod를 [02 gVisor](02_gvisor.md)의 "노드에서 직접 확인하기"와 같은 방법으로 삭제하세요.
+**확인할 것:** 첫째 명령 출력에 `intel_iommu=on iommu=pt`가 있고, 둘째 명령이 0보다 큰 수를 출력하고, 셋째 명령 출력에 `0000:..` 형태의 PCI 주소가 있고, 넷째 명령이 `vfio_iommu_type1`로 시작하는 줄을 출력하면 됩니다. 2026-11-18 노드에서는 IOMMU group이 257개였고 T4 8개가 모두 `vfio-pci`에 바인딩되어 있었어요. 첫째 명령 출력에 커널 인자가 없으면 노드가 IOMMU AMI로 부팅되지 않은 것이고, 넷째 명령이 아무것도 출력하지 않으면 아래 "pod가 `create container timeout`으로 멈출 때"를 보세요. 확인이 끝나면 debug pod를 [02 gVisor](02_gvisor.md)의 "노드에서 직접 확인하기"와 같은 방법으로 삭제하세요.
 
-실제 GPU VM은 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)에서 `scripts/06_deploy_sandboxes.sh kata-qemu`로 실행하고 풀 검증(`scripts/ops/verify.sh`)으로 확인합니다.
+실제 GPU VM은 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)에서 `scripts/06_deploy_sandboxes.sh kata-qemu`로 실행하고 풀 검증(`scripts/ops/verify.sh`)으로 확인합니다. 2026-11-18 실행에서는 `kata-qemu` pod 4개가 Ready가 되었고, `scripts/ops/verify.sh kata-qemu v1`의 결과는 다음과 같았습니다.
+
+- GPU `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`
+- egress 대상 4개 모두 차단
+- golden verdict 6개 PASS(`vector_add_triton`, `relu_bias_triton` 포함)
+- NetworkPolicy가 `default` namespace에서 온 호출을 차단
+
+### pod가 `create container timeout`으로 멈출 때 (vfio_iommu_type1)
+
+2026-11-18 실행에서 만난 문제입니다. 지금의 `build-iommu-ami.sh`는 이 모듈이 부팅 때 로드되도록 고쳤고, 그 전에 만든 AMI의 노드에서는 이 문제가 생깁니다.
+
+- **증상:** `kata-qemu-nvidia-gpu` pod가 `ContainerCreating`에 머물고, 이벤트에 `failed to create shim task: create container timeout`이 나옵니다. 노드 로그에는 QEMU 오류 `vfio 0000:e7:00.0: failed to setup container for group 87: No available IOMMU models`가 남습니다(PCI 주소와 group 번호는 노드마다 다름).
+- **원인:** AL2023 커널은 VFIO type1 IOMMU backend를 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하고, 그 노드에서는 아무것도 이 모듈을 로드하지 않았습니다. `lsmod`에는 `vfio`, `vfio_pci`, `vfio_pci_core`만 있었어요. IOMMU(group 257개, 커널 명령줄의 `intel_iommu=on`), T4 8개의 `vfio-pci` 바인딩, `nvidia.com/pgpu=8`은 모두 정상이었으므로 `kata/gpu_nodes.sh`의 pgpu 확인만으로는 드러나지 않습니다.
+- **해결 (새 AMI):** 지금의 `infra/kata/build-iommu-ami.sh`는 `/etc/modules-load.d/vfio-iommu-type1.conf`(`vfio_iommu_type1`)를 AMI에 넣습니다. 이전 AMI를 쓰고 있다면 이 스크립트로 AMI를 다시 빌드하고, 출력된 `KATA_IOMMU_AMI_ID`로 `scripts/config.env`를 바꾼 뒤 `02_create_cluster.sh`를 다시 실행하세요.
+- **해결 (지금 노드):** 이전 AMI로 뜬 노드에서는 위 debug 셸에서 모듈을 직접 로드합니다. 재부팅하면 다시 로드해야 해요.
+
+```bash
+# In the debug shell on the Kata GPU node (kubectl debug node/<kata-gpu-node> ... --profile=sysadmin)
+chroot /host
+journalctl --since "30 min ago" --no-pager | grep "No available IOMMU models" | tail -3   # the symptom
+modprobe vfio_iommu_type1
+grep vfio_iommu_type1 /proc/modules                                                     # one line now
+exit
+```
+
+**확인할 것:** 마지막 `grep`이 `vfio_iommu_type1` 줄을 출력합니다. 2026-11-18 실행에서는 이 수정 뒤 `kata-qemu` pod 4개가 Ready가 되었습니다. `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu`로 READY가 `1/1`이 되는지 확인하세요.
 
 ## 3단계 (선택, 실험): Kata + Cloud Hypervisor GPU
 
@@ -294,7 +326,10 @@ ls /sys/bus/pci/drivers/vfio-pci/      # expect the T4 PCI addresses once vfio-m
 
 `infra/kata/experimental-clh-gpu/values-clh-gpu.yaml`은 kata-deploy의 `customRuntimes`로 `clh-nvidia-gpu` 런타임을 추가합니다. 이 파일은 `baseConfig: "clh"`에 drop-in으로 NVIDIA guest 커널과 이미지, `cold_plug_vfio = "root-port"`, `default_memory = 8192`, `static_sandbox_resource_mgmt = true` 등을 추가하고, `kata-clh-nvidia-gpu` RuntimeClass(overhead 10240Mi와 CPU 1, nodeSelector `nvidia.com/cc.ready.state: "false"`, label `gpusandbox/support: experimental`)를 만듭니다. 이 설정으로 Go CLH shim의 VFIO cold-plug 코드를 활성화해 시험합니다.
 
-1. **guest 자산 이름 확인.** Kata GPU 노드에서 debug pod를 실행합니다.
+!!! warning "2026-11-18 결과: VM이 시작되지 않았습니다"
+    아래 2번의 경로를 채운 values 파일로도 `kata-clh` 풀의 pod는 `create container timeout`으로 실패했습니다. CLH VM이 socket을 만들지 않았고, 로그에서 더 구체적인 원인은 찾지 못했어요. 그래서 [08 런타임 벤치마크](08_benchmark.md)에는 "측정 안 됨"으로 기록하고 풀을 0으로 줄였습니다.
+
+1. **guest 자산 이름 확인 (다른 kata-deploy 버전일 때).** Kata GPU 노드에서 debug pod를 실행합니다.
 
     ```bash
     kubectl debug node/<kata-node> -it --image=public.ecr.aws/amazonlinux/amazonlinux:2023
@@ -308,7 +343,7 @@ ls /sys/bus/pci/drivers/vfio-pci/      # expect the T4 PCI addresses once vfio-m
 
     **확인할 것:** guest 커널과 이미지 파일 목록이 나옵니다(파일 이름은 kata-deploy 버전마다 다름). NVIDIA용 커널과 이미지의 파일 이름을 메모하세요.
 
-2. **placeholder 교체.** values 파일의 `__NVIDIA_GUEST_VMLINUX__`와 `__NVIDIA_GUEST_IMAGE__`를 위 목록의 파일 이름으로 바꿉니다. 저장소 주석에는 Cloud Hypervisor가 압축하지 않은 `vmlinux`로 부팅하는데, kata-deploy가 QEMU용으로 배포하는 NVIDIA guest 커널은 압축된 형태만 있을 수 있다고 적혀 있습니다. 반면 Cloud Hypervisor README는 x86-64에서 PVH를 지원하는 `vmlinux` ELF와 일반 bzImage를 모두 지원한다고 설명합니다. Kata의 CLH 설정이 어느 형식을 허용하는지는 직접 확인하세요.
+2. **artifact 경로 확인.** values 파일의 `kernel`과 `image`는 kata-deploy 4.3.1이 설치하는 링크로 채워져 있습니다(2026-11-18 `g4dn.metal` 노드에서 확인). `vmlinux-nvidia-gpu.container`는 Cloud Hypervisor가 부팅하는 압축하지 않은 커널이고, `kata-containers-nvidia-gpu.img`는 NVIDIA guest 이미지예요. QEMU NVIDIA RuntimeClass는 압축된 `vmlinuz`로 부팅합니다. 다른 kata-deploy 버전에서 파일 이름이 다르면 1번 목록에 맞게 바꾸세요.
 3. **실험 RuntimeClass 설치.** `kata/gpu_nodes.sh`를 환경변수와 함께 다시 실행합니다.
 
     ```bash
@@ -343,19 +378,20 @@ ls /sys/bus/pci/drivers/vfio-pci/      # expect the T4 PCI addresses once vfio-m
 ## 적용 범위와 한계
 
 - **업스트림 검증 범위:** NVIDIA의 Kata CI는 A100과 H100을 테스트하고 T4는 테스트하지 않습니다. NVIDIA가 EKS에서 검증한 OS는 Ubuntu이고 AL2023은 목록에 없습니다. 그래서 `g4dn.metal` + AL2023으로 구성한 이 환경은 업스트림에서 검증되지 않은 조합이에요.
-- **제3자 보고:** Ubuntu 24.04의 `g4dn.metal`에서 `intel_iommu=on iommu=pt`로 T4 8개가 vfio-pci에 바인딩되고 IOMMU 그룹도 passthrough에 쓸 수 있었다는 보고가 있지만, 이 저장소가 직접 확인하지는 않았습니다.
+- **이 저장소의 실행:** Kata GPU 경로(`g4dn.metal` + AL2023 + `kata-qemu-nvidia-gpu`)는 2026-11-18 실습 계정(us-west-2, EKS 1.36)에서 실행했습니다. `vfio_iommu_type1` 수정 뒤 `kata-qemu` pod 4개가 Ready가 되었고 `ops/verify.sh kata-qemu v1`이 통과했어요. 한 번의 실행 결과이며, 업스트림 검증을 대신하지 않습니다.
+- **제3자 보고:** Ubuntu 24.04의 `g4dn.metal`에서 `intel_iommu=on iommu=pt`로 T4 8개가 vfio-pci에 바인딩되고 IOMMU 그룹도 passthrough에 쓸 수 있었다는 보고가 있습니다. 이 저장소는 AL2023에서 같은 바인딩(T4 8개, IOMMU group 257개)을 확인했고, Ubuntu는 확인하지 않았습니다.
 - **문서로 확인하지 않은 동작:** 재부팅 뒤 Kata handler 유지(containerd `imports`)와 `CpuOptions.NestedVirtualization` 전달은 바뀔 수 있으니, 1단계의 재부팅 확인과 `describe-instances` 확인을 건너뛰지 마세요.
-- **Cloud Hypervisor + GPU:** 실험 경로이며, 동작하는지 확인되지 않았습니다.
+- **Cloud Hypervisor + GPU:** 실험 경로입니다. 2026-11-18 실행에서는 artifact 경로를 채운 뒤에도 VM이 시작되지 않았고(`create container timeout`), 동작하는 구성은 확인하지 못했습니다.
 
 ## 소요 시간과 비용
 
-| 단계 | 예상 시간 (안내값 또는 timeout) | 새로 과금되는 리소스 |
+| 단계 | 시간 (실측, 안내값 또는 timeout) | 새로 과금되는 리소스 |
 |---|---|---|
 | `02_create_cluster.sh` 재실행 (`WITH_KATA_CPU=1`) | 노드 그룹 생성 (측정하지 않음) | `c8i.2xlarge` x1 (0.37484 USD/시간) |
 | `kata/cpu_nodes.sh` | 약 14분 (실측, 대부분 kata-deploy). timeout은 kata-deploy 20분, smoke pod 각 10분 | 없음 |
-| `kata/gpu_nodes.sh` 첫 실행 | AMI 약 10분 | 빌더 `m6i.large`(0.096 USD/시간, 약 10분), AMI 스냅샷(EBS 스냅샷 요금) |
-| `02_create_cluster.sh` 재실행 (`WITH_KATA_GPU=1`) | 노드 그룹 생성 (측정하지 않음) | `g4dn.metal` x1 (7.824 USD/시간) |
-| `kata/gpu_nodes.sh` 두 번째 실행 | GPU Operator 20분 + kata-deploy 20분 + pgpu 대기 최대 20분 | 없음 |
+| `kata/gpu_nodes.sh` 첫 실행 | 스크립트 안내 약 10분. 2026-11-18 실측은 빌더 stop 약 30초, AMI available 약 2분 | 빌더 `m6i.large`(0.096 USD/시간, AMI가 available이 될 때까지), AMI 스냅샷(EBS 스냅샷 요금) |
+| `02_create_cluster.sh` 재실행 (`WITH_KATA_GPU=1`) | `g4dn.metal` 노드 합류 약 3분 (2026-11-18 실측) | `g4dn.metal` x1 (7.824 USD/시간) |
+| `kata/gpu_nodes.sh` 두 번째 실행 | 약 1분 (2026-11-18 실측). timeout은 GPU Operator 20분, kata-deploy 20분, pgpu 대기 최대 20분 | 없음 |
 | 3단계 | `check-clh-gpu.sh` 20분 | 없음 |
 
 가격은 us-east-1과 us-west-2 온디맨드 요금입니다. 쓰지 않는 Kata 노드는 0으로 줄여 두세요.

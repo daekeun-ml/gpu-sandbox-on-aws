@@ -13,7 +13,7 @@
 - **원인은 저장소 코드와 검증된 사실에서 도출했습니다.** 코드나 문서로 확인하지 못한 부분은 "(추정)"으로 표시했어요.
 
 !!! warning "이 페이지의 근거"
-    2026-11-14에 저자는 시나리오 C의 CDK 배포, 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 삭제를 실습 계정에서 실행했습니다. 실습 계정에서 2026-11-18에는 us-west-2의 시나리오 A를 `g5`로 실행했어요. 클러스터는 GPU 노드 그룹 없이 만든 뒤 update로 추가했고(아래 "GPU 용량이 없을 때"), `03_build_push_images.sh`, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(1 replica)과 `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5`, `08_cleanup.sh --images`를 실행했어요. 시나리오 A의 `ops/rollout.sh`, `ops/bench.sh`, Kata GPU, HyperPod B1과 B2는 실행하지 않았습니다([검증 상태](../index.md)). 증상과 원인은 스크립트 오류 메시지, 코드 동작, 공식 문서에서 가져왔습니다. 에러 문구는 도구 버전마다 다를 수 있으니, "(추정)" 행은 특히 직접 확인하세요.
+    2026-11-14에 저자는 시나리오 C의 CDK 배포, 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 삭제를 실습 계정에서 실행했습니다. 실습 계정에서 2026-11-18에는 us-west-2의 시나리오 A를 `g5`로 실행했어요. 클러스터는 GPU 노드 그룹 없이 만든 뒤 update로 추가했고(아래 "GPU 용량이 없을 때"), `03_build_push_images.sh`, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(1 replica)과 `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5`, `08_cleanup.sh --images`를 실행했어요. 같은 날 다른 클러스터 구성(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가)에서 Kata GPU(`g4dn.metal`), `ops/bench.sh`, 데모 사이트(us-east-1)도 실행했습니다. 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행은 이 실행에서 나왔어요. 시나리오 A의 `ops/rollout.sh`, 기본값 60 step 학습, HyperPod B1과 B2는 실행하지 않았고, 실험용 CLH GPU는 VM이 시작되지 않았습니다([검증 상태](../index.md)). 증상과 원인은 스크립트 오류 메시지, 코드 동작, 공식 문서에서 가져왔습니다. 에러 문구는 도구 버전마다 다를 수 있으니, "(추정)" 행은 특히 직접 확인하세요.
 
 ??? note "용어"
     - **readiness**: kubelet이 pod가 요청을 받을 준비가 됐는지 확인하는 검사입니다. 이 저장소에서는 GPU probe와 egress 차단 확인이 모두 통과해야 Ready가 됩니다.
@@ -149,6 +149,7 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 | `render: <template>: missing variable 'X'` | 템플릿의 `${X}`에 값이 없음. `render.py`는 빈 값으로 대체하지 않음 | config.env나 셸에서 `export X=...` |
 | Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)가 `no sandbox-kata-cpu node group: set WITH_KATA_CPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`로 멈춤 | 시나리오 C가 아닌데 `WITH_KATA_CPU=1` 없이 스택을 만듦 | config.env에 `WITH_KATA_CPU=1`을 넣고 `02_create_cluster.sh` 재실행(CDK가 c8i 노드 그룹만 추가함), 그다음 `kata/cpu_nodes.sh` 재실행 |
 | Kata GPU 노드 추가(`scripts/kata/gpu_nodes.sh`)가 `add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`로 끝남 | 정상 동작: 첫 실행은 AMI만 빌드(스크립트 안내 기준 약 10분) | 출력된 AMI ID와 `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh` 재실행(`metal` 입력), 그다음 `kata/gpu_nodes.sh` 재실행 |
+| Kata GPU 노드 추가의 첫 실행(`infra/kata/build-iommu-ami.sh`)이 `Waiter InstanceStopped failed ... "pending"`으로 바로 실패 | 이전 스크립트의 `aws ec2 wait instance-stopped`는 `pending` 상태를 terminal failure로 처리함. 빌더가 아직 running이 되기 전에 waiter가 시작되면 바로 실패하고, 이전 스크립트는 이때 빌더를 terminate하지 않음(2026-11-18 실측) | 스크립트에서 고쳤습니다: waiter 대신 15초 간격으로 상태를 조회(최대 30분, shutting-down이나 terminated면 실패)하고, EXIT trap이 항상 빌더를 terminate함. 이전 버전으로 실패했다면 `<CLUSTER_NAME>-iommu-ami-builder` 인스턴스를 terminate한 뒤 최신 스크립트로 다시 실행 |
 | `scripts/kata/gpu_nodes.sh`가 `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`로 멈춤 | AMI는 있지만 `WITH_KATA_GPU=1`로 `02_create_cluster.sh`를 다시 실행하지 않음 | `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh` 재실행, 그다음 `kata/gpu_nodes.sh` 재실행 |
 | `03_build_push_images.sh`를 다시 실행하자 push가 태그 중복으로 실패 | ECR 저장소를 IMMUTABLE 태그로 만듦 | `IMAGE_TAG`를 새 값(예: `v1-hp`)으로 바꾸고 재실행, 출력된 URI로 config.env 갱신 |
 | `03_build_push_images.sh`의 빌드가 매우 느리거나 디스크가 부족함 | arm64 PC에서 linux/amd64를 에뮬레이션, 큰 베이스 이미지(PyTorch, vLLM) | x86_64 호스트에서 디스크 100 GB 이상으로 빌드(스크립트 주석 기준) |
@@ -166,6 +167,13 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 | `cdk/tunnel.sh`가 `TargetNotConnected`로 끝남 | access instance의 SSM agent가 아직 Systems Manager에 등록되지 않음(배포 직후) | 몇 분 기다렸다 다시 실행 |
 | `cdk/tunnel.sh`가 `[error] missing tool: session-manager-plugin`으로 멈춤 | AWS CLI용 Session Manager plugin이 없음 | [Session Manager plugin 설치](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) 후 `session-manager-plugin --version`으로 확인 |
 | `cdk/destroy.sh`가 `cluster API not reachable (is cdk/tunnel.sh running?)` 경고를 냄 | 터널이 꺼져 있어 풀과 Job을 먼저 지우지 못함 | 그대로 두어도 스택 삭제가 노드를 지웁니다. 풀부터 지우려면 터널을 켜고 다시 실행 |
+
+**오래 쉰 터널이 끊길 때:** 긴 작업 중에는 `cdk/tunnel.sh` 세션이 끊길 수 있습니다(2026-11-18 실행에서 두 번). `kubectl`이 연결 오류로 실패하면 터널 터미널을 확인하고 `cdk/tunnel.sh`를 다시 실행하세요. 그날은 다시 실행해서 복구했어요. 오래 기다리는 작업 중에는 다른 터미널에서 1분에 한 번쯤 가벼운 요청을 보내면 유휴 터널이 유지됩니다.
+
+```bash
+# Keep an idle tunnel alive with one cheap API request per minute (Ctrl-C stops it)
+while sleep 60; do kubectl get --raw /healthz >/dev/null || echo "$(date +%T) API unreachable: rerun cdk/tunnel.sh"; done
+```
 
 ## 클러스터와 노드
 
@@ -223,8 +231,9 @@ kubectl -n kube-system get ds nvdp-nvidia-device-plugin -o yaml | grep -A1 CDI_D
 | `scripts/kata/gpu_nodes.sh`가 `no passthrough GPUs advertised; see docs/reference/troubleshooting.md`로 멈춤, `nvidia.com/pgpu` 없음 | (1) IOMMU 꺼짐: AMI에 `intel_iommu=on`이 없음 (2) 노드 라벨 `nvidia.com/gpu.workload.config=vm-passthrough` 없음 (3) 호스트가 NVIDIA 드라이버를 로드함(NVIDIA AMI 사용) (4) GPU Operator operand나 NFD에 그 taint의 toleration이 없어 실행되지 않음 (5) `ccManager.defaultMode`가 `on`이면 T4에서 cc-manager가 종료됨(pgpu 광고에 주는 영향은 추정) | 아래 명령으로 `/proc/cmdline`, IOMMU group 수, `lsmod`, `lspci -nnk`, 노드 라벨, `gpu-operator` pod 확인. `KATA_IOMMU_AMI_ID`가 `build-iommu-ami.sh`가 만든 AMI인지 확인 |
 | Kata GPU pod가 Pending, 이벤트에 node affinity나 selector 불일치 | RuntimeClass `kata-qemu-nvidia-gpu`의 `scheduling.nodeSelector`(`nvidia.com/cc.ready.state=false`)가 pod에 합쳐짐. 노드에 이 라벨이 없음(cc-manager가 설정하지 않았거나 `ccManager.defaultMode`가 `on`) | 노드 라벨 확인. GPU Operator 값 `ccManager.defaultMode: "off"` 확인 후 `kata/gpu_nodes.sh` 재실행 |
 | Kata GPU pod가 Pending, `Insufficient memory` 또는 `Insufficient nvidia.com/pgpu` | RuntimeClass overhead(10240Mi, CPU 1)가 pod 요청에 추가됨: pod당 16Gi + 10Gi | `scripts/06_deploy_sandboxes.sh kata-qemu v1 2`처럼 replica를 줄이거나 `kubectl describe node <node>`의 Allocated resources 확인. 실험용 kata-clh 풀과 같은 노드를 함께 쓴다는 점도 계산에 포함하기 |
-| `kata-clh` 풀의 pod가 만들어지지 않고 ReplicaSet 이벤트에 RuntimeClass `kata-clh-nvidia-gpu`가 없다는 오류 | 실험용 RuntimeClass는 `ENABLE_EXPERIMENTAL_CLH_GPU=1`로 `kata/gpu_nodes.sh`를 실행해야 생김 | `kubectl -n sandbox describe rs -l gpusandbox/runtime=kata-clh`로 확인. 쓰려면 values 파일의 `__NVIDIA_GUEST_VMLINUX__`, `__NVIDIA_GUEST_IMAGE__`를 먼저 바꾸고 `ENABLE_EXPERIMENTAL_CLH_GPU=1 scripts/kata/gpu_nodes.sh`, 이어서 `infra/kata/experimental-clh-gpu/check-clh-gpu.sh`. 업스트림이 지원하지 않는 경로 |
-| Kata GPU pod 생성이 시간 초과로 실패(추정) | VFIO가 VM을 시작하기 전에 게스트 메모리 전체를 고정하느라 시간이 걸림 | kubelet `runtimeRequestTimeout: 20m`(`infra/eks/userdata.py`의 Kata GPU NodeConfig에 포함) 유지, 메모리 limits를 필요 이상으로 키우지 않기 |
+| `kata-clh` 풀의 pod가 만들어지지 않고 ReplicaSet 이벤트에 RuntimeClass `kata-clh-nvidia-gpu`가 없다는 오류 | 실험용 RuntimeClass는 `ENABLE_EXPERIMENTAL_CLH_GPU=1`로 `kata/gpu_nodes.sh`를 실행해야 생김 | `kubectl -n sandbox describe rs -l gpusandbox/runtime=kata-clh`로 확인. 쓰려면 `ENABLE_EXPERIMENTAL_CLH_GPU=1 scripts/kata/gpu_nodes.sh`, 이어서 `infra/kata/experimental-clh-gpu/check-clh-gpu.sh`(values 파일의 artifact 경로는 kata-deploy 4.3.1 기준으로 채워져 있음). 업스트림이 지원하지 않는 경로이고, 2026-11-18에는 이 경로를 채운 뒤에도 VM이 시작되지 않음(`create container timeout`) |
+| Kata GPU pod가 `ContainerCreating`에 머물고 이벤트에 `failed to create shim task: create container timeout`. 노드 로그에 QEMU 오류 `vfio 0000:e7:00.0: failed to setup container for group 87: No available IOMMU models`(PCI 주소와 group 번호는 노드마다 다름) | AL2023 커널은 VFIO type1 IOMMU backend를 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하고, 아무것도 이 모듈을 로드하지 않음. `lsmod`에 `vfio`, `vfio_pci`, `vfio_pci_core`만 있음. IOMMU(group 257개), T4 8개의 vfio-pci 바인딩, `nvidia.com/pgpu=8`은 정상이라 pgpu 확인으로는 드러나지 않음(2026-11-18 실측) | (1) AMI 다시 빌드: 지금의 `infra/kata/build-iommu-ami.sh`는 `/etc/modules-load.d/vfio-iommu-type1.conf`(`vfio_iommu_type1`)를 AMI에 넣음. 새 `KATA_IOMMU_AMI_ID`로 config.env를 바꾸고 `02_create_cluster.sh` 재실행 (2) 이전 AMI의 노드에서 바로 고치기: `kubectl debug node/<node>` 셸에서 `chroot /host` 뒤 `modprobe vfio_iommu_type1`(재부팅하면 다시 필요). 자세한 절차는 [03 Kata 샌드박스](../handson/03_kata.md)의 2단계 |
+| Kata GPU pod 생성이 시간 초과로 실패하고, 노드 로그에 위 `No available IOMMU models`가 없음(추정) | VFIO가 VM을 시작하기 전에 게스트 메모리 전체를 고정하느라 시간이 걸림 | kubelet `runtimeRequestTimeout: 20m`(`infra/eks/userdata.py`의 Kata GPU NodeConfig에 포함) 유지, 메모리 limits를 필요 이상으로 키우지 않기 |
 | `g4dn.metal` 노드가 재부팅 뒤 다시 시작되지 않음(제3자 보고) | metal 인스턴스 warm reboot 문제 보고가 있음 | user data에서 재부팅하지 않도록 커널 인자를 AMI에 포함(`build-iommu-ami.sh`). 다시 시작되지 않으면 인스턴스 교체 |
 
 아래 명령은 CPU 노드의 nested virtualization 설정, Kata 런타임 구성 요소, GPU 노드의 라벨과 pgpu 광고를 차례로 확인합니다. `CpuOptions`에 `"NestedVirtualization": "enabled"`가, pgpu 줄에 `8`이 나오면 정상입니다.
@@ -254,7 +263,7 @@ dnf install -y -q pciutils && lspci -nnk -d 10de:   # every T4 should show "Kern
 chroot /host
 cat /proc/cmdline                                    # must contain intel_iommu=on iommu=pt
 ls /sys/kernel/iommu_groups | wc -l                  # 0 means the IOMMU is off
-lsmod | grep -E 'vfio|nvidia'                        # vfio_pci loaded, nvidia not loaded
+lsmod | grep -E 'vfio|nvidia'                        # vfio_pci and vfio_iommu_type1 loaded, nvidia not loaded
 ```
 
 ## 샌드박스 풀과 readiness
