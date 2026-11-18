@@ -35,7 +35,7 @@
 
 ## 아키텍처
 
-![시나리오 C: GPU 없이 c8i.2xlarge 한 대에 세 런타임의 CPU 풀이 있는 구성](../images/architecture/scenario-c.drawio.png)
+[![시나리오 C: GPU 없이 c8i.2xlarge 한 대에 세 런타임의 CPU 풀이 있는 구성](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
 *그림 요약: AWS 리소스로 보면 GPU 노드가 없고, c8i.2xlarge 한 대가 샌드박스 노드 그룹을 맡습니다. 아래 그림은 같은 구성을 pod 기준으로 본 것이에요.*
 

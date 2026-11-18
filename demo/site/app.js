@@ -12,6 +12,7 @@ const MAX_REWARD = 0.1 + 1.0 + 0.5 * 1.5;
 const TEXT = {
   ko: {
     navArch: "구조", navTry: "채점해 보기", navDefense: "공격 차단", navTrain: "학습", navBench: "성능 비교",
+    navPatterns: "패턴별 아키텍처 →", patternsLink: "패턴별 아키텍처 자세히 보기 →",
     eyebrow: "강화학습용 GPU 코드 채점 샌드박스",
     title: "AI가 쓴 GPU 코드를 안전하게 채점합니다",
     lede: "강화학습을 하는 동안 모델은 계속 새로운 GPU 코드(Triton, CUDA)를 만듭니다. 믿을 수 없는 코드라서 격리된 환경에서 실행해야 해요. 이 페이지는 Amazon EKS에서 gVisor와 Kata Containers로 실제 채점한 기록을 다시 보여 줍니다. 클러스터나 GPU에 직접 연결하지는 않습니다.",
@@ -83,6 +84,7 @@ const TEXT = {
   },
   en: {
     navArch: "Architecture", navTry: "Try scoring", navDefense: "Attacks blocked", navTrain: "Training", navBench: "Benchmark",
+    navPatterns: "Architecture patterns →", patternsLink: "See the architecture patterns →",
     eyebrow: "GPU reward sandboxes for on-policy RL",
     title: "Score model-written GPU code in isolated sandboxes",
     lede: "During reinforcement learning, a model writes untrusted Triton and CUDA code at every step. This page replays real records of that code being scored on Amazon EKS with gVisor and Kata Containers. Your browser never connects to a cluster or a GPU.",
@@ -196,10 +198,10 @@ const ARCH = {
     { id: "gvisor", x: 392, y: 78, w: 330, h: 74, zone: "sandbox" },
     { id: "kata", x: 392, y: 196, w: 330, h: 74, zone: "sandbox" },
     { id: "cpu", x: 392, y: 314, w: 330, h: 74, zone: "sandbox" },
-    { id: "imds", x: 818, y: 70, w: 150, h: 56, zone: "out", blocked: true },
-    { id: "k8sapi", x: 818, y: 152, w: 150, h: 56, zone: "out", blocked: true },
-    { id: "kubelet", x: 818, y: 234, w: 150, h: 56, zone: "out", blocked: true },
-    { id: "internet", x: 818, y: 316, w: 150, h: 56, zone: "out", blocked: true },
+    { id: "imds", x: 810, y: 70, w: 168, h: 60, zone: "out", blocked: true },
+    { id: "k8sapi", x: 810, y: 152, w: 168, h: 60, zone: "out", blocked: true },
+    { id: "kubelet", x: 810, y: 234, w: 168, h: 60, zone: "out", blocked: true },
+    { id: "internet", x: 810, y: 316, w: 168, h: 60, zone: "out", blocked: true },
   ],
   ko: {
     trainer: { t1: "GRPO 학습기", t2: "vLLM으로 코드 생성, TRL로 학습", title: "GRPO 학습기 (trainer)",
@@ -410,6 +412,7 @@ function renderStatic() {
   for (const node of document.querySelectorAll("[data-i18n]")) node.textContent = t(node.dataset.i18n);
   document.getElementById("lang").textContent = lang === "ko" ? "EN" : "KO";
   document.getElementById("source").textContent = `${recording.source} (${recording.recorded_at})`;
+  for (const id of ["nav-patterns", "patterns-link"]) document.getElementById(id).setAttribute("href", `architecture.html?lang=${lang}`);
   const video = document.getElementById("tour");
   if (video.paused) {
     video.poster = `media/tour-${lang}.jpg`;
@@ -487,8 +490,8 @@ function renderArch() {
     const g = sv("g", { class: `arch-node${n.blocked ? " blocked" : ""}`, tabindex: 0, role: "button", "data-id": n.id,
       "aria-label": tx.title });
     g.append(sv("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 10 }));
-    g.append(sv("text", { class: "t1", x: n.x + 14, y: n.y + 28 }, tx.t1));
-    g.append(sv("text", { class: "t2", x: n.x + 14, y: n.y + 50 }, tx.t2));
+    g.append(sv("text", { class: "t1", x: n.x + 12, y: n.y + 28 }, tx.t1));
+    g.append(sv("text", { class: "t2", x: n.x + 12, y: n.y + 51 }, tx.t2));
     g.addEventListener("click", () => selectArch(n.id));
     g.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectArch(n.id); }

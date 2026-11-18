@@ -40,7 +40,7 @@
 
 ## 구성
 
-![시나리오 B1: trainer는 HyperPod 인스턴스 그룹에, gVisor 풀은 EC2 노드에 있는 구성](../images/architecture/scenario-b1.drawio.png)
+[![시나리오 B1: trainer는 HyperPod 인스턴스 그룹에, gVisor 풀은 EC2 노드에 있는 구성](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
 
 *그림 요약: AWS 리소스로 보면 trainer만 HyperPod 인스턴스 그룹에 있고 나머지는 시나리오 A와 같습니다. 아래 그림은 같은 구성을 노드와 pod 기준으로 본 것이에요.*
 
@@ -309,7 +309,7 @@ HyperPod 노드에는 두 가지 제약이 있습니다. 첫째, ENI가 하나�
 
 B2는 trainer와 GPU 샌드박스를 모두 HyperPod 인스턴스 그룹에서 실행합니다. 샌드박스용 인스턴스 그룹(`sandbox`)은 NVIDIA 드라이버만 바꾼 custom AMI로 부팅하고, 이 노드에서 시나리오 A와 같은 gVisor 풀(`gvisor-hyperpod`)을 실행해요.
 
-![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](../images/architecture/scenario-b2.drawio.png)
+[![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
 
 *그림 요약: B1과 달리 EKS에는 system 노드만 남고, 샌드박스 풀도 custom AMI로 부팅한 HyperPod 노드에 올라갑니다. 아래 그림은 그 AMI를 만드는 순서예요.*
 

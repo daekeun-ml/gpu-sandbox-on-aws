@@ -69,3 +69,6 @@
 .md-typeset table:not([class]) thead + tbody tr:first-child td {
   border-top: none;
 }
+
+/* Architecture diagrams open at full size when clicked. */
+.md-typeset a > img[src*="images/architecture/"] { cursor: zoom-in; }

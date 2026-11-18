@@ -40,7 +40,7 @@ When a GPU node fails during a days-long on-policy run, someone has to replace t
 
 ## Layout
 
-![Scenario B1: the trainer on a HyperPod instance group and the gVisor pools on EC2 nodes](../images/architecture/scenario-b1.drawio.png)
+[![Scenario B1: the trainer on a HyperPod instance group and the gVisor pools on EC2 nodes](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
 
 *Takeaway: In AWS resources, only the trainer sits on a HyperPod instance group and the rest is the same as scenario A. The diagram below shows the same layout by nodes and pods.*
 
@@ -309,7 +309,7 @@ Load `$AWS_REGION`, `$CLUSTER_NAME` and `$HYPERPOD_CLUSTER_NAME` with `source sc
 
 B2 puts both the trainer and the GPU sandboxes on HyperPod instance groups. The sandbox instance group (`sandbox`) boots from a custom AMI whose only change is the NVIDIA driver, and runs the same kind of gVisor pool as scenario A (`gvisor-hyperpod`).
 
-![Scenario B2: the trainer and the gVisor pools both on HyperPod instance groups, the sandbox nodes booting from a custom AMI](../images/architecture/scenario-b2.drawio.png)
+[![Scenario B2: the trainer and the gVisor pools both on HyperPod instance groups, the sandbox nodes booting from a custom AMI](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
 
 *Takeaway: Unlike B1, EKS keeps only the system nodes, and the sandbox pools also run on HyperPod nodes booted from the custom AMI. The diagram below shows how that AMI is built.*
 

@@ -55,12 +55,20 @@ def test_viewers_get_https_and_security_headers():
 
 
 def test_site_loads_nothing_external_and_never_injects_html():
-    html = (SITE / "index.html").read_text()
-    for tag in re.findall(r"<(?:script|link)[^>]*>", html):
-        assert "http" not in tag, f"external resource: {tag}"
+    for page in ("index.html", "architecture.html"):
+        html = (SITE / page).read_text()
+        for tag in re.findall(r"<(?:script|link)[^>]*>", html):
+            assert "http" not in tag, f"external resource in {page}: {tag}"
+    for script in ("app.js", "arch.js"):
+        js = (SITE / script).read_text()
+        for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "new Function", "document.write"):
+            assert banned not in js, (script, banned)
     js = (SITE / "app.js").read_text()
-    for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "new Function", "document.write"):
-        assert banned not in js, banned
+    assert "fetch(" not in (SITE / "arch.js").read_text(), "the patterns page uses only its own static data"
+    # The architecture icons are plain images: no script, no event handlers, no external references.
+    for icon in (SITE / "icons").glob("*.svg"):
+        text = icon.read_text()
+        assert not re.search(r"<script|\son\w+=|href=\"(?:https?:)?//", text), icon.name
     assert re.findall(r"fetch\(\"([^\"]+)\"", js) == ["data/recording.json", "data/extras.json"], "same-origin fetch only"
     assert "media-src 'self'" in _template()["Resources"]["SecurityHeaders"]["Properties"][
         "ResponseHeadersPolicyConfig"]["SecurityHeadersConfig"]["ContentSecurityPolicy"]["ContentSecurityPolicy"]
@@ -128,6 +136,7 @@ def test_waf_limits_video_downloads_per_ip():
     assert len({r["Priority"] for r in rules.values()}) == len(rules)
     deploy = (ROOT / "demo/deploy.sh").read_text()
     assert '--exclude "*"' in deploy and "build_extras.py\" --check" in deploy
+    assert '--include "icons/*.svg"' in deploy and '--include "architecture.html"' in deploy
 
 
 def test_extras_sections_parse_from_cluster_logs():

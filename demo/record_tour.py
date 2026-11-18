@@ -42,6 +42,8 @@ CAPTIONS = {
         "grpo": "실제 모델(Qwen2.5-Coder-1.5B)로 GRPO 학습 5 step: 채점 결과와 점수",
         "switch": "학습 중 샌드박스 버전 바꾸기: 빠지는 배치 없이 v1에서 v2로 넘어갑니다.",
         "bench": "성능 비교: 런타임별 채점 시간, 시작 시간, 처리량",
+        "patterns": "패턴별 아키텍처: 학습기와 샌드박스를 어디에 두는지 네 가지 패턴으로 보여 줍니다.",
+        "patterns2": "HyperPod 학습(B1)에서 학습 한 step을 재생합니다. 요청과 결과가 선을 따라 움직입니다.",
         "end": "GPU Sandbox on AWS: 가이드와 코드는 GitHub에 있습니다.",
     },
     "en": {
@@ -58,6 +60,8 @@ CAPTIONS = {
         "grpo": "Five GRPO steps of a real model (Qwen2.5-Coder-1.5B): verdicts and reward",
         "switch": "Switching the sandbox version mid-training: no batch is lost from v1 to v2.",
         "bench": "Benchmark: eval latency, cold start and throughput per runtime",
+        "patterns": "Architecture patterns: four ways to place the trainer and the sandboxes.",
+        "patterns2": "Replaying one training step of HyperPod training (B1): requests and results move along the lines.",
         "end": "GPU Sandbox on AWS: the guide and the code are on GitHub.",
     },
 }
@@ -65,7 +69,8 @@ CAPTIONS = {
 OVERLAY = """
 () => {
   document.querySelector('.video-box')?.remove();
-  document.querySelector('.hero-grid').style.gridTemplateColumns = '1fr';
+  const heroGrid = document.querySelector('.hero-grid');
+  if (heroGrid) heroGrid.style.gridTemplateColumns = '1fr';
   const cap = document.createElement('div');
   cap.id = 'tour-cap';
   Object.assign(cap.style, {position: 'fixed', left: '50%', bottom: '18px', transform: 'translateX(-50%)',
@@ -182,9 +187,21 @@ class Tour:
             await self.click(f"#bench-metric .tab:nth-child({metric + 1})", 1800)
         await self.click("#bench-metric .tab:nth-child(1)", 1500)
 
+        await self.scroll("#arch")
+        await self.click("#patterns-link", 0)
+        await p.wait_for_selector(".ap-node")
+        await p.evaluate(OVERLAY)
+        await self.caption("patterns")
+        await p.wait_for_timeout(3000)
+        await self.click('.ap-pattern[data-id="b1"]', 1200)
+        await self.click("#ap-flows .tab:nth-child(2)", 300)
+        await self.scroll(".ap-toolbar", "start")
+        await self.caption("patterns2")
+        await self.click("#ap-play", 0)
+        await p.wait_for_timeout(17500)
         await p.evaluate("() => window.scrollTo({top: 0, behavior: 'smooth'})")
         await self.caption("end")
-        await p.wait_for_timeout(4000)
+        await p.wait_for_timeout(3500)
 
 
 def serve(site: Path) -> tuple[http.server.ThreadingHTTPServer, int]:

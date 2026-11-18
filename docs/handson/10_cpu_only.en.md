@@ -35,7 +35,7 @@ Scenario A needs GPU nodes, and many accounts have a `Running On-Demand G and VT
 
 ## Architecture
 
-![Scenario C: CPU pools of three runtimes on one c8i.2xlarge, no GPU](../images/architecture/scenario-c.drawio.png)
+[![Scenario C: CPU pools of three runtimes on one c8i.2xlarge, no GPU](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
 *Takeaway: In AWS resources there is no GPU node, and one c8i.2xlarge serves as the sandbox node group. The diagram below shows the same layout by pods.*
 

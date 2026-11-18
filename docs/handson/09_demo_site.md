@@ -44,8 +44,9 @@
 | 3. 공격 차단 | 풀마다 샌드박스 안 커널과 노드 커널, GPU, egress 차단 여부. 샌드박스 안에서 시도한 접근 8가지(IMDS, Kubernetes API, kubelet, 인터넷, 다른 namespace, 호스트 커널, 호스트 파일, 벤치마크 치팅)의 결과 카드와, 카드를 누르면 그 줄을 강조하는 터미널 출력 재생 | `recording.json`의 `/info`, `extras.json`의 터미널 기록(verify.sh, gVisor 스모크 테스트, rollout.sh) |
 | 4. 학습 | GRPO 배치마다 판정 분포, 통과율, 평균 reward 차트와 step 재생. 학습 중 버전 전환 차트 | `extras.json`의 `training`(GRPO Job 로그)과 `simulation`(없으면 `recording.json`의 `training`) |
 | 5. 벤치마크 | 런타임별 eval p50, p95, cold start, pod당 처리량, speedup 막대 차트. 이미지 캐시 후와 배포 직후를 바꿔 볼 수 있습니다 | `extras.json`의 `bench`(`scripts/ops/bench.sh` 출력) |
+| 패턴별 아키텍처 (`architecture.html`) | 시나리오 A, B1, B2, C를 AWS 아이콘으로 그린 구성도. 패턴마다 "준비와 배포", "학습 한 step", "버전 바꾸기" 흐름을 단계별로 재생하고, 요청과 결과가 선을 따라 움직입니다 | 페이지에 들어 있는 정적 데이터(`arch.js`). 데이터 파일을 읽지 않습니다 |
 
-공개되는 것은 HTML, CSS, JavaScript, 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다. 저장소의 `recording.json` 샘플은 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요. 2026-11-18에 공개한 GPU 기록은 `demo/recordings/2026-11-18-eks-gpu.json`에 있고, `extras.json`과 영상은 같은 날 EKS 실행(us-west-2)의 로그로 만들었습니다. 2절의 진행 막대는 기록된 전체 평가 시간이고, 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워져요.
+공개되는 것은 HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다. 저장소의 `recording.json` 샘플은 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요. 2026-11-18에 공개한 GPU 기록은 `demo/recordings/2026-11-18-eks-gpu.json`에 있고, `extras.json`과 영상은 같은 날 EKS 실행(us-west-2)의 로그로 만들었습니다. 2절의 진행 막대는 기록된 전체 평가 시간이고, 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워져요.
 
 ```mermaid
 flowchart LR
@@ -352,7 +353,7 @@ RECORDING=demo/recordings/2026-11-18-eks-gpu.json demo/deploy.sh
 | 1 | 기록을 검사합니다(`schema`가 1이고 `pools`가 비어 있지 않음, `extras.json`은 `schema`가 `extras-1`). 그다음 `demo/build_extras.py --check`로 두 파일에 IP 주소, 노드 이름, 계정 ID, ARN, 토큰이 없는지 확인하고, 하나라도 있으면 멈춥니다 |
 | 2 | `aws cloudformation deploy`로 `demo/infra/site.yaml`을 us-east-1에 배포합니다(바뀐 것이 없어도 실패하지 않음) |
 | 3 | 스택 출력 `BucketName`, `DistributionId`, `DistributionDomainName`을 읽습니다 |
-| 4 | 허용 목록의 파일(`index.html`, `app.js`, `style.css`, `media/tour-*.mp4`, `media/tour-*.jpg`)만 `aws s3 sync --delete`로 업로드하고, 데이터를 `data/recording.json`과 `data/extras.json`으로 업로드합니다(`application/json`, `no-cache`). 영상을 녹화할 때의 데이터와 게시할 데이터가 다르면 그 전에 경고를 출력합니다 |
+| 4 | 허용 목록의 파일(`index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`)만 `aws s3 sync --delete`로 업로드하고, 데이터를 `data/recording.json`과 `data/extras.json`으로 업로드합니다(`application/json`, `no-cache`). 영상을 녹화할 때의 데이터와 게시할 데이터가 다르면 그 전에 경고를 출력합니다 |
 | 5 | CloudFront invalidation(`/*`)을 만들고, 배포의 `WebACLId`가 WAF web ACL ARN인지 확인합니다. 아니면 오류를 내고 멈춥니다 |
 | 6 | `https://<bucket>.s3.us-east-1.amazonaws.com/index.html`에 익명 요청을 보내고, 응답이 403이 아니면 오류를 내고 멈춥니다 |
 | 7 | 공개 URL이 200을 반환할 때까지 20초 간격으로 최대 30번 확인합니다. 그 뒤 응답에 CSP와 HSTS 헤더가 없거나, `http://` 요청이 301을 반환하지 않으면 오류를 내고 멈춥니다 |
@@ -429,7 +430,7 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-d
 | 응답 헤더 | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` | MIME sniffing, clickjacking, referrer 유출, 브라우저 기능 사용 |
 | 페이지 | `index.html`은 `style.css`와 `app.js`만 불러오고, `app.js`는 같은 origin의 `data/recording.json`과 `data/extras.json`만 `fetch`합니다. 영상도 같은 origin의 `media/`에서 재생합니다. 기록의 값은 모두 text node로 삽입하고(차트는 SVG 요소와 text node로 그림) `innerHTML` 같은 HTML 삽입을 쓰지 않습니다 | 기록 안의 문자열(평가된 코드가 만든 오류 메시지의 끝부분, 정책 위반, 터미널 출력)이 HTML이나 스크립트로 실행되는 것 |
 | 공개 데이터 | `build_extras.py`가 IP 주소(IPv4, IPv6, pod DNS 형식), 노드 이름, AWS endpoint 호스트, 계정 ID, ARN, EC2 리소스 ID, 토큰을 가리고, `deploy.sh`가 업로드 전에 같은 검사(`--check`)를 다시 실행. `record_tour.py`도 녹화 전에 같은 검사를 하고, 녹화에 쓴 데이터의 해시를 남겨 `deploy.sh`가 게시할 데이터와 다르면 경고 | 클러스터 로그에 들어 있는 내부 주소와 식별자가 공개되는 것, 영상에 검사하지 않은 데이터가 찍히는 것 |
-| 업로드 | `aws s3 sync`가 허용 목록(`index.html`, `app.js`, `style.css`, `media/tour-*.mp4`, `media/tour-*.jpg`)만 올리고, 데이터는 검사를 거친 두 파일만 따로 업로드 | `demo/site`에 남은 임시 파일이나 검사하지 않은 파일이 공개되는 것 |
+| 업로드 | `aws s3 sync`가 허용 목록(`index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`)만 올리고, 데이터는 검사를 거친 두 파일만 따로 업로드 | `demo/site`에 남은 임시 파일이나 검사하지 않은 파일이 공개되는 것 |
 
 응답 헤더는 모두 `Override: true`로 설정되어 있어서, origin이 보낸 같은 이름의 헤더보다 정책 값이 우선합니다. 버킷 정책의 `AWS:SourceArn` 조건은 고정값이므로 S3는 이 정책을 public으로 판단하지 않습니다. 그래서 `BlockPublicPolicy`를 켠 상태에서도 이 정책을 적용할 수 있습니다(S3 문서의 "public" 정의).
 
@@ -451,6 +452,7 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-d
     - 공개 데이터 파일에 IP 주소, 노드 이름, 계정 ID, ARN, 토큰이 없고, 가림 규칙이 IMDS 주소는 그대로 두는지
     - `extras.json`의 벤치마크, 학습, 버전 전환, 터미널 기록이 기대한 구조인지
     - WAF가 `/media/` 요청을 IP마다 제한하고, `deploy.sh`가 허용 목록으로만 업로드하며 업로드 전에 `--check`를 실행하는지
+    - 패턴별 아키텍처 페이지도 외부 리소스와 HTML 삽입이 없고 아무것도 `fetch`하지 않는지, 아이콘 SVG에 스크립트나 외부 참조가 없는지
 
     2026-11-18에 us-east-1에 실제로 배포했고, 배포 뒤 외부에서 다음을 확인했습니다.
 

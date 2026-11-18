@@ -59,9 +59,10 @@ distribution="$(output DistributionId)"
 domain="$(output DistributionDomainName)"
 
 echo "[demo] uploading site to s3://${bucket}"
-# Allow list: only the page, its styles and script, and the tour videos with their thumbnails.
+# Allow list: the two pages, their styles and scripts, the AWS icons, and the tour videos with thumbnails.
 aws s3 sync "${SITE}" "s3://${bucket}" --delete --region "${AWS_REGION}" --exclude "*" \
   --include "index.html" --include "app.js" --include "style.css" \
+  --include "architecture.html" --include "arch.js" --include "icons/*.svg" \
   --include "media/tour-*.mp4" --include "media/tour-*.jpg"
 aws s3 cp "${RECORDING}" "s3://${bucket}/data/recording.json" --region "${AWS_REGION}" \
   --content-type application/json --cache-control "no-cache"
