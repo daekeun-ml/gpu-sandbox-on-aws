@@ -9,7 +9,9 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-AWS_REGION="${AWS_REGION:?set AWS_REGION}"
+# us-east-1 only: the WAF web ACL for CloudFront and the CloudFront log delivery live there
+# (see Rules in demo/infra/site.yaml). CloudFront itself is global.
+AWS_REGION="us-east-1"
 STACK="${DEMO_STACK_NAME:-gpu-sandbox-demo}"
 SITE="${REPO_ROOT}/demo/site"
 RECORDING="${RECORDING:-${SITE}/data/recording.json}"
@@ -36,6 +38,12 @@ aws s3 cp "${RECORDING}" "s3://${bucket}/data/recording.json" --region "${AWS_RE
   --content-type application/json --cache-control "no-cache"
 aws cloudfront create-invalidation --distribution-id "${distribution}" --paths "/*" >/dev/null
 
+echo "[demo] checking that the distribution has the WAF web ACL"
+waf="$(aws cloudfront get-distribution-config --id "${distribution}" --query 'DistributionConfig.WebACLId' --output text)"
+if [[ "${waf}" != arn:* ]]; then
+  echo "[demo] ERROR: no WAF web ACL on ${distribution}. Fix before sharing." >&2
+  exit 1
+fi
 echo "[demo] checking that the bucket itself is not readable anonymously"
 direct="$(curl -s -o /dev/null -w '%{http_code}' "https://${bucket}.s3.${AWS_REGION}.amazonaws.com/index.html")"
 if [[ "${direct}" != "403" ]]; then
@@ -53,4 +61,6 @@ done
 headers="$(curl -sI "${url}")"
 grep -qi '^content-security-policy:' <<<"${headers}" || { echo "[demo] ERROR: CSP header missing" >&2; exit 1; }
 grep -qi '^strict-transport-security:' <<<"${headers}" || { echo "[demo] ERROR: HSTS header missing" >&2; exit 1; }
+plain="$(curl -s -o /dev/null -w '%{http_code}' "http://${DEMO_DOMAIN:-${domain}}/")"
+[[ "${plain}" == "301" ]] || { echo "[demo] ERROR: http:// returned ${plain}, expected a 301 redirect to https" >&2; exit 1; }
 echo "[demo] live: ${url}"

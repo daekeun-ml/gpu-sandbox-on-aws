@@ -17,7 +17,7 @@ A live demo that sends visitor input to GPU sandboxes opens an execution path fo
 - **Keep the bucket private and let only this distribution read it.** OAC and an `AWS:SourceArn` condition do this, and `deploy.sh` checks that direct bucket access returns 403.
 - **Narrow the browser side too.** The CSP allows scripts, styles and connections only from the page's own origin, and the page inserts strings from the record as text only.
 
-**Before you start:** you need the local Python environment (section 2 of [Getting started](../getting_started.md)), and a GPU recording needs the pools and the training run from [04](04_sandbox_pools.md), [05](05_grpo_training.md) and [06](06_sandbox_update.md). What the verdicts and rewards mean is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
+**Before you start:** you need the local Python environment (section 2 of [Getting started](../getting_started.md)), and a GPU recording needs the pools deployed in [04](04_sandbox_pools.md); filling section 3 (training events) also needs the training run from [05](05_grpo_training.md) and [06](06_sandbox_update.md). What the verdicts and rewards mean is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
 
 ??? note "Terms (expand if a word is new to you)"
     - **Static site**: a site that serves only HTML, CSS and JavaScript files, with no server-side code.
@@ -46,9 +46,11 @@ What is published is HTML, CSS, JavaScript and one recording JSON of runs that h
 
 ```mermaid
 flowchart LR
-    V["Visitor browser"] -->|"HTTPS (HTTP redirects to HTTPS)<br/>GET and HEAD only"| CF["CloudFront distribution<br/>response headers policy<br/>CSP, HSTS, nosniff, frame DENY"]
+    V["Visitor browser"] -->|"HTTPS (HTTP redirects to HTTPS)<br/>GET and HEAD only"| CF["CloudFront distribution + AWS WAF web ACL<br/>response headers policy<br/>CSP, HSTS, nosniff, frame DENY"]
     CF -->|"OAC (SigV4-signed requests)"| S3["private S3 bucket<br/>4 Block Public Access settings, SSE-S3"]
     V -.->|"direct bucket access gets 403"| S3
+    CF -.->|"standard logging v2"| LOG["private log bucket<br/>90-day expiry, kept after stack deletion"]
+    S3 -.->|"S3 server access logs"| LOG
     OP["Operator workstation<br/>demo/deploy.sh"] -->|"uploads static files and recording.json"| S3
     K["EKS cluster and GPU sandboxes"] -.->|"only when making a recording (record)"| OP
 ```
@@ -60,7 +62,9 @@ flowchart LR
 - **The local preview and regenerating the sample** cost nothing on AWS.
 - **Deployment** is mostly waiting for the stack and for CloudFront to propagate, and the script waits for 200 for up to about 10 minutes (step 7 in section 4). The actual duration was not measured.
 - **Site cost**: usually small for a small static site, but it depends on traffic, so check [CloudFront pricing](https://aws.amazon.com/cloudfront/pricing/) and [S3 pricing](https://aws.amazon.com/s3/pricing/).
-- **GPU recording cost**: the trainer and the GPU sandbox nodes must be up while you record (`g5.2xlarge` 1.212 USD per hour, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1 and us-west-2 On-Demand). Once you have the recording, scale the GPU nodes down with [99 Cleanup](99_cleanup.md).
+- **WAF cost**: about 5 USD per month for the web ACL, 1 USD per rule per month (4 rules), and 0.60 USD per million requests ([AWS WAF pricing](https://aws.amazon.com/waf/pricing/)). While the stack exists, the fixed part (about 9 USD per month) bills even without traffic.
+- **Log cost**: only S3 storage for the log bucket. Objects expire after 90 days, and the bucket stays after cleanup (section 6).
+- **GPU recording cost**: the GPU sandbox nodes must be up while you record (`g5.2xlarge` 1.212 USD per hour, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1 and us-west-2 On-Demand). The recorder pod runs on a system node without a GPU; recording from a trainer pod also needs the trainer node. Once you have the recording, scale the GPU nodes down with [99 Cleanup](99_cleanup.md).
 
 ## 1. Preview locally
 
@@ -103,7 +107,14 @@ Pod IPs, endpoint addresses and tokens are left out (according to the list of fi
 | A ServiceAccount on the allowlist (`grpo-trainer` or `sandbox-probe`) | The sandbox checks the token's subject |
 | An image with torch and httpx | `record` loads the task modules to put task descriptions and reference code into the recording, and the task modules import torch |
 
-The place that meets all four is a running trainer pod, which also holds the training events file `/outputs/grpo/sandbox_metrics.jsonl`.
+Two kinds of pod meet all four.
+
+| Pod | When to use it | Section 3 (training events) |
+|---|---|---|
+| Recorder pod (`demo/recorder-pod.yaml.tpl`) | Recording without a running training Job | empty |
+| A running trainer pod | Recording the training events too. The events file `/outputs/grpo/sandbox_metrics.jsonl` is in this pod | filled |
+
+The recorder pod runs only `sleep` in the trainer image (`rl-trainer`). It has the label `gpusandbox/client: "true"`, the ServiceAccount `grpo-trainer`, a projected token with audience `gpu-sandbox` and Pod Security restricted (uid 2000), and runs on a system node without a GPU. The golden set runs in the sandbox pools.
 
 ??? info "Why not record with the probe Job template (`k8s/probe/job-probe.yaml.tpl`)"
     The probe Job has the `rl-trainer` namespace, the client label and the audience token, but it cannot create or hand over a recording file.
@@ -116,7 +127,8 @@ The place that meets all four is a running trainer pod, which also holds the tra
 
 ### 2.1 Pick the moment to record
 
-- **Run it while the training Job is Running.** Once it ends, the container stops and the events file in the emptyDir can no longer be copied out ([05 On-policy GRPO training](05_grpo_training.md)).
+- **Without a training Job, record from the recorder pod (2.2).** The recording then has no training events, and section 3 shows "This recording has no training events."
+- **When you record from a trainer pod, run it while the training Job is Running.** Once it ends, the container stops and the events file in the emptyDir can no longer be copied out ([05 On-policy GRPO training](05_grpo_training.md)).
 - **To show a version switch in section 3**, record after you switch routing with `scripts/ops/rollout.sh gvisor v1 v2` from [06](06_sandbox_update.md) and before you scale v1 down with `--finish`, so that both pools go in.
 - **Training can slow down briefly.** Recording uses the same pools and a pod evaluates one request at a time, so the golden evaluations slot in between the reward evaluations.
 
@@ -131,7 +143,19 @@ POD="$(kubectl -n rl-trainer get pods -l app=grpo-trainer \
 echo "${POD}"
 ```
 
-**What to look for:** one pod name is printed (in scenario A, `grpo-<RUN_ID>-<suffix>`). If it is empty, no training is running; start with [05](05_grpo_training.md).
+**What to look for:** one pod name is printed (in scenario A, `grpo-<RUN_ID>-<suffix>`). If it is empty, no training is running; start with [05](05_grpo_training.md), or use the recorder pod below.
+
+**To record without a training Job,** create the recorder pod. The template is rendered with `TRAINER_IMAGE_URI` and `SANDBOX_AUDIENCE` from `scripts/config.env`.
+
+```bash
+# Recorder pod: trainer image, client label, grpo-trainer ServiceAccount, no GPU (runs on a system node)
+source scripts/config.env
+python3 scripts/render.py demo/recorder-pod.yaml.tpl | kubectl apply -f -
+kubectl -n rl-trainer wait --for=condition=Ready pod/demo-recorder --timeout=10m
+POD=demo-recorder
+```
+
+**What to look for:** `pod/demo-recorder created` and `pod/demo-recorder condition met`. The recorder pod's container is named `recorder`, so replace `-c trainer` with `-c recorder` in 2.3 and 2.4, and drop the `--training-events` line in 2.3. The pod exits after three hours (`sleep 10800`); delete it with `kubectl -n rl-trainer delete pod demo-recorder` once you have copied the recording.
 
 ### 2.3 Run record inside the trainer pod
 
@@ -155,7 +179,7 @@ kubectl -n rl-trainer exec "${POD}" -c trainer --\
 - **To include v1 and v2 together**, put the version in the label, for example `--pool "gvisor v1=sandbox-gvisor-v1.sandbox.svc.cluster.local:8000" --pool "gvisor v2=sandbox-gvisor-v2.sandbox.svc.cluster.local:8000"`.
 - **`--source` appears verbatim in the recording source line.** Write the conditions of the recording, such as Region, instances and date.
 
-**What to look for:** the last line is JSON like the following. `training_events` depends on how many batches have run by then.
+**What to look for:** the last line is JSON like the following. `training_events` depends on how many batches have run by then, and is 0 on the recorder pod (the 2026-11-18 recording: `goldens: 6`, `training_events: 0`).
 
 ```text
 {"event": "recorded", "out": "/tmp/rec.json", "pools": ["gvisor", "kata-qemu"], "goldens": 6, "training_events": <N>}
@@ -169,6 +193,7 @@ Copy it to your workstation and run the schema check that `deploy.sh` also runs.
 
 ```bash
 # Copy the recording to your workstation (kubectl cp runs tar inside the container)
+# Recorder pod: use -c recorder instead of -c trainer
 kubectl -n rl-trainer cp -c trainer "${POD}:/tmp/rec.json" /tmp/rec.json
 # The same schema check that deploy.sh runs first
 python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['schema'] == 1 and d['pools']" /tmp/rec.json
@@ -205,7 +230,7 @@ print("training events:", len(rec["training"]))
 PY
 ```
 
-**What to look for:** every pool shows `egress_blocked: True`, and every golden line says `as expected`. Run against the repository's sample recording, it prints `local-cpu v1` and `local-cpu v2` with four goldens each and `training events: 7` (checked locally).
+**What to look for:** every pool shows `egress_blocked: True`, and every golden line says `as expected`. In the 2026-11-18 recording both pools had `egress_blocked: True`, all 12 verdicts matched `expected_status`, and the file contained no IPs, account IDs or host names. Run against the repository's sample recording, it prints `local-cpu v1` and `local-cpu v2` with four goldens each and `training events: 7` (checked locally).
 
 To view it in a browser, copy the site to a temporary folder and serve it.
 
@@ -247,20 +272,20 @@ After regenerating, check the schema and reward consistency with `python -m pyte
 
 ## 4. Deploy (demo/deploy.sh)
 
-`demo/deploy.sh` creates one CloudFormation stack (bucket, OAC, response headers policy, CloudFront distribution, bucket policy), uploads the static files and the recording, and checks the public state.
+`demo/deploy.sh` creates one CloudFormation stack (site bucket, log bucket, OAC, response headers policy, WAF web ACL, CloudFront distribution and its log delivery, bucket policies), uploads the static files and the recording, and checks the public state.
 
 ```bash
-# Publish the shipped sample recording
-AWS_REGION=us-west-2 demo/deploy.sh
+# Publish the shipped sample recording (always us-east-1)
+demo/deploy.sh
 # Publish your GPU recording instead
-AWS_REGION=us-west-2 RECORDING=/tmp/rec.json demo/deploy.sh
+RECORDING=/tmp/rec.json demo/deploy.sh
 ```
 
-It does not read `scripts/config.env`, so pass `AWS_REGION` on the command line. It needs permission to create CloudFormation, S3 and CloudFront resources; in a shared or production account, a dedicated demo account or a least-privilege role is safer.
+**The Region is fixed to us-east-1,** because a WAF web ACL for CloudFront and CloudFront log delivery are us-east-1 resources. The script reads neither `AWS_REGION` nor `scripts/config.env`, and the template's `Rules` reject a deployment in any other Region (`Deploy the demo stack in us-east-1 ...`). The cluster can be in another Region (on 2026-11-18 the cluster was in us-west-2 and the demo in us-east-1). It needs permission to create CloudFormation, S3, CloudFront, AWS WAF and CloudWatch Logs (log delivery) resources; in a shared or production account, a dedicated demo account or a least-privilege role is safer.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AWS_REGION` | none (required) | Region for the stack and the bucket |
+| Region | `us-east-1` (fixed) | Region for the stack, the buckets and the WAF web ACL. `AWS_REGION` is ignored |
 | `RECORDING` | `demo/site/data/recording.json` | The recording to upload. It is stored in S3 as `data/recording.json` |
 | `DEMO_STACK_NAME` | `gpu-sandbox-demo` | CloudFormation stack name |
 | `DEMO_DOMAIN`, `DEMO_CERT_ARN` | empty | Custom domain and an ACM certificate in us-east-1. Both are needed for it to apply |
@@ -268,19 +293,20 @@ It does not read `scripts/config.env`, so pass `AWS_REGION` on the command line.
 | Step | What the script does |
 |---|---|
 | 1 | Checks the recording (`schema` is 1 and `pools` is not empty) |
-| 2 | Deploys `demo/infra/site.yaml` with `aws cloudformation deploy` (no failure when nothing changed) |
+| 2 | Deploys `demo/infra/site.yaml` to us-east-1 with `aws cloudformation deploy` (no failure when nothing changed) |
 | 3 | Reads the stack outputs `BucketName`, `DistributionId` and `DistributionDomainName` |
 | 4 | Uploads `demo/site` to the bucket with `aws s3 sync --delete` (excluding `data/*`) and uploads the recording as `data/recording.json` (`application/json`, `no-cache`) |
-| 5 | Creates a CloudFront invalidation (`/*`) |
-| 6 | Sends an anonymous request to `https://<bucket>.s3.<region>.amazonaws.com/index.html` and stops with an error unless it gets 403 |
-| 7 | Checks every 20 seconds, up to 30 times, until the public URL returns 200, then stops with an error if the response lacks the CSP or HSTS header |
+| 5 | Creates a CloudFront invalidation (`/*`) and checks that the distribution's `WebACLId` is a WAF web ACL ARN, stopping with an error if not |
+| 6 | Sends an anonymous request to `https://<bucket>.s3.us-east-1.amazonaws.com/index.html` and stops with an error unless it gets 403 |
+| 7 | Checks every 20 seconds, up to 30 times, until the public URL returns 200, then stops with an error if the response lacks the CSP or HSTS header, or if an `http://` request does not return 301 |
 | 8 | Prints `[demo] live: <URL>` |
 
 **What to look for:** the following lines appear in this order, with AWS CLI output in between.
 
 ```text
-[demo] deploying stack gpu-sandbox-demo in us-west-2
+[demo] deploying stack gpu-sandbox-demo in us-east-1
 [demo] uploading site to s3://<bucket>
+[demo] checking that the distribution has the WAF web ACL
 [demo] checking that the bucket itself is not readable anonymously
 [demo] checking the public URL and its security headers (the distribution may take minutes)
 [demo] live: https://<id>.cloudfront.net/
@@ -290,17 +316,19 @@ Step 7 moves on to the header check even if 200 never arrives, so open the final
 
 **If it fails:**
 
+- `no WAF web ACL on <distribution>. Fix before sharing.`: no web ACL is attached to the distribution. Check the `WebAcl` resource in the stack events, and do not share the URL until it is fixed.
 - `direct S3 access returned <code>, expected 403`: check whether the bucket policy or the Block Public Access settings changed, and do not share the URL until it is fixed.
 - `CSP header missing` or `HSTS header missing`: the distribution may still be propagating; run the same command again a few minutes later (rerunning is safe).
-- Stack creation failed: find the failed resource and the reason with `aws cloudformation describe-stack-events --region <region> --stack-name gpu-sandbox-demo`. Cleanup and cost issues are in the "Cleanup and cost" section of [Troubleshooting](../reference/troubleshooting.md).
+- `http:// returned <code>, expected a 301 redirect to https`: check that the distribution's `ViewerProtocolPolicy` is `redirect-to-https`; if it is still propagating, run it again a few minutes later.
+- Stack creation failed: find the failed resource and the reason with `aws cloudformation describe-stack-events --region us-east-1 --stack-name gpu-sandbox-demo`. Cleanup and cost issues are in the "Cleanup and cost" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ## 5. Custom domain (optional)
 
-With the default `*.cloudfront.net` certificate the viewer security policy is TLSv1 and cannot be raised (per the CloudFront documentation), so to accept only TLS 1.2 and later, use a custom domain with an ACM certificate. When both values are set, the template applies `sni-only` and `TLSv1.2_2021`.
+With the default `*.cloudfront.net` certificate the viewer security policy is TLSv1 and cannot be raised (per the CloudFront documentation), and the default domain of the 2026-11-18 deployment accepted TLS 1.0 and 1.1 handshakes (it also offers TLS 1.2 and 1.3). To accept only TLS 1.2 and later, use a custom domain with an ACM certificate. When both values are set, the template applies `sni-only` and `TLSv1.2_2021`.
 
 ```bash
 # Custom domain with an ACM certificate in us-east-1 (required by CloudFront)
-AWS_REGION=us-west-2 DEMO_DOMAIN=demo.example.com \
+DEMO_DOMAIN=demo.example.com \
 DEMO_CERT_ARN=arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id> \
 demo/deploy.sh
 ```
@@ -312,11 +340,11 @@ demo/deploy.sh
 List the stack outputs with the following command.
 
 ```bash
-aws cloudformation describe-stacks --region us-west-2 --stack-name gpu-sandbox-demo \
+aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-demo \
   --query "Stacks[0].Outputs" --output table
 ```
 
-**What to look for:** three rows, `BucketName`, `DistributionId` and `DistributionDomainName`.
+**What to look for:** five rows, `BucketName`, `DistributionId`, `DistributionDomainName`, `LogBucketName` and `WebAclArn`.
 
 ## Security design
 
@@ -333,6 +361,10 @@ The settings live in [`demo/infra/site.yaml`](https://github.com/daekeun-ml/gpu-
 | CloudFront | `ViewerProtocolPolicy: redirect-to-https` | Viewing the page over plain HTTP |
 | CloudFront | `AllowedMethods: [GET, HEAD]` | Write requests such as PUT, POST and DELETE |
 | CloudFront | `DefaultRootObject: index.html` | Exposing the distribution's contents on a request for the root URL |
+| WAF | A web ACL attached to the distribution (scope `CLOUDFRONT`, default action Allow): a rate limit that blocks an IP above 1000 requests per 5 minutes, and the AWS managed rule groups `AWSManagedRulesAmazonIpReputationList`, `AWSManagedRulesCommonRuleSet` and `AWSManagedRulesKnownBadInputsRuleSet` | Excessive requests from one IP, IPs on the reputation list, common web attack patterns and known bad inputs |
+| Access logs | CloudFront standard logging v2 (CloudWatch Logs vended delivery: `AWS::Logs::DeliverySource`, `DeliveryDestination`, `Delivery`) into the log bucket | No record of access to the public endpoint |
+| Access logs | S3 server access logs of the site bucket into the same log bucket under the `s3-access/` prefix | No record of bucket access |
+| Log bucket | All four Block Public Access settings, `BucketOwnerEnforced`, SSE-S3, 90-day expiration, non-TLS requests denied, writes allowed only for this account's log delivery services (`logging.s3.amazonaws.com`, `delivery.logs.amazonaws.com`), `DeletionPolicy: Retain` | Logs becoming public or piling up forever, and logs disappearing with the stack |
 | Response headers | CSP `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` | External scripts, styles, connections, form submissions, and framing by other sites |
 | Response headers | HSTS `max-age` 63072000, `includeSubDomains` | Downgrading to HTTP |
 | Response headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` | MIME sniffing, clickjacking, referrer leaks, use of browser features |
@@ -341,10 +373,20 @@ The settings live in [`demo/infra/site.yaml`](https://github.com/daekeun-ml/gpu-
 Every response header uses `Override: true`, so the policy value wins over the same header sent by the origin. The bucket policy's `AWS:SourceArn` condition is a fixed value, so S3 does not consider the policy public and it applies with `BlockPublicPolicy` turned on (the definition of "public" in the S3 documentation).
 
 !!! warning "This page is public"
-    The demo is public by design and the template has no access control, so anyone with the URL can view it. Go through the review in 2.5 before uploading.
+    The demo is public by design and the template has no authentication or access control; WAF only blocks abnormal requests with a rate limit and managed rules. Anyone with the URL can view it, so go through the review in 2.5 before uploading.
+
+!!! warning "Residual risk: TLS 1.0 and 1.1 with the default certificate"
+    With the default `*.cloudfront.net` certificate the viewer security policy is fixed at TLSv1, and on 2026-11-18 the endpoint accepted TLS 1.0 and 1.1 handshakes (it also offers TLS 1.2 and 1.3). `TLSv1.2_2021` is available only with a custom domain and an ACM certificate in us-east-1 (`DEMO_DOMAIN`, `DEMO_CERT_ARN`); see section 5. This practice account has no Route 53 hosted zone, so the default certificate was used.
 
 !!! note "Validation status"
-    Locally, the four tests in `tests/test_demo.py`, `cfn-lint demo/infra/site.yaml` and `node --check demo/site/app.js` pass, and the local preview served every file. The tests check the four Block Public Access settings on the bucket, that the only Allow statement is for the CloudFront service principal with an `AWS:SourceArn` condition, the denial of non-TLS access, `redirect-to-https`, GET and HEAD only, the CSP directives and HSTS of at least one year, that the page loads nothing external, uses no HTML insertion such as `innerHTML` and fetches only `data/recording.json`, and that each verdict in the recording matches its expected status and its reward equals `score_verdict`. The CloudFront deployment was not run.
+    Locally, the four tests in `tests/test_demo.py`, `cfn-lint demo/infra/site.yaml` and `node --check demo/site/app.js` pass, and the local preview served every file. The tests check the four Block Public Access settings on the bucket, that the only Allow statement is for the CloudFront service principal with an `AWS:SourceArn` condition, the denial of non-TLS access, `redirect-to-https`, GET and HEAD only, the CSP directives and HSTS of at least one year, that the page loads nothing external, uses no HTML insertion such as `innerHTML` and fetches only `data/recording.json`, and that each verdict in the recording matches its expected status and its reward equals `score_verdict`.
+
+    The stack was deployed to us-east-1 on 2026-11-18, and an external check after the deploy found:
+
+    - **Headers:** CSP, HSTS (max-age 63072000, includeSubDomains), `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: strict-origin-when-cross-origin`, Permissions-Policy
+    - **Requests:** POST, PUT and DELETE return 403, a missing path returns 403, `http://` returns 301; only GET and HEAD are allowed
+    - **Buckets:** both buckets have Block Public Access on and a policy status that is not public, and both use SSE-S3
+    - **Logging:** the log delivery to S3 exists
 
 ## How to verify
 
@@ -364,34 +406,53 @@ After deploying, check the following in order.
 
     ```bash
     # Direct bucket access must be refused
-    curl -s -o /dev/null -w '%{http_code}\n' https://<bucket>.s3.<region>.amazonaws.com/index.html
+    curl -s -o /dev/null -w '%{http_code}\n' https://<bucket>.s3.us-east-1.amazonaws.com/index.html
     ```
 
     **What to look for:** `403` is printed.
 
-5. A request over `http://` returns a redirect whose `Location` starts with `https://` (`curl -sI http://<distribution-domain>/`).
+5. A request over `http://` returns a 301 whose `Location` starts with `https://` (`curl -sI http://<distribution-domain>/`).
+6. Write requests are refused, and the distribution has a WAF web ACL.
+
+    ```bash
+    # Write methods are refused (403), and the distribution has a web ACL (an ARN)
+    curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<distribution-domain>/
+    aws cloudfront get-distribution-config --id <distribution-id> \
+      --query 'DistributionConfig.WebACLId' --output text
+    ```
+
+    **What to look for:** the first command prints `403`, and the second an ARN starting with `arn:aws:wafv2:us-east-1:`.
 
 ## 6. Cleanup (demo/teardown.sh)
 
-Empties the bucket with `aws s3 rm --recursive`, deletes the CloudFormation stack and waits until the deletion finishes. Every file in the bucket and the CloudFront distribution are deleted, and the URL stops working (deleting the distribution can take a while).
+Empties the site bucket with `aws s3 rm --recursive`, deletes the CloudFormation stack in us-east-1 and waits until the deletion finishes. The files in the site bucket, the CloudFront distribution and the WAF web ACL are deleted, and the URL stops working (deleting the distribution can take a while). **The log bucket stays, because it has `DeletionPolicy: Retain`.**
 
 ```bash
-AWS_REGION=us-west-2 demo/teardown.sh
+demo/teardown.sh
 ```
 
-**What to look for:** the script continues only after you answer `Delete demo stack gpu-sandbox-demo and all files in its bucket? Type 'gpu-sandbox-demo':` with the stack name, and the deletion output ends with `deleted gpu-sandbox-demo`. If you used another stack name, pass `DEMO_STACK_NAME` as well.
+**What to look for:** the script continues only after you answer `Delete demo stack gpu-sandbox-demo and all files in its bucket? Type 'gpu-sandbox-demo':` with the stack name, and the deletion output ends with the two lines below. If you used another stack name, pass `DEMO_STACK_NAME` as well.
+
+```text
+deleted gpu-sandbox-demo
+kept the access log bucket <log-bucket>; when you no longer need the logs: aws s3 rb s3://<log-bucket> --force
+```
+
+The log objects expire after 90 days, but the bucket itself stays. When you no longer need the logs, delete the log bucket with the printed `aws s3 rb` command.
 
 GPU node and cluster cleanup are in [99 Cleanup](99_cleanup.md).
 
 ## Scope and limits
 
-- **Not run on AWS.** Verify `deploy.sh`, `teardown.sh` and `record` inside the cluster with the checks on this page.
-- **`record` can run only in a trainer-image pod, and only while training runs** (section 2).
+- **Run on AWS on 2026-11-18.** A GPU recording (gVisor A10G, Kata QEMU T4) was made with `record` in the recorder pod, published to us-east-1 with `deploy.sh`, and checked from outside (the validation status under "Security design"). The published recording comes from real GPU pools and has no training events.
+- **`record` runs in a trainer-image pod.** Training events (section 3) go in only when you record from a trainer pod while training runs (section 2).
 - **Waiting for 200 is not treated as a failure** (step 7 of `deploy.sh`).
 - **DNS for a custom domain is not created automatically** (section 5).
-- **With the default `*.cloudfront.net` certificate, the viewer TLS policy stays at TLSv1** (section 5).
+- **With the default `*.cloudfront.net` certificate, the viewer TLS policy stays at TLSv1.** TLS 1.0 and 1.1 handshakes succeeded on the 2026-11-18 deployment, and `TLSv1.2_2021` needs a custom domain (section 5).
+- **The Region is fixed to us-east-1** (section 4).
+- **WAF has a fixed cost even without traffic** ("Time and cost"), and the log bucket stays after cleanup (section 6).
 - **The template uses `PriceClass_100`.** It is narrower than the default (all edge locations), so check the price class that fits where most viewers are on [CloudFront pricing](https://aws.amazon.com/cloudfront/pricing/).
-- **The sample recording is a laptop CPU recording.** Its numbers say nothing about GPU sandbox performance, as the page footer notes.
+- **The repository's sample recording (`demo/site/data/recording.json`) is still the laptop CPU recording.** Its numbers say nothing about GPU sandbox performance, as the page footer notes.
 
 ??? note "References"
     | Topic | Link |

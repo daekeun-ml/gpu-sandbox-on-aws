@@ -13,6 +13,14 @@ Parameters:
     Default: ""
     Description: Optional ACM certificate in us-east-1 for AliasDomain. Enables TLSv1.2_2021 for viewers.
 
+Rules:
+  # AWS WAF web ACLs for CloudFront (scope CLOUDFRONT) and CloudFront log delivery exist only in
+  # us-east-1, so the whole demo stack lives there (CloudFront itself is global).
+  UsEast1Only:
+    Assertions:
+      - Assert: !Equals [!Ref "AWS::Region", us-east-1]
+        AssertDescription: Deploy the demo stack in us-east-1 (demo/deploy.sh does this by default).
+
 Conditions:
   UseCustomDomain: !And
     - !Not [!Equals [!Ref AliasDomain, ""]]
@@ -36,6 +44,112 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LogBucket
+        LogFilePrefix: s3-access/
+      Tags:
+        - {Key: project, Value: gpu-sandbox-on-aws}
+
+  # Access logs of the public endpoint (CloudFront) and of the site bucket. Private, encrypted,
+  # expired after 90 days, and kept when the stack is deleted so the logs stay available for review.
+  LogBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-access-logs
+            Status: Enabled
+            ExpirationInDays: 90
+      Tags:
+        - {Key: project, Value: gpu-sandbox-on-aws}
+
+  LogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LogBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowS3ServerAccessLogs
+            Effect: Allow
+            Principal: {Service: logging.s3.amazonaws.com}
+            Action: s3:PutObject
+            Resource: !Sub "${LogBucket.Arn}/s3-access/*"
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref "AWS::AccountId"}
+              ArnLike: {aws:SourceArn: !GetAtt SiteBucket.Arn}
+          - Sid: AllowCloudFrontLogDelivery
+            Effect: Allow
+            Principal: {Service: delivery.logs.amazonaws.com}
+            Action: s3:PutObject
+            Resource: !Sub "${LogBucket.Arn}/*"
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref "AWS::AccountId"}
+              ArnLike: {aws:SourceArn: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:delivery-source:*"}
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt LogBucket.Arn
+              - !Sub "${LogBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  # The site is static (GET and HEAD only), so the web ACL mainly sheds abusive traffic: a per-IP
+  # rate limit, AWS IP reputation, and the common and known-bad-input managed rule groups.
+  WebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "${AWS::StackName}-web-acl"
+      Scope: CLOUDFRONT
+      DefaultAction: {Allow: {}}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub "${AWS::StackName}-web-acl"
+      Rules:
+        - Name: rate-limit-per-ip
+          Priority: 0
+          Action: {Block: {}}
+          Statement:
+            RateBasedStatement:
+              Limit: 1000
+              AggregateKeyType: IP
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: rate-limit-per-ip}
+        - Name: aws-ip-reputation
+          Priority: 1
+          OverrideAction: {None: {}}
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesAmazonIpReputationList}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: aws-ip-reputation}
+        - Name: aws-common
+          Priority: 2
+          OverrideAction: {None: {}}
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesCommonRuleSet}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: aws-common}
+        - Name: aws-known-bad-inputs
+          Priority: 3
+          OverrideAction: {None: {}}
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesKnownBadInputsRuleSet}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: aws-known-bad-inputs}
       Tags:
         - {Key: project, Value: gpu-sandbox-on-aws}
 
@@ -85,6 +199,7 @@ Resources:
         DefaultRootObject: index.html
         HttpVersion: http2and3
         PriceClass: PriceClass_100
+        WebACLId: !GetAtt WebAcl.Arn
         Aliases: !If [UseCustomDomain, [!Ref AliasDomain], !Ref "AWS::NoValue"]
         Origins:
           - Id: site
@@ -136,6 +251,27 @@ Resources:
               Bool:
                 aws:SecureTransport: "false"
 
+  # CloudFront standard logging (v2) through CloudWatch Logs vended delivery, into LogBucket.
+  AccessLogSource:
+    Type: AWS::Logs::DeliverySource
+    Properties:
+      Name: !Sub "${AWS::StackName}-cf-access"
+      LogType: ACCESS_LOGS
+      ResourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  AccessLogDestination:
+    Type: AWS::Logs::DeliveryDestination
+    DependsOn: LogBucketPolicy
+    Properties:
+      Name: !Sub "${AWS::StackName}-cf-access-s3"
+      DestinationResourceArn: !GetAtt LogBucket.Arn
+
+  AccessLogDelivery:
+    Type: AWS::Logs::Delivery
+    Properties:
+      DeliverySourceName: !Ref AccessLogSource
+      DeliveryDestinationArn: !GetAtt AccessLogDestination.Arn
+
 Outputs:
   BucketName:
     Value: !Ref SiteBucket
@@ -143,3 +279,7 @@ Outputs:
     Value: !Ref Distribution
   DistributionDomainName:
     Value: !GetAtt Distribution.DomainName
+  LogBucketName:
+    Value: !Ref LogBucket
+  WebAclArn:
+    Value: !GetAtt WebAcl.Arn
