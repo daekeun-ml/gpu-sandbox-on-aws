@@ -8,6 +8,57 @@
 
 If you are new, pick a path that fits your goal and budget in [Choose a learning path](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/learning_paths/) (the free reading and local run paths come first).
 
+**Jump to:** [Architecture](#architecture) | [Scenarios and runtimes](#scenarios-and-runtimes) | [Getting started](#getting-started) | [Key pages of the guidebook](#key-pages-of-the-guidebook)
+
+## Architecture
+
+![What you build: the policy model and vLLM on the training node send kernel code, with the version pinned, to GPU sandbox pools on three runtimes and get correctness and speedup back as the reward](docs/images/figures/index--what-we-build.en.svg)
+
+*Takeaway: Kernel code from the policy model goes to GPU sandbox pools on three runtimes with its version pinned per group, and correctness and speedup come back as the reward.*
+
+All four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key, logs); only where the trainer and the sandboxes run differs.
+
+### Scenario A: EC2 GPU (default)
+
+![Scenario A: the private EKS API reached through the SSM tunnel, and a trainer on g5.2xlarge sending kernel code to gVisor pools on two g5.xlarge nodes](docs/images/architecture/scenario-a.drawio.png)
+
+*Takeaway: The trainer and the gVisor pools both run on EC2 nodes of EKS, and the model comes from Hugging Face Hub through the NAT.*
+
+<details>
+<summary><b>Scenario B1: training on HyperPod</b></summary>
+
+![Scenario B1: the trainer on a HyperPod instance group and the gVisor pools on EC2 nodes](docs/images/architecture/scenario-b1.drawio.png)
+
+*Takeaway: Only the trainer moves to a HyperPod instance group (ml.g5.2xlarge), booted with lifecycle scripts from S3; the sandboxes stay on the same EC2 gVisor nodes as in A.*
+
+</details>
+
+<details>
+<summary><b>Scenario B2: training and sandboxes on HyperPod</b></summary>
+
+![Scenario B2: the trainer and the gVisor pools both on HyperPod instance groups, the sandbox nodes booting from a custom AMI](docs/images/architecture/scenario-b2.drawio.png)
+
+*Takeaway: The sandboxes also move to a HyperPod instance group (ml.g5.xlarge x2), whose nodes boot from a custom AMI baked once (driver 580.178.04). This experimental path has not been run on AWS.*
+
+</details>
+
+<details>
+<summary><b>Scenario C: CPU only</b></summary>
+
+![Scenario C: CPU pools of three runtimes on one c8i.2xlarge, no GPU](docs/images/architecture/scenario-c.drawio.png)
+
+*Takeaway: With no GPU node, the pools of three runtimes share one c8i.2xlarge, and a simulate Job on the system nodes sends golden code in place of the trainer.*
+
+</details>
+
+### Request path
+
+- For every reward batch the trainer pins the runtime and version with one snapshot of the routing ConfigMap (`sandbox-routing`). A switch to v2 during training never mixes versions within a batch.
+- The trainer resolves the headless Service through CoreDNS and sends `POST /v1/evaluate` straight to each Ready pod. A busy pod answers `503`, and the trainer retries another pod.
+- Each request carries a projected ServiceAccount token with the audience `gpu-sandbox`, which the pod verifies offline against the JWKS. The `sandbox` namespace is default-deny, so only labelled pods from `rl-trainer` can connect.
+
+The production layout (Karpenter NodePools, sandbox gateway, veRL on KubeRay) is in [Production 00 Architecture](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/production/00_architecture/), and node groups, namespaces and a reading of each arrow are in [Hands-on 00 Overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/00_overview/). The diagram sources (`.drawio`) are in [`diagrams/`](diagrams/).
+
 ## Scenarios and runtimes
 
 | Scenario | Where training runs | Where GPU sandboxes run | When |
@@ -26,7 +77,9 @@ If you are new, pick a path that fits your goal and budget in [Choose a learning
 
 There is one sandbox image and one server, and only the `RuntimeClass` changes to select the runtime; how to choose is in the guidebook's [05 Decision guide](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/concepts/05_decision_guide/).
 
-## Quick start (if you are new)
+## Getting started
+
+Start with the local tests (no AWS cost), then run the scripts in order. Step-by-step explanations and what to look for are in [Getting started](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/getting_started/) in the guidebook.
 
 ### 1. Start with the local tests (no AWS cost)
 

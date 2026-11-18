@@ -37,7 +37,9 @@
 - **on-policy 학습을 멈추지 않고 샌드박스를 업데이트합니다.** blue/green 풀, golden 제출물 parity 검사, 배치(또는 group) 단위 버전 고정으로 reward 일관성을 유지해요.
 - **reward 무결성까지 다룹니다.** KernelBench 계열에서 보고된 reward hacking(추가 CUDA stream, 결과 캐싱, "벤치마크 때만 틀리기", lazy tensor)을 harness 설계로 막고, harness로 막지 못하는 위험은 문서에 명시합니다.
 
-## 만드는 것
+## 아키텍처
+
+### 만드는 것
 
 ![왼쪽은 학습 노드(EC2 GPU 노드 또는 HyperPod 노드)이고, 그 안에서 policy 모델과 vLLM이 GRPO로 on-policy 학습을 합니다(g5.2xlarge 또는 ml.g5.2xlarge). 오른쪽은 EC2 노드의 GPU 샌드박스 풀입니다. gVisor + nvproxy(g5.xlarge, A10G), Kata + QEMU(g4dn.metal, T4), Kata + Cloud Hypervisor(CPU 계층, c8i, nested virt, GPU는 실험적)의 세 풀이 같은 이미지를 쓰고, 런타임은 RuntimeClass로 선택합니다. 커널 코드는 group 단위로 버전을 고정해 풀로 보내고, 풀은 정확성과 speedup을 돌려줍니다.](images/figures/index--what-we-build.svg)
 
@@ -50,12 +52,49 @@
 | B2. HyperPod (실험) | HyperPod 인스턴스 그룹 | 드라이버를 바꾼 custom AMI로 만든 HyperPod 인스턴스 그룹에서 실행하는 gVisor | 샌드박스 노드에도 HyperPod 노드 복구가 필요할 때 (custom AMI를 직접 관리, AWS에서 미실행) |
 | C. c8i 단독 (GPU 없음) | 없음 (모델 없는 reward 루프) | `c8i.2xlarge` 한 대의 CPU 샌드박스 (gVisor, Kata + CLH, Kata + QEMU) | GPU 쿼터 없이, 컴퓨트 시간당 약 0.57 USD로 런타임 비교와 버전 교체를 먼저 익히고 싶을 때 ([핸즈온 10](handson/10_cpu_only.md)) |
 
-!!! tip "읽는 순서"
-    - **무엇부터 할지 모르겠다면** → [학습 코스 고르기](learning_paths.md)에서 질문 몇 개로 코스를 고르세요(무료 코스부터 안내합니다).
-    - **바로 실습하려면** → [시작하기](getting_started.md)의 로컬 smoke test를 마친 뒤 [핸즈온 00 전체 흐름](handson/00_overview.md)으로 진행하세요.
-    - **런타임 차이가 헷갈린다면** → [02 격리 런타임 비교](concepts/02_isolation_runtimes.md)의 [AWS에서 각 런타임을 실행할 수 있는 위치](concepts/02_isolation_runtimes.md#aws에서-각-런타임을-실행할-수-있는-위치) 표
-    - **고객 상황에 맞는 조합을 골라야 한다면** → [05 상황별 선택 가이드](concepts/05_decision_guide.md)
-    - **용어가 낯설다면** → [용어 사전](reference/glossary.md)
+### 시나리오별 구성
+
+네 시나리오는 같은 CDK 스택(private EKS API, SSM 터널, KMS 키, 로그)을 쓰고, trainer와 샌드박스가 배치되는 위치만 다릅니다.
+
+=== "A: EC2 GPU"
+
+    ![시나리오 A: SSM 터널로 private EKS API에 접속하고, g5.2xlarge의 trainer가 g5.xlarge 두 대의 gVisor 풀에 커널 코드를 보내는 구성](images/architecture/scenario-a.drawio.png)
+
+    *그림 요약: trainer와 gVisor 풀이 모두 EKS의 EC2 노드에 있고, 모델은 NAT를 거쳐 Hugging Face Hub에서 받습니다.*
+
+=== "B1: HyperPod 학습"
+
+    ![시나리오 B1: trainer는 HyperPod 인스턴스 그룹에, gVisor 풀은 EC2 노드에 있는 구성](images/architecture/scenario-b1.drawio.png)
+
+    *그림 요약: trainer만 HyperPod 인스턴스 그룹(ml.g5.2xlarge)으로 옮겨 S3의 lifecycle 스크립트로 부팅하고, 샌드박스는 A와 같은 EC2 gVisor 노드에 남습니다.*
+
+=== "B2: HyperPod 학습과 샌드박스"
+
+    ![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](images/architecture/scenario-b2.drawio.png)
+
+    *그림 요약: 샌드박스도 HyperPod 인스턴스 그룹(ml.g5.xlarge x2)에 올라가고, 이 노드는 한 번 빌드하는 custom AMI(드라이버 580.178.04)로 부팅해요. AWS에서 실행해 보지 않은 실험 경로입니다.*
+
+=== "C: CPU 전용"
+
+    ![시나리오 C: GPU 없이 c8i.2xlarge 한 대에 세 런타임의 CPU 풀이 있는 구성](images/architecture/scenario-c.drawio.png)
+
+    *그림 요약: GPU 노드 없이 c8i.2xlarge 한 대에 세 런타임의 풀이 서고, system 노드의 simulate Job이 trainer 대신 golden 코드를 보냅니다.*
+
+### 요청 경로
+
+- reward batch마다 trainer가 routing ConfigMap(`sandbox-routing`)의 snapshot 하나로 런타임과 버전을 고정합니다. 학습 중에 v2로 바꿔도 한 batch 안에서는 버전이 섞이지 않아요.
+- trainer는 headless Service를 CoreDNS로 풀어 Ready 상태인 pod에 `POST /v1/evaluate`를 직접 보냅니다. 바쁜 pod는 `503`을 돌려주고, trainer는 다른 pod로 다시 시도합니다.
+- 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있어요.
+
+노드 그룹과 네임스페이스, 화살표별 설명은 [핸즈온 00 전체 흐름](handson/00_overview.md)에, Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Production 00 아키텍처](production/00_architecture.md)에 있습니다. 그림 원본(`.drawio`)은 저장소의 `diagrams/`에 있어요.
+
+## 시작하기
+
+- **무엇부터 할지 모르겠다면** → [학습 코스 고르기](learning_paths.md)에서 질문 몇 개로 코스를 고르세요(무료 코스부터 안내합니다).
+- **바로 실습하려면** → [시작하기](getting_started.md)의 로컬 smoke test를 마친 뒤 [핸즈온 00 전체 흐름](handson/00_overview.md)으로 진행하세요.
+- **런타임 차이가 헷갈린다면** → [02 격리 런타임 비교](concepts/02_isolation_runtimes.md)의 [AWS에서 각 런타임을 실행할 수 있는 위치](concepts/02_isolation_runtimes.md#aws에서-각-런타임을-실행할-수-있는-위치) 표
+- **고객 상황에 맞는 조합을 골라야 한다면** → [05 상황별 선택 가이드](concepts/05_decision_guide.md)
+- **용어가 낯설다면** → [용어 사전](reference/glossary.md)
 
 ## 트랙 구성
 

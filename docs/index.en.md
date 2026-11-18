@@ -37,7 +37,9 @@ For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, b
 - **Update the sandbox without stopping on-policy training.** Blue/green pools, parity checks with golden submissions, and version pinning per batch (or per group) keep rewards consistent.
 - **Reward integrity is covered too.** The harness design blocks the reward hacking reported around KernelBench (extra CUDA streams, result caching, "wrong only during the benchmark", lazy tensors), and the docs state the remaining risks.
 
-## What you build
+## Architecture
+
+### What you build
 
 ![Left: the policy model + vLLM (GRPO, on-policy, g5.2xlarge or ml.g5.2xlarge) inside training on an EC2 GPU node or a HyperPod node. Right: GPU sandbox pools on EC2 nodes with gVisor + nvproxy (g5.xlarge, A10G), Kata + QEMU (g4dn.metal, T4) and Kata + Cloud Hypervisor (CPU tier on c8i with nested virt, GPU experimental), one image chosen by RuntimeClass. Kernel code goes to the pools with its version pinned per group, and correctness and speedup come back](images/figures/index--what-we-build.svg)
 
@@ -50,12 +52,49 @@ For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, b
 | B2. HyperPod (experimental) | HyperPod instance group | gVisor on a HyperPod instance group built from a custom AMI with a replaced driver | When the sandbox nodes also need HyperPod's node recovery (you maintain the custom AMI; not run on AWS) |
 | C. c8i only (no GPU) | none (a reward loop without a model) | CPU sandboxes on one `c8i.2xlarge` (gVisor, Kata + CLH, Kata + QEMU) | When you want to learn the runtime comparison and the version swap first, without GPU quota, for about 0.57 USD of compute per hour ([Hands-on 10](handson/10_cpu_only.md)) |
 
-!!! tip "Where to start reading"
-    - **Not sure where to begin** → pick a path with a few questions in [Choose a learning path](learning_paths.md) (free paths first).
-    - **To start the hands-on right away** → the local smoke test in [Getting started](getting_started.md), then [Hands-on 00 Overview](handson/00_overview.md)
-    - **If the runtime differences are confusing** → the [where each runtime can run on AWS](concepts/02_isolation_runtimes.md#where-each-runtime-can-run-on-aws) table in [02 Isolation runtimes](concepts/02_isolation_runtimes.md)
-    - **To pick the combination for a customer's situation** → [05 Decision guide](concepts/05_decision_guide.md)
-    - **If a term is unfamiliar** → [Glossary](reference/glossary.md)
+### Scenarios on AWS
+
+All four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key, logs); only where the trainer and the sandboxes run differs.
+
+=== "A: EC2 GPU"
+
+    ![Scenario A: the private EKS API reached through the SSM tunnel, and a trainer on g5.2xlarge sending kernel code to gVisor pools on two g5.xlarge nodes](images/architecture/scenario-a.drawio.png)
+
+    *Takeaway: The trainer and the gVisor pools both run on EC2 nodes of EKS, and the model comes from Hugging Face Hub through the NAT.*
+
+=== "B1: training on HyperPod"
+
+    ![Scenario B1: the trainer on a HyperPod instance group and the gVisor pools on EC2 nodes](images/architecture/scenario-b1.drawio.png)
+
+    *Takeaway: Only the trainer moves to a HyperPod instance group (ml.g5.2xlarge), booted with lifecycle scripts from S3; the sandboxes stay on the same EC2 gVisor nodes as in A.*
+
+=== "B2: training and sandboxes on HyperPod"
+
+    ![Scenario B2: the trainer and the gVisor pools both on HyperPod instance groups, the sandbox nodes booting from a custom AMI](images/architecture/scenario-b2.drawio.png)
+
+    *Takeaway: The sandboxes also move to a HyperPod instance group (ml.g5.xlarge x2), whose nodes boot from a custom AMI baked once (driver 580.178.04). This experimental path has not been run on AWS.*
+
+=== "C: CPU only"
+
+    ![Scenario C: CPU pools of three runtimes on one c8i.2xlarge, no GPU](images/architecture/scenario-c.drawio.png)
+
+    *Takeaway: With no GPU node, the pools of three runtimes share one c8i.2xlarge, and a simulate Job on the system nodes sends golden code in place of the trainer.*
+
+### Request path
+
+- For every reward batch the trainer pins the runtime and version with one snapshot of the routing ConfigMap (`sandbox-routing`). A switch to v2 during training never mixes versions within a batch.
+- The trainer resolves the headless Service through CoreDNS and sends `POST /v1/evaluate` straight to each Ready pod. A busy pod answers `503`, and the trainer retries another pod.
+- Each request carries a projected ServiceAccount token with the audience `gpu-sandbox`, which the pod verifies offline against the JWKS. The `sandbox` namespace is default-deny, so only labelled pods from `rl-trainer` can connect.
+
+Node groups, namespaces and a step-by-step reading of each arrow are in [Hands-on 00 Overview](handson/00_overview.md), and the production layout (Karpenter NodePools, sandbox gateway, veRL on KubeRay) is in [Production 00 Architecture](production/00_architecture.md). The diagram sources (`.drawio`) are in `diagrams/` in the repository.
+
+## Getting started
+
+- **Not sure where to begin** → pick a path with a few questions in [Choose a learning path](learning_paths.md) (free paths first).
+- **To start the hands-on right away** → the local smoke test in [Getting started](getting_started.md), then [Hands-on 00 Overview](handson/00_overview.md)
+- **If the runtime differences are confusing** → the [where each runtime can run on AWS](concepts/02_isolation_runtimes.md#where-each-runtime-can-run-on-aws) table in [02 Isolation runtimes](concepts/02_isolation_runtimes.md)
+- **To pick the combination for a customer's situation** → [05 Decision guide](concepts/05_decision_guide.md)
+- **If a term is unfamiliar** → [Glossary](reference/glossary.md)
 
 ## Tracks
 

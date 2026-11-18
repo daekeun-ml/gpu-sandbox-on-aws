@@ -8,6 +8,57 @@
 
 처음이라면 [학습 코스 고르기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/learning_paths/)에서 목적과 예산에 맞는 코스를 고르세요(무료인 읽기, 로컬 실행 코스가 먼저).
 
+**바로 가기:** [아키텍처](#아키텍처) | [시나리오와 런타임](#시나리오와-런타임) | [시작하기](#시작하기) | [가이드북의 주요 페이지](#가이드북의-주요-페이지)
+
+## 아키텍처
+
+![만드는 것: 학습 노드의 policy 모델과 vLLM이 버전을 고정한 채 세 런타임의 GPU 샌드박스 풀에 커널 코드를 보내고, 정확성과 speedup을 reward로 받는 구성](docs/images/figures/index--what-we-build.ko.svg)
+
+*그림 요약: policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 세 런타임의 GPU 샌드박스 풀에 전달되고, 풀이 측정한 정확성과 speedup이 reward로 쓰입니다.*
+
+네 시나리오는 같은 CDK 스택(private EKS API, SSM 터널, KMS 키, 로그)을 쓰고, trainer와 샌드박스가 배치되는 위치만 다릅니다.
+
+### 시나리오 A: EC2 GPU (기본)
+
+![시나리오 A: SSM 터널로 private EKS API에 접속하고, g5.2xlarge의 trainer가 g5.xlarge 두 대의 gVisor 풀에 커널 코드를 보내는 구성](docs/images/architecture/scenario-a.drawio.png)
+
+*그림 요약: trainer와 gVisor 풀이 모두 EKS의 EC2 노드에 있고, 모델은 NAT를 거쳐 Hugging Face Hub에서 받습니다.*
+
+<details>
+<summary><b>시나리오 B1: HyperPod 학습</b></summary>
+
+![시나리오 B1: trainer는 HyperPod 인스턴스 그룹에, gVisor 풀은 EC2 노드에 있는 구성](docs/images/architecture/scenario-b1.drawio.png)
+
+*그림 요약: trainer만 HyperPod 인스턴스 그룹(ml.g5.2xlarge)으로 옮겨 S3의 lifecycle 스크립트로 부팅하고, 샌드박스는 A와 같은 EC2 gVisor 노드에 남습니다.*
+
+</details>
+
+<details>
+<summary><b>시나리오 B2: HyperPod 학습과 샌드박스</b></summary>
+
+![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](docs/images/architecture/scenario-b2.drawio.png)
+
+*그림 요약: 샌드박스도 HyperPod 인스턴스 그룹(ml.g5.xlarge x2)에 올라가고, 이 노드는 한 번 빌드하는 custom AMI(드라이버 580.178.04)로 부팅해요. AWS에서 실행해 보지 않은 실험 경로입니다.*
+
+</details>
+
+<details>
+<summary><b>시나리오 C: CPU 전용</b></summary>
+
+![시나리오 C: GPU 없이 c8i.2xlarge 한 대에 세 런타임의 CPU 풀이 있는 구성](docs/images/architecture/scenario-c.drawio.png)
+
+*그림 요약: GPU 노드 없이 c8i.2xlarge 한 대에 세 런타임의 풀이 서고, system 노드의 simulate Job이 trainer 대신 golden 코드를 보냅니다.*
+
+</details>
+
+### 요청 경로
+
+- reward batch마다 trainer가 routing ConfigMap(`sandbox-routing`)의 snapshot 하나로 런타임과 버전을 고정합니다. 학습 중에 v2로 바꿔도 한 batch 안에서는 버전이 섞이지 않아요.
+- trainer는 headless Service를 CoreDNS로 풀어 Ready 상태인 pod에 `POST /v1/evaluate`를 직접 보냅니다. 바쁜 pod는 `503`을 돌려주고, trainer는 다른 pod로 다시 시도합니다.
+- 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있어요.
+
+Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Production 00 아키텍처](https://daekeun-ml.github.io/gpu-sandbox-on-aws/production/00_architecture/)에, 노드 그룹과 네임스페이스, 화살표별 설명은 [핸즈온 00 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에 있습니다. 그림 원본(`.drawio`)은 [`diagrams/`](diagrams/)에 있어요.
+
 ## 시나리오와 런타임
 
 | 시나리오 | 학습 위치 | GPU 샌드박스 위치 | 언제 |
@@ -26,7 +77,9 @@
 
 샌드박스 이미지와 서버는 하나이고 `RuntimeClass`만 바꿔 런타임을 고르며, 선택 기준은 가이드북의 [05 상황별 선택 가이드](https://daekeun-ml.github.io/gpu-sandbox-on-aws/concepts/05_decision_guide/)에 있습니다.
 
-## 빠른 시작 (처음이라면)
+## 시작하기
+
+로컬 테스트(AWS 비용 없음)부터 스크립트 순서대로 진행합니다. 단계별 설명과 확인할 것은 가이드북의 [시작하기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/getting_started/)에 있어요.
 
 ### 1. 로컬 테스트부터 (AWS 비용 없음)
 
