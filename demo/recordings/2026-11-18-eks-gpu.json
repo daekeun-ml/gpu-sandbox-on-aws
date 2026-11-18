@@ -1,0 +1,367 @@
+{
+ "schema": 1,
+ "recorded_at": "2026-11-18T13:42:49Z",
+ "source": "Amazon EKS, us-west-2, 2026-11-18: gVisor + nvproxy on g5.2xlarge (A10G), Kata + QEMU with VFIO passthrough on g4dn.metal (T4)",
+ "device": "cuda",
+ "tasks": {
+  "relu_bias": {
+   "description": "Add a per-column bias vector to a 2-D activation and apply ReLU.",
+   "input_spec": "x: float32[4096, 4096], b: float32[4096]",
+   "reference": "class Model(nn.Module):\n    def forward(self, x: torch.Tensor, b: torch.Tensor) -> torch.Tensor:\n        return torch.relu(x + b)\n"
+  },
+  "vector_add": {
+   "description": "Add two 1-D float32 tensors elementwise.",
+   "input_spec": "x: float32[16777216], y: float32[16777216]",
+   "reference": "class Model(nn.Module):\n    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:\n        return x + y\n"
+  }
+ },
+ "goldens": [
+  {
+   "name": "vector_add_triton",
+   "task_id": "vector_add",
+   "code": "import torch\nimport triton\nimport triton.language as tl\nfrom torch import nn\n\n\n@triton.jit\ndef add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK: tl.constexpr):\n    offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)\n    mask = offs < n\n    tl.store(out_ptr + offs, tl.load(x_ptr + offs, mask=mask) + tl.load(y_ptr + offs, mask=mask), mask=mask)\n\n\nclass ModelNew(nn.Module):\n    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:\n        out = torch.empty_like(x)\n        n = x.numel()\n        add_kernel[(triton.cdiv(n, 1024),)](x, y, out, n, BLOCK=1024)\n        return out\n",
+   "expect_status": "ok"
+  },
+  {
+   "name": "relu_bias_triton",
+   "task_id": "relu_bias",
+   "code": "import torch\nimport triton\nimport triton.language as tl\nfrom torch import nn\n\n\n@triton.jit\ndef relu_bias_kernel(x_ptr, b_ptr, out_ptr, n_cols, BLOCK: tl.constexpr):\n    row = tl.program_id(0)\n    cols = tl.program_id(1) * BLOCK + tl.arange(0, BLOCK)\n    mask = cols < n_cols\n    x = tl.load(x_ptr + row * n_cols + cols, mask=mask)\n    b = tl.load(b_ptr + cols, mask=mask)\n    tl.store(out_ptr + row * n_cols + cols, tl.maximum(x + b, 0.0), mask=mask)\n\n\nclass ModelNew(nn.Module):\n    def forward(self, x: torch.Tensor, b: torch.Tensor) -> torch.Tensor:\n        out = torch.empty_like(x)\n        rows, cols = x.shape\n        relu_bias_kernel[(rows, triton.cdiv(cols, 1024))](x, b, out, cols, BLOCK=1024)\n        return out\n",
+   "expect_status": "ok"
+  },
+  {
+   "name": "relu_bias_torch_only",
+   "task_id": "relu_bias",
+   "code": "import torch\nfrom torch import nn\n\n\nclass ModelNew(nn.Module):\n    def forward(self, x, b):\n        return torch.clamp_min(x + b, 0.0)\n",
+   "expect_status": "ok"
+  },
+  {
+   "name": "relu_bias_wrong",
+   "task_id": "relu_bias",
+   "code": "import torch\nfrom torch import nn\n\n\nclass ModelNew(nn.Module):\n    def forward(self, x, b):\n        return x + b\n",
+   "expect_status": "wrong_answer"
+  },
+  {
+   "name": "relu_bias_benchmark_cheat",
+   "task_id": "relu_bias",
+   "code": "import torch\nfrom torch import nn\n\n\nclass ModelNew(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.calls = 0\n\n    def forward(self, x, b):\n        self.calls += 1\n        if self.calls > 3:\n            return torch.zeros_like(x)\n        return torch.relu(x + b)\n",
+   "expect_status": "wrong_answer"
+  },
+  {
+   "name": "read_host_file",
+   "task_id": "relu_bias",
+   "code": "import torch\nfrom torch import nn\n\nSECRET = open(\"/etc/hostname\").read()\n\n\nclass ModelNew(nn.Module):\n    def forward(self, x, b):\n        return torch.relu(x + b)\n",
+   "expect_status": "policy_violation"
+  }
+ ],
+ "pools": [
+  {
+   "runtime": "gVisor (A10G)",
+   "info": {
+    "runtime": "gvisor",
+    "sandbox_version": "v1",
+    "kernel_release": "4.19.0-gvisor",
+    "gpu": "NVIDIA A10G",
+    "egress_blocked": true
+   },
+   "results": {
+    "vector_add_triton": {
+     "status": "ok",
+     "correct": true,
+     "custom_kernel": true,
+     "uses_triton": true,
+     "speedup": 0.9352,
+     "ref_ms": 0.436924,
+     "cand_ms": 0.467179,
+     "flags": [],
+     "violations": [],
+     "error": "",
+     "duration_s": 9.4177,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "gvisor",
+     "reward": {
+      "format": 1.0,
+      "correctness": 1.0,
+      "speedup": 0.4516734174911035,
+      "total": 1.325837
+     },
+     "expected_status": "ok"
+    },
+    "relu_bias_triton": {
+     "status": "ok",
+     "correct": true,
+     "custom_kernel": true,
+     "uses_triton": true,
+     "speedup": 1.7819,
+     "ref_ms": 0.584247,
+     "cand_ms": 0.327877,
+     "flags": [],
+     "violations": [],
+     "error": "",
+     "duration_s": 9.4477,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "gvisor",
+     "reward": {
+      "format": 1.0,
+      "correctness": 1.0,
+      "speedup": 0.9167081876352468,
+      "total": 1.558354
+     },
+     "expected_status": "ok"
+    },
+    "relu_bias_torch_only": {
+     "status": "ok",
+     "correct": true,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": 0.9985,
+     "ref_ms": 0.577861,
+     "cand_ms": 0.578732,
+     "flags": [],
+     "violations": [],
+     "error": "",
+     "duration_s": 8.1646,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "gvisor",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.3,
+      "speedup": 0.0,
+      "total": 0.4
+     },
+     "expected_status": "ok"
+    },
+    "relu_bias_wrong": {
+     "status": "wrong_answer",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [],
+     "error": "values differ beyond tolerance",
+     "duration_s": 6.8547,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "gvisor",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.2,
+      "speedup": 0.0,
+      "total": 0.3
+     },
+     "expected_status": "wrong_answer"
+    },
+    "relu_bias_benchmark_cheat": {
+     "status": "wrong_answer",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [
+      "timed_output_mismatch"
+     ],
+     "violations": [],
+     "error": "timed iteration 0 output mismatch",
+     "duration_s": 8.3179,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "gvisor",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.2,
+      "speedup": 0.0,
+      "total": 0.3
+     },
+     "expected_status": "wrong_answer"
+    },
+    "read_host_file": {
+     "status": "policy_violation",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [
+      "line 4: builtin 'open' is not allowed"
+     ],
+     "error": "",
+     "duration_s": 0.0848,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "gvisor",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.0,
+      "speedup": 0.0,
+      "total": 0.1
+     },
+     "expected_status": "policy_violation"
+    }
+   }
+  },
+  {
+   "runtime": "Kata QEMU (T4)",
+   "info": {
+    "runtime": "kata-qemu",
+    "sandbox_version": "v1",
+    "kernel_release": "6.18.56-nvidia-gpu",
+    "gpu": "Tesla T4",
+    "egress_blocked": true
+   },
+   "results": {
+    "vector_add_triton": {
+     "status": "ok",
+     "correct": true,
+     "custom_kernel": true,
+     "uses_triton": true,
+     "speedup": 0.9462,
+     "ref_ms": 0.834809,
+     "cand_ms": 0.882231,
+     "flags": [],
+     "violations": [],
+     "error": "",
+     "duration_s": 12.6538,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "kata-qemu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 1.0,
+      "speedup": 0.46010853298110854,
+      "total": 1.330054
+     },
+     "expected_status": "ok"
+    },
+    "relu_bias_triton": {
+     "status": "ok",
+     "correct": true,
+     "custom_kernel": true,
+     "uses_triton": true,
+     "speedup": 1.7882,
+     "ref_ms": 1.151584,
+     "cand_ms": 0.643979,
+     "flags": [],
+     "violations": [],
+     "error": "",
+     "duration_s": 11.4932,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "kata-qemu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 1.0,
+      "speedup": 0.919254051390328,
+      "total": 1.559627
+     },
+     "expected_status": "ok"
+    },
+    "relu_bias_torch_only": {
+     "status": "ok",
+     "correct": true,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": 1.0001,
+     "ref_ms": 1.152555,
+     "cand_ms": 1.152482,
+     "flags": [],
+     "violations": [],
+     "error": "",
+     "duration_s": 9.3126,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "kata-qemu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.3,
+      "speedup": 0.0,
+      "total": 0.4
+     },
+     "expected_status": "ok"
+    },
+    "relu_bias_wrong": {
+     "status": "wrong_answer",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [],
+     "error": "values differ beyond tolerance",
+     "duration_s": 7.2265,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "kata-qemu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.2,
+      "speedup": 0.0,
+      "total": 0.3
+     },
+     "expected_status": "wrong_answer"
+    },
+    "relu_bias_benchmark_cheat": {
+     "status": "wrong_answer",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [
+      "timed_output_mismatch"
+     ],
+     "violations": [],
+     "error": "timed iteration 0 output mismatch",
+     "duration_s": 7.8255,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "kata-qemu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.2,
+      "speedup": 0.0,
+      "total": 0.3
+     },
+     "expected_status": "wrong_answer"
+    },
+    "read_host_file": {
+     "status": "policy_violation",
+     "correct": false,
+     "custom_kernel": false,
+     "uses_triton": false,
+     "speedup": null,
+     "ref_ms": null,
+     "cand_ms": null,
+     "flags": [],
+     "violations": [
+      "line 4: builtin 'open' is not allowed"
+     ],
+     "error": "",
+     "duration_s": 0.1255,
+     "sandbox_version": "v1",
+     "harness_version": "1",
+     "runtime": "kata-qemu",
+     "reward": {
+      "format": 1.0,
+      "correctness": 0.0,
+      "speedup": 0.0,
+      "total": 0.1
+     },
+     "expected_status": "policy_violation"
+    }
+   }
+  }
+ ],
+ "training": []
+}

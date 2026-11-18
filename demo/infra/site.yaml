@@ -132,6 +132,22 @@ Resources:
               Limit: 1000
               AggregateKeyType: IP
           VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: rate-limit-per-ip}
+        # The tour videos are the only large objects: a tighter per-IP limit caps the transfer one
+        # client can cause (100 requests per 5 minutes is far above what playback and seeking need).
+        - Name: rate-limit-media-per-ip
+          Priority: 4
+          Action: {Block: {}}
+          Statement:
+            RateBasedStatement:
+              Limit: 100
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch: {UriPath: {}}
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: /media/
+                  TextTransformations: [{Priority: 0, Type: NONE}]
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: rate-limit-media-per-ip}
         - Name: aws-ip-reputation
           Priority: 1
           OverrideAction: {None: {}}
@@ -170,7 +186,7 @@ Resources:
         SecurityHeadersConfig:
           # The page loads only its own files: no external scripts, styles, fonts or frames.
           ContentSecurityPolicy:
-            ContentSecurityPolicy: "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+            ContentSecurityPolicy: "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
             Override: true
           StrictTransportSecurity:
             AccessControlMaxAgeSec: 63072000

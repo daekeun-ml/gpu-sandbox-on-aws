@@ -2,6 +2,7 @@
 # Deploy the replay demo: private S3 bucket + CloudFront (OAC), then upload the static site.
 #   demo/deploy.sh                       uses demo/site/data/recording.json as is
 #   RECORDING=path/to/rec.json demo/deploy.sh   publish another recording
+#   EXTRAS=path/to/extras.json                  benchmark, training and transcripts (demo/build_extras.py)
 # Optional: DEMO_DOMAIN and DEMO_CERT_ARN (ACM, us-east-1) for a custom domain with TLS 1.2+.
 #
 # The demo is public by design (anyone with the URL can view it) and contains only the
@@ -15,8 +16,33 @@ AWS_REGION="us-east-1"
 STACK="${DEMO_STACK_NAME:-gpu-sandbox-demo}"
 SITE="${REPO_ROOT}/demo/site"
 RECORDING="${RECORDING:-${SITE}/data/recording.json}"
+EXTRAS="${EXTRAS:-${SITE}/data/extras.json}"
 
 python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['schema'] == 1 and d['pools']" "${RECORDING}"
+data=("${RECORDING}")
+if [[ -f "${EXTRAS}" ]]; then
+  python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['schema'] == 'extras-1'" "${EXTRAS}"
+  data+=("${EXTRAS}")
+else
+  echo "[demo] no ${EXTRAS}: the benchmark, training and terminal sections stay hidden"
+fi
+# The tour videos show the data they were recorded with (demo/record_tour.py writes the hashes).
+python3 - "${SITE}/media/tour-data.json" "${RECORDING}" "${EXTRAS}" <<'PY' || true
+import hashlib, json, os, sys
+manifest, recording, extras = sys.argv[1:]
+if not os.path.exists(manifest):
+    sys.exit(0)
+want = json.load(open(manifest))
+have = {"recording.json": recording, "extras.json": extras}
+for name, path in have.items():
+    digest = hashlib.sha256(open(path, "rb").read()).hexdigest() if os.path.exists(path) else None
+    if want.get(name) != digest:
+        print(f"[demo] WARNING: the tour videos were recorded with another {name}; "
+              "re-record them (demo/record_tour.py) so the video matches the page")
+PY
+# Everything published must be free of IP addresses, node names, account IDs, ARNs and tokens.
+python3 -I "${REPO_ROOT}/demo/build_extras.py" --check "${data[@]}" \
+  || { echo "[demo] ERROR: the data files above would leak details. Fix before publishing." >&2; exit 1; }
 
 echo "[demo] deploying stack ${STACK} in ${AWS_REGION}"
 aws cloudformation deploy --region "${AWS_REGION}" --stack-name "${STACK}" \
@@ -33,9 +59,16 @@ distribution="$(output DistributionId)"
 domain="$(output DistributionDomainName)"
 
 echo "[demo] uploading site to s3://${bucket}"
-aws s3 sync "${SITE}" "s3://${bucket}" --delete --exclude "data/*" --region "${AWS_REGION}"
+# Allow list: only the page, its styles and script, and the tour videos with their thumbnails.
+aws s3 sync "${SITE}" "s3://${bucket}" --delete --region "${AWS_REGION}" --exclude "*" \
+  --include "index.html" --include "app.js" --include "style.css" \
+  --include "media/tour-*.mp4" --include "media/tour-*.jpg"
 aws s3 cp "${RECORDING}" "s3://${bucket}/data/recording.json" --region "${AWS_REGION}" \
   --content-type application/json --cache-control "no-cache"
+if [[ -f "${EXTRAS}" ]]; then
+  aws s3 cp "${EXTRAS}" "s3://${bucket}/data/extras.json" --region "${AWS_REGION}" \
+    --content-type application/json --cache-control "no-cache"
+fi
 aws cloudfront create-invalidation --distribution-id "${distribution}" --paths "/*" >/dev/null
 
 echo "[demo] checking that the distribution has the WAF web ACL"

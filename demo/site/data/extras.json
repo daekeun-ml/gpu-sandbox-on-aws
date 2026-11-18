@@ -1,0 +1,1483 @@
+{
+ "schema": "extras-1",
+ "built_at": "2026-11-18T15:22:01Z",
+ "source": "Amazon EKS 1.36, us-west-2, 2026-11-18",
+ "bench": {
+  "requests": 32,
+  "passes": [
+   {
+    "label": "pass1",
+    "rows": [
+     {
+      "golden": "relu_bias_triton",
+      "runtime": "gvisor",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.105,
+      "eval_p50_s": 9.482,
+      "eval_p95_s": 9.699,
+      "speedup_median": 1.754,
+      "ref_ms_median": 0.5796,
+      "cold_start_s": [
+       15
+      ],
+      "instance": "g5.2xlarge",
+      "gpu": "NVIDIA A10G"
+     },
+     {
+      "golden": "relu_bias_triton",
+      "runtime": "kata-qemu",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.342,
+      "eval_p50_s": 10.694,
+      "eval_p95_s": 12.469,
+      "speedup_median": 1.791,
+      "ref_ms_median": 1.1524,
+      "cold_start_s": [
+       1235,
+       1241,
+       1235,
+       1240
+      ],
+      "instance": "g4dn.metal",
+      "gpu": "Tesla T4"
+     },
+     {
+      "golden": "relu_bias_torch_only",
+      "runtime": "gvisor-cpu",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.267,
+      "eval_p50_s": 3.691,
+      "eval_p95_s": 3.75,
+      "speedup_median": 0.859,
+      "ref_ms_median": 0.0062,
+      "cold_start_s": [
+       141
+      ],
+      "instance": "c8i.2xlarge",
+      "gpu": null
+     },
+     {
+      "golden": "relu_bias_torch_only",
+      "runtime": "kata-clh-cpu",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.242,
+      "eval_p50_s": 4.105,
+      "eval_p95_s": 4.155,
+      "speedup_median": 0.899,
+      "ref_ms_median": 0.0061,
+      "cold_start_s": [
+       21
+      ],
+      "instance": "c8i.2xlarge",
+      "gpu": null
+     },
+     {
+      "golden": "relu_bias_torch_only",
+      "runtime": "kata-qemu-cpu",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.254,
+      "eval_p50_s": 3.902,
+      "eval_p95_s": 3.987,
+      "speedup_median": 0.92,
+      "ref_ms_median": 0.0061,
+      "cold_start_s": [
+       20
+      ],
+      "instance": "c8i.2xlarge",
+      "gpu": null
+     }
+    ]
+   },
+   {
+    "label": "pass2",
+    "rows": [
+     {
+      "golden": "relu_bias_triton",
+      "runtime": "gvisor",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.106,
+      "eval_p50_s": 9.416,
+      "eval_p95_s": 9.546,
+      "speedup_median": 1.752,
+      "ref_ms_median": 0.5797,
+      "cold_start_s": [
+       16
+      ],
+      "instance": "g5.2xlarge",
+      "gpu": "NVIDIA A10G"
+     },
+     {
+      "golden": "relu_bias_triton",
+      "runtime": "kata-qemu",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.317,
+      "eval_p50_s": 12.17,
+      "eval_p95_s": 13.412,
+      "speedup_median": 1.788,
+      "ref_ms_median": 1.1533,
+      "cold_start_s": [
+       31,
+       30,
+       36,
+       30
+      ],
+      "instance": "g4dn.metal",
+      "gpu": "Tesla T4"
+     },
+     {
+      "golden": "relu_bias_torch_only",
+      "runtime": "gvisor-cpu",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.263,
+      "eval_p50_s": 3.76,
+      "eval_p95_s": 3.851,
+      "speedup_median": 0.879,
+      "ref_ms_median": 0.0062,
+      "cold_start_s": [
+       11
+      ],
+      "instance": "c8i.2xlarge",
+      "gpu": null
+     },
+     {
+      "golden": "relu_bias_torch_only",
+      "runtime": "kata-clh-cpu",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.234,
+      "eval_p50_s": 4.225,
+      "eval_p95_s": 4.317,
+      "speedup_median": 0.901,
+      "ref_ms_median": 0.0062,
+      "cold_start_s": [
+       10
+      ],
+      "instance": "c8i.2xlarge",
+      "gpu": null
+     },
+     {
+      "golden": "relu_bias_torch_only",
+      "runtime": "kata-qemu-cpu",
+      "requests": 32,
+      "ok": 32,
+      "throughput_eval_per_s": 0.244,
+      "eval_p50_s": 4.058,
+      "eval_p95_s": 4.139,
+      "speedup_median": 0.914,
+      "ref_ms_median": 0.0061,
+      "cold_start_s": [
+       10
+      ],
+      "instance": "c8i.2xlarge",
+      "gpu": null
+     }
+    ]
+   }
+  ],
+  "unmeasured": [
+   {
+    "runtime": "kata-clh",
+    "instance": "g4dn.metal",
+    "gpu": "Tesla T4"
+   }
+  ]
+ },
+ "training": {
+  "source": "Amazon EKS, us-west-2, 2026-11-18: trainer on g5.2xlarge, rewards from gVisor on g5.xlarge (A10G)",
+  "model": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+  "batches": [
+   {
+    "event": "reward_batch",
+    "batch": 1,
+    "global_step": 0,
+    "runtime": "gvisor",
+    "version": "v1",
+    "served_versions": {
+     "v1": 14
+    },
+    "routing_revision": 1,
+    "n": 14,
+    "status": {
+     "runtime_error": 9,
+     "wrong_answer": 2,
+     "compile_error": 3
+    },
+    "pass_rate": 0.0,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": null,
+    "eval_p50_s": 3.04,
+    "eval_p95_s": 8.422,
+    "batch_wall_s": 56.339,
+    "ts": 1794982715.529
+   },
+   {
+    "event": "reward_batch",
+    "batch": 2,
+    "global_step": 1,
+    "runtime": "gvisor",
+    "version": "v1",
+    "served_versions": {
+     "v1": 12
+    },
+    "routing_revision": 1,
+    "n": 12,
+    "status": {
+     "runtime_error": 7,
+     "ok": 3,
+     "compile_error": 1,
+     "wrong_answer": 1
+    },
+    "pass_rate": 0.25,
+    "custom_kernel_rate": 0.25,
+    "mean_speedup": 0.9216,
+    "eval_p50_s": 4.259,
+    "eval_p95_s": 9.855,
+    "batch_wall_s": 66.32,
+    "ts": 1794982793.274
+   },
+   {
+    "event": "reward_batch",
+    "batch": 3,
+    "global_step": 2,
+    "runtime": "gvisor",
+    "version": "v1",
+    "served_versions": {
+     "v1": 15
+    },
+    "routing_revision": 1,
+    "n": 15,
+    "status": {
+     "wrong_answer": 3,
+     "compile_error": 5,
+     "ok": 2,
+     "runtime_error": 5
+    },
+    "pass_rate": 0.1333,
+    "custom_kernel_rate": 0.1333,
+    "mean_speedup": 1.5489,
+    "eval_p50_s": 3.015,
+    "eval_p95_s": 9.792,
+    "batch_wall_s": 77.0,
+    "ts": 1794982884.057
+   },
+   {
+    "event": "reward_batch",
+    "batch": 4,
+    "global_step": 3,
+    "runtime": "gvisor",
+    "version": "v1",
+    "served_versions": {
+     "v1": 15
+    },
+    "routing_revision": 1,
+    "n": 15,
+    "status": {
+     "runtime_error": 7,
+     "wrong_answer": 6,
+     "compile_error": 2
+    },
+    "pass_rate": 0.0,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": null,
+    "eval_p50_s": 4.336,
+    "eval_p95_s": 7.592,
+    "batch_wall_s": 80.77,
+    "ts": 1794982981.216
+   },
+   {
+    "event": "reward_batch",
+    "batch": 5,
+    "global_step": 4,
+    "runtime": "gvisor",
+    "version": "v1",
+    "served_versions": {
+     "v1": 15
+    },
+    "routing_revision": 1,
+    "n": 15,
+    "status": {
+     "compile_error": 7,
+     "runtime_error": 8
+    },
+    "pass_rate": 0.0,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": null,
+    "eval_p50_s": 2.966,
+    "eval_p95_s": 4.32,
+    "batch_wall_s": 49.756,
+    "ts": 1794983045.398
+   }
+  ],
+  "switches": [],
+  "steps": [
+   {
+    "loss": 0.3725,
+    "reward": 0.1469,
+    "reward_std": 0.07181,
+    "rewards/format_reward/mean": 0.9375,
+    "rewards/correctness_reward/mean": 0.05313,
+    "rewards/speedup_reward/mean": 0.0,
+    "completions/mean_length": 328.8,
+    "step_time": 69.8,
+    "step": 1
+   },
+   {
+    "loss": 0.0956,
+    "reward": 0.3434,
+    "reward_std": 0.4877,
+    "rewards/format_reward/mean": 0.8125,
+    "rewards/correctness_reward/mean": 0.2219,
+    "rewards/speedup_reward/mean": 0.08058,
+    "completions/mean_length": 228.9,
+    "step_time": 75.21,
+    "step": 2
+   },
+   {
+    "loss": -0.005838,
+    "reward": 0.3228,
+    "reward_std": 0.4699,
+    "rewards/format_reward/mean": 0.9375,
+    "rewards/correctness_reward/mean": 0.1781,
+    "rewards/speedup_reward/mean": 0.1019,
+    "completions/mean_length": 295.5,
+    "step_time": 93.31,
+    "step": 3
+   },
+   {
+    "loss": 0.04093,
+    "reward": 0.1906,
+    "reward_std": 0.09525,
+    "rewards/format_reward/mean": 0.9375,
+    "rewards/correctness_reward/mean": 0.09687,
+    "rewards/speedup_reward/mean": 0.0,
+    "completions/mean_length": 251.1,
+    "step_time": 95.59,
+    "step": 4
+   },
+   {
+    "loss": -0.01626,
+    "reward": 0.125,
+    "reward_std": 0.02582,
+    "rewards/format_reward/mean": 1.0,
+    "rewards/correctness_reward/mean": 0.025,
+    "rewards/speedup_reward/mean": 0.0,
+    "completions/mean_length": 335.6,
+    "step_time": 63.15,
+    "step": 5
+   }
+  ]
+ },
+ "simulation": {
+  "source": "Amazon EKS, us-west-2, 2026-11-17: Kata + Cloud Hypervisor CPU pool on c8i, golden submissions instead of a model",
+  "events": [
+   {
+    "event": "reward_batch",
+    "batch": 1,
+    "global_step": 1,
+    "runtime": "kata-clh-cpu",
+    "version": "v1",
+    "served_versions": {
+     "v1": 3
+    },
+    "routing_revision": 1,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9183,
+    "eval_p50_s": 4.181,
+    "eval_p95_s": 4.181,
+    "batch_wall_s": 13.53,
+    "ts": 1794914190.945
+   },
+   {
+    "event": "reward_batch",
+    "batch": 2,
+    "global_step": 2,
+    "runtime": "kata-clh-cpu",
+    "version": "v1",
+    "served_versions": {
+     "v1": 3
+    },
+    "routing_revision": 1,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.8851,
+    "eval_p50_s": 4.094,
+    "eval_p95_s": 4.094,
+    "batch_wall_s": 12.252,
+    "ts": 1794914223.199
+   },
+   {
+    "event": "reward_batch",
+    "batch": 3,
+    "global_step": 3,
+    "runtime": "kata-clh-cpu",
+    "version": "v1",
+    "served_versions": {
+     "v1": 3
+    },
+    "routing_revision": 1,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9504,
+    "eval_p50_s": 4.089,
+    "eval_p95_s": 4.089,
+    "batch_wall_s": 12.312,
+    "ts": 1794914255.514
+   },
+   {
+    "event": "reward_batch",
+    "batch": 4,
+    "global_step": 4,
+    "runtime": "kata-clh-cpu",
+    "version": "v1",
+    "served_versions": {
+     "v1": 3
+    },
+    "routing_revision": 1,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.8619,
+    "eval_p50_s": 5.175,
+    "eval_p95_s": 5.175,
+    "batch_wall_s": 14.727,
+    "ts": 1794914290.243
+   },
+   {
+    "event": "reward_batch",
+    "batch": 5,
+    "global_step": 5,
+    "runtime": "kata-clh-cpu",
+    "version": "v1",
+    "served_versions": {
+     "v1": 3
+    },
+    "routing_revision": 1,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9607,
+    "eval_p50_s": 5.152,
+    "eval_p95_s": 5.152,
+    "batch_wall_s": 15.287,
+    "ts": 1794914325.532
+   },
+   {
+    "event": "reward_batch",
+    "batch": 6,
+    "global_step": 6,
+    "runtime": "kata-clh-cpu",
+    "version": "v1",
+    "served_versions": {
+     "v1": 3
+    },
+    "routing_revision": 1,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9152,
+    "eval_p50_s": 4.035,
+    "eval_p95_s": 4.035,
+    "batch_wall_s": 12.112,
+    "ts": 1794914357.646
+   },
+   {
+    "event": "reward_batch",
+    "batch": 7,
+    "global_step": 7,
+    "runtime": "kata-clh-cpu",
+    "version": "v1",
+    "served_versions": {
+     "v1": 3
+    },
+    "routing_revision": 1,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.99,
+    "eval_p50_s": 4.144,
+    "eval_p95_s": 4.144,
+    "batch_wall_s": 12.341,
+    "ts": 1794914389.989
+   },
+   {
+    "event": "sandbox_version_switch",
+    "from": "kata-clh-cpu/v1",
+    "to": "kata-clh-cpu/v2",
+    "routing_revision": 2,
+    "global_step": 8,
+    "ts": 1794914422.429
+   },
+   {
+    "event": "reward_batch",
+    "batch": 8,
+    "global_step": 8,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9262,
+    "eval_p50_s": 4.161,
+    "eval_p95_s": 4.161,
+    "batch_wall_s": 12.438,
+    "ts": 1794914422.429
+   },
+   {
+    "event": "reward_batch",
+    "batch": 9,
+    "global_step": 9,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9346,
+    "eval_p50_s": 4.14,
+    "eval_p95_s": 4.14,
+    "batch_wall_s": 12.392,
+    "ts": 1794914454.823
+   },
+   {
+    "event": "reward_batch",
+    "batch": 10,
+    "global_step": 10,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.8718,
+    "eval_p50_s": 4.162,
+    "eval_p95_s": 4.162,
+    "batch_wall_s": 12.55,
+    "ts": 1794914487.375
+   },
+   {
+    "event": "reward_batch",
+    "batch": 11,
+    "global_step": 11,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.905,
+    "eval_p50_s": 4.132,
+    "eval_p95_s": 4.132,
+    "batch_wall_s": 12.449,
+    "ts": 1794914519.826
+   },
+   {
+    "event": "reward_batch",
+    "batch": 12,
+    "global_step": 12,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9227,
+    "eval_p50_s": 4.155,
+    "eval_p95_s": 4.155,
+    "batch_wall_s": 12.428,
+    "ts": 1794914552.256
+   },
+   {
+    "event": "reward_batch",
+    "batch": 13,
+    "global_step": 13,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9224,
+    "eval_p50_s": 3.998,
+    "eval_p95_s": 3.998,
+    "batch_wall_s": 12.188,
+    "ts": 1794914584.446
+   },
+   {
+    "event": "reward_batch",
+    "batch": 14,
+    "global_step": 14,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9531,
+    "eval_p50_s": 4.188,
+    "eval_p95_s": 4.188,
+    "batch_wall_s": 12.551,
+    "ts": 1794914616.999
+   },
+   {
+    "event": "reward_batch",
+    "batch": 15,
+    "global_step": 15,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9233,
+    "eval_p50_s": 4.107,
+    "eval_p95_s": 4.107,
+    "batch_wall_s": 12.389,
+    "ts": 1794914649.39
+   },
+   {
+    "event": "reward_batch",
+    "batch": 16,
+    "global_step": 16,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9142,
+    "eval_p50_s": 4.056,
+    "eval_p95_s": 4.056,
+    "batch_wall_s": 12.317,
+    "ts": 1794914681.709
+   },
+   {
+    "event": "reward_batch",
+    "batch": 17,
+    "global_step": 17,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9086,
+    "eval_p50_s": 4.09,
+    "eval_p95_s": 4.09,
+    "batch_wall_s": 12.243,
+    "ts": 1794914713.954
+   },
+   {
+    "event": "reward_batch",
+    "batch": 18,
+    "global_step": 18,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.8655,
+    "eval_p50_s": 4.2,
+    "eval_p95_s": 4.2,
+    "batch_wall_s": 12.591,
+    "ts": 1794914746.546
+   },
+   {
+    "event": "reward_batch",
+    "batch": 19,
+    "global_step": 19,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.8486,
+    "eval_p50_s": 4.08,
+    "eval_p95_s": 4.08,
+    "batch_wall_s": 12.237,
+    "ts": 1794914778.786
+   },
+   {
+    "event": "reward_batch",
+    "batch": 20,
+    "global_step": 20,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9263,
+    "eval_p50_s": 4.103,
+    "eval_p95_s": 4.103,
+    "batch_wall_s": 12.286,
+    "ts": 1794914811.073
+   },
+   {
+    "event": "reward_batch",
+    "batch": 21,
+    "global_step": 21,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9054,
+    "eval_p50_s": 4.153,
+    "eval_p95_s": 4.153,
+    "batch_wall_s": 12.437,
+    "ts": 1794914843.512
+   },
+   {
+    "event": "reward_batch",
+    "batch": 22,
+    "global_step": 22,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.857,
+    "eval_p50_s": 4.109,
+    "eval_p95_s": 4.109,
+    "batch_wall_s": 12.416,
+    "ts": 1794914875.93
+   },
+   {
+    "event": "reward_batch",
+    "batch": 23,
+    "global_step": 23,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9145,
+    "eval_p50_s": 4.142,
+    "eval_p95_s": 4.142,
+    "batch_wall_s": 12.341,
+    "ts": 1794914908.273
+   },
+   {
+    "event": "reward_batch",
+    "batch": 24,
+    "global_step": 24,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9357,
+    "eval_p50_s": 4.114,
+    "eval_p95_s": 4.114,
+    "batch_wall_s": 12.393,
+    "ts": 1794914940.668
+   },
+   {
+    "event": "reward_batch",
+    "batch": 25,
+    "global_step": 25,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.907,
+    "eval_p50_s": 4.187,
+    "eval_p95_s": 4.187,
+    "batch_wall_s": 12.538,
+    "ts": 1794914973.208
+   },
+   {
+    "event": "reward_batch",
+    "batch": 26,
+    "global_step": 26,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9097,
+    "eval_p50_s": 4.321,
+    "eval_p95_s": 4.321,
+    "batch_wall_s": 13.024,
+    "ts": 1794915006.234
+   },
+   {
+    "event": "reward_batch",
+    "batch": 27,
+    "global_step": 27,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.8406,
+    "eval_p50_s": 4.204,
+    "eval_p95_s": 4.204,
+    "batch_wall_s": 12.614,
+    "ts": 1794915038.849
+   },
+   {
+    "event": "reward_batch",
+    "batch": 28,
+    "global_step": 28,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.8937,
+    "eval_p50_s": 4.264,
+    "eval_p95_s": 4.264,
+    "batch_wall_s": 12.795,
+    "ts": 1794915071.646
+   },
+   {
+    "event": "reward_batch",
+    "batch": 29,
+    "global_step": 29,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.8732,
+    "eval_p50_s": 4.255,
+    "eval_p95_s": 4.255,
+    "batch_wall_s": 12.835,
+    "ts": 1794915104.483
+   },
+   {
+    "event": "reward_batch",
+    "batch": 30,
+    "global_step": 30,
+    "runtime": "kata-clh-cpu",
+    "version": "v2",
+    "served_versions": {
+     "v2": 3
+    },
+    "routing_revision": 2,
+    "n": 3,
+    "status": {
+     "ok": 1,
+     "wrong_answer": 2
+    },
+    "pass_rate": 0.3333,
+    "custom_kernel_rate": 0.0,
+    "mean_speedup": 0.9769,
+    "eval_p50_s": 4.178,
+    "eval_p95_s": 4.178,
+    "batch_wall_s": 12.463,
+    "ts": 1794915136.948
+   }
+  ]
+ },
+ "transcripts": [
+  {
+   "id": "verify-gvisor",
+   "lines": [
+    {
+     "t": 0.12,
+     "text": "$ scripts/ops/verify.sh gvisor v1"
+    },
+    {
+     "t": 0.24,
+     "text": "[13:37:42] 1) kernel inside sandbox-gvisor-v1-6f6c799449-fw4b2 vs node <node>"
+    },
+    {
+     "t": 0.36,
+     "text": "  sandbox: 4.19.0-gvisor"
+    },
+    {
+     "t": 0.48,
+     "text": "  node:    6.18.62-127.179.amzn2023.x86_64"
+    },
+    {
+     "t": 2.0,
+     "text": "[13:37:44] 2) egress from inside the sandbox must fail"
+    },
+    {
+     "t": 2.12,
+     "text": "  instance metadata                169.254.169.254:80     blocked (TimeoutError)"
+    },
+    {
+     "t": 2.24,
+     "text": "  kubernetes api                   <private-ip>:443    blocked (TimeoutError)"
+    },
+    {
+     "t": 2.36,
+     "text": "  node kubelet                     <private-ip>:10250  blocked (TimeoutError)"
+    },
+    {
+     "t": 2.48,
+     "text": "  internet (S3 endpoint)           <public-ip>:443    blocked (TimeoutError)"
+    },
+    {
+     "t": 15.0,
+     "text": "[13:37:57] 3) golden verdicts via the authenticated API"
+    },
+    {
+     "t": 15.12,
+     "text": "{\"endpoint\": \"<private-ip>:8000\", \"pod\": \"sandbox-gvisor-v1-6f6c799449-fw4b2\", \"runtime\": \"gvisor\", \"version\": \"v1\", \"kernel_release\": \"4.19.0-gvisor\", \"gpu\": \"NVIDIA A10G\", \"egress_blocked\": true}"
+    },
+    {
+     "t": 15.24,
+     "text": "PASS vector_add_triton            status=ok                speedup=0.936"
+    },
+    {
+     "t": 15.36,
+     "text": "PASS relu_bias_triton             status=ok                speedup=1.7362"
+    },
+    {
+     "t": 15.48,
+     "text": "PASS relu_bias_torch_only         status=ok                speedup=1.0016"
+    },
+    {
+     "t": 15.6,
+     "text": "PASS relu_bias_wrong              status=wrong_answer      speedup=None"
+    },
+    {
+     "t": 15.72,
+     "text": "PASS relu_bias_benchmark_cheat    status=wrong_answer      speedup=None"
+    },
+    {
+     "t": 15.84,
+     "text": "PASS read_host_file               status=policy_violation  speedup=None"
+    },
+    {
+     "t": 64.0,
+     "text": "[13:38:46] 4) a pod outside the trainer namespace cannot connect"
+    },
+    {
+     "t": 64.12,
+     "text": "  connect from default ns: blocked (errno 11)"
+    },
+    {
+     "t": 71.0,
+     "text": "[13:38:53] pool sandbox-gvisor-v1 verified"
+    }
+   ]
+  },
+  {
+   "id": "verify-kata-qemu",
+   "lines": [
+    {
+     "t": 0.12,
+     "text": "$ scripts/ops/verify.sh kata-qemu v1"
+    },
+    {
+     "t": 0.24,
+     "text": "[13:39:37] 1) kernel inside sandbox-kata-qemu-v1-7fdc556888-2hj6t vs node <node>"
+    },
+    {
+     "t": 0.36,
+     "text": "  sandbox: 6.18.56-nvidia-gpu"
+    },
+    {
+     "t": 0.48,
+     "text": "  node:    6.18.62-127.179.amzn2023.x86_64"
+    },
+    {
+     "t": 2.0,
+     "text": "[13:39:39] 2) egress from inside the sandbox must fail"
+    },
+    {
+     "t": 2.12,
+     "text": "  instance metadata                169.254.169.254:80     blocked (TimeoutError)"
+    },
+    {
+     "t": 2.24,
+     "text": "  kubernetes api                   <private-ip>:443    blocked (TimeoutError)"
+    },
+    {
+     "t": 2.36,
+     "text": "  node kubelet                     <private-ip>:10250  blocked (TimeoutError)"
+    },
+    {
+     "t": 2.48,
+     "text": "  internet (S3 endpoint)           <public-ip>:443    blocked (TimeoutError)"
+    },
+    {
+     "t": 16.0,
+     "text": "[13:39:53] 3) golden verdicts via the authenticated API"
+    },
+    {
+     "t": 16.12,
+     "text": "{\"endpoint\": \"<private-ip>:8000\", \"pod\": \"sandbox-kata-qemu-v1-7fdc556888-mxmd2\", \"runtime\": \"kata-qemu\", \"version\": \"v1\", \"kernel_release\": \"6.18.56-nvidia-gpu\", \"gpu\": \"Tesla T4\", \"egress_blocked\": true}"
+    },
+    {
+     "t": 16.24,
+     "text": "{\"endpoint\": \"<private-ip>:8000\", \"pod\": \"sandbox-kata-qemu-v1-7fdc556888-rrrb2\", \"runtime\": \"kata-qemu\", \"version\": \"v1\", \"kernel_release\": \"6.18.56-nvidia-gpu\", \"gpu\": \"Tesla T4\", \"egress_blocked\": true}"
+    },
+    {
+     "t": 16.36,
+     "text": "{\"endpoint\": \"<private-ip>:8000\", \"pod\": \"sandbox-kata-qemu-v1-7fdc556888-z6f79\", \"runtime\": \"kata-qemu\", \"version\": \"v1\", \"kernel_release\": \"6.18.56-nvidia-gpu\", \"gpu\": \"Tesla T4\", \"egress_blocked\": true}"
+    },
+    {
+     "t": 16.48,
+     "text": "{\"endpoint\": \"<private-ip>:8000\", \"pod\": \"sandbox-kata-qemu-v1-7fdc556888-2hj6t\", \"runtime\": \"kata-qemu\", \"version\": \"v1\", \"kernel_release\": \"6.18.56-nvidia-gpu\", \"gpu\": \"Tesla T4\", \"egress_blocked\": true}"
+    },
+    {
+     "t": 16.6,
+     "text": "PASS vector_add_triton            status=ok                speedup=0.9446"
+    },
+    {
+     "t": 16.72,
+     "text": "PASS relu_bias_triton             status=ok                speedup=1.7934"
+    },
+    {
+     "t": 16.84,
+     "text": "PASS relu_bias_torch_only         status=ok                speedup=1.015"
+    },
+    {
+     "t": 16.96,
+     "text": "PASS relu_bias_wrong              status=wrong_answer      speedup=None"
+    },
+    {
+     "t": 17.08,
+     "text": "PASS relu_bias_benchmark_cheat    status=wrong_answer      speedup=None"
+    },
+    {
+     "t": 17.2,
+     "text": "PASS read_host_file               status=policy_violation  speedup=None"
+    },
+    {
+     "t": 39.0,
+     "text": "[13:40:16] 4) a pod outside the trainer namespace cannot connect"
+    },
+    {
+     "t": 39.12,
+     "text": "  connect from default ns: blocked (errno 11)"
+    },
+    {
+     "t": 46.0,
+     "text": "[13:40:23] pool sandbox-kata-qemu-v1 verified"
+    }
+   ]
+  },
+  {
+   "id": "smoke-gvisor",
+   "lines": [
+    {
+     "t": 0.12,
+     "text": "$ scripts/04_install_gpu_stack.sh"
+    },
+    {
+     "t": 0.24,
+     "text": "runtimeclass.node.k8s.io/gvisor created"
+    },
+    {
+     "t": 0.36,
+     "text": "NAME     HANDLER   AGE"
+    },
+    {
+     "t": 0.48,
+     "text": "gvisor   runsc     1s"
+    },
+    {
+     "t": 0.6,
+     "text": "pod/gvisor-smoke-24408 created"
+    },
+    {
+     "t": 0.72,
+     "text": "pod/gvisor-smoke-24408 condition met"
+    },
+    {
+     "t": 0.84,
+     "text": "kernel (gVisor reports its own): 4.19.0-gvisor"
+    },
+    {
+     "t": 0.96,
+     "text": "[    0.000000] Starting gVisor..."
+    },
+    {
+     "t": 1.08,
+     "text": "[    0.398548] Constructing home..."
+    },
+    {
+     "t": 1.2,
+     "text": "[    0.843386] Creating bureaucratic processes..."
+    },
+    {
+     "t": 1.32,
+     "text": "cuda ok: NVIDIA A10G 2048.0"
+    },
+    {
+     "t": 1.44,
+     "text": "pod \"gvisor-smoke-24408\" deleted from default namespace"
+    }
+   ]
+  },
+  {
+   "id": "rollout",
+   "lines": [
+    {
+     "t": 0.12,
+     "text": "$ scripts/ops/rollout.sh kata-clh-cpu v1 v2"
+    },
+    {
+     "t": 0.24,
+     "text": "[11:17:13] 1) deploying kata-clh-cpu/v2"
+    },
+    {
+     "t": 1.0,
+     "text": "[11:17:14] deploying sandbox-kata-clh-cpu-v2: 1 replica(s), runtimeClass kata-clh"
+    },
+    {
+     "t": 1.12,
+     "text": "deployment.apps/sandbox-kata-clh-cpu-v2 created"
+    },
+    {
+     "t": 1.24,
+     "text": "service/sandbox-kata-clh-cpu-v2 created"
+    },
+    {
+     "t": 1.36,
+     "text": "Waiting for deployment \"sandbox-kata-clh-cpu-v2\" rollout to finish: 0 of 1 updated replicas are available..."
+    },
+    {
+     "t": 1.48,
+     "text": "deployment \"sandbox-kata-clh-cpu-v2\" successfully rolled out"
+    },
+    {
+     "t": 1.6,
+     "text": "NAME                                      READY   STATUS    RESTARTS   AGE   IP            NODE                                        NOMINATED NODE   READINESS GATES"
+    },
+    {
+     "t": 1.72,
+     "text": "sandbox-kata-clh-cpu-v2-d699bf96c-k2rd4   1/1     Running   0          21s   <private-ip>   <node>   <none>           <none>"
+    },
+    {
+     "t": 24.0,
+     "text": "[11:17:37] 2) verifying kata-clh-cpu/v2"
+    },
+    {
+     "t": 25.0,
+     "text": "[11:17:38] 1) kernel inside sandbox-kata-clh-cpu-v2-d699bf96c-k2rd4 vs node <node>"
+    },
+    {
+     "t": 25.12,
+     "text": "  sandbox: 6.18.56"
+    },
+    {
+     "t": 25.24,
+     "text": "  node:    6.18.62-127.179.amzn2023.x86_64"
+    },
+    {
+     "t": 27.0,
+     "text": "[11:17:40] 2) egress from inside the sandbox must fail"
+    },
+    {
+     "t": 27.12,
+     "text": "  instance metadata                169.254.169.254:80     blocked (TimeoutError)"
+    },
+    {
+     "t": 27.24,
+     "text": "  kubernetes api                   <private-ip>:443    blocked (TimeoutError)"
+    },
+    {
+     "t": 27.36,
+     "text": "  node kubelet                     <private-ip>:10250  blocked (TimeoutError)"
+    },
+    {
+     "t": 27.48,
+     "text": "  internet (S3 endpoint)           <public-ip>:443    blocked (TimeoutError)"
+    },
+    {
+     "t": 40.0,
+     "text": "[11:17:53] 3) golden verdicts via the authenticated API"
+    },
+    {
+     "t": 40.12,
+     "text": "{\"endpoint\": \"<private-ip>:8000\", \"pod\": \"sandbox-kata-clh-cpu-v2-d699bf96c-k2rd4\", \"runtime\": \"kata-clh-cpu\", \"version\": \"v2\", \"kernel_release\": \"6.18.56\", \"gpu\": null, \"egress_blocked\": true}"
+    },
+    {
+     "t": 40.24,
+     "text": "PASS relu_bias_torch_only         status=ok                speedup=0.8946"
+    },
+    {
+     "t": 40.36,
+     "text": "PASS relu_bias_wrong              status=wrong_answer      speedup=None"
+    },
+    {
+     "t": 40.48,
+     "text": "PASS relu_bias_benchmark_cheat    status=wrong_answer      speedup=None"
+    },
+    {
+     "t": 40.6,
+     "text": "PASS read_host_file               status=policy_violation  speedup=None"
+    },
+    {
+     "t": 66.0,
+     "text": "[11:18:19] 4) a pod outside the trainer namespace cannot connect"
+    },
+    {
+     "t": 66.12,
+     "text": "  connect from default ns: blocked (errno 11)"
+    },
+    {
+     "t": 74.0,
+     "text": "[11:18:27] pool sandbox-kata-clh-cpu-v2 verified"
+    },
+    {
+     "t": 74.12,
+     "text": "[11:18:27] 3) parity v1 -> v2"
+    },
+    {
+     "t": 74.24,
+     "text": "PASS relu_bias_torch_only         v1=ok v2=ok"
+    },
+    {
+     "t": 74.36,
+     "text": "PASS relu_bias_wrong              v1=wrong_answer v2=wrong_answer"
+    },
+    {
+     "t": 74.48,
+     "text": "PASS relu_bias_benchmark_cheat    v1=wrong_answer v2=wrong_answer"
+    },
+    {
+     "t": 74.6,
+     "text": "PASS read_host_file               v1=policy_violation v2=policy_violation"
+    },
+    {
+     "t": 74.72,
+     "text": "{\"event\": \"parity\", \"baseline\": \"sandbox-kata-clh-cpu-v1.sandbox.svc.cluster.local:8000\", \"candidate\": \"sandbox-kata-clh-cpu-v2.sandbox.svc.cluster.local:8000\", \"passed\": true}"
+    },
+    {
+     "t": 108.0,
+     "text": "[11:19:01] 4) switching the routing table to kata-clh-cpu/v2"
+    },
+    {
+     "t": 108.12,
+     "text": "configmap/sandbox-routing configured"
+    },
+    {
+     "t": 108.24,
+     "text": ""
+    },
+    {
+     "t": 108.36,
+     "text": "The ConfigMap reaches mounted pods within about a minute (kubelet sync). Watch the trainer for"
+    },
+    {
+     "t": 108.48,
+     "text": "  {\"event\": \"sandbox_version_switch\", \"from\": \"kata-clh-cpu/v1\", \"to\": \"kata-clh-cpu/v2\", ...}"
+    },
+    {
+     "t": 108.6,
+     "text": "then retire the old pool:"
+    },
+    {
+     "t": 108.72,
+     "text": "  scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish"
+    }
+   ]
+  }
+ ]
+}

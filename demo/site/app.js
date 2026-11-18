@@ -1,66 +1,331 @@
-// Replay demo: renders data/recording.json. No network calls other than that same-origin
-// fetch, and every value from the recording is inserted as text (never as HTML), because
-// recordings contain strings produced by evaluated code (error tails, violations).
+// Replay demo: renders data/recording.json (golden verdicts) and data/extras.json (benchmark,
+// training, terminal transcripts). No network calls other than those two same-origin fetches.
+// Every value from the data files is inserted as text (never as HTML), because they contain
+// strings produced by evaluated code and by cluster logs.
 "use strict";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const WEIGHTS = { format: 0.1, correctness: 1.0, speedup: 0.5 };
+const MAX_REWARD = 0.1 + 1.0 + 0.5 * 1.5;
 
 const TEXT = {
   ko: {
-    title: "GPU Sandbox on AWS 재생 데모",
-    lede: "모델이 쓴 GPU 코드를 격리된 샌드박스에서 채점하는 on-policy RL의 한 장면을, 실제 실행 기록으로 다시 보여 줍니다. 이 페이지는 클러스터나 GPU에 접속하지 않습니다.",
+    navArch: "아키텍처", navTry: "채점 체험", navDefense: "공격 차단", navTrain: "학습", navBench: "벤치마크",
+    eyebrow: "on-policy RL을 위한 GPU reward 샌드박스",
+    title: "모델이 쓴 GPU 코드를 격리된 샌드박스에서 채점합니다",
+    lede: "강화학습 중인 모델은 step마다 신뢰할 수 없는 Triton, CUDA 코드를 만들어 냅니다. 이 페이지는 Amazon EKS에서 gVisor와 Kata Containers로 그 코드를 채점한 실제 기록을 재생합니다. 방문자의 브라우저는 클러스터나 GPU에 접속하지 않아요.",
+    ctaTry: "채점 체험하기", ctaDefense: "공격 차단 증거 보기",
     sourceLabel: "기록 출처:",
-    s1: "1. 격리 런타임과 증거",
-    s1hint: "샌드박스 안에서 본 커널 버전, GPU, egress 차단 여부입니다. gVisor는 자체 커널 버전을, Kata는 guest VM 커널을 보고합니다.",
-    s2: "2. 제출물 채점 재생",
-    s2hint: "정답, 오답, reward hacking 시도를 고르면 각 샌드박스 버전의 판정과 reward 구성 요소를 보여 줍니다.",
-    pick: "제출물",
-    task: "태스크와 기준 구현",
-    candidate: "제출된 코드",
-    verdicts: "판정",
-    s3: "3. 학습 중 샌드박스 업데이트",
-    s3hint: "reward 배치마다 어떤 샌드박스 버전이 채점했는지 보여 줍니다. 버전 전환은 배치 경계에서만 일어납니다.",
-    footer: "기록 재생 데모입니다. 수치는 표시된 기록 출처의 환경에서 얻은 값이며 다른 환경의 성능을 뜻하지 않습니다.",
-    guide: "가이드북",
-    repo: "GitHub 저장소",
-    runtime: "런타임", version: "샌드박스 버전", kernel: "샌드박스 안 커널", gpu: "GPU",
-    egress: "egress 차단", yes: "확인됨", no: "열림", none: "없음 (CPU)",
-    status: "판정", expected: "기대 판정", speedup: "speedup", ms: "기준/후보 ms",
-    custom: "커스텀 커널", flags: "플래그", violations: "정책 위반", reward: "reward (format, correctness, speedup = 합계)",
+    videoCaption: "둘러보기 영상: 이 페이지의 기능을 자동으로 재생한 화면입니다(소리 없음).",
+    kpiGpu: "GPU 격리 런타임 (gVisor, Kata)", kpiGolden: "기대 판정과 일치한 golden 채점",
+    kpiBlocked: "샌드박스 안에서 시도해 차단된 접근", kpiBench: "벤치마크 요청 정상 응답",
+    sArch: "아키텍처: reward 요청 한 건의 흐름",
+    sArchHint: "구성 요소를 누르면 설명이 열립니다. 재생 버튼을 누르면 reward 요청 한 건이 지나가는 순서를 보여 줍니다.",
+    flowPlay: "▶ 요청 흐름 재생", flowStop: "■ 멈춤", evidence: "증거 보기",
+    zoneTrainer: "rl-trainer namespace", zoneSandbox: "sandbox namespace (default deny)", zoneOut: "샌드박스에서 차단",
+    sTry: "채점 체험: 같은 코드를 두 샌드박스에서",
+    sTryHint: "제출물을 고르고 재생을 누르면 gVisor(A10G)와 Kata QEMU(T4)가 같은 코드를 채점한 기록이 동시에 재생됩니다.",
+    showTask: "태스크와 기준 구현 보기", candidate: "제출된 코드",
+    run: "▶ 두 샌드박스에서 채점 재생", running: "재생 중...",
+    speed: "속도", speed1: "실제 속도", speed4: "4배속", speed0: "결과만",
+    laneNote: "진행 막대는 기록된 전체 평가 시간(duration_s)을 그대로 재생합니다. 단계별 시간은 기록하지 않았기 때문에, 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.",
+    stAuth: "요청 인증 (ServiceAccount 토큰, NetworkPolicy)", stPolicy: "정적 정책 검사 (AST)",
+    stRun: "격리된 자식 프로세스에서 실행", stCorrect: "기준 구현과 정확성 비교 (무작위 seed)",
+    stBench: "벤치마크와 timed 출력 재검증", stReward: "reward 계산 (score_verdict)",
+    idle: "대기", evaluating: "평가 중",
+    expected: "기대 판정", speedupL: "speedup", msL: "기준/후보 ms", violationsL: "정책 위반", flagsL: "플래그",
+    rewardTotal: "reward 합계", rewardMax: "최대", rFormat: "format x0.1", rCorrect: "correctness x1.0", rSpeed: "speedup x0.5",
     excluded: "인프라 오류: 이 샘플은 group baseline에서 제외",
-    step: "step", batch: "배치", passRate: "통과율", served: "채점 버전", switchTo: "샌드박스 버전 전환",
-    noTraining: "이 기록에는 학습 이벤트가 없습니다.",
+    why_ok_custom: "정답이고 custom kernel입니다. 기준 구현보다 빠른 만큼 speedup 점수도 받습니다.",
+    why_ok_plain: "정답이지만 PyTorch 연산만 써서 custom kernel이 아닙니다. correctness 0.3만 받고 speedup 점수는 없어요.",
+    why_policy: "실행 전에 정적 정책 검사에서 막혔습니다. 제출된 코드는 한 줄도 실행되지 않았어요.",
+    why_wrong: "기준 구현과 출력이 다릅니다.",
+    why_cheat: "정확성 검사는 통과했지만, 벤치마크 구간의 출력 checksum이 기준과 달라서 잡혔습니다.",
+    why_runtime: "실행 중 오류가 났습니다.",
+    why_infra: "샌드박스 쪽 오류라 reward를 매기지 않습니다.",
+    sDefense: "공격 차단: 샌드박스 안에서 시도한 것들",
+    sDefenseHint: "verify.sh가 샌드박스 pod 안에서 직접 시도한 결과입니다. 카드를 누르면 실제 터미널 출력에서 그 줄을 찾아 강조합니다.",
+    attacks: "시도와 결과",
+    termPlay: "▶ 재생", termPause: "❚❚ 일시정지", termAll: "전체 보기",
+    runtime: "런타임", version: "샌드박스 버전", kernel: "샌드박스 안 커널", nodeKernel: "노드 커널",
+    gpu: "GPU", egress: "egress 차단", yes: "확인됨", no: "열림", none: "없음 (CPU)",
+    sTrain: "학습: reward가 샌드박스에서 나오는 과정",
+    sTrainHint: "위는 실제 모델이 GPU에서 GRPO로 학습한 5 step입니다. 아래는 학습 중에 샌드박스 버전을 바꾸는 장면이에요.",
+    grpoTitle: "GRPO 5 step: 모델 출력을 gVisor(A10G)가 채점",
+    stepPlay: "▶ step 재생",
+    grpoNote: "5 step짜리 확인용 실행이라 학습 효과를 보여 주는 결과는 아닙니다. 실제 모델 출력이 샌드박스에서 어떤 판정을 받고, reward가 어떻게 모이는지를 보여 줍니다.",
+    lPass: "통과율 (오른쪽 축, 0~1)", lReward: "평균 reward (오른쪽 축)",
+    st_ok: "ok", st_wrong_answer: "오답", st_compile_error: "컴파일 오류", st_runtime_error: "실행 오류",
+    st_timeout: "시간 초과", st_policy_violation: "정책 위반", st_sandbox_error: "인프라 오류",
+    batch: "배치", step: "step", evals: "평가 수", passRate: "통과율", customRate: "custom kernel 비율",
+    meanSpeedup: "평균 speedup", p50: "eval p50", p95: "eval p95", wall: "배치 소요",
+    rewardMean: "평균 reward", rewardStd: "reward 표준편차", loss: "loss", compLen: "평균 completion 길이 (token)",
+    stepTime: "step 시간", sec: "초", model: "모델", sandboxSide: "샌드박스 쪽", trainerSide: "trainer 쪽",
+    switchTitle: "학습 중 샌드박스 버전 전환 (v1에서 v2로)",
+    switchNote: "시뮬레이션입니다. golden 제출물이 모델 출력을 대신했고 모델 학습은 하지 않았습니다. 채점 경로와 라우팅 표는 학습 때와 같아요.",
+    showRollout: "rollout 터미널 출력 보기",
+    simSummary: "배치 {n}개가 빠짐없이 채점됐습니다. step {s}에서 {from}에서 {to}로 바뀌었고, eval p50 중앙값은 전환 전 {a}초, 전환 후 {b}초입니다.",
+    sBench: "벤치마크: 런타임별 측정값",
+    sBenchHint: "풀마다 같은 golden을 32건씩 보냈습니다. 막대에 마우스를 올리면 세부 값이 보입니다.",
+    mP50: "eval p50 (초)", mP95: "eval p95 (초)", mCold: "cold start (초, pod 중앙값)",
+    mTput: "pod당 처리량 (eval/s)", mSpeed: "speedup 중앙값 (GPU)",
+    pass2: "이미지 캐시 후 (기준)", pass1: "배포 직후",
+    notMeasured: "측정 안 됨: VM이 시작되지 않음", na: "해당 없음",
+    pods: "Ready pod", requests: "요청", throughput: "처리량", refMs: "기준 구현 ms",
+    benchNoteGpu: "GPU 두 풀은 GPU가 다릅니다(A10G, T4). 런타임 오버헤드 비교로 읽으면 안 됩니다. CPU 세 풀은 같은 c8i.2xlarge 노드에서 같은 이미지와 golden으로 쟀어요.",
+    benchNotePass1: "배포 직후 cold start에는 다른 요인이 섞여 있습니다. kata-qemu의 약 1235초에는 IOMMU 수정 전 VM 시작 실패 약 20분이, gvisor-cpu의 141초에는 첫 이미지 pull이 들어 있어요.",
+    benchNoteSpeed: "CPU 풀의 speedup은 비교 대상이 아니라서 표시하지 않습니다.",
+    noData: "이 기록에는 해당 데이터가 없습니다.",
+    footer: "기록 재생 데모입니다. 수치는 표시된 기록 출처의 환경에서 얻은 값이며 다른 환경의 성능을 뜻하지 않습니다. 로그의 IP 주소와 노드 이름은 가렸습니다.",
+    guide: "가이드북", repo: "GitHub 저장소",
   },
   en: {
-    title: "GPU Sandbox on AWS replay demo",
-    lede: "A replay of one moment of on-policy RL where model-written GPU code is scored in isolated sandboxes, built from a real execution record. This page never connects to a cluster or a GPU.",
+    navArch: "Architecture", navTry: "Try scoring", navDefense: "Attacks blocked", navTrain: "Training", navBench: "Benchmark",
+    eyebrow: "GPU reward sandboxes for on-policy RL",
+    title: "Score model-written GPU code in isolated sandboxes",
+    lede: "During reinforcement learning, a model writes untrusted Triton and CUDA code at every step. This page replays real records of that code being scored on Amazon EKS with gVisor and Kata Containers. Your browser never connects to a cluster or a GPU.",
+    ctaTry: "Try scoring", ctaDefense: "See blocked attacks",
     sourceLabel: "Recording source:",
-    s1: "1. Isolation runtimes and evidence",
-    s1hint: "Kernel version, GPU and egress status as seen from inside each sandbox. gVisor reports its own kernel version; Kata reports the guest VM kernel.",
-    s2: "2. Replay a submission",
-    s2hint: "Pick a correct, wrong or reward-hacking submission to see each sandbox version's verdict and reward components.",
-    pick: "Submission",
-    task: "Task and reference",
-    candidate: "Submitted code",
-    verdicts: "Verdicts",
-    s3: "3. Updating the sandbox during training",
-    s3hint: "Which sandbox version scored each reward batch. Versions switch only at batch boundaries.",
-    footer: "This is a replay. Numbers come from the environment named in the recording source and say nothing about other environments.",
-    guide: "Guidebook",
-    repo: "GitHub repository",
-    runtime: "Runtime", version: "Sandbox version", kernel: "Kernel inside sandbox", gpu: "GPU",
-    egress: "Egress blocked", yes: "verified", no: "open", none: "none (CPU)",
-    status: "Verdict", expected: "Expected", speedup: "Speedup", ms: "Ref/cand ms",
-    custom: "Custom kernel", flags: "Flags", violations: "Policy violations", reward: "Reward (format, correctness, speedup = total)",
+    videoCaption: "Tour video: this page playing its features automatically (no sound).",
+    kpiGpu: "GPU isolation runtimes (gVisor, Kata)", kpiGolden: "golden verdicts matching the expected one",
+    kpiBlocked: "access attempts from inside a sandbox, blocked", kpiBench: "benchmark requests answered ok",
+    sArch: "Architecture: the path of one reward request",
+    sArchHint: "Click a component to open its description. The play button shows the order in which one reward request travels.",
+    flowPlay: "▶ Play request flow", flowStop: "■ Stop", evidence: "See evidence",
+    zoneTrainer: "rl-trainer namespace", zoneSandbox: "sandbox namespace (default deny)", zoneOut: "Blocked from sandboxes",
+    sTry: "Try scoring: the same code in two sandboxes",
+    sTryHint: "Pick a submission and press play: the records of gVisor (A10G) and Kata QEMU (T4) scoring the same code replay side by side.",
+    showTask: "Show the task and reference", candidate: "Submitted code",
+    run: "▶ Replay scoring in both sandboxes", running: "Replaying...",
+    speed: "Speed", speed1: "real time", speed4: "4x", speed0: "result only",
+    laneNote: "The progress bar replays the recorded total evaluation time (duration_s). Per-stage times were not recorded, so the stages are filled in from the verdict once the evaluation ends.",
+    stAuth: "Request authentication (ServiceAccount token, NetworkPolicy)", stPolicy: "Static policy check (AST)",
+    stRun: "Run in an isolated child process", stCorrect: "Compare with the reference (random seeds)",
+    stBench: "Benchmark and re-check timed outputs", stReward: "Compute reward (score_verdict)",
+    idle: "idle", evaluating: "evaluating",
+    expected: "Expected", speedupL: "Speedup", msL: "Ref/cand ms", violationsL: "Policy violations", flagsL: "Flags",
+    rewardTotal: "Reward total", rewardMax: "max", rFormat: "format x0.1", rCorrect: "correctness x1.0", rSpeed: "speedup x0.5",
     excluded: "Infrastructure error: sample excluded from the group baseline",
-    step: "step", batch: "batch", passRate: "Pass rate", served: "Scored by", switchTo: "Sandbox version switch",
-    noTraining: "This recording has no training events.",
+    why_ok_custom: "Correct and a custom kernel, so it also earns the speedup score for beating the reference.",
+    why_ok_plain: "Correct, but only PyTorch ops, so not a custom kernel: correctness 0.3 and no speedup score.",
+    why_policy: "Stopped by the static policy check before running. Not one line of the submission ran.",
+    why_wrong: "The output differs from the reference.",
+    why_cheat: "It passed the correctness check, but its outputs during the benchmark failed the checksum against the reference.",
+    why_runtime: "It failed while running.",
+    why_infra: "A sandbox-side error, so no reward is given.",
+    sDefense: "Attacks blocked: what was tried inside the sandbox",
+    sDefenseHint: "These are attempts that verify.sh made from inside sandbox pods. Click a card to find and highlight that line in the real terminal output.",
+    attacks: "Attempts and results",
+    termPlay: "▶ Play", termPause: "❚❚ Pause", termAll: "Show all",
+    runtime: "Runtime", version: "Sandbox version", kernel: "Kernel inside sandbox", nodeKernel: "Node kernel",
+    gpu: "GPU", egress: "Egress blocked", yes: "verified", no: "open", none: "none (CPU)",
+    sTrain: "Training: where the reward comes from",
+    sTrainHint: "Top: five GRPO steps of a real model on a GPU. Bottom: switching the sandbox version during training.",
+    grpoTitle: "GRPO, 5 steps: model outputs scored by gVisor (A10G)",
+    stepPlay: "▶ Play steps",
+    grpoNote: "A five-step check run, so it does not show a training effect. It shows which verdicts real model outputs get in the sandbox and how the reward adds up.",
+    lPass: "Pass rate (right axis, 0 to 1)", lReward: "Mean reward (right axis)",
+    st_ok: "ok", st_wrong_answer: "wrong answer", st_compile_error: "compile error", st_runtime_error: "runtime error",
+    st_timeout: "timeout", st_policy_violation: "policy violation", st_sandbox_error: "infrastructure error",
+    batch: "batch", step: "step", evals: "Evaluations", passRate: "Pass rate", customRate: "Custom kernel rate",
+    meanSpeedup: "Mean speedup", p50: "eval p50", p95: "eval p95", wall: "Batch wall time",
+    rewardMean: "Mean reward", rewardStd: "Reward std", loss: "Loss", compLen: "Mean completion length (tokens)",
+    stepTime: "Step time", sec: "s", model: "Model", sandboxSide: "Sandbox side", trainerSide: "Trainer side",
+    switchTitle: "Switching the sandbox version during training (v1 to v2)",
+    switchNote: "A simulation: golden submissions stood in for model outputs and no model was trained. The scoring path and the routing table are the same as in training.",
+    showRollout: "Show the rollout terminal output",
+    simSummary: "All {n} batches were scored. At step {s} the pool changed from {from} to {to}; the median eval p50 was {a} s before and {b} s after.",
+    sBench: "Benchmark: measurements per runtime",
+    sBenchHint: "Each pool received the same golden 32 times. Hover a bar for details.",
+    mP50: "eval p50 (s)", mP95: "eval p95 (s)", mCold: "cold start (s, pod median)",
+    mTput: "throughput per pod (eval/s)", mSpeed: "speedup median (GPU)",
+    pass2: "cached images (reference)", pass1: "as deployed",
+    notMeasured: "not measured: the VM never started", na: "n/a",
+    pods: "Ready pods", requests: "requests", throughput: "throughput", refMs: "reference ms",
+    benchNoteGpu: "The two GPU pools use different GPUs (A10G, T4), so this is not a runtime overhead comparison. The three CPU pools ran on the same c8i.2xlarge node with the same image and golden.",
+    benchNotePass1: "As-deployed cold starts include other factors: about 20 minutes of failed VM starts before the IOMMU fix in kata-qemu's ~1235 s, and the first image pull in gvisor-cpu's 141 s.",
+    benchNoteSpeed: "Speedup is not compared for CPU pools, so it is not shown.",
+    noData: "This recording has no data for this part.",
+    footer: "This is a replay. Numbers come from the environment named in the recording source and say nothing about other environments. IP addresses and node names in the logs are masked.",
+    guide: "Guidebook", repo: "GitHub repository",
   },
 };
 
+// Short names and stories for the golden submissions; unknown names fall back to the raw name.
+const SUBS = {
+  vector_add_triton: {
+    kind: "good",
+    ko: { n: "Triton 벡터 덧셈", d: "정답, custom kernel", s: "Triton으로 직접 쓴 벡터 덧셈 커널입니다. 정답이고 custom kernel이라 speedup 점수 대상이에요." },
+    en: { n: "Triton vector add", d: "correct, custom kernel", s: "A hand-written Triton vector add kernel. Correct and a custom kernel, so it is eligible for the speedup score." },
+  },
+  relu_bias_triton: {
+    kind: "good",
+    ko: { n: "Triton fused ReLU", d: "정답, 기준보다 빠름", s: "bias 덧셈과 ReLU를 한 커널로 합친 Triton 커널입니다. 기준 구현(PyTorch)은 두 연산을 따로 실행합니다." },
+    en: { n: "Triton fused ReLU", d: "correct, faster than reference", s: "A Triton kernel that fuses the bias add and the ReLU into one kernel. The PyTorch reference runs the two ops separately." },
+  },
+  relu_bias_torch_only: {
+    kind: "good",
+    ko: { n: "PyTorch만 사용", d: "정답, custom kernel 아님", s: "PyTorch 연산만으로 쓴 정답입니다. 맞는 코드지만 학습 목표(custom kernel 작성)를 피해 가는 답이라 점수를 덜 줍니다." },
+    en: { n: "PyTorch only", d: "correct, no custom kernel", s: "A correct answer using only PyTorch ops. It is right, but it dodges the training goal (writing a custom kernel), so it earns less." },
+  },
+  relu_bias_wrong: {
+    kind: "bad",
+    ko: { n: "ReLU 빠뜨린 오답", d: "wrong_answer", s: "ReLU를 빠뜨리고 x + b만 반환하는 오답입니다." },
+    en: { n: "Missing ReLU", d: "wrong_answer", s: "A wrong answer that returns x + b and forgets the ReLU." },
+  },
+  relu_bias_benchmark_cheat: {
+    kind: "bad",
+    ko: { n: "벤치마크 치팅", d: "reward hacking 시도", s: "처음 세 번 호출에는 정답을 내고, 그 뒤 벤치마크 구간부터는 0을 반환해 빠른 척합니다. 정확성 검사만 하는 채점기는 속아 넘어가요." },
+    en: { n: "Benchmark cheat", d: "reward hacking attempt", s: "Answers correctly for the first three calls, then returns zeros during the benchmark to look fast. A grader that only checks correctness is fooled." },
+  },
+  read_host_file: {
+    kind: "bad",
+    ko: { n: "호스트 파일 읽기", d: "정책 위반 시도", s: "모듈을 불러오는 순간 /etc/hostname을 읽으려는 코드입니다. 파일 시스템을 들여다보려는 시도의 가장 단순한 형태예요." },
+    en: { n: "Read a host file", d: "policy violation attempt", s: "Code that reads /etc/hostname as soon as the module loads: the simplest form of poking at the file system." },
+  },
+};
+
+const ARCH = {
+  nodes: [
+    { id: "trainer", x: 40, y: 78, w: 260, h: 70, zone: "trainer" },
+    { id: "reward", x: 40, y: 198, w: 260, h: 70, zone: "trainer" },
+    { id: "routing", x: 40, y: 318, w: 260, h: 70, zone: "trainer" },
+    { id: "gvisor", x: 392, y: 78, w: 330, h: 74, zone: "sandbox" },
+    { id: "kata", x: 392, y: 196, w: 330, h: 74, zone: "sandbox" },
+    { id: "cpu", x: 392, y: 314, w: 330, h: 74, zone: "sandbox" },
+    { id: "imds", x: 818, y: 70, w: 150, h: 56, zone: "out", blocked: true },
+    { id: "k8sapi", x: 818, y: 152, w: 150, h: 56, zone: "out", blocked: true },
+    { id: "kubelet", x: 818, y: 234, w: 150, h: 56, zone: "out", blocked: true },
+    { id: "internet", x: 818, y: 316, w: 150, h: 56, zone: "out", blocked: true },
+  ],
+  ko: {
+    trainer: { t1: "GRPO trainer", t2: "vLLM 생성 + TRL, GPU 노드", title: "GRPO trainer",
+      items: ["vLLM으로 프롬프트마다 completion 여러 개를 만들고 TRL GRPO로 학습합니다.",
+        "기본 모델은 Qwen2.5-Coder-1.5B-Instruct, 노드는 g5.2xlarge(A10G 1장)입니다.",
+        "샌드박스 API는 gpusandbox/client 라벨이 붙은 rl-trainer pod만 부를 수 있어요."], link: "#train" },
+    reward: { t1: "reward 함수", t2: "verdict를 reward로 (score_verdict)", title: "reward 함수",
+      items: ["completion마다 샌드박스에 채점을 요청하고, 돌아온 verdict로 reward를 만듭니다.",
+        "가중치는 format 0.1, correctness 1.0, speedup 0.5입니다.",
+        "인프라 오류(sandbox_error)는 reward 없이 group baseline에서 뺍니다."], link: "#try" },
+    routing: { t1: "라우팅 표 (ConfigMap)", t2: "활성 런타임과 버전", title: "라우팅 표",
+      items: ["trainer pod에 마운트된 ConfigMap으로, 지금 채점할 런타임과 버전을 담습니다.",
+        "버전 전환은 reward 배치 경계에서만 일어납니다. 한 배치가 두 버전으로 섞이지 않아요.",
+        "새 버전은 golden parity를 통과해야 트래픽을 받습니다."], link: "#train" },
+    gvisor: { t1: "gVisor 풀 (GPU)", t2: "runsc + nvproxy", title: "gVisor 풀",
+      items: ["runsc가 시스템 콜을 사용자 공간 커널에서 처리합니다. 컨테이너가 호스트 커널을 직접 만지지 않아요.",
+        "nvproxy가 GPU 드라이버 ioctl을 걸러서 호스트 드라이버로 넘깁니다."], link: "#defense", runtime: "gvisor" },
+    kata: { t1: "Kata QEMU 풀 (GPU)", t2: "pod마다 micro VM + VFIO", title: "Kata QEMU 풀",
+      items: ["pod마다 경량 VM을 띄우고, GPU는 VFIO passthrough로 VM에 통째로 넘깁니다.",
+        "샌드박스 코드는 guest VM 커널 위에서 돕니다. 호스트와 커널이 다릅니다."], link: "#defense", runtime: "kata-qemu" },
+    cpu: { t1: "CPU 풀 3종", t2: "gVisor, Kata CLH, Kata QEMU", title: "CPU 풀",
+      items: ["GPU 없이 같은 API를 제공하는 풀입니다. CPU 시나리오와 개발에 씁니다.",
+        "세 런타임을 같은 c8i.2xlarge 노드에서 비교했습니다. Kata는 nested virtualization을 씁니다."], link: "#bench" },
+    imds: { t1: "인스턴스 메타데이터", t2: "169.254.169.254", title: "인스턴스 메타데이터 (IMDS)" },
+    k8sapi: { t1: "Kubernetes API", t2: "cluster 서비스 IP", title: "Kubernetes API" },
+    kubelet: { t1: "노드 kubelet", t2: "포트 10250", title: "노드 kubelet" },
+    internet: { t1: "인터넷", t2: "S3 endpoint 등", title: "인터넷" },
+    blockedItems: ["sandbox namespace는 default-deny NetworkPolicy로 시작합니다. DNS, IMDS, 인터넷, Kubernetes API가 모두 막혀요.",
+      "verify.sh가 샌드박스 안에서 직접 연결을 시도하고, 연결이 되지 않는 것(TimeoutError)을 확인합니다."],
+    measured: "측정: {inst}, {gpu}, pod {pods}개, eval p50 {p50}초",
+    kernelLine: "샌드박스 안 커널 {k}, 노드 커널 {n}",
+    flow: [
+      "1. 모델이 프롬프트마다 커널 코드를 여러 개 생성합니다 (GRPO group).",
+      "2. completion이 reward 함수로 넘어갑니다.",
+      "3. 라우팅 표에서 지금 활성인 런타임과 버전을 읽습니다.",
+      "4. ServiceAccount 토큰과 함께 샌드박스 풀에 채점을 요청합니다.",
+      "5. 샌드박스 안에서 정책 검사, 실행, 정확성 비교, 벤치마크를 합니다. 밖으로 나가는 연결은 모두 막힙니다.",
+      "6. verdict가 돌아오면 reward를 계산합니다.",
+      "7. group 안에서 reward를 비교해 정책을 업데이트하고, 다음 step으로 갑니다.",
+    ],
+  },
+  en: {
+    trainer: { t1: "GRPO trainer", t2: "vLLM generation + TRL, GPU node", title: "GRPO trainer",
+      items: ["vLLM generates several completions per prompt; TRL GRPO trains on them.",
+        "The default model is Qwen2.5-Coder-1.5B-Instruct on a g5.2xlarge (one A10G).",
+        "Only rl-trainer pods labelled gpusandbox/client can call the sandbox API."], link: "#train" },
+    reward: { t1: "Reward function", t2: "verdict to reward (score_verdict)", title: "Reward function",
+      items: ["Sends every completion to a sandbox and turns the returned verdict into a reward.",
+        "Weights: format 0.1, correctness 1.0, speedup 0.5.",
+        "Infrastructure errors (sandbox_error) get no reward and leave the group baseline."], link: "#try" },
+    routing: { t1: "Routing table (ConfigMap)", t2: "active runtime and version", title: "Routing table",
+      items: ["A ConfigMap mounted in the trainer pod that names the runtime and version to score with.",
+        "Versions switch only at reward batch boundaries, so no batch mixes two versions.",
+        "A new version takes traffic only after it passes golden parity."], link: "#train" },
+    gvisor: { t1: "gVisor pool (GPU)", t2: "runsc + nvproxy", title: "gVisor pool",
+      items: ["runsc handles system calls in a user-space kernel, so the container never touches the host kernel directly.",
+        "nvproxy filters GPU driver ioctls and forwards them to the host driver."], link: "#defense", runtime: "gvisor" },
+    kata: { t1: "Kata QEMU pool (GPU)", t2: "a micro VM per pod + VFIO", title: "Kata QEMU pool",
+      items: ["Starts a lightweight VM per pod and hands the whole GPU to the VM with VFIO passthrough.",
+        "Sandbox code runs on the guest VM kernel, which is not the host kernel."], link: "#defense", runtime: "kata-qemu" },
+    cpu: { t1: "Three CPU pools", t2: "gVisor, Kata CLH, Kata QEMU", title: "CPU pools",
+      items: ["Pools that serve the same API without a GPU, for the CPU scenario and development.",
+        "The three runtimes were compared on the same c8i.2xlarge node; Kata uses nested virtualization."], link: "#bench" },
+    imds: { t1: "Instance metadata", t2: "169.254.169.254", title: "Instance metadata (IMDS)" },
+    k8sapi: { t1: "Kubernetes API", t2: "cluster service IP", title: "Kubernetes API" },
+    kubelet: { t1: "Node kubelet", t2: "port 10250", title: "Node kubelet" },
+    internet: { t1: "Internet", t2: "S3 endpoints and more", title: "Internet" },
+    blockedItems: ["The sandbox namespace starts from a default-deny NetworkPolicy: no DNS, IMDS, internet or Kubernetes API.",
+      "verify.sh tries each connection from inside a sandbox and checks that it fails (TimeoutError)."],
+    measured: "Measured: {inst}, {gpu}, {pods} pod(s), eval p50 {p50} s",
+    kernelLine: "Kernel inside the sandbox {k}, node kernel {n}",
+    flow: [
+      "1. The model writes several kernel candidates per prompt (a GRPO group).",
+      "2. The completions go to the reward function.",
+      "3. It reads the active runtime and version from the routing table.",
+      "4. It asks a sandbox pool to score, with a ServiceAccount token.",
+      "5. Inside the sandbox: policy check, run, correctness, benchmark. Every outbound connection is blocked.",
+      "6. The verdict comes back and becomes a reward.",
+      "7. Rewards are compared within the group, the policy is updated, and the next step starts.",
+    ],
+  },
+};
+
+// Attempts shown in the defense section. `match` finds the evidence line in a verify transcript.
+const ATTACKS = [
+  { id: "imds", match: /instance metadata/, ko: ["인스턴스 메타데이터 접근", "IAM 자격 증명을 노리는 경로", "NetworkPolicy default deny"], en: ["Instance metadata", "the path to IAM credentials", "NetworkPolicy default deny"] },
+  { id: "k8sapi", match: /kubernetes api/, ko: ["Kubernetes API 접근", "클러스터 조작을 노리는 경로", "NetworkPolicy default deny"], en: ["Kubernetes API", "the path to the cluster", "NetworkPolicy default deny"] },
+  { id: "kubelet", match: /node kubelet/, ko: ["노드 kubelet 접근", "노드의 다른 pod를 노리는 경로", "NetworkPolicy default deny"], en: ["Node kubelet", "the path to other pods on the node", "NetworkPolicy default deny"] },
+  { id: "internet", match: /internet/, ko: ["인터넷 연결", "데이터 유출, 정답 내려받기", "NetworkPolicy default deny"], en: ["Internet", "exfiltration, downloading answers", "NetworkPolicy default deny"] },
+  { id: "ns", match: /connect from default ns/, ko: ["다른 namespace에서 샌드박스 호출", "trainer가 아닌 pod의 접근", "NetworkPolicy ingress 허용 목록"], en: ["Calling a sandbox from another namespace", "access from a pod that is not the trainer", "NetworkPolicy ingress allow list"] },
+  { id: "kernel", match: /^\s+sandbox:/, ko: ["호스트 커널 직접 사용", "커널 취약점으로 탈출", "gVisor 사용자 공간 커널, Kata guest VM"], en: ["Using the host kernel", "escaping through a kernel bug", "gVisor user-space kernel, Kata guest VM"] },
+  { id: "hostfile", match: /read_host_file/, ko: ["호스트 파일 읽기", "파일 시스템 탐색", "정적 정책 검사 (open 금지)"], en: ["Reading a host file", "exploring the file system", "static policy check (no open)"] },
+  { id: "cheat", match: /relu_bias_benchmark_cheat/, ko: ["벤치마크 구간에서만 가짜 출력", "speedup reward 부풀리기", "timed 출력 checksum 재검증"], en: ["Fake output during the benchmark", "inflating the speedup reward", "timed-output checksum re-check"] },
+];
+
+const TRANSCRIPTS = {
+  "verify-gvisor": { ko: ["verify.sh gvisor", "커널 비교, egress 4곳, golden 6개, 다른 namespace 접속을 차례로 확인합니다 (gVisor, A10G)."],
+    en: ["verify.sh gvisor", "Kernel comparison, four egress targets, six goldens and a connection from another namespace (gVisor, A10G)."] },
+  "verify-kata-qemu": { ko: ["verify.sh kata-qemu", "같은 검증을 Kata QEMU GPU 풀(T4, pod 4개)에서 실행했습니다."],
+    en: ["verify.sh kata-qemu", "The same checks on the Kata QEMU GPU pool (T4, four pods)."] },
+  "smoke-gvisor": { ko: ["gVisor GPU 스모크 테스트", "gVisor RuntimeClass를 만들고 gVisor 안에서 CUDA가 A10G를 보는지 확인합니다. 'Starting gVisor...'는 gVisor 자체 커널이 낸 메시지예요."],
+    en: ["gVisor GPU smoke test", "Creates the gVisor RuntimeClass and checks that CUDA inside gVisor sees the A10G. 'Starting gVisor...' comes from gVisor's own kernel."] },
+  rollout: { ko: ["rollout.sh v1 → v2", "새 버전 풀을 띄우고 검증한 뒤, golden parity를 확인하고 라우팅 표를 바꿉니다 (CPU 풀)."],
+    en: ["rollout.sh v1 → v2", "Starts the new version's pool, verifies it, checks golden parity and switches the routing table (CPU pool)."] },
+};
+
+const STATUS_COLORS = {
+  ok: "#1a7f37", wrong_answer: "#e8912d", compile_error: "#7b4fd6", runtime_error: "#cf222e",
+  timeout: "#8d99a6", policy_violation: "#24292f", sandbox_error: "#9a6700",
+};
+const STAGES = ["stAuth", "stPolicy", "stRun", "stCorrect", "stBench", "stReward"];
+
 let lang = "ko";
 let recording = null;
+let extras = null;
+const ui = {
+  golden: null, runToken: 0, archSel: "trainer", flowToken: 0,
+  term: { id: null, shown: 0, timer: null, playing: false, highlight: -1 },
+  grpoStep: 1, grpoTimer: null, benchMetric: "p50", benchPass: "pass2",
+};
 
+// ---------- helpers ----------
 function t(key) {
   return TEXT[lang][key] ?? key;
+}
+
+function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (_, k) => String(values[k] ?? ""));
 }
 
 function el(tag, attrs = {}, ...children) {
@@ -69,129 +334,848 @@ function el(tag, attrs = {}, ...children) {
     if (k === "class") node.className = v;
     else node.setAttribute(k, v);
   }
-  for (const child of children) {
-    node.append(child instanceof Node ? child : document.createTextNode(String(child ?? "")));
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+function sv(tag, attrs = {}, ...children) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  for (const child of children.flat()) {
+    if (child === null || child === undefined) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
   }
   return node;
 }
 
 function row(label, value) {
-  return el("div", { class: "kv" }, el("span", { class: "k" }, label), el("span", { class: "v" }, value));
-}
-
-function statusChip(status) {
-  const good = status === "ok";
-  const infra = status === "sandbox_error";
-  return el("span", { class: `chip ${good ? "good" : infra ? "infra" : "bad"}` }, status);
-}
-
-function renderStatic() {
-  document.documentElement.lang = lang;
-  for (const node of document.querySelectorAll("[data-i18n]")) {
-    node.textContent = t(node.dataset.i18n);
-  }
-  document.getElementById("lang").textContent = lang === "ko" ? "EN" : "KO";
-}
-
-function renderPools() {
-  const box = document.getElementById("pools");
-  box.replaceChildren();
-  for (const pool of recording.pools) {
-    const info = pool.info || {};
-    box.append(el("div", { class: "card" },
-      el("h3", {}, pool.runtime),
-      row(t("version"), info.sandbox_version),
-      row(t("kernel"), info.kernel_release),
-      row(t("gpu"), info.gpu || t("none")),
-      row(t("egress"), info.egress_blocked ? t("yes") : t("no")),
-    ));
-  }
-}
-
-function renderGoldenPicker() {
-  const select = document.getElementById("golden");
-  const current = select.value;
-  select.replaceChildren();
-  for (const g of recording.goldens) {
-    select.append(el("option", { value: g.name }, `${g.name} (${g.task_id})`));
-  }
-  if (current) select.value = current;
+  return el("div", { class: "kv" }, el("span", { class: "k" }, label), el("span", { class: "v" }, value ?? ""));
 }
 
 function fmt(value, digits = 3) {
   return typeof value === "number" ? value.toFixed(digits) : value ?? "";
 }
 
-function renderGolden() {
-  const name = document.getElementById("golden").value;
+function median(values) {
+  const v = values.filter((x) => typeof x === "number").sort((a, b) => a - b);
+  if (!v.length) return null;
+  const m = Math.floor(v.length / 2);
+  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+}
+
+function statusChip(status) {
+  const cls = status === "ok" ? "good" : status === "sandbox_error" ? "infra" : "bad";
+  return el("span", { class: `chip ${cls}` }, status);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function transcript(id) {
+  return (extras?.transcripts || []).find((x) => x.id === id) || null;
+}
+
+function benchRows(label) {
+  return extras?.bench?.passes?.find((p) => p.label === label)?.rows || [];
+}
+
+function benchRow(runtime) {
+  return benchRows("pass2").find((r) => r.runtime === runtime) || null;
+}
+
+function nodeKernel(runtime) {
+  const tr = transcript(`verify-${runtime}`);
+  const line = tr?.lines.find((l) => /^\s+node:\s+/.test(l.text));
+  return line ? line.text.replace(/^\s+node:\s+/, "").trim() : null;
+}
+
+// ---------- static text and hero ----------
+function renderStatic() {
+  document.documentElement.lang = lang;
+  for (const node of document.querySelectorAll("[data-i18n]")) node.textContent = t(node.dataset.i18n);
+  document.getElementById("lang").textContent = lang === "ko" ? "EN" : "KO";
+  document.getElementById("source").textContent = `${recording.source} (${recording.recorded_at})`;
+  const video = document.getElementById("tour");
+  if (video.paused) {
+    video.poster = `media/tour-${lang}.jpg`;
+    video.src = `media/tour-${lang}.mp4`;
+  }
+}
+
+function renderKpis() {
+  const pools = recording.pools;
+  const gpuPools = pools.filter((p) => p.info?.gpu).length;
+  let match = 0;
+  let total = 0;
+  for (const p of pools) {
+    for (const v of Object.values(p.results)) {
+      total += 1;
+      if (v.status === v.expected_status) match += 1;
+    }
+  }
+  let blocked = 0;
+  for (const tr of extras?.transcripts || []) {
+    if (!tr.id.startsWith("verify-")) continue;
+    blocked += tr.lines.filter((l) => /\bblocked\b/.test(l.text)).length;
+  }
+  const rows = benchRows("pass2");
+  const ok = rows.reduce((s, r) => s + (r.ok || 0), 0);
+  const req = rows.reduce((s, r) => s + (r.requests || 0), 0);
+  const tiles = gpuPools ? [[String(gpuPools), t("kpiGpu")]] : [];
+  tiles.push([`${match}/${total}`, t("kpiGolden")]);
+  if (blocked) tiles.push([`${blocked}/${blocked}`, t("kpiBlocked")]);
+  if (req) tiles.push([`${ok}/${req}`, t("kpiBench")]);
+  document.getElementById("kpis").replaceChildren(
+    ...tiles.map(([v, k]) => el("div", { class: "kpi" }, el("div", { class: "v" }, v), el("div", { class: "k" }, k))),
+  );
+}
+
+// ---------- 1. architecture ----------
+function archText(id) {
+  return ARCH[lang][id];
+}
+
+function renderArch() {
+  const svgEl = document.getElementById("arch-svg");
+  const keep = svgEl.querySelector("title");
+  keep.textContent = t("sArch");
+  svgEl.replaceChildren(keep);
+  const zones = [
+    { x: 20, y: 30, w: 300, h: 380, label: t("zoneTrainer") },
+    { x: 360, y: 30, w: 400, h: 380, label: t("zoneSandbox") },
+    { x: 800, y: 30, w: 185, h: 380, label: t("zoneOut") },
+  ];
+  for (const z of zones) {
+    svgEl.append(sv("rect", { class: "arch-zone", x: z.x, y: z.y, width: z.w, height: z.h, rx: 14 }));
+    svgEl.append(sv("text", { class: "arch-zone-label", x: z.x + 14, y: z.y + 22 }, z.label));
+  }
+  const edges = sv("g", {});
+  const byId = Object.fromEntries(ARCH.nodes.map((n) => [n.id, n]));
+  const line = (x1, y1, x2, y2, cls = "arch-edge") => edges.append(sv("line", { class: cls, x1, y1, x2, y2 }));
+  line(170, 148, 170, 198);
+  line(170, 318, 170, 268);
+  for (const id of ["gvisor", "kata", "cpu"]) {
+    const n = byId[id];
+    line(300, 233, n.x, n.y + n.h / 2);
+  }
+  svgEl.append(edges);
+  svgEl.append(sv("text", { class: "arch-zone-label", x: 400, y: 179 }, "POST /v1/evaluate"));
+  for (const id of ["imds", "k8sapi", "kubelet", "internet"]) {
+    const n = byId[id];
+    const y = n.y + n.h / 2;
+    svgEl.append(sv("line", { class: "arch-edge deny", x1: 722, y1: y, x2: n.x, y2: y }));
+    svgEl.append(sv("line", { class: "arch-x", x1: 762, y1: y - 9, x2: 780, y2: y + 9 }));
+    svgEl.append(sv("line", { class: "arch-x", x1: 762, y1: y + 9, x2: 780, y2: y - 9 }));
+  }
+  for (const n of ARCH.nodes) {
+    const tx = archText(n.id);
+    const g = sv("g", { class: `arch-node${n.blocked ? " blocked" : ""}`, tabindex: 0, role: "button", "data-id": n.id,
+      "aria-label": tx.title });
+    g.append(sv("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 10 }));
+    g.append(sv("text", { class: "t1", x: n.x + 14, y: n.y + 28 }, tx.t1));
+    g.append(sv("text", { class: "t2", x: n.x + 14, y: n.y + 50 }, tx.t2));
+    g.addEventListener("click", () => selectArch(n.id));
+    g.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectArch(n.id); }
+    });
+    svgEl.append(g);
+  }
+  svgEl.append(sv("circle", { id: "arch-dot", class: "arch-dot", r: 9, cx: -50, cy: -50 }));
+  selectArch(ui.archSel);
+}
+
+function selectArch(id) {
+  ui.archSel = id;
+  for (const g of document.querySelectorAll(".arch-node")) g.classList.toggle("active", g.dataset.id === id);
+  const node = ARCH.nodes.find((n) => n.id === id);
+  const tx = archText(id);
+  const items = [...(node.blocked ? ARCH[lang].blockedItems : tx.items)];
+  if (tx.runtime) {
+    const pool = recording.pools.find((p) => p.info?.runtime === tx.runtime);
+    const nk = nodeKernel(tx.runtime);
+    if (pool?.info?.kernel_release && nk) items.push(fill(ARCH[lang].kernelLine, { k: pool.info.kernel_release, n: nk }));
+    const b = benchRow(tx.runtime);
+    if (b) items.push(fill(ARCH[lang].measured, { inst: b.instance, gpu: b.gpu, pods: b.cold_start_s.length, p50: b.eval_p50_s }));
+  }
+  const link = tx.link || (node.blocked ? "#defense" : null);
+  document.getElementById("arch-detail").replaceChildren(
+    el("h3", {}, tx.title),
+    el("ul", {}, items.map((s) => el("li", {}, s))),
+    link ? el("a", { href: link }, `${t("evidence")} →`) : null,
+  );
+}
+
+async function playFlow() {
+  const button = document.getElementById("flow-play");
+  if (ui.flowToken) {
+    ui.flowToken = 0;
+    return;
+  }
+  const token = Date.now();
+  ui.flowToken = token;
+  button.textContent = t("flowStop");
+  const caption = document.getElementById("flow-caption");
+  const dot = document.getElementById("arch-dot");
+  const C = (id) => {
+    const n = ARCH.nodes.find((x) => x.id === id);
+    return [n.x + n.w / 2, n.y + n.h / 2];
+  };
+  const steps = [
+    { light: ["trainer"], path: null },
+    { light: ["reward"], path: [C("trainer"), C("reward")] },
+    { light: ["routing", "reward"], path: [C("routing"), C("reward")] },
+    { light: ["gvisor"], path: [C("reward"), C("gvisor")] },
+    { light: ["gvisor", "imds", "k8sapi", "kubelet", "internet"], path: null },
+    { light: ["reward"], path: [C("gvisor"), C("reward")] },
+    { light: ["trainer"], path: [C("reward"), C("trainer")] },
+  ];
+  const lit = (ids) => {
+    for (const g of document.querySelectorAll(".arch-node")) g.classList.toggle("lit", ids.includes(g.dataset.id));
+  };
+  try {
+    for (let i = 0; i < steps.length; i += 1) {
+      if (ui.flowToken !== token) break;
+      caption.textContent = ARCH[lang].flow[i];
+      const s = steps[i];
+      if (s.path && !REDUCED) await moveDot(dot, s.path[0], s.path[1], 900, token);
+      lit(s.light);
+      if (s.path && REDUCED) dot.setAttribute("cx", s.path[1][0]);
+      await sleep(1700);
+    }
+  } finally {
+    if (ui.flowToken === token) ui.flowToken = 0;
+    lit([]);
+    dot.setAttribute("cx", -50);
+    dot.setAttribute("cy", -50);
+    button.textContent = t("flowPlay");
+    if (!ui.flowToken) caption.textContent = "";
+  }
+}
+
+function moveDot(dot, from, to, ms, token) {
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const frame = (now) => {
+      const p = Math.min(1, (now - start) / ms);
+      const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      dot.setAttribute("cx", from[0] + (to[0] - from[0]) * e);
+      dot.setAttribute("cy", from[1] + (to[1] - from[1]) * e);
+      if (p < 1 && ui.flowToken === token) requestAnimationFrame(frame);
+      else resolve();
+    };
+    requestAnimationFrame(frame);
+  });
+}
+
+// ---------- 2. try a submission ----------
+function subText(name) {
+  return SUBS[name]?.[lang] || { n: name, d: "", s: "" };
+}
+
+function renderSubmissions() {
+  if (!ui.golden || !recording.goldens.some((g) => g.name === ui.golden)) ui.golden = recording.goldens[0].name;
+  const box = document.getElementById("submissions");
+  box.replaceChildren(...recording.goldens.map((g) => {
+    const tx = subText(g.name);
+    const b = el("button", { type: "button", class: "sub", role: "radio", "aria-checked": String(g.name === ui.golden), "data-name": g.name },
+      el("span", { class: "n" }, tx.n), el("span", { class: "d" }, tx.d || g.expect_status));
+    b.addEventListener("click", () => selectGolden(g.name));
+    return b;
+  }));
+  selectGolden(ui.golden);
+}
+
+function selectGolden(name) {
+  ui.golden = name;
+  ui.runToken += 1;
+  for (const b of document.querySelectorAll(".sub")) b.setAttribute("aria-checked", String(b.dataset.name === name));
   const golden = recording.goldens.find((g) => g.name === name);
-  if (!golden) return;
   const task = recording.tasks[golden.task_id];
+  const tx = subText(name);
+  document.getElementById("sub-title").textContent = tx.n;
+  const tag = document.getElementById("sub-tag");
+  tag.textContent = `${t("expected")}: ${golden.expect_status}`;
+  tag.className = `tag ${golden.expect_status === "ok" ? "good" : "bad"}`;
+  document.getElementById("sub-story").textContent = tx.s;
   document.getElementById("task-desc").textContent = `${golden.task_id}: ${task.description} (${task.input_spec})`;
   document.getElementById("reference").textContent = task.reference;
   document.getElementById("candidate").textContent = golden.code;
+  renderLanes(false);
+}
 
-  const box = document.getElementById("verdicts");
-  box.replaceChildren();
-  for (const pool of recording.pools) {
-    const v = pool.results[name];
-    if (!v) continue;
-    const r = v.reward || {};
-    const rewardText = r.total === null || r.total === undefined
-      ? t("excluded")
-      : `${fmt(r.format, 2)}, ${fmt(r.correctness, 2)}, ${fmt(r.speedup, 2)} = ${fmt(r.total, 2)}`;
-    const card = el("div", { class: "card" },
-      el("h3", {}, pool.runtime, " ", statusChip(v.status)),
-      row(t("expected"), v.expected_status),
-      row(t("speedup"), fmt(v.speedup, 3)),
-      row(t("ms"), v.ref_ms ? `${fmt(v.ref_ms, 4)} / ${fmt(v.cand_ms, 4)}` : ""),
-      row(t("custom"), String(Boolean(v.custom_kernel))),
-      row(t("flags"), (v.flags || []).join(", ")),
-      row(t("violations"), (v.violations || []).join("; ")),
-      row(t("reward"), rewardText),
-    );
-    if (v.error) card.append(el("pre", { class: "code small" }, v.error));
-    box.append(card);
+function failStage(v) {
+  switch (v.status) {
+    case "ok": return -1;
+    case "policy_violation": return 1;
+    case "compile_error": case "runtime_error": case "timeout": case "sandbox_error": return 2;
+    case "wrong_answer": return (v.flags || []).includes("timed_output_mismatch") ? 4 : 3;
+    default: return 2;
   }
 }
 
-function renderTimeline() {
-  const list = document.getElementById("timeline");
-  list.replaceChildren();
-  if (!recording.training.length) {
-    list.append(el("li", {}, t("noTraining")));
+function whyText(v) {
+  if (v.status === "ok") return t(v.custom_kernel ? "why_ok_custom" : "why_ok_plain");
+  if (v.status === "policy_violation") return t("why_policy");
+  if (v.status === "wrong_answer") return t((v.flags || []).includes("timed_output_mismatch") ? "why_cheat" : "why_wrong");
+  if (v.status === "sandbox_error") return t("why_infra");
+  return t("why_runtime");
+}
+
+function laneSkeleton(pool) {
+  const stages = el("ol", { class: "stages" },
+    STAGES.map((k) => el("li", {}, el("span", { class: "mark" }, "○"), el("span", {}, t(k)))));
+  return {
+    root: el("div", { class: "lane" },
+      el("div", { class: "lane-head" },
+        el("span", { class: "rt" }, pool.runtime, " ", el("span", { class: "muted small" }, pool.info?.gpu || "")),
+        el("span", { class: "clock" }, t("idle"))),
+      el("div", { class: "bar" }, el("div", {})),
+      stages,
+      el("div", { class: "result" })),
+    stages,
+  };
+}
+
+function renderLanes(run) {
+  const token = ui.runToken;
+  const box = document.getElementById("lanes");
+  const lanes = recording.pools.filter((p) => p.results[ui.golden]).map((pool) => ({ pool, ...laneSkeleton(pool) }));
+  box.replaceChildren(...lanes.map((l) => l.root));
+  if (!run) return Promise.resolve();
+  const speed = Number(document.getElementById("speed").value);
+  return Promise.all(lanes.map((l) => runLane(l, l.pool.results[ui.golden], speed, token)));
+}
+
+async function runLane(lane, v, speed, token) {
+  const clock = lane.root.querySelector(".clock");
+  const bar = lane.root.querySelector(".bar");
+  const fillBar = bar.firstChild;
+  const total = Number(v.duration_s) || 0;
+  const marks = [...lane.stages.children];
+  if (speed > 0 && total > 0) {
+    marks[0].className = "run";
+    const start = performance.now();
+    while (ui.runToken === token) {
+      const elapsed = ((performance.now() - start) / 1000) * speed;
+      const p = Math.min(1, elapsed / total);
+      fillBar.style.width = `${(p * 100).toFixed(1)}%`;
+      clock.textContent = `${t("evaluating")} ${Math.min(elapsed, total).toFixed(1)}${t("sec")} / ${total.toFixed(1)}${t("sec")}`;
+      if (p >= 1) break;
+      await sleep(80);
+    }
+  }
+  if (ui.runToken !== token) return;
+  fillBar.style.width = "100%";
+  clock.textContent = `${total.toFixed(2)}${t("sec")}`;
+  const failAt = failStage(v);
+  bar.classList.add(failAt === -1 ? "done-good" : "done-bad");
+  for (let i = 0; i < marks.length; i += 1) {
+    const mark = marks[i].firstChild;
+    if (failAt === -1 || i < failAt) { marks[i].className = "pass"; mark.textContent = "✓"; }
+    else if (i === failAt) { marks[i].className = "fail"; mark.textContent = "✕"; }
+    else if (i === marks.length - 1 && v.status !== "sandbox_error") { marks[i].className = "pass"; mark.textContent = "✓"; }
+    else { marks[i].className = "skip"; mark.textContent = "-"; }
+    if (speed > 0) await sleep(110);
+    if (ui.runToken !== token) return;
+  }
+  lane.root.querySelector(".result").replaceChildren(...laneResult(v));
+}
+
+function laneResult(v) {
+  const r = v.reward || {};
+  const out = [el("div", { class: "lane-head" }, statusChip(v.status),
+    el("span", { class: "muted small" }, `${t("expected")}: ${v.expected_status}`))];
+  if (r.total === null || r.total === undefined) {
+    out.push(el("p", { class: "why" }, t("excluded")));
+    return out;
+  }
+  const part = (x, w) => (Number(x) || 0) * w;
+  const f = part(r.format, WEIGHTS.format);
+  const c = part(r.correctness, WEIGHTS.correctness);
+  const s = part(r.speedup, WEIGHTS.speedup);
+  const pct = (x) => `${((x / MAX_REWARD) * 100).toFixed(1)}%`;
+  const rbar = el("div", { class: "rbar", role: "img", "aria-label": `${t("rewardTotal")} ${fmt(r.total, 2)}` },
+    el("div", { class: "f" }), el("div", { class: "c" }), el("div", { class: "s" }));
+  rbar.children[0].style.width = pct(f);
+  rbar.children[1].style.width = pct(c);
+  rbar.children[2].style.width = pct(s);
+  out.push(el("div", { class: "reward" },
+    row(t("rewardTotal"), `${fmt(r.total, 3)} (${t("rewardMax")} ${MAX_REWARD.toFixed(2)})`),
+    rbar,
+    el("div", { class: "rlegend" },
+      el("span", {}, el("span", { class: "sw f-sw" }), `${t("rFormat")} = ${fmt(f, 2)}`),
+      el("span", {}, el("span", { class: "sw c-sw" }), `${t("rCorrect")} = ${fmt(c, 2)}`),
+      el("span", {}, el("span", { class: "sw s-sw" }), `${t("rSpeed")} = ${fmt(s, 2)}`))));
+  for (const sw of out[1].querySelectorAll(".sw")) {
+    sw.style.background = sw.classList.contains("f-sw") ? "#8d99a6" : sw.classList.contains("c-sw") ? "var(--good)" : "var(--accent)";
+  }
+  if (v.speedup) out.push(row(t("speedupL"), `${fmt(v.speedup, 3)}x`));
+  if (v.ref_ms) out.push(row(t("msL"), `${fmt(v.ref_ms, 4)} / ${fmt(v.cand_ms, 4)}`));
+  if ((v.violations || []).length) out.push(row(t("violationsL"), v.violations.join("; ")));
+  if ((v.flags || []).length) out.push(row(t("flagsL"), v.flags.join(", ")));
+  out.push(el("p", { class: "why" }, whyText(v)));
+  return out;
+}
+
+async function runScoring() {
+  const button = document.getElementById("run");
+  ui.runToken += 1;
+  button.disabled = true;
+  button.textContent = t("running");
+  try {
+    await renderLanes(true);
+  } finally {
+    button.disabled = false;
+    button.textContent = t("run");
+  }
+}
+
+// ---------- 3. defense ----------
+function renderPools() {
+  const box = document.getElementById("pools");
+  box.replaceChildren(...recording.pools.map((pool) => {
+    const info = pool.info || {};
+    return el("div", { class: "card" },
+      el("h4", {}, pool.runtime),
+      row(t("version"), info.sandbox_version),
+      row(t("kernel"), info.kernel_release),
+      nodeKernel(info.runtime) ? row(t("nodeKernel"), nodeKernel(info.runtime)) : null,
+      row(t("gpu"), info.gpu || t("none")),
+      row(t("egress"), info.egress_blocked ? t("yes") : t("no")));
+  }));
+}
+
+function attackResult(attack, runtime) {
+  const tr = transcript(`verify-${runtime}`);
+  const line = tr?.lines.find((l) => attack.match.test(l.text));
+  if (!line) return null;
+  if (/blocked/.test(line.text)) return "blocked";
+  if (/^PASS/.test(line.text)) return line.text.match(/status=(\S+)/)?.[1] || "PASS";
+  if (attack.id === "kernel") return line.text.replace(/^\s+sandbox:\s+/, "").trim();
+  return null;
+}
+
+function renderAttacks() {
+  const box = document.getElementById("attacks");
+  const runtimes = (extras?.transcripts || []).filter((x) => x.id.startsWith("verify-")).map((x) => x.id.slice(7));
+  if (!runtimes.length) {
+    box.replaceChildren(el("p", { class: "muted" }, t("noData")));
     return;
   }
-  for (const e of recording.training) {
-    if (e.event === "sandbox_version_switch") {
-      list.append(el("li", { class: "switch" }, `${t("switchTo")}: ${e.from} → ${e.to} (${t("step")} ${e.global_step})`));
-      continue;
+  box.replaceChildren(...ATTACKS.map((a) => {
+    const [title, aim, layer] = a[lang];
+    const results = runtimes.map((rt) => [rt, attackResult(a, rt)]).filter(([, r]) => r);
+    const b = el("button", { type: "button", class: "attack", "data-id": a.id },
+      el("span", { class: "a" }, title),
+      el("span", { class: "l" }, aim),
+      el("span", { class: "r" }, results.map(([rt, r]) => el("span", {},
+        el("span", { class: "chip good" }, r), `${rt}  `))),
+      el("span", { class: "l" }, `→ ${layer}`));
+    b.addEventListener("click", () => {
+      for (const x of document.querySelectorAll(".attack")) x.classList.toggle("active", x === b);
+      const id = ui.term.id?.startsWith("verify-") ? ui.term.id : `verify-${runtimes[0]}`;
+      seekTerm(id, a.match);
+    });
+    return b;
+  }));
+}
+
+function renderTermTabs() {
+  const ids = (extras?.transcripts || []).map((x) => x.id);
+  const box = document.getElementById("term-tabs");
+  box.replaceChildren(...ids.map((id) => {
+    const title = TRANSCRIPTS[id]?.[lang]?.[0] || id;
+    const b = el("button", { type: "button", class: "tab", role: "tab", "aria-selected": String(id === ui.term.id), "data-id": id }, title);
+    b.addEventListener("click", () => { selectTerm(id); playTerm(); });
+    return b;
+  }));
+  if (!ids.length) {
+    document.querySelector(".term-box").hidden = true;
+    return;
+  }
+  if (!ui.term.id) ui.term.id = ids[0];
+  selectTerm(ui.term.id, true);
+}
+
+function lineNode(text, index) {
+  const cls = ["ln"];
+  if (text.startsWith("$ ")) cls.push("cmd");
+  if (/^PASS\b|\bverified\b|\bblocked\b|cuda ok|successfully rolled out|"passed": true/.test(text)) cls.push("ok");
+  if (index === ui.term.highlight) cls.push("hl");
+  const m = text.match(/^(\[\d{2}:\d{2}:\d{2}\])(.*)$/);
+  if (m) return el("span", { class: cls.join(" ") }, el("span", { class: "ts" }, m[1]), m[2], "\n");
+  return el("span", { class: cls.join(" ") }, text, "\n");
+}
+
+function renderTerm() {
+  const tr = transcript(ui.term.id);
+  const pre = document.getElementById("term");
+  if (!tr) { pre.replaceChildren(); return; }
+  pre.replaceChildren(...tr.lines.slice(0, ui.term.shown).map((l, i) => lineNode(l.text, i)));
+  document.getElementById("term-progress").style.width = `${((ui.term.shown / tr.lines.length) * 100).toFixed(1)}%`;
+  document.getElementById("term-play").textContent = ui.term.playing ? t("termPause") : t("termPlay");
+}
+
+function selectTerm(id, keep = false) {
+  stopTerm();
+  if (!keep || ui.term.id !== id) {
+    ui.term.shown = 0;
+    ui.term.highlight = -1;
+  }
+  ui.term.id = id;
+  for (const b of document.querySelectorAll("#term-tabs .tab")) b.setAttribute("aria-selected", String(b.dataset.id === id));
+  document.getElementById("term-desc").textContent = TRANSCRIPTS[id]?.[lang]?.[1] || "";
+  renderTerm();
+}
+
+function stopTerm() {
+  if (ui.term.timer) clearTimeout(ui.term.timer);
+  ui.term.timer = null;
+  ui.term.playing = false;
+}
+
+function playTerm() {
+  const tr = transcript(ui.term.id);
+  if (!tr) return;
+  if (ui.term.playing) { stopTerm(); renderTerm(); return; }
+  if (ui.term.shown >= tr.lines.length) { ui.term.shown = 0; ui.term.highlight = -1; }
+  ui.term.playing = true;
+  const pre = document.getElementById("term");
+  const tick = () => {
+    if (!ui.term.playing) return;
+    ui.term.shown += 1;
+    renderTerm();
+    pre.scrollTop = pre.scrollHeight;
+    if (ui.term.shown >= tr.lines.length) { stopTerm(); renderTerm(); return; }
+    const gap = tr.lines[ui.term.shown].t - tr.lines[ui.term.shown - 1].t;
+    // Real gaps are compressed (at most 1.2 s per line) so a two-minute run plays in seconds.
+    const delay = REDUCED ? 0 : Math.max(60, Math.min(1200, gap * 250));
+    ui.term.timer = setTimeout(tick, delay);
+  };
+  renderTerm();
+  tick();
+}
+
+function showAllTerm() {
+  const tr = transcript(ui.term.id);
+  if (!tr) return;
+  stopTerm();
+  ui.term.shown = tr.lines.length;
+  renderTerm();
+}
+
+function seekTerm(id, pattern) {
+  if (ui.term.id !== id) selectTerm(id);
+  const tr = transcript(id);
+  if (!tr) return;
+  stopTerm();
+  const index = tr.lines.findIndex((l) => pattern.test(l.text));
+  ui.term.highlight = index;
+  ui.term.shown = tr.lines.length;
+  renderTerm();
+  const pre = document.getElementById("term");
+  const target = pre.children[index];
+  if (target) pre.scrollTop = Math.max(0, target.offsetTop - pre.offsetTop - 120);
+  document.querySelector(".term-box").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "nearest" });
+}
+
+// ---------- 4. training ----------
+function renderGrpo() {
+  const tr = extras?.training;
+  const svgEl = document.getElementById("grpo-chart");
+  const panel = svgEl.closest(".panel");
+  if (!tr?.batches?.length) {
+    panel.replaceChildren(el("h3", {}, t("grpoTitle")), el("p", { class: "muted" }, t("noData")));
+    return;
+  }
+  document.getElementById("grpo-source").textContent = `${tr.source}${tr.model ? `, ${t("model")} ${tr.model}` : ""}`;
+  const batches = tr.batches;
+  const steps = tr.steps || [];
+  const W = 900, H = 300, L = 46, R = 56, T = 30, B = 40;
+  const pw = W - L - R, ph = H - T - B;
+  const maxN = Math.max(5, Math.ceil(Math.max(...batches.map((b) => b.n)) / 5) * 5);
+  const band = pw / batches.length;
+  const yN = (n) => T + ph - (n / maxN) * ph;
+  const y1 = (v) => T + ph - v * ph;
+  const kids = [];
+  for (let i = 0; i <= 5; i += 1) {
+    const v = (maxN / 5) * i;
+    kids.push(sv("line", { class: "grid", x1: L, x2: W - R, y1: yN(v), y2: yN(v) }));
+    kids.push(sv("text", { class: "ax-label", x: L - 8, y: yN(v) + 4, "text-anchor": "end" }, String(v)));
+    kids.push(sv("text", { class: "ax-label", x: W - R + 8, y: y1(i / 5) + 4 }, (i / 5).toFixed(1)));
+  }
+  kids.push(sv("text", { class: "ax-label", x: 8, y: T - 14 }, t("evals")));
+  const sel = batches.findIndex((b) => b.batch === ui.grpoStep);
+  if (sel >= 0) kids.push(sv("rect", { class: "sel-band", x: L + band * sel, y: T, width: band, height: ph }));
+  const order = Object.keys(STATUS_COLORS);
+  batches.forEach((b, i) => {
+    let acc = 0;
+    const x = L + band * i + band * 0.28;
+    const w = band * 0.44;
+    for (const s of order) {
+      const n = b.status?.[s] || 0;
+      if (!n) continue;
+      kids.push(sv("rect", { x, y: yN(acc + n), width: w, height: yN(acc) - yN(acc + n), fill: STATUS_COLORS[s] },
+        sv("title", {}, `${t("batch")} ${b.batch}: ${t(`st_${s}`)} ${n}`)));
+      acc += n;
     }
-    const served = Object.entries(e.served_versions || {}).map(([k, n]) => `${k} x${n}`).join(", ");
-    list.append(el("li", {},
-      el("strong", {}, `${t("step")} ${e.global_step}`), ` ${t("batch")} ${e.batch}: `,
-      `${t("served")} ${served}, ${t("passRate")} ${fmt(e.pass_rate, 2)}`,
-    ));
+    kids.push(sv("text", { class: "ax-label", x: L + band * i + band / 2, y: H - B + 18, "text-anchor": "middle" },
+      `${t("batch")} ${b.batch}`));
+    const hit = sv("rect", { class: "bar-hit", x: L + band * i, y: T, width: band, height: ph });
+    hit.style.cursor = "pointer";
+    hit.addEventListener("click", () => setGrpoStep(b.batch));
+    kids.push(hit);
+  });
+  const pts = (vals) => vals.map((v, i) => `${L + band * i + band / 2},${y1(v)}`).join(" ");
+  const pass = batches.map((b) => b.pass_rate || 0);
+  kids.push(sv("polyline", { class: "line-pass", points: pts(pass) }));
+  pass.forEach((v, i) => kids.push(sv("circle", { class: "dot-pass", cx: L + band * i + band / 2, cy: y1(v), r: 4 })));
+  if (steps.length === batches.length) {
+    const rew = steps.map((s) => Math.min(1, s.reward || 0));
+    kids.push(sv("polyline", { class: "line-reward", points: pts(rew) }));
+    rew.forEach((v, i) => kids.push(sv("circle", { class: "dot-reward", cx: L + band * i + band / 2, cy: y1(v), r: 4 })));
+  }
+  kids.push(sv("line", { class: "axis", x1: L, x2: W - R, y1: T + ph, y2: T + ph }));
+  svgEl.replaceChildren(...kids);
+
+  const used = order.filter((s) => batches.some((b) => b.status?.[s]));
+  const sw = (color) => { const x = el("span", { class: "sw" }); x.style.background = color; return x; };
+  document.getElementById("grpo-legend").replaceChildren(
+    ...used.map((s) => el("span", {}, sw(STATUS_COLORS[s]), t(`st_${s}`))),
+    el("span", {}, sw("var(--blue)"), t("lPass")),
+    steps.length === batches.length ? el("span", {}, sw("var(--violet)"), t("lReward")) : null);
+  const range = document.getElementById("grpo-step");
+  range.min = String(batches[0].batch);
+  range.max = String(batches[batches.length - 1].batch);
+  range.value = String(ui.grpoStep);
+  renderGrpoDetail();
+}
+
+function setGrpoStep(n) {
+  ui.grpoStep = n;
+  renderGrpo();
+}
+
+function renderGrpoDetail() {
+  const tr = extras.training;
+  const b = tr.batches.find((x) => x.batch === ui.grpoStep) || tr.batches[0];
+  const idx = tr.batches.indexOf(b);
+  const s = (tr.steps || [])[idx];
+  document.getElementById("grpo-step-label").textContent =
+    `${t("batch")} ${b.batch} / ${tr.batches.length} (${t("step")} ${b.global_step})`;
+  const order = Object.keys(STATUS_COLORS).filter((k) => b.status?.[k]);
+  const cards = [
+    el("div", { class: "card" },
+      el("h4", {}, `${t("sandboxSide")}: ${b.runtime}/${b.version}`),
+      row(t("passRate"), fmt(b.pass_rate, 2)),
+      row(t("customRate"), fmt(b.custom_kernel_rate, 2)),
+      row(t("meanSpeedup"), b.mean_speedup === null ? "-" : `${fmt(b.mean_speedup, 3)}x`),
+      row(`${t("p50")} / ${t("p95")}`, `${b.eval_p50_s} / ${b.eval_p95_s} ${t("sec")}`),
+      row(t("wall"), `${b.batch_wall_s} ${t("sec")}`)),
+    el("div", { class: "card" },
+      el("h4", {}, `${t("evals")}: ${b.n}`),
+      order.map((k) => row(t(`st_${k}`), b.status[k]))),
+  ];
+  if (s) {
+    cards.push(el("div", { class: "card" },
+      el("h4", {}, t("trainerSide")),
+      row(t("rewardMean"), fmt(s.reward, 4)),
+      row(t("rewardStd"), fmt(s.reward_std, 4)),
+      row(t("loss"), fmt(s.loss, 4)),
+      row(t("compLen"), s["completions/mean_length"]),
+      row(t("stepTime"), `${s.step_time} ${t("sec")}`)));
+  }
+  document.getElementById("grpo-detail").replaceChildren(...cards);
+}
+
+async function playGrpo() {
+  const button = document.getElementById("grpo-play");
+  const tr = extras?.training;
+  if (!tr?.batches?.length) return;
+  if (ui.grpoTimer) { clearTimeout(ui.grpoTimer); ui.grpoTimer = null; button.textContent = t("stepPlay"); return; }
+  let i = 0;
+  button.textContent = t("termPause");
+  const next = () => {
+    setGrpoStep(tr.batches[i].batch);
+    i += 1;
+    if (i < tr.batches.length) ui.grpoTimer = setTimeout(next, 1300);
+    else { ui.grpoTimer = null; button.textContent = t("stepPlay"); }
+  };
+  next();
+}
+
+function renderSim() {
+  // The version switch comes from extras.simulation, or from the recording's own training events.
+  const sim = extras?.simulation?.events?.length
+    ? extras.simulation
+    : { source: recording.source, events: recording.training || [] };
+  const svgEl = document.getElementById("sim-chart");
+  const panel = svgEl.closest(".panel");
+  const batches = sim.events.filter((e) => e.event === "reward_batch");
+  const sw = sim.events.find((e) => e.event === "sandbox_version_switch");
+  panel.hidden = !batches.length;
+  if (!batches.length) return;
+  document.getElementById("sim-source").textContent = sim.source || "";
+  const W = 900, H = 220, L = 46, R = 20, T = 30, B = 34;
+  const pw = W - L - R, ph = H - T - B;
+  const maxY = Math.ceil(Math.max(...batches.map((b) => b.eval_p50_s)) + 1);
+  const band = pw / batches.length;
+  const y = (v) => T + ph - (v / maxY) * ph;
+  const versions = [...new Set(batches.map((b) => b.version))];
+  const kids = [];
+  for (let i = 0; i <= maxY; i += Math.max(1, Math.round(maxY / 4))) {
+    kids.push(sv("line", { class: "grid", x1: L, x2: W - R, y1: y(i), y2: y(i) }));
+    kids.push(sv("text", { class: "ax-label", x: L - 8, y: y(i) + 4, "text-anchor": "end" }, `${i}${t("sec")}`));
+  }
+  kids.push(sv("text", { class: "ax-label", x: 8, y: 16 }, `${t("p50")} (${t("sec")})`));
+  batches.forEach((b, i) => {
+    const x = L + band * i + band * 0.15;
+    kids.push(sv("rect", { x, y: y(b.eval_p50_s), width: band * 0.7, height: T + ph - y(b.eval_p50_s),
+      class: `sim-v${versions.indexOf(b.version) % 3}` },
+    sv("title", {}, `${t("step")} ${b.global_step}: ${b.runtime}/${b.version}, ${t("p50")} ${b.eval_p50_s}${t("sec")}, ${t("passRate")} ${fmt(b.pass_rate, 2)}`)));
+    if (i % 5 === 0 || i === batches.length - 1) {
+      kids.push(sv("text", { class: "ax-label", x: L + band * i + band / 2, y: H - B + 16, "text-anchor": "middle" }, String(b.global_step)));
+    }
+  });
+  let a = null;
+  let bAfter = null;
+  if (sw) {
+    const i = batches.findIndex((b) => b.global_step >= sw.global_step);
+    const x = L + band * i;
+    kids.push(sv("line", { class: "switch-line", x1: x, x2: x, y1: T - 8, y2: T + ph }));
+    kids.push(sv("text", { class: "val-label", x: x + 6, y: T - 12 }, `${sw.from} → ${sw.to} (${t("step")} ${sw.global_step})`));
+    a = median(batches.slice(0, i).map((b) => b.eval_p50_s));
+    bAfter = median(batches.slice(i).map((b) => b.eval_p50_s));
+  }
+  kids.push(sv("line", { class: "axis", x1: L, x2: W - R, y1: T + ph, y2: T + ph }));
+  svgEl.replaceChildren(...kids);
+  const steps = batches.map((b) => b.global_step);
+  const contiguous = steps.every((s, i) => i === 0 || s === steps[i - 1] + 1);
+  const summary = sw && contiguous
+    ? fill(t("simSummary"), { n: batches.length, s: sw.global_step, from: sw.from, to: sw.to, a: fmt(a, 2), b: fmt(bAfter, 2) })
+    : "";
+  const p = document.getElementById("sim-summary");
+  p.replaceChildren(summary, " ");
+  if (transcript("rollout")) {
+    const link = el("a", { href: "#defense" }, t("showRollout"));
+    link.addEventListener("click", (e) => { e.preventDefault(); seekTerm("rollout", /switching the routing table/); });
+    p.append(link);
   }
 }
 
+// ---------- 5. benchmark ----------
+const METRICS = [
+  { id: "p50", key: "mP50", get: (r) => r.eval_p50_s },
+  { id: "p95", key: "mP95", get: (r) => r.eval_p95_s },
+  { id: "cold", key: "mCold", get: (r) => median(r.cold_start_s || []) },
+  { id: "tput", key: "mTput", get: (r) => (r.cold_start_s?.length ? r.throughput_eval_per_s / r.cold_start_s.length : r.throughput_eval_per_s) },
+  { id: "speed", key: "mSpeed", get: (r) => (r.gpu ? r.speedup_median : null) },
+];
+
+function renderBenchTabs() {
+  const passes = extras?.bench?.passes || [];
+  const section = document.getElementById("bench");
+  if (!passes.length) { section.hidden = true; return; }
+  const mk = (boxId, items, current, onPick) => {
+    document.getElementById(boxId).replaceChildren(...items.map(([id, label]) => {
+      const b = el("button", { type: "button", class: "tab", role: "tab", "aria-selected": String(id === current) }, label);
+      b.addEventListener("click", () => onPick(id));
+      return b;
+    }));
+  };
+  mk("bench-metric", METRICS.map((m) => [m.id, t(m.key)]), ui.benchMetric, (id) => { ui.benchMetric = id; renderBench(); });
+  mk("bench-pass", ["pass2", "pass1"].filter((p) => passes.some((x) => x.label === p)).map((p) => [p, t(p)]), ui.benchPass,
+    (id) => { ui.benchPass = id; renderBench(); });
+}
+
+function renderBench() {
+  const passes = extras?.bench?.passes || [];
+  if (!passes.length) return;
+  renderBenchTabs();
+  const metric = METRICS.find((m) => m.id === ui.benchMetric);
+  const rows = [...benchRows(ui.benchPass)];
+  for (const u of extras.bench.unmeasured || []) rows.splice(2, 0, { ...u, unmeasured: true });
+  const W = 900, L = 210, R = 90, T = 10, rowH = 40;
+  const H = T + rows.length * rowH + 10;
+  const svgEl = document.getElementById("bench-chart");
+  svgEl.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const values = rows.map((r) => (r.unmeasured ? null : metric.get(r)));
+  const maxV = Math.max(...values.filter((v) => typeof v === "number"), 0.001);
+  const pw = W - L - R;
+  const kids = [];
+  rows.forEach((r, i) => {
+    const y = T + i * rowH;
+    kids.push(sv("text", { class: "val-label", x: 10, y: y + 17 }, r.runtime));
+    kids.push(sv("text", { class: "ax-label", x: 10, y: y + 33 }, [r.instance, r.gpu].filter(Boolean).join(", ") || "CPU"));
+    const v = values[i];
+    if (r.unmeasured) {
+      kids.push(sv("rect", { class: "bar-na", x: L, y: y + 8, width: pw * 0.35, height: 22, rx: 3 }));
+      kids.push(sv("text", { class: "ax-label", x: L + 10, y: y + 24 }, t("notMeasured")));
+      return;
+    }
+    if (typeof v !== "number") {
+      kids.push(sv("text", { class: "ax-label", x: L + 4, y: y + 24 }, t("na")));
+      return;
+    }
+    const w = Math.max(2, (v / maxV) * pw);
+    const details = [`${r.runtime}: ${t(metric.key)} ${fmt(v, 3)}`,
+      `${t("pods")} ${r.cold_start_s?.length ?? "-"}, cold start ${(r.cold_start_s || []).join(", ")} ${t("sec")}`,
+      `${t("p50")} ${r.eval_p50_s} / ${t("p95")} ${r.eval_p95_s} ${t("sec")}`,
+      `${t("throughput")} ${r.throughput_eval_per_s} eval/s, ${r.ok}/${r.requests} ok`,
+      r.gpu ? `speedup ${r.speedup_median}, ${t("refMs")} ${r.ref_ms_median}` : `${t("refMs")} ${r.ref_ms_median}`].join("\n");
+    kids.push(sv("rect", { class: r.gpu ? "bar-gpu" : "bar-cpu", x: L, y: y + 8, width: w, height: 22, rx: 3 }, sv("title", {}, details)));
+    kids.push(sv("text", { class: "val-label", x: L + w + 8, y: y + 24 }, fmt(v, metric.id === "tput" ? 3 : metric.id === "cold" ? 1 : 3)));
+  });
+  svgEl.replaceChildren(...kids);
+  const notes = [t("benchNoteGpu")];
+  if (ui.benchPass === "pass1" && metric.id === "cold") notes.unshift(t("benchNotePass1"));
+  if (metric.id === "speed") notes.push(t("benchNoteSpeed"));
+  document.getElementById("bench-note").textContent = notes.join(" ");
+}
+
+// ---------- wiring ----------
 function renderAll() {
   renderStatic();
-  document.getElementById("source").textContent = `${recording.source} (${recording.recorded_at})`;
+  renderKpis();
+  renderArch();
+  renderSubmissions();
   renderPools();
-  renderGoldenPicker();
-  renderGolden();
-  renderTimeline();
+  renderAttacks();
+  renderTermTabs();
+  renderGrpo();
+  renderSim();
+  renderBench();
+}
+
+async function loadJson(response) {
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
 }
 
 async function main() {
-  const response = await fetch("data/recording.json", { cache: "no-cache" });
-  recording = await response.json();
+  recording = await loadJson(await fetch("data/recording.json", { cache: "no-cache" }));
+  try {
+    extras = await loadJson(await fetch("data/extras.json", { cache: "no-cache" }));
+  } catch {
+    extras = null;
+  }
+  const wanted = new URLSearchParams(window.location.search).get("lang");
+  if (wanted === "ko" || wanted === "en") lang = wanted;
+  else if (navigator.language && !navigator.language.startsWith("ko")) lang = "en";
   document.getElementById("lang").addEventListener("click", () => {
     lang = lang === "ko" ? "en" : "ko";
     renderAll();
   });
-  document.getElementById("golden").addEventListener("change", renderGolden);
+  document.getElementById("flow-play").addEventListener("click", playFlow);
+  document.getElementById("run").addEventListener("click", runScoring);
+  document.getElementById("term-play").addEventListener("click", playTerm);
+  document.getElementById("term-all").addEventListener("click", showAllTerm);
+  document.getElementById("grpo-play").addEventListener("click", playGrpo);
+  document.getElementById("grpo-step").addEventListener("input", (e) => setGrpoStep(Number(e.target.value)));
   renderAll();
 }
 

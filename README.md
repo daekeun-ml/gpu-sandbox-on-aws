@@ -161,9 +161,9 @@ template은 label이 붙은 trainer pod의 8000번 ingress만 허용하고 egres
 
 ## 리플레이 데모 사이트
 
-`demo/`는 `python -m gpusandbox.tools record`가 만든 JSON 녹화를 재생할 뿐인 정적 리플레이 사이트(HTML, CSS, JS, 외부 스크립트 없음)라서, 방문자는 클러스터나 GPU에 닿지 않아요. 저장소에 든 녹화는 노트북 CPU 풀에서 만든 것으로 표시되어 있고, GPU 클러스터의 녹화로 바꿔 쓰도록 되어 있습니다.
+`demo/`는 실행 기록을 재생할 뿐인 정적 리플레이 사이트(HTML, CSS, JS, 외부 스크립트 없음)라서, 방문자는 클러스터나 GPU에 닿지 않아요. 클릭해 보는 아키텍처 그림, gVisor와 Kata에서 같은 코드를 채점하는 재생, 샌드박스 안에서 시도한 접근이 막히는 실제 터미널 출력, GRPO 학습과 버전 전환 차트, 벤치마크 차트, 약 2분짜리 둘러보기 영상을 담고 있습니다. 데이터는 `python -m gpusandbox.tools record`의 녹화와, `demo/build_extras.py`가 클러스터 로그에서 만든 `extras.json`이에요. 로그의 IP 주소와 노드 이름은 가리고, 배포 전에 한 번 더 검사합니다. 2026-11-18에 공개한 GPU 녹화는 `demo/recordings/`에 있습니다.
 
-사이트는 Block Public Access를 켠 private S3 bucket에 두고 CloudFront가 Origin Access Control로만 읽습니다. bucket policy는 `AWS:SourceArn` 조건을 건 CloudFront 서비스 주체만 허용하고 TLS가 아닌 요청을 거부하며, 응답에는 엄격한 Content-Security-Policy, HSTS, nosniff, `frame-ancestors 'none'`, referrer policy를 붙여요. 배포는 `AWS_REGION=<region> demo/deploy.sh`, 삭제는 `demo/teardown.sh`입니다. 기본 `*.cloudfront.net` 인증서로는 viewer TLS 정책을 올릴 수 없으니, TLSv1.2_2021이 필요하면 custom domain과 us-east-1의 ACM 인증서를 쓰세요. 절차는 [09 데모 사이트 (CloudFront)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/09_demo_site/)에 있어요.
+사이트는 Block Public Access를 켠 private S3 bucket에 두고 CloudFront가 Origin Access Control로만 읽습니다. bucket policy는 `AWS:SourceArn` 조건을 건 CloudFront 서비스 주체만 허용하고 TLS가 아닌 요청을 거부하며, 응답에는 엄격한 Content-Security-Policy, HSTS, nosniff, `frame-ancestors 'none'`, referrer policy를 붙여요. AWS WAF(IP별 rate limit과 관리형 규칙)를 붙이고 접근 로그를 비공개 로그 버킷에 남깁니다. 배포는 `demo/deploy.sh`(us-east-1 고정), 삭제는 `demo/teardown.sh`입니다. 기본 `*.cloudfront.net` 인증서로는 viewer TLS 정책을 올릴 수 없으니, TLSv1.2_2021이 필요하면 custom domain과 us-east-1의 ACM 인증서를 쓰세요. 절차는 [09 데모 사이트 (CloudFront)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/09_demo_site/)에 있어요.
 
 ## 검증 상태
 

@@ -8,50 +8,154 @@
   <script src="app.js" defer></script>
 </head>
 <body>
-  <header>
-    <div class="wrap">
-      <div class="title-row">
-        <h1 data-i18n="title"></h1>
-        <button id="lang" type="button" aria-label="language">EN</button>
+  <nav class="topnav" aria-label="sections">
+    <div class="wrap navrow">
+      <a class="brand" href="#top">GPU Sandbox on AWS</a>
+      <div class="navlinks">
+        <a href="#arch" data-i18n="navArch"></a>
+        <a href="#try" data-i18n="navTry"></a>
+        <a href="#defense" data-i18n="navDefense"></a>
+        <a href="#train" data-i18n="navTrain"></a>
+        <a href="#bench" data-i18n="navBench"></a>
       </div>
-      <p class="lede" data-i18n="lede"></p>
-      <p class="source"><span data-i18n="sourceLabel"></span> <span id="source"></span></p>
+      <button id="lang" type="button" aria-label="language">EN</button>
+    </div>
+  </nav>
+
+  <header id="top" class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow" data-i18n="eyebrow"></p>
+        <h1 data-i18n="title"></h1>
+        <p class="lede" data-i18n="lede"></p>
+        <div id="kpis" class="kpis"></div>
+        <div class="cta">
+          <a class="btn primary" href="#try" data-i18n="ctaTry"></a>
+          <a class="btn ghost" href="#defense" data-i18n="ctaDefense"></a>
+        </div>
+        <p class="source"><span data-i18n="sourceLabel"></span> <span id="source"></span></p>
+      </div>
+      <figure class="video-box">
+        <video id="tour" controls preload="none" playsinline></video>
+        <figcaption data-i18n="videoCaption"></figcaption>
+      </figure>
     </div>
   </header>
 
   <main class="wrap">
-    <section>
-      <h2 data-i18n="s1"></h2>
-      <p class="hint" data-i18n="s1hint"></p>
-      <div id="pools" class="cards"></div>
+    <section id="arch">
+      <h2><span class="num">1</span><span data-i18n="sArch"></span></h2>
+      <p class="hint" data-i18n="sArchHint"></p>
+      <div class="arch-grid">
+        <div class="arch-canvas">
+          <svg id="arch-svg" viewBox="0 0 1000 470" role="img" aria-labelledby="arch-title">
+            <title id="arch-title">architecture</title>
+          </svg>
+          <div class="arch-controls">
+            <button id="flow-play" type="button" class="btn primary small" data-i18n="flowPlay"></button>
+            <span id="flow-caption" class="flow-caption" aria-live="polite"></span>
+          </div>
+        </div>
+        <aside id="arch-detail" class="panel" aria-live="polite"></aside>
+      </div>
     </section>
 
-    <section>
-      <h2 data-i18n="s2"></h2>
-      <p class="hint" data-i18n="s2hint"></p>
-      <div class="picker">
-        <label for="golden" data-i18n="pick"></label>
-        <select id="golden"></select>
-      </div>
-      <div class="split">
-        <div>
-          <h3 data-i18n="task"></h3>
-          <p id="task-desc"></p>
-          <pre id="reference" class="code"></pre>
-          <h3 data-i18n="candidate"></h3>
+    <section id="try">
+      <h2><span class="num">2</span><span data-i18n="sTry"></span></h2>
+      <p class="hint" data-i18n="sTryHint"></p>
+      <div id="submissions" class="subs" role="radiogroup"></div>
+      <div class="try-grid">
+        <div class="panel">
+          <div class="panel-head">
+            <h3 id="sub-title"></h3>
+            <span id="sub-tag" class="tag"></span>
+          </div>
+          <p id="sub-story" class="story"></p>
+          <details>
+            <summary data-i18n="showTask"></summary>
+            <p id="task-desc" class="muted small"></p>
+            <pre id="reference" class="code"></pre>
+          </details>
+          <h4 data-i18n="candidate"></h4>
           <pre id="candidate" class="code"></pre>
         </div>
-        <div>
-          <h3 data-i18n="verdicts"></h3>
-          <div id="verdicts"></div>
+        <div class="panel">
+          <div class="run-bar">
+            <button id="run" type="button" class="btn primary" data-i18n="run"></button>
+            <label class="speed"><span data-i18n="speed"></span>
+              <select id="speed">
+                <option value="1" data-i18n="speed1"></option>
+                <option value="4" selected data-i18n="speed4"></option>
+                <option value="0" data-i18n="speed0"></option>
+              </select>
+            </label>
+          </div>
+          <div id="lanes" class="lanes"></div>
+          <p class="muted small" data-i18n="laneNote"></p>
         </div>
       </div>
     </section>
 
-    <section>
-      <h2 data-i18n="s3"></h2>
-      <p class="hint" data-i18n="s3hint"></p>
-      <ol id="timeline" class="timeline"></ol>
+    <section id="defense">
+      <h2><span class="num">3</span><span data-i18n="sDefense"></span></h2>
+      <p class="hint" data-i18n="sDefenseHint"></p>
+      <div id="pools" class="cards"></div>
+      <h3 data-i18n="attacks"></h3>
+      <div id="attacks" class="attacks"></div>
+      <div class="term-box">
+        <div class="term-head">
+          <div id="term-tabs" class="tabs" role="tablist"></div>
+          <div class="term-ctl">
+            <button id="term-play" type="button" class="btn small" data-i18n="termPlay"></button>
+            <button id="term-all" type="button" class="btn small ghost" data-i18n="termAll"></button>
+          </div>
+        </div>
+        <p id="term-desc" class="term-desc"></p>
+        <div class="progress"><div id="term-progress"></div></div>
+        <pre id="term" class="term" tabindex="0" aria-live="off"></pre>
+      </div>
+    </section>
+
+    <section id="train">
+      <h2><span class="num">4</span><span data-i18n="sTrain"></span></h2>
+      <p class="hint" data-i18n="sTrainHint"></p>
+      <div class="panel">
+        <div class="panel-head">
+          <h3 data-i18n="grpoTitle"></h3>
+          <span id="grpo-source" class="muted small"></span>
+        </div>
+        <div class="chart-wrap"><svg id="grpo-chart" viewBox="0 0 900 300" role="img" aria-label="GRPO reward batches"></svg></div>
+        <div class="legend" id="grpo-legend"></div>
+        <div class="step-ctl">
+          <button id="grpo-play" type="button" class="btn small" data-i18n="stepPlay"></button>
+          <input id="grpo-step" type="range" min="1" max="1" value="1" aria-label="step">
+          <span id="grpo-step-label" class="muted small"></span>
+        </div>
+        <div id="grpo-detail" class="cards"></div>
+        <p class="muted small" data-i18n="grpoNote"></p>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h3 data-i18n="switchTitle"></h3>
+          <span id="sim-source" class="muted small"></span>
+        </div>
+        <div class="chart-wrap"><svg id="sim-chart" viewBox="0 0 900 220" role="img" aria-label="sandbox version switch"></svg></div>
+        <p id="sim-summary" class="story"></p>
+        <p class="muted small" data-i18n="switchNote"></p>
+      </div>
+    </section>
+
+    <section id="bench">
+      <h2><span class="num">5</span><span data-i18n="sBench"></span></h2>
+      <p class="hint" data-i18n="sBenchHint"></p>
+      <div class="bench-ctl">
+        <div id="bench-metric" class="tabs" role="tablist"></div>
+        <div id="bench-pass" class="tabs" role="tablist"></div>
+      </div>
+      <div class="panel">
+        <div class="chart-wrap"><svg id="bench-chart" viewBox="0 0 900 300" role="img" aria-label="benchmark"></svg></div>
+        <p id="bench-note" class="muted small"></p>
+      </div>
     </section>
   </main>
 
