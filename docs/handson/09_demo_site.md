@@ -84,11 +84,11 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 **확인할 것:**
 
 - 맨 위 "기록 출처:" 줄에 `Local CPU smoke run on a laptop (127.0.0.1, no gVisor or Kata, no GPU).`로 시작하는 문구와 기록 시각이 보입니다.
-- 핵심 수치 타일은 `8/8`(기대 판정과 일치한 golden 채점), `10/10`(차단된 접근), `160/160`(벤치마크 정상 응답) 세 개입니다. 샘플 기록에는 GPU 풀이 없어서 GPU 런타임 타일은 나오지 않아요.
-- 2절에 제출물 카드 네 개(PyTorch만 사용, ReLU 빠뜨린 오답, 벤치마크 치팅, 호스트 파일 읽기)가 있고, 재생하면 `local-cpu v1`, `local-cpu v2` 두 줄이 채워집니다.
-- 3절에 공격 카드 여덟 개와 터미널 탭 네 개(verify.sh gvisor, verify.sh kata-qemu, gVisor GPU 스모크 테스트, rollout.sh v1 → v2)가 있습니다.
-- 4절 아래 차트의 요약이 "배치 30개가 빠짐없이 채점됐습니다. step 8에서 kata-clh-cpu/v1에서 kata-clh-cpu/v2로 바뀌었고"로 시작합니다.
-- 5절 막대 여섯 개 중 `kata-clh`는 "측정 안 됨"으로 나옵니다.
+- 핵심 수치 타일은 `8/8`(예상대로 나온 채점 결과), `10/10`(샌드박스 안에서 막힌 접근 시도), `160/160`(성능 측정 요청 중 성공) 세 개입니다. 샘플 기록에는 GPU 풀이 없어서 GPU 격리 방식 타일은 나오지 않아요.
+- 2절에 제출 코드 카드 네 개(PyTorch만 사용, ReLU 빠뜨린 오답, 속도 측정 속이기, 서버 파일 읽기)가 있고, 재생하면 `local-cpu v1`, `local-cpu v2` 두 줄이 채워집니다. 코드는 문법 색상과 줄 번호로 표시됩니다.
+- 3절에 공격 카드 여덟 개와 터미널 탭 네 개(verify.sh gvisor, verify.sh kata-qemu, gVisor GPU 동작 확인, rollout.sh v1 → v2)가 있습니다.
+- 4절 아래 차트의 요약이 "배치 30개가 하나도 빠지지 않고 채점됐습니다. step 8에서 kata-clh-cpu/v1에서 kata-clh-cpu/v2로 바뀌었고"로 시작합니다.
+- 5절 막대 여섯 개 중 `kata-clh`는 "측정 못 함: VM이 시작되지 않음"으로 나옵니다.
 - 브라우저 언어가 한국어면 한국어로, 아니면 영어로 열립니다(`?lang=ko`나 `?lang=en`으로 고를 수 있음). 오른쪽 위 `EN`/`KO` 버튼으로 언어를 바꿉니다. 터미널에는 파일마다 200 응답 로그가 출력돼요.
 
 이 항목은 2026-11-18에 Linux의 Chromium(Playwright)으로 확인했습니다. 3절부터 5절까지는 저장소의 `extras.json`(2026-11-18 EKS 실행)에서 나오고, 각 차트 옆에 그 출처가 표시됩니다.
@@ -464,7 +464,7 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-d
 배포한 뒤 다음을 순서대로 확인합니다.
 
 1. `deploy.sh`의 마지막 줄이 `[demo] live: https://...`입니다.
-2. 그 URL을 브라우저로 열면 "기록 출처" 줄에 직접 쓴 `--source` 문구가 보이고, 3절의 모든 풀 카드에서 egress 차단이 "확인됨"입니다. 맨 위 영상이 재생되는지도 확인하세요(`curl -sI https://<distribution-domain>/media/tour-ko.mp4`의 `content-type`이 `video/mp4`).
+2. 그 URL을 브라우저로 열면 "기록 출처" 줄에 직접 쓴 `--source` 문구가 보이고, 3절의 모든 풀 카드에서 외부 연결 차단이 "확인됨"입니다. 맨 위 영상이 재생되는지도 확인하세요(`curl -sI https://<distribution-domain>/media/tour-ko.mp4`의 `content-type`이 `video/mp4`).
 3. 응답에 보안 헤더 여섯 개가 있습니다.
 
     ```bash

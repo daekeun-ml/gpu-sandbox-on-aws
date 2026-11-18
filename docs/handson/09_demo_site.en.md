@@ -87,7 +87,7 @@ The page opens in Korean when the browser language is Korean and in English othe
 
 - At the top, the recording source line shows text starting with `Local CPU smoke run on a laptop (127.0.0.1, no gVisor or Kata, no GPU).` and the recording time.
 - There are three key-number tiles: `8/8` (goldens matching their expected verdict), `10/10` (access attempts blocked) and `160/160` (benchmark requests answered ok). The sample has no GPU pool, so the GPU runtime tile does not appear.
-- Section 2 has four submission cards (PyTorch only, Missing ReLU, Benchmark cheat, Read a host file), and playing fills two lanes, `local-cpu v1` and `local-cpu v2`.
+- Section 2 has four submission cards (PyTorch only, Missing ReLU, Benchmark cheat, Read a host file), and playing fills two lanes, `local-cpu v1` and `local-cpu v2`. Code is shown with syntax colors and line numbers.
 - Section 3 has eight attack cards and four terminal tabs (verify.sh gvisor, verify.sh kata-qemu, gVisor GPU smoke test, rollout.sh v1 → v2).
 - The summary under the lower chart in section 4 starts with "All 30 batches were scored. At step 8 the pool changed from kata-clh-cpu/v1 to kata-clh-cpu/v2".
 - In section 5, `kata-clh` is one of six bars and shows "not measured".
@@ -456,7 +456,7 @@ Every response header uses `Override: true`, so the policy value wins over the s
 After deploying, check the following in order.
 
 1. The last line of `deploy.sh` is `[demo] live: https://...`.
-2. Opening that URL in a browser shows your own `--source` text in the recording source line, and every pool card in section 3 shows egress "verified" ("확인됨" in the Korean view). Check that the video at the top plays as well (`curl -sI https://<distribution-domain>/media/tour-en.mp4` returns `content-type: video/mp4`).
+2. Opening that URL in a browser shows your own `--source` text in the recording source line, and every pool card in section 3 shows egress "verified" ("외부 연결 차단: 확인됨" in the Korean view). Check that the video at the top plays as well (`curl -sI https://<distribution-domain>/media/tour-en.mp4` returns `content-type: video/mp4`).
 3. The six security headers are present.
 
     ```bash

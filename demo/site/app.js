@@ -11,73 +11,74 @@ const MAX_REWARD = 0.1 + 1.0 + 0.5 * 1.5;
 
 const TEXT = {
   ko: {
-    navArch: "아키텍처", navTry: "채점 체험", navDefense: "공격 차단", navTrain: "학습", navBench: "벤치마크",
-    eyebrow: "on-policy RL을 위한 GPU reward 샌드박스",
-    title: "모델이 쓴 GPU 코드를 격리된 샌드박스에서 채점합니다",
-    lede: "강화학습 중인 모델은 step마다 신뢰할 수 없는 Triton, CUDA 코드를 만들어 냅니다. 이 페이지는 Amazon EKS에서 gVisor와 Kata Containers로 그 코드를 채점한 실제 기록을 재생합니다. 방문자의 브라우저는 클러스터나 GPU에 접속하지 않아요.",
-    ctaTry: "채점 체험하기", ctaDefense: "공격 차단 증거 보기",
+    navArch: "구조", navTry: "채점해 보기", navDefense: "공격 차단", navTrain: "학습", navBench: "성능 비교",
+    eyebrow: "강화학습용 GPU 코드 채점 샌드박스",
+    title: "AI가 쓴 GPU 코드를 안전하게 채점합니다",
+    lede: "강화학습을 하는 동안 모델은 계속 새로운 GPU 코드(Triton, CUDA)를 만듭니다. 믿을 수 없는 코드라서 격리된 환경에서 실행해야 해요. 이 페이지는 Amazon EKS에서 gVisor와 Kata Containers로 실제 채점한 기록을 다시 보여 줍니다. 클러스터나 GPU에 직접 연결하지는 않습니다.",
+    ctaTry: "채점 장면 보기", ctaDefense: "공격 차단 결과 보기",
     sourceLabel: "기록 출처:",
-    videoCaption: "둘러보기 영상: 이 페이지의 기능을 자동으로 재생한 화면입니다(소리 없음).",
-    kpiGpu: "GPU 격리 런타임 (gVisor, Kata)", kpiGolden: "기대 판정과 일치한 golden 채점",
-    kpiBlocked: "샌드박스 안에서 시도해 차단된 접근", kpiBench: "벤치마크 요청 정상 응답",
-    sArch: "아키텍처: reward 요청 한 건의 흐름",
-    sArchHint: "구성 요소를 누르면 설명이 열립니다. 재생 버튼을 누르면 reward 요청 한 건이 지나가는 순서를 보여 줍니다.",
-    flowPlay: "▶ 요청 흐름 재생", flowStop: "■ 멈춤", evidence: "증거 보기",
-    zoneTrainer: "rl-trainer namespace", zoneSandbox: "sandbox namespace (default deny)", zoneOut: "샌드박스에서 차단",
-    sTry: "채점 체험: 같은 코드를 두 샌드박스에서",
-    sTryHint: "제출물을 고르고 재생을 누르면 gVisor(A10G)와 Kata QEMU(T4)가 같은 코드를 채점한 기록이 동시에 재생됩니다.",
-    showTask: "태스크와 기준 구현 보기", candidate: "제출된 코드",
-    run: "▶ 두 샌드박스에서 채점 재생", running: "재생 중...",
-    speed: "속도", speed1: "실제 속도", speed4: "4배속", speed0: "결과만",
-    laneNote: "진행 막대는 기록된 전체 평가 시간(duration_s)을 그대로 재생합니다. 단계별 시간은 기록하지 않았기 때문에, 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.",
-    stAuth: "요청 인증 (ServiceAccount 토큰, NetworkPolicy)", stPolicy: "정적 정책 검사 (AST)",
-    stRun: "격리된 자식 프로세스에서 실행", stCorrect: "기준 구현과 정확성 비교 (무작위 seed)",
-    stBench: "벤치마크와 timed 출력 재검증", stReward: "reward 계산 (score_verdict)",
-    idle: "대기", evaluating: "평가 중",
-    expected: "기대 판정", speedupL: "speedup", msL: "기준/후보 ms", violationsL: "정책 위반", flagsL: "플래그",
-    rewardTotal: "reward 합계", rewardMax: "최대", rFormat: "format x0.1", rCorrect: "correctness x1.0", rSpeed: "speedup x0.5",
-    excluded: "인프라 오류: 이 샘플은 group baseline에서 제외",
-    why_ok_custom: "정답이고 custom kernel입니다. 기준 구현보다 빠른 만큼 speedup 점수도 받습니다.",
-    why_ok_plain: "정답이지만 PyTorch 연산만 써서 custom kernel이 아닙니다. correctness 0.3만 받고 speedup 점수는 없어요.",
-    why_policy: "실행 전에 정적 정책 검사에서 막혔습니다. 제출된 코드는 한 줄도 실행되지 않았어요.",
-    why_wrong: "기준 구현과 출력이 다릅니다.",
-    why_cheat: "정확성 검사는 통과했지만, 벤치마크 구간의 출력 checksum이 기준과 달라서 잡혔습니다.",
-    why_runtime: "실행 중 오류가 났습니다.",
-    why_infra: "샌드박스 쪽 오류라 reward를 매기지 않습니다.",
-    sDefense: "공격 차단: 샌드박스 안에서 시도한 것들",
-    sDefenseHint: "verify.sh가 샌드박스 pod 안에서 직접 시도한 결과입니다. 카드를 누르면 실제 터미널 출력에서 그 줄을 찾아 강조합니다.",
-    attacks: "시도와 결과",
+    videoCaption: "2분 소개 영상입니다. 이 페이지의 기능을 순서대로 보여 줍니다(소리 없음).",
+    kpiGpu: "GPU 격리 방식 (gVisor, Kata)", kpiGolden: "예상대로 나온 채점 결과",
+    kpiBlocked: "샌드박스 안에서 막힌 접근 시도", kpiBench: "성능 측정 요청 중 성공",
+    sArch: "구조: 채점 요청 하나가 지나가는 길",
+    sArchHint: "상자를 누르면 설명이 나옵니다. 재생 버튼을 누르면 채점 요청 하나가 어디를 거치는지 차례로 보여 줍니다.",
+    flowPlay: "▶ 요청 흐름 보기", flowStop: "■ 멈춤", evidence: "실제 기록 보기",
+    zoneTrainer: "학습 영역 (rl-trainer)", zoneSandbox: "샌드박스 영역 (기본 차단)", zoneOut: "샌드박스에서 접근 불가",
+    sTry: "채점해 보기: 같은 코드, 두 가지 샌드박스",
+    sTryHint: "제출 코드를 고르고 재생을 누르세요. gVisor(A10G GPU)와 Kata(T4 GPU)가 같은 코드를 채점한 기록이 나란히 재생됩니다.",
+    showTask: "문제와 정답 코드 보기", candidate: "제출된 코드",
+    run: "▶ 채점 재생", running: "재생 중...",
+    speed: "속도", speed1: "실제 속도", speed4: "4배 빠르게", speed0: "결과만 보기",
+    laneNote: "막대가 차는 시간은 실제 채점에 걸린 시간입니다. 단계별 시간은 기록하지 않아서, 단계 표시는 채점이 끝난 뒤 한꺼번에 채워집니다.",
+    stAuth: "요청 확인 (인증 토큰, 네트워크 정책)", stPolicy: "코드 사전 검사 (금지된 기능 사용 여부)",
+    stRun: "격리된 프로세스에서 실행", stCorrect: "정답 코드와 결과 비교 (무작위 입력)",
+    stBench: "속도 측정, 측정 중에도 결과 확인", stReward: "점수(reward) 계산",
+    idle: "대기 중", evaluating: "채점 중",
+    expected: "예상 결과", speedupL: "속도 향상", msL: "정답/제출 실행 시간 (ms)", violationsL: "금지된 사용", flagsL: "감지된 문제",
+    rewardTotal: "점수 합계", rewardMax: "만점", rFormat: "형식 x0.1", rCorrect: "정확도 x1.0", rSpeed: "속도 x0.5",
+    excluded: "샌드박스 오류: 이 결과는 점수 비교에서 뺍니다",
+    why_ok_custom: "정답이고, 직접 작성한 GPU 커널입니다. 정답 코드보다 빠른 만큼 속도 점수도 받습니다.",
+    why_ok_plain: "정답이지만 PyTorch 기본 연산만 썼습니다. 직접 만든 커널이 아니라서 정확도 점수는 0.3만 받고 속도 점수는 없어요.",
+    why_policy: "실행하기 전 사전 검사에서 막혔습니다. 코드는 한 줄도 실행되지 않았어요.",
+    why_wrong: "결과가 정답과 다릅니다.",
+    why_cheat: "처음 확인할 때는 정답을 냈지만, 속도를 재는 동안 결과가 달라져서 잡혔습니다.",
+    why_runtime: "실행 중에 오류가 났습니다.",
+    why_infra: "샌드박스 쪽 문제라서 점수를 매기지 않습니다.",
+    sDefense: "공격 차단: 샌드박스 안에서 해 본 시도",
+    sDefenseHint: "검증 스크립트(verify.sh)가 샌드박스 안에서 실제로 시도한 결과입니다. 카드를 누르면 아래 터미널 기록에서 해당 줄을 찾아 표시합니다.",
+    attacks: "시도한 공격과 결과",
     termPlay: "▶ 재생", termPause: "❚❚ 일시정지", termAll: "전체 보기",
-    runtime: "런타임", version: "샌드박스 버전", kernel: "샌드박스 안 커널", nodeKernel: "노드 커널",
-    gpu: "GPU", egress: "egress 차단", yes: "확인됨", no: "열림", none: "없음 (CPU)",
-    sTrain: "학습: reward가 샌드박스에서 나오는 과정",
-    sTrainHint: "위는 실제 모델이 GPU에서 GRPO로 학습한 5 step입니다. 아래는 학습 중에 샌드박스 버전을 바꾸는 장면이에요.",
-    grpoTitle: "GRPO 5 step: 모델 출력을 gVisor(A10G)가 채점",
-    stepPlay: "▶ step 재생",
-    grpoNote: "5 step짜리 확인용 실행이라 학습 효과를 보여 주는 결과는 아닙니다. 실제 모델 출력이 샌드박스에서 어떤 판정을 받고, reward가 어떻게 모이는지를 보여 줍니다.",
-    lPass: "통과율 (오른쪽 축, 0~1)", lReward: "평균 reward (오른쪽 축)",
-    st_ok: "ok", st_wrong_answer: "오답", st_compile_error: "컴파일 오류", st_runtime_error: "실행 오류",
-    st_timeout: "시간 초과", st_policy_violation: "정책 위반", st_sandbox_error: "인프라 오류",
-    batch: "배치", step: "step", evals: "평가 수", passRate: "통과율", customRate: "custom kernel 비율",
-    meanSpeedup: "평균 speedup", p50: "eval p50", p95: "eval p95", wall: "배치 소요",
-    rewardMean: "평균 reward", rewardStd: "reward 표준편차", loss: "loss", compLen: "평균 completion 길이 (token)",
-    stepTime: "step 시간", sec: "초", model: "모델", sandboxSide: "샌드박스 쪽", trainerSide: "trainer 쪽",
-    switchTitle: "학습 중 샌드박스 버전 전환 (v1에서 v2로)",
-    switchNote: "시뮬레이션입니다. golden 제출물이 모델 출력을 대신했고 모델 학습은 하지 않았습니다. 채점 경로와 라우팅 표는 학습 때와 같아요.",
-    showRollout: "rollout 터미널 출력 보기",
-    simSummary: "배치 {n}개가 빠짐없이 채점됐습니다. step {s}에서 {from}에서 {to}로 바뀌었고, eval p50 중앙값은 전환 전 {a}초, 전환 후 {b}초입니다.",
-    sBench: "벤치마크: 런타임별 측정값",
-    sBenchHint: "풀마다 같은 golden을 32건씩 보냈습니다. 막대에 마우스를 올리면 세부 값이 보입니다.",
-    mP50: "eval p50 (초)", mP95: "eval p95 (초)", mCold: "cold start (초, pod 중앙값)",
-    mTput: "pod당 처리량 (eval/s)", mSpeed: "speedup 중앙값 (GPU)",
-    pass2: "이미지 캐시 후 (기준)", pass1: "배포 직후",
-    notMeasured: "측정 안 됨: VM이 시작되지 않음", na: "해당 없음",
-    pods: "Ready pod", requests: "요청", throughput: "처리량", refMs: "기준 구현 ms",
-    benchNoteGpu: "GPU 두 풀은 GPU가 다릅니다(A10G, T4). 런타임 오버헤드 비교로 읽으면 안 됩니다. CPU 세 풀은 같은 c8i.2xlarge 노드에서 같은 이미지와 golden으로 쟀어요.",
-    benchNotePass1: "배포 직후 cold start에는 다른 요인이 섞여 있습니다. kata-qemu의 약 1235초에는 IOMMU 수정 전 VM 시작 실패 약 20분이, gvisor-cpu의 141초에는 첫 이미지 pull이 들어 있어요.",
-    benchNoteSpeed: "CPU 풀의 speedup은 비교 대상이 아니라서 표시하지 않습니다.",
-    noData: "이 기록에는 해당 데이터가 없습니다.",
-    footer: "기록 재생 데모입니다. 수치는 표시된 기록 출처의 환경에서 얻은 값이며 다른 환경의 성능을 뜻하지 않습니다. 로그의 IP 주소와 노드 이름은 가렸습니다.",
+    runtime: "런타임", version: "샌드박스 버전", kernel: "샌드박스 커널", nodeKernel: "서버 커널",
+    gpu: "GPU", egress: "외부 연결 차단", yes: "확인됨", no: "열려 있음", none: "없음 (CPU)",
+    sTrain: "학습: 채점 결과가 점수가 되기까지",
+    sTrainHint: "위 그래프는 실제 모델을 GPU에서 5 step 학습한 기록입니다. 아래 그래프는 학습 도중 샌드박스 버전을 바꾼 기록이에요.",
+    grpoTitle: "GRPO 학습 5 step: 모델이 쓴 코드를 gVisor(A10G)가 채점",
+    stepPlay: "▶ step 순서대로 보기",
+    grpoNote: "동작 확인용으로 5 step만 돌렸기 때문에, 모델이 좋아지는지를 보여 주는 결과는 아닙니다. 모델이 쓴 코드가 어떤 채점 결과를 받고 점수가 어떻게 나오는지를 보여 줍니다.",
+    lPass: "통과율 (오른쪽 눈금, 0~1)", lReward: "평균 점수 (오른쪽 눈금)",
+    st_ok: "통과", st_wrong_answer: "오답", st_compile_error: "컴파일 오류", st_runtime_error: "실행 오류",
+    st_timeout: "시간 초과", st_policy_violation: "사전 검사 위반", st_sandbox_error: "샌드박스 오류",
+    flag_timed_output_mismatch: "측정 중 결과가 달라짐", flag_gpu_fault: "GPU 오류", blockedChip: "차단",
+    batch: "배치", step: "step", evals: "채점 수", passRate: "통과율", customRate: "직접 만든 커널 비율",
+    meanSpeedup: "평균 속도 향상", evalTimes: "채점 시간 (중앙값 / p95)", evalMedian: "채점 시간 중앙값", wall: "배치 전체 시간",
+    rewardMean: "평균 점수", rewardStd: "점수 표준편차", loss: "loss", compLen: "평균 답변 길이 (token)",
+    stepTime: "step 시간", sec: "초", model: "모델", sandboxSide: "샌드박스", trainerSide: "학습기 (trainer)",
+    switchTitle: "학습 중 샌드박스 버전 바꾸기 (v1 → v2)",
+    switchNote: "모의 실행입니다. 모델 대신 미리 준비한 코드로 채점했고, 실제 학습은 하지 않았습니다. 채점 방식과 버전을 바꾸는 방식은 실제 학습과 같아요.",
+    showRollout: "버전 전환 터미널 기록 보기",
+    simSummary: "배치 {n}개가 하나도 빠지지 않고 채점됐습니다. step {s}에서 {from}에서 {to}로 바뀌었고, 채점 시간 중앙값은 바꾸기 전 {a}초, 바꾼 뒤 {b}초입니다.",
+    sBench: "성능 비교: 런타임별 측정 결과",
+    sBenchHint: "샌드박스마다 같은 코드를 32번씩 채점했습니다. 막대에 마우스를 올리면 자세한 값이 나옵니다.",
+    mP50: "채점 시간 중앙값 (초)", mP95: "채점 시간 p95 (초)", mCold: "시작 시간 (초, pod 중앙값)",
+    mTput: "pod 하나의 초당 채점 수", mSpeed: "속도 향상 중앙값 (GPU)",
+    pass2: "이미지를 받아 둔 뒤 (기준)", pass1: "처음 배포했을 때",
+    notMeasured: "측정 못 함: VM이 시작되지 않음", na: "해당 없음",
+    pods: "준비된 pod", requests: "요청", throughput: "처리량", refMs: "정답 코드 실행 시간 (ms)",
+    benchNoteGpu: "GPU 샌드박스 두 개는 GPU 종류가 다릅니다(A10G와 T4). 그래서 이 차이를 gVisor와 Kata의 성능 차이로 보면 안 됩니다. CPU 샌드박스 세 개는 같은 서버(c8i.2xlarge)에서 같은 조건으로 측정했습니다.",
+    benchNotePass1: "처음 배포했을 때의 시작 시간에는 다른 시간이 섞여 있습니다. kata-qemu의 약 1235초에는 설정을 고치기 전 VM 시작에 실패하던 약 20분이 들어 있고, gvisor-cpu의 141초에는 이미지를 처음 내려받은 시간이 들어 있어요.",
+    benchNoteSpeed: "CPU 샌드박스는 속도 향상을 비교하지 않아서 표시하지 않습니다.",
+    noData: "이 기록에는 이 부분의 데이터가 없습니다.",
+    footer: "실제 실행 기록을 다시 보여 주는 데모입니다. 수치는 위에 적힌 환경에서 나온 값이라 다른 환경에서는 달라질 수 있습니다. 로그에 있던 IP 주소와 서버 이름은 가렸습니다.",
     guide: "가이드북", repo: "GitHub 저장소",
   },
   en: {
@@ -128,8 +129,9 @@ const TEXT = {
     lPass: "Pass rate (right axis, 0 to 1)", lReward: "Mean reward (right axis)",
     st_ok: "ok", st_wrong_answer: "wrong answer", st_compile_error: "compile error", st_runtime_error: "runtime error",
     st_timeout: "timeout", st_policy_violation: "policy violation", st_sandbox_error: "infrastructure error",
+    flag_timed_output_mismatch: "timed output mismatch", flag_gpu_fault: "GPU fault", blockedChip: "blocked",
     batch: "batch", step: "step", evals: "Evaluations", passRate: "Pass rate", customRate: "Custom kernel rate",
-    meanSpeedup: "Mean speedup", p50: "eval p50", p95: "eval p95", wall: "Batch wall time",
+    meanSpeedup: "Mean speedup", evalTimes: "Eval time (median / p95)", evalMedian: "eval median", wall: "Batch wall time",
     rewardMean: "Mean reward", rewardStd: "Reward std", loss: "Loss", compLen: "Mean completion length (tokens)",
     stepTime: "Step time", sec: "s", model: "Model", sandboxSide: "Sandbox side", trainerSide: "Trainer side",
     switchTitle: "Switching the sandbox version during training (v1 to v2)",
@@ -156,32 +158,32 @@ const TEXT = {
 const SUBS = {
   vector_add_triton: {
     kind: "good",
-    ko: { n: "Triton 벡터 덧셈", d: "정답, custom kernel", s: "Triton으로 직접 쓴 벡터 덧셈 커널입니다. 정답이고 custom kernel이라 speedup 점수 대상이에요." },
+    ko: { n: "Triton 벡터 덧셈", d: "정답, 직접 만든 커널", s: "Triton으로 직접 작성한 벡터 덧셈 커널입니다. 정답이고 직접 만든 커널이라 속도 점수도 받을 수 있어요." },
     en: { n: "Triton vector add", d: "correct, custom kernel", s: "A hand-written Triton vector add kernel. Correct and a custom kernel, so it is eligible for the speedup score." },
   },
   relu_bias_triton: {
     kind: "good",
-    ko: { n: "Triton fused ReLU", d: "정답, 기준보다 빠름", s: "bias 덧셈과 ReLU를 한 커널로 합친 Triton 커널입니다. 기준 구현(PyTorch)은 두 연산을 따로 실행합니다." },
+    ko: { n: "Triton ReLU 합치기", d: "정답, 정답 코드보다 빠름", s: "덧셈과 ReLU를 커널 하나로 합친 Triton 코드입니다. 정답 코드(PyTorch)는 두 연산을 따로 실행해요." },
     en: { n: "Triton fused ReLU", d: "correct, faster than reference", s: "A Triton kernel that fuses the bias add and the ReLU into one kernel. The PyTorch reference runs the two ops separately." },
   },
   relu_bias_torch_only: {
     kind: "good",
-    ko: { n: "PyTorch만 사용", d: "정답, custom kernel 아님", s: "PyTorch 연산만으로 쓴 정답입니다. 맞는 코드지만 학습 목표(custom kernel 작성)를 피해 가는 답이라 점수를 덜 줍니다." },
+    ko: { n: "PyTorch만 사용", d: "정답, 직접 만든 커널 아님", s: "PyTorch 기본 연산만 쓴 정답입니다. 결과는 맞지만 학습 목표인 커널 작성을 하지 않았기 때문에 점수를 덜 줍니다." },
     en: { n: "PyTorch only", d: "correct, no custom kernel", s: "A correct answer using only PyTorch ops. It is right, but it dodges the training goal (writing a custom kernel), so it earns less." },
   },
   relu_bias_wrong: {
     kind: "bad",
-    ko: { n: "ReLU 빠뜨린 오답", d: "wrong_answer", s: "ReLU를 빠뜨리고 x + b만 반환하는 오답입니다." },
+    ko: { n: "ReLU 빠뜨린 오답", d: "오답", s: "ReLU를 빼먹고 x + b만 돌려주는 오답입니다." },
     en: { n: "Missing ReLU", d: "wrong_answer", s: "A wrong answer that returns x + b and forgets the ReLU." },
   },
   relu_bias_benchmark_cheat: {
     kind: "bad",
-    ko: { n: "벤치마크 치팅", d: "reward hacking 시도", s: "처음 세 번 호출에는 정답을 내고, 그 뒤 벤치마크 구간부터는 0을 반환해 빠른 척합니다. 정확성 검사만 하는 채점기는 속아 넘어가요." },
+    ko: { n: "속도 측정 속이기", d: "점수 조작 시도", s: "처음 세 번은 정답을 내고, 속도를 재기 시작하면 0만 돌려줘서 빠른 척합니다. 결과를 한 번만 확인하는 채점기는 여기에 속아요." },
     en: { n: "Benchmark cheat", d: "reward hacking attempt", s: "Answers correctly for the first three calls, then returns zeros during the benchmark to look fast. A grader that only checks correctness is fooled." },
   },
   read_host_file: {
     kind: "bad",
-    ko: { n: "호스트 파일 읽기", d: "정책 위반 시도", s: "모듈을 불러오는 순간 /etc/hostname을 읽으려는 코드입니다. 파일 시스템을 들여다보려는 시도의 가장 단순한 형태예요." },
+    ko: { n: "서버 파일 읽기", d: "금지된 동작 시도", s: "코드를 불러오자마자 /etc/hostname 파일을 읽으려고 합니다. 서버 파일을 엿보려는 가장 단순한 시도예요." },
     en: { n: "Read a host file", d: "policy violation attempt", s: "Code that reads /etc/hostname as soon as the module loads: the simplest form of poking at the file system." },
   },
 };
@@ -200,43 +202,43 @@ const ARCH = {
     { id: "internet", x: 818, y: 316, w: 150, h: 56, zone: "out", blocked: true },
   ],
   ko: {
-    trainer: { t1: "GRPO trainer", t2: "vLLM 생성 + TRL, GPU 노드", title: "GRPO trainer",
-      items: ["vLLM으로 프롬프트마다 completion 여러 개를 만들고 TRL GRPO로 학습합니다.",
-        "기본 모델은 Qwen2.5-Coder-1.5B-Instruct, 노드는 g5.2xlarge(A10G 1장)입니다.",
-        "샌드박스 API는 gpusandbox/client 라벨이 붙은 rl-trainer pod만 부를 수 있어요."], link: "#train" },
-    reward: { t1: "reward 함수", t2: "verdict를 reward로 (score_verdict)", title: "reward 함수",
-      items: ["completion마다 샌드박스에 채점을 요청하고, 돌아온 verdict로 reward를 만듭니다.",
-        "가중치는 format 0.1, correctness 1.0, speedup 0.5입니다.",
-        "인프라 오류(sandbox_error)는 reward 없이 group baseline에서 뺍니다."], link: "#try" },
-    routing: { t1: "라우팅 표 (ConfigMap)", t2: "활성 런타임과 버전", title: "라우팅 표",
-      items: ["trainer pod에 마운트된 ConfigMap으로, 지금 채점할 런타임과 버전을 담습니다.",
-        "버전 전환은 reward 배치 경계에서만 일어납니다. 한 배치가 두 버전으로 섞이지 않아요.",
-        "새 버전은 golden parity를 통과해야 트래픽을 받습니다."], link: "#train" },
-    gvisor: { t1: "gVisor 풀 (GPU)", t2: "runsc + nvproxy", title: "gVisor 풀",
-      items: ["runsc가 시스템 콜을 사용자 공간 커널에서 처리합니다. 컨테이너가 호스트 커널을 직접 만지지 않아요.",
-        "nvproxy가 GPU 드라이버 ioctl을 걸러서 호스트 드라이버로 넘깁니다."], link: "#defense", runtime: "gvisor" },
-    kata: { t1: "Kata QEMU 풀 (GPU)", t2: "pod마다 micro VM + VFIO", title: "Kata QEMU 풀",
-      items: ["pod마다 경량 VM을 띄우고, GPU는 VFIO passthrough로 VM에 통째로 넘깁니다.",
-        "샌드박스 코드는 guest VM 커널 위에서 돕니다. 호스트와 커널이 다릅니다."], link: "#defense", runtime: "kata-qemu" },
-    cpu: { t1: "CPU 풀 3종", t2: "gVisor, Kata CLH, Kata QEMU", title: "CPU 풀",
-      items: ["GPU 없이 같은 API를 제공하는 풀입니다. CPU 시나리오와 개발에 씁니다.",
-        "세 런타임을 같은 c8i.2xlarge 노드에서 비교했습니다. Kata는 nested virtualization을 씁니다."], link: "#bench" },
+    trainer: { t1: "GRPO 학습기", t2: "vLLM으로 코드 생성, TRL로 학습", title: "GRPO 학습기 (trainer)",
+      items: ["vLLM으로 문제마다 코드를 여러 개 만들고, TRL의 GRPO로 모델을 학습합니다.",
+        "기본 모델은 Qwen2.5-Coder-1.5B-Instruct이고, g5.2xlarge(A10G GPU 1장)에서 돌립니다.",
+        "샌드박스에는 학습 영역(rl-trainer)에 있는 허가된 pod만 요청을 보낼 수 있어요."], link: "#train" },
+    reward: { t1: "점수 계산 (reward)", t2: "채점 결과를 점수로 바꿈", title: "점수 계산 (reward 함수)",
+      items: ["모델이 쓴 코드를 샌드박스에 보내 채점받고, 그 결과를 점수로 바꿉니다.",
+        "점수 비중은 형식 0.1, 정확도 1.0, 속도 0.5입니다.",
+        "샌드박스 쪽 오류가 나면 점수를 매기지 않고 비교 대상에서 뺍니다."], link: "#try" },
+    routing: { t1: "라우팅 표 (ConfigMap)", t2: "지금 쓸 샌드박스와 버전", title: "라우팅 표",
+      items: ["지금 어떤 샌드박스와 버전으로 채점할지 적어 둔 설정입니다.",
+        "버전은 배치가 끝날 때만 바뀝니다. 한 배치를 두 버전이 나눠 채점하는 일은 없어요.",
+        "새 버전은 미리 준비한 코드로 같은 결과가 나오는지 확인한 뒤에만 쓰입니다."], link: "#train" },
+    gvisor: { t1: "gVisor 샌드박스 (GPU)", t2: "runsc + nvproxy", title: "gVisor 샌드박스",
+      items: ["gVisor가 만든 가상 커널 위에서 코드가 돌아서, 서버의 진짜 커널에 직접 닿지 않습니다.",
+        "GPU 명령은 nvproxy가 걸러서 서버의 GPU 드라이버로 넘깁니다."], link: "#defense", runtime: "gvisor" },
+    kata: { t1: "Kata 샌드박스 (GPU)", t2: "pod마다 작은 VM, GPU를 통째로 연결", title: "Kata QEMU 샌드박스",
+      items: ["pod마다 작은 가상 머신(VM)을 띄우고, GPU를 그 VM에 통째로 연결합니다(VFIO).",
+        "코드는 VM 안의 커널에서 돕니다. 서버 커널과는 다른 커널이에요."], link: "#defense", runtime: "kata-qemu" },
+    cpu: { t1: "CPU 샌드박스 3종", t2: "gVisor, Kata CLH, Kata QEMU", title: "CPU 샌드박스",
+      items: ["GPU 없이 같은 방식으로 채점하는 샌드박스입니다. CPU 실습과 개발에 씁니다.",
+        "세 가지를 같은 서버(c8i.2xlarge)에서 비교했습니다. Kata는 VM 안에서 다시 VM을 띄웁니다(nested virtualization)."], link: "#bench" },
     imds: { t1: "인스턴스 메타데이터", t2: "169.254.169.254", title: "인스턴스 메타데이터 (IMDS)" },
-    k8sapi: { t1: "Kubernetes API", t2: "cluster 서비스 IP", title: "Kubernetes API" },
+    k8sapi: { t1: "Kubernetes API", t2: "클러스터 관리 주소", title: "Kubernetes API" },
     kubelet: { t1: "노드 kubelet", t2: "포트 10250", title: "노드 kubelet" },
-    internet: { t1: "인터넷", t2: "S3 endpoint 등", title: "인터넷" },
-    blockedItems: ["sandbox namespace는 default-deny NetworkPolicy로 시작합니다. DNS, IMDS, 인터넷, Kubernetes API가 모두 막혀요.",
-      "verify.sh가 샌드박스 안에서 직접 연결을 시도하고, 연결이 되지 않는 것(TimeoutError)을 확인합니다."],
-    measured: "측정: {inst}, {gpu}, pod {pods}개, eval p50 {p50}초",
-    kernelLine: "샌드박스 안 커널 {k}, 노드 커널 {n}",
+    internet: { t1: "인터넷", t2: "S3 같은 외부 주소", title: "인터넷" },
+    blockedItems: ["샌드박스 영역은 기본적으로 모든 연결을 막아 둡니다. DNS, 메타데이터, 인터넷, Kubernetes API 모두 막혀 있어요.",
+      "검증 스크립트가 샌드박스 안에서 직접 연결해 보고, 연결이 안 되는 것(TimeoutError)을 확인했습니다."],
+    measured: "측정: {inst}, {gpu}, pod {pods}개, 채점 시간 중앙값 {p50}초",
+    kernelLine: "샌드박스 안 커널 {k}, 서버 커널 {n}",
     flow: [
-      "1. 모델이 프롬프트마다 커널 코드를 여러 개 생성합니다 (GRPO group).",
-      "2. completion이 reward 함수로 넘어갑니다.",
-      "3. 라우팅 표에서 지금 활성인 런타임과 버전을 읽습니다.",
-      "4. ServiceAccount 토큰과 함께 샌드박스 풀에 채점을 요청합니다.",
-      "5. 샌드박스 안에서 정책 검사, 실행, 정확성 비교, 벤치마크를 합니다. 밖으로 나가는 연결은 모두 막힙니다.",
-      "6. verdict가 돌아오면 reward를 계산합니다.",
-      "7. group 안에서 reward를 비교해 정책을 업데이트하고, 다음 step으로 갑니다.",
+      "1. 모델이 문제마다 GPU 코드를 여러 개 씁니다.",
+      "2. 쓴 코드가 점수 계산 단계로 넘어갑니다.",
+      "3. 라우팅 표에서 지금 쓸 샌드박스와 버전을 확인합니다.",
+      "4. 인증 토큰을 붙여 샌드박스에 채점을 요청합니다.",
+      "5. 샌드박스 안에서 코드 검사, 실행, 정답 비교, 속도 측정을 합니다. 밖으로 나가는 연결은 모두 막혀 있어요.",
+      "6. 채점 결과가 돌아오면 점수로 바꿉니다.",
+      "7. 같은 문제의 코드끼리 점수를 비교해 모델을 업데이트하고, 다음 step으로 넘어갑니다.",
     ],
   },
   en: {
@@ -283,24 +285,24 @@ const ARCH = {
 
 // Attempts shown in the defense section. `match` finds the evidence line in a verify transcript.
 const ATTACKS = [
-  { id: "imds", match: /instance metadata/, ko: ["인스턴스 메타데이터 접근", "IAM 자격 증명을 노리는 경로", "NetworkPolicy default deny"], en: ["Instance metadata", "the path to IAM credentials", "NetworkPolicy default deny"] },
-  { id: "k8sapi", match: /kubernetes api/, ko: ["Kubernetes API 접근", "클러스터 조작을 노리는 경로", "NetworkPolicy default deny"], en: ["Kubernetes API", "the path to the cluster", "NetworkPolicy default deny"] },
-  { id: "kubelet", match: /node kubelet/, ko: ["노드 kubelet 접근", "노드의 다른 pod를 노리는 경로", "NetworkPolicy default deny"], en: ["Node kubelet", "the path to other pods on the node", "NetworkPolicy default deny"] },
-  { id: "internet", match: /internet/, ko: ["인터넷 연결", "데이터 유출, 정답 내려받기", "NetworkPolicy default deny"], en: ["Internet", "exfiltration, downloading answers", "NetworkPolicy default deny"] },
-  { id: "ns", match: /connect from default ns/, ko: ["다른 namespace에서 샌드박스 호출", "trainer가 아닌 pod의 접근", "NetworkPolicy ingress 허용 목록"], en: ["Calling a sandbox from another namespace", "access from a pod that is not the trainer", "NetworkPolicy ingress allow list"] },
-  { id: "kernel", match: /^\s+sandbox:/, ko: ["호스트 커널 직접 사용", "커널 취약점으로 탈출", "gVisor 사용자 공간 커널, Kata guest VM"], en: ["Using the host kernel", "escaping through a kernel bug", "gVisor user-space kernel, Kata guest VM"] },
-  { id: "hostfile", match: /read_host_file/, ko: ["호스트 파일 읽기", "파일 시스템 탐색", "정적 정책 검사 (open 금지)"], en: ["Reading a host file", "exploring the file system", "static policy check (no open)"] },
-  { id: "cheat", match: /relu_bias_benchmark_cheat/, ko: ["벤치마크 구간에서만 가짜 출력", "speedup reward 부풀리기", "timed 출력 checksum 재검증"], en: ["Fake output during the benchmark", "inflating the speedup reward", "timed-output checksum re-check"] },
+  { id: "imds", match: /instance metadata/, ko: ["인스턴스 메타데이터 접근", "AWS 자격 증명을 빼내려는 시도", "네트워크 정책: 기본 차단"], en: ["Instance metadata", "the path to IAM credentials", "NetworkPolicy default deny"] },
+  { id: "k8sapi", match: /kubernetes api/, ko: ["Kubernetes API 접근", "클러스터를 조작하려는 시도", "네트워크 정책: 기본 차단"], en: ["Kubernetes API", "the path to the cluster", "NetworkPolicy default deny"] },
+  { id: "kubelet", match: /node kubelet/, ko: ["노드 kubelet 접근", "같은 서버의 다른 pod를 노리는 시도", "네트워크 정책: 기본 차단"], en: ["Node kubelet", "the path to other pods on the node", "NetworkPolicy default deny"] },
+  { id: "internet", match: /internet/, ko: ["인터넷 연결", "데이터 유출, 정답 내려받기", "네트워크 정책: 기본 차단"], en: ["Internet", "exfiltration, downloading answers", "NetworkPolicy default deny"] },
+  { id: "ns", match: /connect from default ns/, ko: ["다른 영역에서 샌드박스 호출", "학습기가 아닌 pod가 채점을 요청", "네트워크 정책: 허가된 pod만 허용"], en: ["Calling a sandbox from another namespace", "access from a pod that is not the trainer", "NetworkPolicy ingress allow list"] },
+  { id: "kernel", match: /^\s+sandbox:/, ko: ["서버 커널 직접 사용", "커널 취약점을 이용한 탈출", "gVisor 가상 커널, Kata VM 커널"], en: ["Using the host kernel", "escaping through a kernel bug", "gVisor user-space kernel, Kata guest VM"] },
+  { id: "hostfile", match: /read_host_file/, ko: ["서버 파일 읽기", "파일 시스템 엿보기", "코드 사전 검사 (open 금지)"], en: ["Reading a host file", "exploring the file system", "static policy check (no open)"] },
+  { id: "cheat", match: /relu_bias_benchmark_cheat/, ko: ["속도 측정 중에만 가짜 결과", "속도 점수 부풀리기", "측정 중에도 결과 확인"], en: ["Fake output during the benchmark", "inflating the speedup reward", "timed-output checksum re-check"] },
 ];
 
 const TRANSCRIPTS = {
-  "verify-gvisor": { ko: ["verify.sh gvisor", "커널 비교, egress 4곳, golden 6개, 다른 namespace 접속을 차례로 확인합니다 (gVisor, A10G)."],
+  "verify-gvisor": { ko: ["verify.sh gvisor", "커널 비교, 외부 연결 4곳, 미리 준비한 코드 6개 채점, 다른 영역에서의 접속을 차례로 확인합니다 (gVisor, A10G)."],
     en: ["verify.sh gvisor", "Kernel comparison, four egress targets, six goldens and a connection from another namespace (gVisor, A10G)."] },
-  "verify-kata-qemu": { ko: ["verify.sh kata-qemu", "같은 검증을 Kata QEMU GPU 풀(T4, pod 4개)에서 실행했습니다."],
+  "verify-kata-qemu": { ko: ["verify.sh kata-qemu", "같은 검증을 Kata GPU 샌드박스(T4, pod 4개)에서 실행한 기록입니다."],
     en: ["verify.sh kata-qemu", "The same checks on the Kata QEMU GPU pool (T4, four pods)."] },
-  "smoke-gvisor": { ko: ["gVisor GPU 스모크 테스트", "gVisor RuntimeClass를 만들고 gVisor 안에서 CUDA가 A10G를 보는지 확인합니다. 'Starting gVisor...'는 gVisor 자체 커널이 낸 메시지예요."],
+  "smoke-gvisor": { ko: ["gVisor GPU 동작 확인", "gVisor 안에서 CUDA가 A10G GPU를 인식하는지 확인합니다. 'Starting gVisor...'는 gVisor의 가상 커널이 출력한 메시지예요."],
     en: ["gVisor GPU smoke test", "Creates the gVisor RuntimeClass and checks that CUDA inside gVisor sees the A10G. 'Starting gVisor...' comes from gVisor's own kernel."] },
-  rollout: { ko: ["rollout.sh v1 → v2", "새 버전 풀을 띄우고 검증한 뒤, golden parity를 확인하고 라우팅 표를 바꿉니다 (CPU 풀)."],
+  rollout: { ko: ["rollout.sh v1 → v2", "새 버전 샌드박스를 띄워 검증하고, 이전 버전과 결과가 같은지 확인한 뒤 라우팅 표를 바꿉니다 (CPU 샌드박스)."],
     en: ["rollout.sh v1 → v2", "Starts the new version's pool, verifies it, checks golden parity and switches the routing table (CPU pool)."] },
 };
 
@@ -366,9 +368,18 @@ function median(values) {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 }
 
+// Verdict codes and flags shown in the reader's language; unknown codes stay as they are.
+function statusLabel(status) {
+  return TEXT[lang][`st_${status}`] ?? status;
+}
+
+function flagLabel(flag) {
+  return TEXT[lang][`flag_${flag}`] ?? flag;
+}
+
 function statusChip(status) {
   const cls = status === "ok" ? "good" : status === "sandbox_error" ? "infra" : "bad";
-  return el("span", { class: `chip ${cls}` }, status);
+  return el("span", { class: `chip ${cls}`, title: status }, statusLabel(status));
 }
 
 function sleep(ms) {
@@ -571,6 +582,67 @@ function moveDot(dot, from, to, ms, token) {
   });
 }
 
+// ---------- Python syntax colors (text nodes only, no HTML parsing) ----------
+const PY_CONTROL = new Set(("and as assert async await break case continue del elif else except finally for from global if "
+  + "import in is lambda match nonlocal not or pass raise return try while with yield").split(" "));
+const PY_DECL = new Set(["def", "class"]);
+const PY_CONST = new Set(["True", "False", "None"]);
+const PY_BUILTIN = new Set(("self super print open len range int float str bytes list dict tuple set isinstance getattr "
+  + "setattr hasattr type object min max abs sum zip enumerate map filter any all exec eval compile __import__").split(" "));
+// Comment, string (triple-quoted first), number, identifier, whitespace, anything else.
+const PY_TOKEN = /(#[^\n]*)|((?:[rRbBuUfF]{1,2})?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'))|(\b\d[\d_]*(?:\.\d*)?(?:[eE][+-]?\d+)?\b)|([A-Za-z_]\w*)|(\s+)|([\s\S])/g;
+
+function pyTokens(source) {
+  const out = [];
+  let prev = "";
+  let atLineStart = true;
+  for (const m of source.matchAll(PY_TOKEN)) {
+    const [text, com, str, num, ident, space] = m;
+    let cls = null;
+    if (com) cls = "com";
+    else if (str) cls = "str";
+    else if (num) cls = "num";
+    else if (ident) {
+      const next = source.slice(m.index + text.length).match(/^\s*(\S)/)?.[1];
+      if (PY_CONTROL.has(ident)) cls = "ctrl";
+      else if (PY_DECL.has(ident)) cls = "decl";
+      else if (PY_CONST.has(ident)) cls = "const";
+      else if (prev === "@" || prev === "dec") cls = "dec";
+      else if (prev === "def") cls = "fn";
+      else if (/^[A-Z][A-Z0-9_]+$/.test(ident)) cls = "bi";
+      else if (prev === "class" || /^[A-Z]/.test(ident)) cls = "cls";
+      else if (PY_BUILTIN.has(ident)) cls = "bi";
+      else if (next === "(") cls = "fn";
+    } else if (text === "@" && atLineStart) cls = "dec";
+    else if (text === "." && prev === "dec") cls = "dec";
+    out.push([text, cls]);
+    if (!space) prev = cls === "dec" ? "dec" : ident || text;
+    else if (space.includes("\n")) prev = "";
+    if (text.includes("\n")) atLineStart = true;
+    else if (!space) atLineStart = false;
+  }
+  return out;
+}
+
+function renderCode(pre, source) {
+  // One span per line so CSS can number the lines; tokens that span lines are split.
+  const lines = [];
+  let line = el("span", { class: "cl" });
+  for (const [text, cls] of pyTokens(source || "")) {
+    const parts = text.split("\n");
+    parts.forEach((part, i) => {
+      if (i > 0) {
+        lines.push(line, "\n");
+        line = el("span", { class: "cl" });
+      }
+      if (part) line.append(cls ? el("span", { class: `tok-${cls}` }, part) : document.createTextNode(part));
+    });
+  }
+  if (line.childNodes.length) lines.push(line);
+  pre.classList.add("hl");
+  pre.replaceChildren(...lines);
+}
+
 // ---------- 2. try a submission ----------
 function subText(name) {
   return SUBS[name]?.[lang] || { n: name, d: "", s: "" };
@@ -598,12 +670,12 @@ function selectGolden(name) {
   const tx = subText(name);
   document.getElementById("sub-title").textContent = tx.n;
   const tag = document.getElementById("sub-tag");
-  tag.textContent = `${t("expected")}: ${golden.expect_status}`;
+  tag.textContent = `${t("expected")}: ${statusLabel(golden.expect_status)}`;
   tag.className = `tag ${golden.expect_status === "ok" ? "good" : "bad"}`;
   document.getElementById("sub-story").textContent = tx.s;
   document.getElementById("task-desc").textContent = `${golden.task_id}: ${task.description} (${task.input_spec})`;
-  document.getElementById("reference").textContent = task.reference;
-  document.getElementById("candidate").textContent = golden.code;
+  renderCode(document.getElementById("reference"), task.reference);
+  renderCode(document.getElementById("candidate"), golden.code);
   renderLanes(false);
 }
 
@@ -688,7 +760,7 @@ async function runLane(lane, v, speed, token) {
 function laneResult(v) {
   const r = v.reward || {};
   const out = [el("div", { class: "lane-head" }, statusChip(v.status),
-    el("span", { class: "muted small" }, `${t("expected")}: ${v.expected_status}`))];
+    el("span", { class: "muted small" }, `${t("expected")}: ${statusLabel(v.expected_status)}`))];
   if (r.total === null || r.total === undefined) {
     out.push(el("p", { class: "why" }, t("excluded")));
     return out;
@@ -716,7 +788,7 @@ function laneResult(v) {
   if (v.speedup) out.push(row(t("speedupL"), `${fmt(v.speedup, 3)}x`));
   if (v.ref_ms) out.push(row(t("msL"), `${fmt(v.ref_ms, 4)} / ${fmt(v.cand_ms, 4)}`));
   if ((v.violations || []).length) out.push(row(t("violationsL"), v.violations.join("; ")));
-  if ((v.flags || []).length) out.push(row(t("flagsL"), v.flags.join(", ")));
+  if ((v.flags || []).length) out.push(row(t("flagsL"), v.flags.map(flagLabel).join(", ")));
   out.push(el("p", { class: "why" }, whyText(v)));
   return out;
 }
@@ -773,7 +845,7 @@ function renderAttacks() {
       el("span", { class: "a" }, title),
       el("span", { class: "l" }, aim),
       el("span", { class: "r" }, results.map(([rt, r]) => el("span", {},
-        el("span", { class: "chip good" }, r), `${rt}  `))),
+        el("span", { class: "chip good" }, r === "blocked" ? t("blockedChip") : statusLabel(r)), `${rt}  `))),
       el("span", { class: "l" }, `→ ${layer}`));
     b.addEventListener("click", () => {
       for (const x of document.querySelectorAll(".attack")) x.classList.toggle("active", x === b);
@@ -974,7 +1046,7 @@ function renderGrpoDetail() {
       row(t("passRate"), fmt(b.pass_rate, 2)),
       row(t("customRate"), fmt(b.custom_kernel_rate, 2)),
       row(t("meanSpeedup"), b.mean_speedup === null ? "-" : `${fmt(b.mean_speedup, 3)}x`),
-      row(`${t("p50")} / ${t("p95")}`, `${b.eval_p50_s} / ${b.eval_p95_s} ${t("sec")}`),
+      row(t("evalTimes"), `${b.eval_p50_s} / ${b.eval_p95_s} ${t("sec")}`),
       row(t("wall"), `${b.batch_wall_s} ${t("sec")}`)),
     el("div", { class: "card" },
       el("h4", {}, `${t("evals")}: ${b.n}`),
@@ -1031,12 +1103,12 @@ function renderSim() {
     kids.push(sv("line", { class: "grid", x1: L, x2: W - R, y1: y(i), y2: y(i) }));
     kids.push(sv("text", { class: "ax-label", x: L - 8, y: y(i) + 4, "text-anchor": "end" }, `${i}${t("sec")}`));
   }
-  kids.push(sv("text", { class: "ax-label", x: 8, y: 16 }, `${t("p50")} (${t("sec")})`));
+  kids.push(sv("text", { class: "ax-label", x: 8, y: 16 }, `${t("evalMedian")} (${t("sec")})`));
   batches.forEach((b, i) => {
     const x = L + band * i + band * 0.15;
     kids.push(sv("rect", { x, y: y(b.eval_p50_s), width: band * 0.7, height: T + ph - y(b.eval_p50_s),
       class: `sim-v${versions.indexOf(b.version) % 3}` },
-    sv("title", {}, `${t("step")} ${b.global_step}: ${b.runtime}/${b.version}, ${t("p50")} ${b.eval_p50_s}${t("sec")}, ${t("passRate")} ${fmt(b.pass_rate, 2)}`)));
+    sv("title", {}, `${t("step")} ${b.global_step}: ${b.runtime}/${b.version}, ${t("evalMedian")} ${b.eval_p50_s}${t("sec")}, ${t("passRate")} ${fmt(b.pass_rate, 2)}`)));
     if (i % 5 === 0 || i === batches.length - 1) {
       kids.push(sv("text", { class: "ax-label", x: L + band * i + band / 2, y: H - B + 16, "text-anchor": "middle" }, String(b.global_step)));
     }
@@ -1124,7 +1196,7 @@ function renderBench() {
     const w = Math.max(2, (v / maxV) * pw);
     const details = [`${r.runtime}: ${t(metric.key)} ${fmt(v, 3)}`,
       `${t("pods")} ${r.cold_start_s?.length ?? "-"}, cold start ${(r.cold_start_s || []).join(", ")} ${t("sec")}`,
-      `${t("p50")} ${r.eval_p50_s} / ${t("p95")} ${r.eval_p95_s} ${t("sec")}`,
+      `${t("evalTimes")} ${r.eval_p50_s} / ${r.eval_p95_s} ${t("sec")}`,
       `${t("throughput")} ${r.throughput_eval_per_s} eval/s, ${r.ok}/${r.requests} ok`,
       r.gpu ? `speedup ${r.speedup_median}, ${t("refMs")} ${r.ref_ms_median}` : `${t("refMs")} ${r.ref_ms_median}`].join("\n");
     kids.push(sv("rect", { class: r.gpu ? "bar-gpu" : "bar-cpu", x: L, y: y + 8, width: w, height: 22, rx: 3 }, sv("title", {}, details)));

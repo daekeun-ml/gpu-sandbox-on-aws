@@ -97,6 +97,28 @@ h4 { font-size: 14px; margin: 14px 0 6px; }
 .kv .v { text-align: right; overflow-wrap: anywhere; }
 .code { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow-x: auto;
   font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, "NanumGothicCoding", monospace; white-space: pre; margin: 0; }
+/* Python syntax colors: Light+ and Dark+ style palettes */
+.code.hl { counter-reset: line; padding-left: 0; }
+.code.hl .cl::before { counter-increment: line; content: counter(line); display: inline-block; width: 2.6em;
+  padding-right: 1em; text-align: right; color: var(--muted); opacity: .6; user-select: none; }
+.tok-ctrl { color: #af00db; }
+.tok-decl, .tok-const { color: #0000ff; }
+.tok-bi { color: #0070c1; }
+.tok-str { color: #a31515; }
+.tok-com { color: #008000; font-style: italic; }
+.tok-num { color: #098658; }
+.tok-fn, .tok-dec { color: #795e26; }
+.tok-cls { color: #267f99; }
+@media (prefers-color-scheme: dark) {
+  .tok-ctrl { color: #c586c0; }
+  .tok-decl, .tok-const { color: #569cd6; }
+  .tok-bi { color: #4fc1ff; }
+  .tok-str { color: #ce9178; }
+  .tok-com { color: #6a9955; }
+  .tok-num { color: #b5cea8; }
+  .tok-fn, .tok-dec { color: #dcdcaa; }
+  .tok-cls { color: #4ec9b0; }
+}
 details summary { cursor: pointer; color: var(--blue); margin: 6px 0; }
 .chip { display: inline-block; font-size: 12px; padding: 1px 9px; border-radius: 10px; color: #fff; vertical-align: middle; font-weight: 600; }
 .chip.good { background: var(--good); }
