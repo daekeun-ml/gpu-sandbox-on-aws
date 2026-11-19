@@ -13,9 +13,8 @@ If you go to the cloud before checking the concepts, you run into AWS costs and 
 
 ## Why
 
-- **We start with your PC, which is free.** You first check the grading flow by hand, and go to AWS only if you want to.
-- **Each step says "what is happening now."** It points out which command matches the concepts you learned in chapters 1 to 4.
-- **The AWS steps include screenshots from actually doing it.** On 2026-11-14, we deployed, checked, and deleted in this order in a practice account.
+- **The exercise on your PC is free.** In part 1 you see how correct, wrong and cheating answers are graded.
+- **The AWS exercise is optional and billed.** Part 2 compares the kernels of the three runtimes on one `c8i.2xlarge`, then deletes the stack.
 
 **Before you start:** [Chapter 01](01_why_sandbox.md) through [chapter 04](04_rl_and_sandbox.md). What you need is listed at the start of each part.
 
@@ -52,7 +51,7 @@ uv pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-**What to check:** The last line should end with `94 passed`. The screenshot below was taken when the suite had 74 tests.
+**What to check:** The final summary line shows only `passed`, with no `failed` or `error` (105 tests as of 2026-11-19). The screenshot below was taken when the suite had 74 tests.
 
 ![Local terminal: result of python -m pytest -q, 74 passed](../images/learning/local-pytest.png)
 
@@ -60,11 +59,11 @@ python -m pytest -q
 
 **What is happening now:** You check that the mechanisms from chapters 01 and 04 work (the check that blocks dangerous code before it runs, the split between the grader and the submitted code, the authentication that rejects requests without a token, and the version switch at batch boundaries).
 
-**If you get stuck:** If you see `ModuleNotFoundError`, run `source .venv/bin/activate` again and repeat step 1. On a Linux host, starting servers directly as in step 3 below can terminate other processes of the same user, so run step 3 on macOS or with each server in its own container (its own PID namespace) (the reason is in section 3 of [Getting started](../getting_started.md)).
+**If you get stuck:** If you see `ModuleNotFoundError`, check that you ran `source .venv/bin/activate` in the cloned repository folder (`gpu-sandbox-on-aws`). If it still appears, run only the two `uv pip install` lines of step 1 again. On a Linux host, starting servers directly as in step 3 below can terminate other processes of the same user (the reason is in section 3 of [Getting started](../getting_started.md)). On Linux, skip steps 3 and 4. The step 2 test `test_golden_probe_and_parity_on_cpu_pools` starts two local servers, grades the same four test answers as step 4, and checks the results. On macOS, run the same grading yourself in steps 3 and 4.
 
 ### 3. Start two sandbox servers (macOS)
 
-Run one command in each of two terminals. The two servers differ only in their port and work directory (`SANDBOX_WORK_ROOT`).
+Open two terminals, move to the repository folder in each, and run one command in each. The two servers differ only in their port and work directory (`SANDBOX_WORK_ROOT`).
 
 ```bash
 # Terminal 1
@@ -90,7 +89,7 @@ gpusandbox-server
 
 ### 4. Grade the test answers
 
-In a third terminal, send the four test answers (golden) to the two servers.
+In a third terminal, move to the repository folder and send the four test answers (golden) to the two servers.
 
 ```bash
 source .venv/bin/activate
@@ -121,7 +120,7 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 **What you need:** An AWS account for practice (avoid production accounts), the AWS CLI and credentials, Node.js 22 or 24, the AWS CDK CLI (`npm install -g aws-cdk`), the Session Manager plugin for the AWS CLI, `kubectl`, and `helm`. The account's `Running On-Demand Standard` vCPU quota must be 14 or more. The steps assume the `us-west-2` Region.
 
-**Cost:** About 0.57 USD per hour for compute (2 `m6i.large` + 1 `c8i.2xlarge`) + 0.10 USD for EKS + NAT gateway charges (On-Demand list prices). For 1 to 2 hours, expect a few dollars (estimate).
+**Cost:** The three cluster nodes (2 `m6i.large` + 1 `c8i.2xlarge`) cost about 0.57 USD per hour, plus 0.10 USD for EKS and NAT gateway charges (On-Demand list prices). The access instance (`t4g.nano`), the KMS key, logs and EBS volumes add a little more. For 1 to 2 hours, expect a few dollars (estimate).
 
 !!! warning "Be sure to delete it when you are done"
     The cluster is billed until you delete it, even while you take a break. Do not skip the last step (delete).
@@ -139,12 +138,15 @@ flowchart LR
 
 ### 5. Create the configuration file
 
+Run these in a terminal where the virtual environment from part 1 is active (in the repository folder).
+
 ```bash
-cp scripts/config.env.example scripts/config.env
-pip install -r cdk/requirements.txt
+test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
+uv pip install -r cdk/requirements.txt
+source scripts/config.env
 ```
 
-You can keep the defaults (`us-west-2`, `gpu-sandbox`) for `AWS_REGION` and `CLUSTER_NAME` in `scripts/config.env`.
+The first line copies the example only when the file does not exist yet, so a file you already made is kept. You can keep the defaults (`us-west-2`, `gpu-sandbox`) for `AWS_REGION` and `CLUSTER_NAME` in `scripts/config.env`. The last line loads these values into the current terminal, for `$AWS_REGION` and `$CLUSTER_NAME` in step 6 and in the troubleshooting commands. If you edit the file or open a new terminal, run `source scripts/config.env` again.
 
 **What is happening now:** All scripts and the CDK app read their settings from this one file, which can contain account information and is therefore kept out of the repository.
 
@@ -153,7 +155,7 @@ You can keep the defaults (`us-west-2`, `gpu-sandbox`) for `AWS_REGION` and `CLU
 Run CDK bootstrap once (the first time only), then deploy the cluster.
 
 ```bash
-cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/us-west-2"
+cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
 cdk/deploy.sh C
 ```
 
@@ -165,7 +167,7 @@ During deployment, a list of IAM role and security group changes appears, and it
 
 *A deployment in a practice account (2026-11-14, us-west-2, account and resource identifiers masked).*
 
-**What is happening now:** It creates a private network (VPC), an EKS cluster, two kinds of nodes (2 system nodes, 1 `c8i.2xlarge`), and an access instance all at once, with the defense layers from chapter 01 included by default. The API is not open to the internet, the nodes use IMDSv2 and hop limit 1, the disks are encrypted, and the `c8i.2xlarge` gets nested virtualization and gVisor installed.
+**What is happening now:** It creates a private network (VPC), an EKS cluster, two kinds of nodes (2 system nodes, 1 `c8i.2xlarge`), and an access instance all at once, and applies the node and cluster side of the defenses from chapter 01. The API is not open to the internet, the nodes use IMDSv2 and hop limit 1, the disks are encrypted, and the `c8i.2xlarge` gets nested virtualization, gVisor and the node guard. The network policy feature of the VPC CNI is turned on too, but the blocking rules of the `sandbox` namespace are installed separately when you deploy sandbox pools (step 5 of [chapter 10](../handson/10_cpu_only.md)), so they do not apply to the test pods of this chapter (`default` namespace).
 
 **If you get stuck:** See "If it fails" in [Production 09 CDK](../production/09_cdk.md).
 
@@ -235,7 +237,10 @@ kubectl logs runc-smoke
 kubectl delete pod runc-smoke
 ```
 
-**If you get stuck:** if only the Kata pods fail, the node has no `/dev/kvm`; check that `NestedVirtualization` is `enabled` with the `describe-instances` command in step 2 of [Production 09 CDK](../production/09_cdk.md). If only the gVisor pod fails, the gVisor install at node boot failed; see the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md).
+**If you get stuck:** The script only checks whether each pod finished in time; it does not tell you why one failed. The script prints a warning, reads the logs, and then deletes that pod, so write down the pod name from the warning. If the pod is still there, check `kubectl describe pod <name>`; if it is already gone, check `kubectl get events -n default --field-selector involvedObject.name=<name>`. If a Kata pod shows a KVM error, check that `NestedVirtualization` is `enabled` with the `describe-instances` command in step 2 of [Production 09 CDK](../production/09_cdk.md). If a gVisor pod shows a runtime error, see the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md) and check the gVisor install on the node.
+
+!!! tip "To continue with chapter 10 on the same cluster"
+    [10 CPU-only path on c8i](../handson/10_cpu_only.md) starts sandbox pools on the same setup as this cluster and checks a version switch by grading test answers, without a model. To continue, skip step 9, check "Preparation" and step 1 of chapter 10, and go on from step 3. Step 2 (cluster creation) and step 4 (runtime install) were done in steps 6 and 8 of this chapter. Delete the cluster with the cleanup in chapter 10.
 
 ### 9. Delete
 
@@ -257,7 +262,7 @@ cdk/destroy.sh
 
 ## Next steps
 
-- To start sandbox pools on the same cluster and go as far as switching versions during training, go to [10 CPU-only path on c8i](../handson/10_cpu_only.md).
+- To start sandbox pools and check a version switch with test answers, without a model, go to [10 CPU-only path on c8i](../handson/10_cpu_only.md). If you already deleted the cluster, start chapter 10 from the beginning.
 - To see how multi-turn agents use sandboxes, continue with [06 Multi-turn agents and Agent Sandbox](06_multi_turn_agent.md).
 - Pick other courses in [Choose a learning path](../learning_paths.md).
 

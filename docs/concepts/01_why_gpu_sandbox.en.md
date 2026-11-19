@@ -13,9 +13,9 @@ Most sandboxes for code-execution RL are CPU-only, so they cannot score tasks th
 
 ## Why
 
-- **First decide whether the GPU is on the reward path.** Where none is needed, it only adds cost and isolation burden.
-- **Save GPU time with a two-tier pattern.** Format and policy checks finish on CPU.
-- **Pin the tasks and the reward in code.** The ten tasks, the three-part reward and the defenses against measurement cheating are in the repository code.
+- **The first criterion is whether the reward needs a GPU.** Where none is needed, it only adds cost and isolation burden.
+- **GPU time goes only to code that passes the policy.** A completion with no code block or a policy violation is judged on CPU without calling the sandbox.
+- **The repository has ten tasks and a three-part reward.** The AST policy and the timing harness together block attempts to fool the measurement.
 
 **Before you start:** nothing is needed. What this repository builds is on the [Home](../index.md) page, and unfamiliar terms are in the "Terms" box below and in the [Glossary](../reference/glossary.md).
 
@@ -41,7 +41,7 @@ Most sandboxes for code-execution RL are CPU-only, so they cannot score tasks th
 | ML engineer agents | tasks scored by actually running a training or tuning script | the training run uses the GPU |
 
 !!! note "When no GPU is needed"
-    If the reward is decided on CPU, as in code RL scored by unit tests, SQL, or checking math answers, a CPU sandbox is enough; the options are in [05 Decision guide](05_decision_guide.md).
+    If running the candidate code and every measurement the score needs can happen on CPU, as in code RL scored by unit tests, SQL, or checking math answers, a CPU sandbox is enough; the options are in [05 Decision guide](05_decision_guide.md).
 
 ## Why most sandboxes are CPU-only
 
@@ -49,7 +49,7 @@ Most sandboxes for code-execution RL are CPU-only, so they cannot score tasks th
 |---|---|
 | Firecracker has no GPU passthrough | Firecracker uses a minimal device model built around virtio devices (six emulated devices according to its FAQ). PCI support was added in 1.13.0, but the changelog does not list VFIO GPU passthrough. This is why Firecracker-based sandbox services (E2B and others) are mostly CPU-only. |
 | Managed isolation is CPU-only at launch, too | The AWS Nitro Sandboxes documentation (EKS isolated pods, launched 2026-11-09) states "GPU and other device passthrough are not supported at launch". |
-| CUDA state contamination | When several untrusted runs share one GPU in turn, leftover processes, Triton and CUDA compile caches and driver state can affect the next evaluation. Each run needs a fresh process tree and fresh caches, and resetting the device takes a fresh VM. The GKE Sandbox documentation also advises "Don't use GPU time-sharing in sandboxed Pods". |
+| CUDA state contamination | When several untrusted runs share one GPU in turn, leftover processes, Triton and CUDA compile caches and driver state can affect the next evaluation. Each run needs a fresh process tree and fresh caches. Under Kata, VFIO resets the device when the old VM releases the GPU; under gVisor, a new pod still uses the same host driver and GPU. The GKE Sandbox documentation also advises "Don't use GPU time-sharing in sandboxed Pods". |
 | Cost and density | Trustworthy timing needs one GPU per evaluation. This asset runs one GPU per pod and one evaluation at a time (503 when busy), so you cannot pack many sandboxes onto one node as with CPU sandboxes. |
 | Driver coupling | gVisor needs the host driver version to match the nvproxy support list exactly, and Kata needs a separate driver inside the guest VM. The number of version combinations to operate grows. |
 
@@ -57,18 +57,18 @@ Most sandboxes for code-execution RL are CPU-only, so they cannot score tasks th
 
 GPU nodes cost more per hour than CPU nodes (for example `g5.xlarge` 1.006 USD and `m6i.large` 0.096 USD, On-Demand), so whatever can be decided without a GPU is settled before it.
 
-![Inside the trainer process (CPU), a completion goes to KernelRewards for code block extraction and the AST policy check (check_source). Without a code block or with a policy violation it gets a no_code or policy_violation verdict with no sandbox call. If it passes, it goes through the optional CPU tier (static checks, nvcc compile, Kata + CLH on c8i, dashed outline) to the GPU tier (correctness + timing, gVisor or Kata + QEMU), which returns the verdict.](../images/figures/concepts-01_why_gpu_sandbox--two-tier.svg)
+![Inside the trainer process (CPU), a completion goes to KernelRewards for code block extraction and the AST policy check (check_source). Without a code block or with a policy violation it gets a no_code or policy_violation verdict with no sandbox call. If it passes, it goes to the GPU tier (correctness + timing, gVisor or Kata + QEMU), which returns the verdict. The optional CPU tier (Kata + CLH on c8i, dashed outline) stands apart and is not wired in front of the GPU tier.](../images/figures/concepts-01_why_gpu_sandbox--two-tier.svg)
 
 *Takeaway: Answers without code or with a policy violation get their verdict before reaching a GPU, and the GPU sandbox only measures correctness and timing.*
 
 
 The first stage is `KernelRewards` inside the trainer process. It extracts the code block, checks the AST policy with `check_source` and, on a violation, records the same `policy_violation` verdict as the sandbox, without a round trip. The sandbox harness checks the same policy again. The policy is a reward-integrity device; the security boundary that protects the node is gVisor or Kata.
 
-The CPU tier is a Kata + Cloud Hypervisor node group on a nested-virtualization node (`c8i.2xlarge`; nested virtualization lets a regular EC2 VM start VMs of its own) with the `kata-clh-cpu` profile. The hands-on uses it to rehearse Kata cheaply before paying for `g4dn.metal`, and production gives it work that needs no GPU, such as static checks or nvcc compilation.
+The CPU tier is a Kata + Cloud Hypervisor node group on a nested-virtualization node (`c8i.2xlarge`; nested virtualization lets a regular EC2 VM start VMs of its own) with the `kata-clh-cpu` profile. The hands-on uses it to rehearse Kata cheaply before paying for `g4dn.metal`, and in production it can host steps that need no GPU, such as nvcc compilation. The harness has no compile-only mode, so you build that step yourself.
 
 ## The scenario of this asset
 
-A code model (default `Qwen/Qwen2.5-Coder-1.5B-Instruct`, Apache-2.0) rewrites a PyTorch module as `ModelNew` using Triton kernels, and the sandbox measures correctness and speed to return the reward. The task contract is similar to KernelBench: each task module has a trusted reference `Model`, `get_init_inputs()`, `get_inputs(seed, device, size)` that builds inputs per seed, and tolerances `ATOL` and `RTOL`.
+A code model (default `Qwen/Qwen2.5-Coder-1.5B-Instruct`, Apache-2.0) rewrites a PyTorch module as `ModelNew` using Triton kernels, the sandbox measures correctness and speed and returns the result, and the trainer computes the format, correctness and speedup scores. The task contract is similar to KernelBench: each task module has a trusted reference `Model`, `get_init_inputs()`, `get_inputs(seed, device, size)` that builds inputs per seed, and tolerances `ATOL` and `RTOL`.
 
 ### Ten tasks (`src/gpusandbox/tasks/`)
 
@@ -113,11 +113,11 @@ When speedup is the reward, the policy looks for gaps in the measurement.
 | work on an extra CUDA stream to fool the timer (CUDA-L1: 82 of 250 cases, 32.8%) | a host clock around `torch.cuda.synchronize()` waits for every stream. The AST policy forbids the stream and graph APIs |
 | caching results | a different input for every timed iteration |
 | wrong only during the benchmark, no-op kernels with memory reuse | the checksum of every timed output is compared with the reference |
-| lazy evaluation | the output type must be exactly `torch.Tensor` |
-| copying the reference, replacing the kernel with PyTorch or cuBLAS calls | no Triton kernel, or a kernel that is never launched, earns correctness 0.3 and speedup 0 |
-| monkeypatching, reaching into the harness, skipping the correctness check through memory tricks | the candidate runs in a separate process, and the trusted parent compares correctness itself with fresh seeds on every request. Dunder access and attribute writes are forbidden |
+| lazy evaluation | every output tensor must be exactly `torch.Tensor` (no subclasses). A returned list or tuple has each element checked |
+| copying the reference, replacing the kernel with PyTorch or cuBLAS calls | a correct answer with no Triton kernel, or with a launch count of 0 during the correctness check, earns correctness 0.3 and speedup 0. If the count is unavailable, the Triton kernel definition in the AST decides |
+| monkeypatching, reaching into the harness, skipping the correctness check through memory tricks | the candidate runs in a separate process, and the trusted parent compares correctness itself with fresh seeds on every request. The AST policy forbids underscore attribute access other than `__init__` and attribute assignment outside `self` |
 
-KernelBench's default timing with CUDA events (with an L2 flush) can miss work on an extra stream (its host_time mode measures all streams). KernelBench flags speedups above 10x as suspicious (`excessive_speedup_threshold 10`), and sandbox v2 in this asset applies the same 10x cap.
+KernelBench's default timing with CUDA events (with an L2 flush) can miss work on an extra stream (its host_time mode measures all streams). KernelBench flags speedups above 10x as suspicious (`excessive_speedup_threshold 10`), and sandbox v2 in this asset flags a measured speedup above 10x as `implausible_speedup` and scores it as 1x.
 
 ??? info "Why a small server instead of an existing sandbox project"
     GPU timing needs one exclusive GPU per sandbox and a trusted measurement harness, so this asset uses a small server that does only those two things (`src/gpusandbox/server/app.py`). Existing projects include kubernetes-sigs/agent-sandbox (v1.0.11), OpenSandbox (release-1.2.1) and ByteDance SandboxFusion, which serializes GPU execution. Running this server in Agent Sandbox warm pools is covered in [06 Extending with Agent Sandbox](06_agent_sandbox.md).

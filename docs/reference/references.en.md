@@ -1,8 +1,8 @@
 # All references
 
-**TL;DR** The collapsed "References" box at the end of each page keeps only the key links; the full list for every page is collected here.
+**TL;DR** The full reference list for every page, in left-menu order. The collapsed "References" box at the end of each page has only the key links.
 
-Pages appear in the same order as the left menu, and the first line of each section links back to the page that uses the links. Which source supports which fact is in [Verified facts and sources](sources.md).
+Which source supports which fact is in [Verified facts and sources](sources.md).
 
 ## 01 Why AI-generated code needs isolation { #ref-beginner-01-why-sandbox }
 
@@ -425,7 +425,7 @@ Repository files this page describes:
 - [src/gpusandbox/client/routing.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/client/routing.py), [src/gpusandbox/rewards.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/rewards.py)
 - [src/gpusandbox/tools.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/tools.py), [src/gpusandbox/golden.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/golden.py)
 
-In production, trainers that score answers one at a time, such as veRL, cannot use a batch snapshot, so the gateway pins the version per `group_key` ([Production 05 Sandbox versioning](../production/05_sandbox_updates.md)).
+In production, trainers that score answers one at a time, such as veRL, cannot keep one version per batch, so the gateway pins the version per `group_key` ([Production 05 Sandbox versioning](../production/05_sandbox_updates.md)).
 
 ## 07 HyperPod scenario { #ref-handson-07-hyperpod }
 
@@ -457,7 +457,8 @@ Repository files this page describes:
 
 - [scripts/hyperpod/create.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/create.sh), [run_grpo.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/run_grpo.sh), [check_gvisor.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/check_gvisor.sh), [delete.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/delete.sh)
 - [infra/hyperpod/cluster.json.tpl](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/cluster.json.tpl), [execution-role-eks-policy.json](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/execution-role-eks-policy.json)
-- [infra/hyperpod/lifecycle/on_create.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/on_create.sh), [install_gvisor_hyperpod.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/install_gvisor_hyperpod.sh)
+- [infra/hyperpod/lifecycle/on_create.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/on_create.sh), [on_create_sandbox.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/on_create_sandbox.sh), [register_runsc.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/register_runsc.sh) (registers `runsc` when a B2 node starts)
+- [infra/hyperpod/ami/build-b2-ami.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/ami/build-b2-ami.sh), [customize-b2.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/ami/customize-b2.sh) (replaces the driver and installs gVisor in the B2 image)
 - [k8s/trainer/hyperpod-job-grpo.yaml.tpl](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/trainer/hyperpod-job-grpo.yaml.tpl)
 - [scripts/config.env.example](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example)
 

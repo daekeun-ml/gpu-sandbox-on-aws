@@ -12,8 +12,8 @@ from figlib import (ACCENT, ACCENT_FILL, CONTAINER, GREY_FILL, INK, MUTED_STROKE
 T = {
     "ko": {
         # docs/index.md, Pain point
-        "ix.a": "일반 컨테이너에서 채점, 학습 중에 섞이는 버전",
-        "ix.b": "격리 런타임에서 채점, 버전 고정",
+        "ix.a": "서로 다른 두 문제: host를 공유하는 runc, 학습 중 섞이는 버전",
+        "ix.b": "각각의 대응: 격리 런타임, 배치(또는 group)마다 한 버전",
         "ix.code": "policy가 쓴 커널 코드", "ix.code_sub": "reward를 GPU에서 측정",
         "ix.runc": "runc 컨테이너", "ix.runc_sub": "일반 컨테이너",
         "ix.iso": "gVisor 또는 Kata", "ix.iso_sub": "RuntimeClass로 선택",
@@ -27,17 +27,17 @@ T = {
         "wb.train": "학습 (EC2 GPU 노드 또는 HyperPod 노드)",
         "wb.model": "policy 모델 + vLLM", "wb.model_sub": "GRPO, on-policy",
         "wb.model_sub2": "g5.2xlarge 또는 ml.g5.2xlarge",
-        "wb.pool": "GPU 샌드박스 풀 (EC2 노드)",
+        "wb.pool": "샌드박스 풀 (EC2 GPU, CPU 노드)",
         "wb.g": "gVisor + nvproxy", "wb.g_sub": "g5.xlarge (A10G)",
         "wb.q": "Kata + QEMU", "wb.q_sub": "g4dn.metal (T4)",
         "wb.c": "Kata + Cloud Hypervisor", "wb.c_sub": "CPU 계층 (c8i, nested virt)", "wb.c_sub2": "GPU는 실험적",
-        "wb.same": "같은 이미지, RuntimeClass로 선택",
+        "wb.same": "같은 이미지, 프로필이 RuntimeClass와 노드를 정함",
         "wb.fwd": "커널 코드", "wb.pin": "group 단위 버전 고정", "wb.back": "정확성, speedup",
         # docs/learning_paths.md
         "lp.a": "어디서 시작할지 모른 채 GPU 코스부터 고를 때",
         "lp.b": "무료 코스부터, 비용 먼저 확인",
         "lp.reader": "처음 온 독자",
-        "lp.pages": "70개 가까운 페이지", "lp.pages_sub": "시나리오 A, B1, B2, C",
+        "lp.pages": "46개 페이지", "lp.pages_sub": "시나리오 A, B1, B2, C",
         "lp.gpu": "GPU 코스부터 시작", "lp.gpu_sub": "아직 GPU가 필요 없는데도",
         "lp.cost": "시간당 몇 달러", "lp.cost_sub": "노드를 켜 둔 동안",
         "lp.c1": "코스 1: 읽기", "lp.c2": "코스 2: 로컬 실행", "lp.free": "0원",
@@ -49,8 +49,8 @@ T = {
         "gs.err": "오류 발견", "gs.err_sub": "import 오류,", "gs.err_sub2": "설정 누락",
         "gs.fix": "고치기", "gs.rerun": "다시 실행",
         "gs.bill_a": "GPU 노드 과금: 고치고 다시 실행하는 동안에도 계속",
-        "gs.local": "로컬 CPU에서 확인", "gs.local_sub": "pytest 94개,", "gs.local_sub2": "GRPO dry run 2 step",
-        "gs.env": "scripts/config.env", "gs.env_sub": "빈 값이나 __SET_ME__면", "gs.env_sub2": "그 자리에서 멈춥니다",
+        "gs.local": "로컬 CPU에서 확인", "gs.local_sub": "pytest 105개,", "gs.local_sub2": "GRPO dry run 2 step",
+        "gs.env": "scripts/config.env", "gs.env_sub": "필요한 값이 비거나", "gs.env_sub2": "__SET_ME__면 멈춤",
         "gs.path": "경로 고르기", "gs.path_sub": "A, B1, B2, C,", "gs.path_sub2": "Production",
         "gs.free": "AWS 비용 없음", "gs.bill_b": "GPU 노드 과금",
         # docs/beginner/index.md
@@ -62,26 +62,25 @@ T = {
         "bi.stuck": "응용 불가", "bi.stuck_sub": "상황이 조금만 바뀌어도",
         "bi.why": "1~4편: 그림과 예시", "bi.why_sub": "용어는 처음 나올 때", "bi.why_sub2": "한 줄로 풀이",
         "bi.how": "5편: 직접 해 보기", "bi.how_sub": "내 PC (무료),", "bi.how_sub2": "AWS (선택)",
-        "bi.see": "각 명령이 막는 위험 이해",
+        "bi.see": "채점 결과를 직접 확인",
         # docs/beginner/01_why_sandbox.md, 한 겹이 아니라 여러 겹
-        "ly.code": "모델이 쓴 코드", "ly.code_sub": "채점하려고 실행",
-        "ly.head": "주로 막는 위험",
-        "ly.l1": "pod 보안 설정", "ly.l1s": "root가 아닌 사용자, 권한 제거, 읽기 전용 파일 시스템",
+        "ly.title": "샌드박스의 여섯 층", "ly.head": "막는 위험",
+        "ly.l1": "pod 보안 설정", "ly.l1s": "root가 아닌 사용자, 권한 제거",
         "ly.l2": "격리 런타임", "ly.l2s": "gVisor 또는 Kata",
-        "ly.l3": "네트워크 규칙", "ly.l3s": "NetworkPolicy, 나가는 연결은 전부 차단",
+        "ly.l3": "네트워크 규칙", "ly.l3s": "NetworkPolicy, 나가는 연결 기본 차단",
         "ly.l4": "노드 설정", "ly.l4s": "IMDSv2 필수, hop limit 1, node guard",
-        "ly.l5": "자격 증명 없음", "ly.l5s": "샌드박스 안에 두지 않는 AWS 키, Kubernetes 토큰",
+        "ly.l5": "자격 증명 없음", "ly.l5s": "AWS 키, 자체 서비스 계정 토큰 없음",
         "ly.l6": "자원과 시간 한도", "ly.l6s": "CPU, 메모리, 실행 시간",
-        "ly.r1": "서버 파일 읽기", "ly.r2": "커널 공격", "ly.r3": "데이터 빼돌리기, 다른 곳으로 퍼지기",
-        "ly.r4": "자격 증명 빼내기", "ly.r5": "다른 곳으로 퍼지기", "ly.r6": "자원 독차지",
-        "ly.target": "서버의 파일, 자격 증명, 네트워크",
+        "ly.risks": [("서버 파일", "읽기"), ("자격 증명", "빼내기"), ("다른 곳으로", "퍼지기"), ("커널", "공격"),
+                     ("자원", "독차지"), ("데이터", "빼돌리기")],
+        "ly.note": "점은 그 층이 막는 위험입니다. 한 위험을 여러 층이 함께 막기도 합니다.",
         # docs/beginner/02_container_vs_sandbox.md, Pain point
         "b02.a": "일반 컨테이너: 함께 쓰는 서버 커널 하나",
         "b02.b": "샌드박스 런타임: 컨테이너와 커널 사이에 하나 더 두는 격리 계층",
-        "b02.c": "컨테이너", "b02.wall": "Sentry 또는 VM 커널",
+        "b02.c": "컨테이너", "b02.cpod": "pod {}의 컨테이너", "b02.wall": "Sentry 또는 VM 커널", "b02.wall_sub": "pod마다 하나",
         "b02.kern_a": "서버 커널 하나", "b02.kern_b": "서버 커널",
         "b02.weak": "커널 취약점 하나",
-        "b02.bad": "위험에 놓인 A, B, C", "b02.good": "추가 격리 계층", "b02.good_sub": "A, B, C 앞에",
+        "b02.bad": "위험해질 수 있음", "b02.bad_sub": "A, B, C 모두", "b02.good": "추가 격리 계층", "b02.good_sub": "A, B, C 앞에",
         # docs/beginner/02_container_vs_sandbox.md, 세 가지 격리 방식
         "tw.runc": "runc (일반 컨테이너)", "tw.gvisor": "gVisor", "tw.kata": "Kata",
         "tw.pod": "pod", "tw.vm": "VM",
@@ -100,7 +99,7 @@ T = {
         "b03.gv": "gVisor + nvproxy", "b03.gv_sub": "g5.xlarge (일반 GPU VM)", "b03.check": "ioctl을 검사해 전달",
         "b03.gv_out": "허용 목록의 명령만", "b03.gv_out_sub": "서버의 드라이버로",
         "b03.kt": "Kata + VFIO", "b03.kt_sub": "g4dn.metal (bare metal)", "b03.pass": "GPU를 VM에 직접 할당",
-        "b03.kt_out": "VM 안으로 한정되는", "b03.kt_out_sub": "드라이버 버그의 영향",
+        "b03.kt_out": "드라이버는 VM 안에서 실행", "b03.kt_out_sub": "하이퍼바이저, 장치 위험은 남음",
         # docs/beginner/03_gpu_sandbox.md, GPU 접근 경로
         "gp.torch": "PyTorch 코드", "gp.cuda": "CUDA 라이브러리", "gp.drv": "NVIDIA 드라이버", "gp.drv_sub": "커널 안",
         "gp.gpu": "GPU", "gp.ioctl": "ioctl (장치 명령)",
@@ -113,18 +112,18 @@ T = {
         "b04.mix": "한 group 안에 v1, v2", "b04.mix_sub": "섞이는 채점 기준",
         "b04.wrong": "잘못된 점수", "b04.learn_bad": "잘못 학습하는 모델",
         "b04.guard": "속임수를 막는 harness", "b04.guard_sub": "프로세스 분리, 입력 교체",
-        "b04.pin": "한 배치는 한 버전", "b04.pin_sub": "교체는 배치와 배치 사이",
-        "b04.right": "올바른 점수", "b04.right_sub": "같은 기준으로 채점",
-        "b04.learn_good": "올바른 점수로 학습하는 모델",
+        "b04.pin": "한 배치는 한 버전", "b04.pin_sub": "배치 안에서는 안 섞임",
+        "b04.right": "일관된 점수", "b04.right_sub": "같은 기준으로 채점",
+        "b04.learn_good": "이 점수로 학습하는 모델",
         # docs/beginner/04_rl_and_sandbox.md, 학습 루프에서 샌드박스의 자리
         "rl.task": "문제", "rl.task_sub": "PyTorch 연산을 더 빠른 GPU 커널로 다시 쓰기",
         "rl.model": "모델", "rl.model_sub": "GPU에서 학습",
         "rl.sb": "샌드박스", "rl.sb_sub": "코드 실행과 채점", "rl.sb_sub2": "속도 측정에 GPU 사용",
-        "rl.score": "점수 (reward)", "rl.score_sub": "정확성, speedup",
+        "rl.score": "점수 (reward)", "rl.score_sub": "trainer가 계산",
         "rl.e1": ["문제를 보고 코드 작성"],
-        "rl.e2": ["실행해서 맞는지,", "얼마나 빠른지 확인"],
+        "rl.e2": ["실행해 정확성과", "speedup 측정"],
         "rl.e3": ["점수가 높은 답을", "더 쓰도록 조정"],
-        "rl.rep": "수천 번 반복",
+        "rl.rep": "step마다 반복 (기본 60 step)",
         # docs/beginner/05_hands_on.md, Pain point
         "b05.a": "바로 AWS에서 시작하고, 끝난 뒤 삭제를 잊을 때",
         "b05.b": "내 PC에서 먼저 실습하고, 끝나면 한 번에 삭제",
@@ -141,8 +140,8 @@ T = {
         "b05.gone": "한 번에 삭제되는 스택", "b05.gone_sub": "하나씩 찾지 않아도 됩니다",
     },
     "en": {
-        "ix.a": "Scored in a plain container, versions mixed during training",
-        "ix.b": "Scored in an isolation runtime, version pinned",
+        "ix.a": "Two separate problems: runc shares the host, versions mix during training",
+        "ix.b": "One fix each: an isolation runtime, one version per batch (or group)",
         "ix.code": "Kernel code from the policy", "ix.code_sub": "reward measured on a GPU",
         "ix.runc": "runc container", "ix.runc_sub": "plain container",
         "ix.iso": "gVisor or Kata", "ix.iso_sub": "chosen by RuntimeClass",
@@ -155,16 +154,16 @@ T = {
         "wb.train": "Training (EC2 GPU node or HyperPod node)",
         "wb.model": "Policy model + vLLM", "wb.model_sub": "GRPO, on-policy",
         "wb.model_sub2": "g5.2xlarge or ml.g5.2xlarge",
-        "wb.pool": "GPU sandbox pools (EC2 nodes)",
+        "wb.pool": "Sandbox pools (EC2 GPU, CPU nodes)",
         "wb.g": "gVisor + nvproxy", "wb.g_sub": "g5.xlarge (A10G)",
         "wb.q": "Kata + QEMU", "wb.q_sub": "g4dn.metal (T4)",
         "wb.c": "Kata + Cloud Hypervisor", "wb.c_sub": "CPU tier (c8i, nested virt)", "wb.c_sub2": "GPU is experimental",
-        "wb.same": "One image, chosen by RuntimeClass",
+        "wb.same": "One image; profiles set RuntimeClass, nodes",
         "wb.fwd": "kernel code", "wb.pin": "version pinned per group", "wb.back": "correctness, speedup",
         "lp.a": "Picking a GPU path without a starting point",
         "lp.b": "Free paths first, costs shown up front",
         "lp.reader": "New reader",
-        "lp.pages": "Close to 70 pages", "lp.pages_sub": "scenarios A, B1, B2, C",
+        "lp.pages": "46 pages", "lp.pages_sub": "scenarios A, B1, B2, C",
         "lp.gpu": "Starts a GPU path", "lp.gpu_sub": "without needing it",
         "lp.cost": "A few dollars", "lp.cost_sub": "per hour while it runs",
         "lp.c1": "Path 1: Reading", "lp.c2": "Path 2: Local run", "lp.free": "free",
@@ -175,8 +174,8 @@ T = {
         "gs.err": "Error found", "gs.err_sub": "import error or", "gs.err_sub2": "missing setting",
         "gs.fix": "Fix it", "gs.rerun": "Run again",
         "gs.bill_a": "GPU node billing: continues while you fix and rerun",
-        "gs.local": "Local CPU check", "gs.local_sub": "94 pytest tests,", "gs.local_sub2": "2-step GRPO dry run",
-        "gs.env": "scripts/config.env", "gs.env_sub": "stops on an empty", "gs.env_sub2": "or __SET_ME__ value",
+        "gs.local": "Local CPU check", "gs.local_sub": "105 pytest tests,", "gs.local_sub2": "2-step GRPO dry run",
+        "gs.env": "scripts/config.env", "gs.env_sub": "stops if a value it needs", "gs.env_sub2": "is empty or __SET_ME__",
         "gs.path": "Pick a path", "gs.path_sub": "A, B1, B2, C,", "gs.path_sub2": "production",
         "gs.free": "No AWS cost", "gs.bill_b": "GPU node billing",
         "bi.a": "Copying commands before the reasons",
@@ -187,24 +186,23 @@ T = {
         "bi.stuck": "Stuck when things change", "bi.stuck_sub": "even a little",
         "bi.why": "Chapters 1 to 4: pictures", "bi.why_sub": "each term explained", "bi.why_sub2": "in one line",
         "bi.how": "Chapter 5: hands-on", "bi.how_sub": "your PC (free),", "bi.how_sub2": "AWS (optional)",
-        "bi.see": "See what each command blocks",
-        "ly.code": "Code the model wrote", "ly.code_sub": "run to grade it",
-        "ly.head": "Main risk it blocks",
-        "ly.l1": "pod security settings", "ly.l1s": "non-root user, dropped privileges, read-only file system",
+        "bi.see": "Check the grading yourself",
+        "ly.title": "The six layers of a sandbox", "ly.head": "Risks blocked",
+        "ly.l1": "pod security settings", "ly.l1s": "non-root user, dropped privileges",
         "ly.l2": "Isolation runtime", "ly.l2s": "gVisor or Kata",
-        "ly.l3": "Network rules", "ly.l3s": "NetworkPolicy, all outbound connections blocked",
+        "ly.l3": "Network rules", "ly.l3s": "NetworkPolicy, default-deny outbound",
         "ly.l4": "Node settings", "ly.l4s": "IMDSv2 required, hop limit 1, node guard",
-        "ly.l5": "No credentials", "ly.l5s": "no AWS keys or Kubernetes tokens inside the sandbox",
+        "ly.l5": "No credentials", "ly.l5s": "no AWS keys or service account token",
         "ly.l6": "Resource and time limits", "ly.l6s": "CPU, memory, execution time",
-        "ly.r1": "Reading server files", "ly.r2": "Kernel attack", "ly.r3": "Exfiltrating data, spreading",
-        "ly.r4": "Stealing credentials", "ly.r5": "Spreading elsewhere", "ly.r6": "Hogging resources",
-        "ly.target": "Server files, credentials, network",
+        "ly.risks": [("Reading", "server files"), ("Stealing", "credentials"), ("Spreading", "elsewhere"),
+                     ("Kernel", "attack"), ("Hogging", "resources"), ("Exfiltrating", "data")],
+        "ly.note": "A dot marks a risk the layer blocks; some risks are blocked by several layers.",
         "b02.a": "Plain containers: one server kernel shared",
         "b02.b": "Sandbox runtimes: one more wall between container and kernel",
-        "b02.c": "Container", "b02.wall": "Sentry or VM kernel",
+        "b02.c": "Container", "b02.cpod": "pod {} container", "b02.wall": "Sentry or VM kernel", "b02.wall_sub": "one per pod",
         "b02.kern_a": "One server kernel", "b02.kern_b": "Server kernel",
         "b02.weak": "one kernel weakness",
-        "b02.bad": "A, B and C at risk", "b02.good": "One more wall", "b02.good_sub": "in front of A, B and C",
+        "b02.bad": "May be at risk", "b02.bad_sub": "A, B and C", "b02.good": "One more wall", "b02.good_sub": "in front of A, B and C",
         "tw.runc": "runc (regular container)", "tw.gvisor": "gVisor", "tw.kata": "Kata",
         "tw.pod": "pod", "tw.vm": "VM",
         "tw.code": "Code", "tw.sentry": "Sentry", "tw.vmk": "Kernel inside the VM", "tw.per": "one per pod",
@@ -221,7 +219,7 @@ T = {
         "b03.gv": "gVisor + nvproxy", "b03.gv_sub": "g5.xlarge (regular GPU VM)", "b03.check": "checks, forwards ioctls",
         "b03.gv_out": "Only allowlisted calls", "b03.gv_out_sub": "reach the server driver",
         "b03.kt": "Kata + VFIO", "b03.kt_sub": "g4dn.metal (bare metal)", "b03.pass": "whole GPU to the VM",
-        "b03.kt_out": "Driver bugs stay", "b03.kt_out_sub": "inside the VM",
+        "b03.kt_out": "Driver runs inside the VM", "b03.kt_out_sub": "hypervisor, device risks stay",
         "gp.torch": "PyTorch code", "gp.cuda": "CUDA library", "gp.drv": "NVIDIA driver", "gp.drv_sub": "inside the kernel",
         "gp.gpu": "GPU", "gp.ioctl": "ioctl (order form)",
         "gp.gv": "gVisor + nvproxy", "gp.gv_sub": "checks commands here, passes only the allowlist",
@@ -232,17 +230,17 @@ T = {
         "b04.mix": "v1 and v2 in one group", "b04.mix_sub": "grading standards mixed",
         "b04.wrong": "Wrong score", "b04.learn_bad": "Model learns the wrong thing",
         "b04.guard": "Harness blocks cheating", "b04.guard_sub": "separate processes, new inputs",
-        "b04.pin": "One version per batch", "b04.pin_sub": "switch between batches",
-        "b04.right": "Right score", "b04.right_sub": "one grading standard",
+        "b04.pin": "One version per batch", "b04.pin_sub": "never mixed in a batch",
+        "b04.right": "Consistent score", "b04.right_sub": "one grading standard",
         "b04.learn_good": "Model improves from the score",
         "rl.task": "Problem", "rl.task_sub": "rewrite a PyTorch op as a faster GPU kernel",
         "rl.model": "Model", "rl.model_sub": "trained on GPU",
         "rl.sb": "Sandbox", "rl.sb_sub": "exam room and grader", "rl.sb_sub2": "a GPU to measure speed",
-        "rl.score": "Score (reward)", "rl.score_sub": "correctness, speedup",
+        "rl.score": "Score (reward)", "rl.score_sub": "computed by the trainer",
         "rl.e1": ["Reads the problem and writes code"],
-        "rl.e2": ["Runs it to check", "if it is correct", "and how fast"],
+        "rl.e2": ["Runs it and", "measures", "correctness,", "speedup"],
         "rl.e3": ["Adjusts to write", "more high-scoring", "answers"],
-        "rl.rep": "repeats thousands of times",
+        "rl.rep": "repeats every step (60 by default)",
         "b05.a": "Straight to AWS, then forgetting to delete",
         "b05.b": "Your PC first, then delete everything at once",
         "b05.aws": "Straight to AWS", "b05.aws_sub": "without the concepts",
@@ -440,7 +438,8 @@ def beginner_index_pain(lang: str) -> Figure:
 
 
 def beginner_02_pain(lang: str) -> Figure:
-    """docs/beginner/02_container_vs_sandbox.md: one shared kernel; sandbox runtimes add one wall per pod (TL;DR)."""
+    """docs/beginner/02_container_vs_sandbox.md: one shared kernel; sandbox runtimes add one wall per pod (TL;DR),
+    between the container in that pod and the server kernel."""
     t = T[lang]
     fig = Figure(760, 470)
     cx, cw, wx, ww, kx, kw, ox, ow = 16, 116, 166, 142, 340, 126, 608, 136
@@ -453,19 +452,21 @@ def beginner_02_pain(lang: str) -> Figure:
                 gid=f"n:kernel-{letter}")
         for name, ry in zip("ABC", rows):
             mid = ry + 21
-            fig.box(cx, ry, cw, 42, f"{t['b02.c']} {name}", gid=f"n:c{name}-{letter}")
+            clabel = f"{t['b02.c']} {name}" if p == 0 else t["b02.cpod"].format(name)
+            fig.box(cx, ry, cw, 42, clabel, gid=f"n:c{name}-{letter}")
             if p == 0:
                 fig.arrow([(cx + cw, mid), (kx - 2, mid)])
             else:
                 fig.arrow([(cx + cw, mid), (wx - 2, mid)])
-                fig.box(wx, ry, ww, 42, t["b02.wall"], fill=ACCENT_FILL, stroke=ACCENT, gid=f"n:wall{name}")
+                fig.box(wx, ry, ww, 42, t["b02.wall"], t["b02.wall_sub"], fill=ACCENT_FILL, stroke=ACCENT,
+                        gid=f"n:wall{name}")
                 fig.arrow([(wx + ww, mid), (kx - 2, mid)])
         kmid = top + kh / 2
         fig.arrow([(kx + kw, kmid), (ox - 2, kmid)], color=RED if p == 0 else ACCENT,
                   label=t["b02.weak"], label_at=((kx + kw + ox) / 2, kmid - 8))
         _fits(t["b02.weak"], SMALL, ox - kx - kw + 14, "b02 edge")
         if p == 0:
-            vbox(fig, ox, kmid - 52, ow, 104, t["b02.bad"], icon="alert", fill=RED_FILL, stroke=RED, color=RED,
+            vbox(fig, ox, kmid - 52, ow, 104, t["b02.bad"], t["b02.bad_sub"], icon="alert", fill=RED_FILL, stroke=RED, color=RED,
                  gid="n:bad")
         else:
             vbox(fig, ox, kmid - 52, ow, 104, t["b02.good"], t["b02.good_sub"], icon="shield-lock", fill=ACCENT_FILL,
@@ -616,31 +617,43 @@ def index_what_we_build(lang: str) -> Figure:
 
 
 def beginner_01_layers(lang: str) -> Figure:
-    """docs/beginner/01_why_sandbox.md "한 겹이 아니라 여러 겹": the six layers of the layer table, each with the
-    risk the risk table assigns to it."""
+    """docs/beginner/01_why_sandbox.md "여러 층의 방어": the six layers of the layer table as rows and the six
+    risks of the risk table as columns; a dot where the risk table names the layer as a blocking setting."""
     t = T[lang]
-    fig = Figure(760, 532)
-    bx, bw, cw = 24, 712, 272
-    ax = bx + cw / 4
-    fig.box(bx, 16, cw, 50, t["ly.code"], t["ly.code_sub"], icon="code", gid="n:code")
-    rx, rw = 512, 208
-    fig.text(rx + rw / 2, 100, t["ly.head"], size=SMALL)
-    y0, bh, step = 110, 46, 56
+    fig = Figure(760, 428)
+    bx, bw = 16, 728
+    cx0, cwid = 312, 72
+    fig.text(bx, 24, t["ly.title"], size=14, bold=True, anchor="start")
+    fig.text(cx0 + 3 * cwid, 24, t["ly.head"], size=SMALL, bold=True)
+    for j, (h1, h2) in enumerate(t["ly.risks"]):
+        hx = cx0 + cwid * (j + 0.5)
+        fig.text(hx, 48, h1, size=SMALL)
+        fig.text(hx, 63, h2, size=SMALL)
+        for h in (h1, h2):
+            _fits(h, SMALL, cwid + 4, f"risk header {j}")
+    # Rows of the layer table; columns in the order of the risk table.
+    blocks = ({0}, {0, 3}, {1, 2, 5}, {1}, {2}, {4})
+    y0, bh, step = 76, 46, 52
     for i in range(6):
         y = y0 + i * step
         n = i + 1
         fig.rect(bx, y, bw, bh, fill="#FFFFFF", stroke=ACCENT, gid=f"n:layer{n}")
-        cxn = bx + 106
+        cxn = bx + 22
         fig.parts.append(f'<circle cx="{cxn}" cy="{y + bh / 2}" r="10" fill="{ACCENT_FILL}" stroke="{ACCENT}" '
                          f'stroke-width="1.2"/>')
         fig.text(cxn, y + bh / 2 + 4.2, str(n), size=SMALL)
         fig.text(cxn + 22, y + 19, t[f"ly.l{n}"], anchor="start")
         fig.text(cxn + 22, y + 36, t[f"ly.l{n}s"], size=SMALL, anchor="start")
-        _fits(t[f"ly.l{n}s"], SMALL, rx - cxn - 22, f"layer {n}")
-        fig.box(rx, y + 8, rw, 30, t[f"ly.r{n}"], gid=f"n:risk{n}")
-    fig.box(bx, y0 + 6 * step + 14, cw, 50, t["ly.target"], icon="server", gid="n:target")
-    # Drawn after the bands so the path visibly crosses every layer.
-    fig.arrow([(ax, 66), (ax, y0 + 6 * step + 12)], width=2.0)
+        _fits(t[f"ly.l{n}"], SIZE, cx0 - cxn - 22, f"layer {n}")
+        _fits(t[f"ly.l{n}s"], SMALL, cx0 - cxn - 22, f"layer {n}")
+        for j in range(6):
+            dx = cx0 + cwid * (j + 0.5)
+            if j in blocks[i]:
+                fig.parts.append(f'<circle cx="{dx}" cy="{y + bh / 2}" r="7" fill="{ACCENT}"/>')
+            else:
+                fig.parts.append(f'<circle cx="{dx}" cy="{y + bh / 2}" r="2" fill="{CONTAINER}"/>')
+    fig.text(bx, y0 + 6 * step + 16, t["ly.note"], size=SMALL, anchor="start")
+    _fits(t["ly.note"], SMALL, bw, "layers note")
     return fig
 
 

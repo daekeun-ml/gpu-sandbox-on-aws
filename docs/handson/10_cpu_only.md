@@ -14,7 +14,7 @@
 ## Why
 
 - **세 런타임을 같은 노드에서 비교합니다.** 세 풀이 CPU, 메모리, 커널이 같은 한 노드에서 실행되므로, 부팅 시간과 평가 지연의 차이를 런타임 차이로 해석하기 쉬워요.
-- **샌드박스 쪽 코드는 GPU 경로와 같습니다.** 이미지, `/v1/evaluate` API, 인증, NetworkPolicy, 검증 스크립트(`scripts/ops/verify.sh`)는 그대로 쓰고, `device=cpu`와 RuntimeClass만 달라요.
+- **샌드박스 쪽 코드는 GPU 경로와 같습니다.** 이미지, `/v1/evaluate` API, 인증, NetworkPolicy, 검증 스크립트(`scripts/ops/verify.sh`)는 그대로 씁니다. CPU 풀은 CPU용 RuntimeClass와 `device=cpu`, 작은 입력 크기(`SANDBOX_SIZE=smoke`)를 써요. 예를 들어 `relu_bias`의 입력은 4096×4096에서 64×128로 줄어듭니다.
 - **학습 대신 reward 경로를 실행합니다.** reward 루프 시뮬레이션(`scripts/ops/simulate.sh`)은 golden 제출물을 trainer의 reward 함수(`KernelRewards`)로 배치마다 채점합니다. 그래서 학습 중 버전 교체(`scripts/ops/rollout.sh`)가 어떻게 동작하는지 그대로 확인할 수 있어요.
 
 **사전 지식:** [00 전체 흐름](00_overview.md)의 아키텍처와 [시작하기](../getting_started.md)의 로컬 smoke test를 먼저 보세요. 런타임 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), 버전 교체의 원리는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에 있습니다.
@@ -26,18 +26,18 @@
     - **launch template**: EC2 인스턴스의 시작 설정 묶음입니다. 여기서는 nested virtualization 활성화, IMDS 제한, 노드 부팅 스크립트(user data)를 포함하며, CDK 스택이 만듭니다.
     - **SSM 터널 (`cdk/tunnel.sh`)**: private API endpoint만 있는 클러스터에 kubectl과 helm이 접속할 수 있도록, SSM Session Manager로 작업 PC의 `127.0.0.1:8443`을 클러스터 API에 연결하는 터널입니다.
     - **golden 제출물**: 기대 결과가 미리 정해진 시험용 제출물입니다. 정답, 오답, 벤치마크 치팅, 정책 위반이 하나씩 있어요.
-    - **reward batch**: trainer가 한 번에 채점을 요청하는 completion 묶음입니다. trainer는 배치마다 routing 표를 한 번 읽어 버전을 고정합니다.
+    - **reward batch**: trainer가 한 번에 채점을 요청하는 completion 묶음입니다. trainer는 샌드박스를 부를 때마다 routing 표를 읽고, 한 배치는 한 버전으로 채점합니다.
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 !!! warning "검증 상태"
-    2026-11-14 실습 계정(us-west-2)에서 클러스터 생성(`02_create_cluster.sh`, CDK 배포와 삭제, 두 번)과 Kata CPU 노드 추가(`kata/cpu_nodes.sh`)를 실행했습니다. 2단계의 노드 구성과 소요 시간, 4단계의 smoke pod 출력이 그 결과입니다. 시나리오 C에서는 이미지 빌드(`03_build_push_images.sh`), 네임스페이스와 인증 설정(`05_setup_namespaces_auth.sh`), 풀 배포(`06_deploy_sandboxes.sh`), 풀 검증(`ops/verify.sh`), reward 루프 시뮬레이션(`ops/simulate.sh`), 버전 교체(`ops/rollout.sh`), 벤치마크(`ops/bench.sh`)를 AWS에서 실행하지 않았습니다(이미지 빌드, 네임스페이스와 인증 설정, gVisor GPU 풀의 배포와 검증은 실습 계정에서 2026-11-18에 시나리오 A로 실행했어요). 이 단계들의 "확인할 것"은 스크립트 코드를 기준으로 썼으니 직접 검증하세요. reward 루프 시뮬레이션(`ops/simulate.sh`)의 예시 출력은 로컬(CPU, loopback 서버 2개)에서 실행한 결과이며, 테스트(`test_simulate_reports_a_version_switch_between_batches`)로도 확인했어요.
+    2026-11-14 실습 계정(us-west-2)에서 클러스터 생성(`02_create_cluster.sh`, CDK 배포와 삭제, 두 번)과 Kata CPU 노드 추가(`kata/cpu_nodes.sh`)를 실행했습니다. 2단계의 노드 구성과 소요 시간, 4단계의 smoke pod 출력이 그 결과입니다. 2026-11-17에는 같은 리전의 EKS c8i 노드에서 `kata-clh-cpu` 풀로 reward 루프 시뮬레이션(`ops/simulate.sh`) 30배치를 채점했고, 8번째 배치에서 v2 전환을 확인했습니다. 그 사이에 실행한 버전 교체(`ops/rollout.sh kata-clh-cpu v1 v2`)의 v2 검증과 parity 검사도 통과했어요. 이 기록은 데모 사이트 데이터(`demo/site/data/extras.json`)에 있습니다. CPU 풀 세 개의 벤치마크(`ops/bench.sh`)는 2026-11-18에 측정했습니다([08](08_benchmark.md)). 7단계의 예시 출력은 이와 별개로 로컬(CPU, loopback 서버 2개)에서 실행한 결과를 줄인 것이며, 테스트(`test_simulate_reports_a_version_switch_between_batches`)로도 확인했습니다.
 
 ## 아키텍처
 
 [![시나리오 C: GPU 없이 c8i.2xlarge 한 대에 세 런타임의 CPU 풀이 있는 구성](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
-*그림 요약: AWS 리소스로 보면 GPU 노드가 없고, c8i.2xlarge 한 대가 샌드박스 노드 그룹을 맡습니다. 아래 그림은 같은 구성을 pod 기준으로 본 것이에요.*
+*그림 요약: AWS 리소스로 보면 GPU 노드가 없고, c8i.2xlarge 한 대가 샌드박스 노드 그룹을 맡습니다.*
 
 ```mermaid
 flowchart LR
@@ -61,10 +61,10 @@ flowchart LR
 |---|---|---|
 | GRPO trainer(`g5.2xlarge`, vLLM 생성, gradient 계산) | 없음. Job `simulate`가 completion 대신 golden 제출물을 사용 | 다름 (학습 없음) |
 | reward 함수 `KernelRewards` | 같은 코드, `require_triton=False` | 같음 |
-| 배치마다 routing snapshot으로 버전 고정 | 같은 코드 | 같음 |
+| 배치 하나를 한 버전으로 채점 (routing snapshot) | 같은 코드 | 같음 |
 | 샌드박스 이미지, API, 인증, NetworkPolicy | 같은 것 | 같음 |
 | 샌드박스 런타임 | `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu` | RuntimeClass만 다름 |
-| harness 측정 | CPU timing(`device=cpu`), Triton 없음 | 다름 (GPU timing 없음) |
+| harness 측정 | CPU timing(`device=cpu`), 작은 입력(`SANDBOX_SIZE=smoke`), Triton 없음 | 다름 (GPU timing 없음) |
 
 ## 준비
 
@@ -93,7 +93,7 @@ scripts/01_check_prereqs.sh
 
 **확인할 것:** Standard 쿼터 값이 14 이상이고 `c8i.2xlarge`의 지원 기능 목록에 `nested-virtualization`이 있으면 됩니다. G and VT 쿼터와 GPU 인스턴스의 AZ 목록은 무시하세요.
 
-**문제가 생기면:** 지원 기능 목록에 nested virtualization이 없으면 그 리전이 지원하지 않는 것이니 `us-east-1` 또는 `us-west-2`로 바꾸거나 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요.
+**문제가 생기면:** 이 명령은 설정한 인스턴스 유형(`KATA_CPU_INSTANCE_TYPE`, 기본 `c8i.2xlarge`) 하나만 조회합니다. 지원 기능 목록에 `nested-virtualization`이 없으면 현재 리전에서 그 유형이 지원하지 않는 것이니 `us-east-1` 또는 `us-west-2`로 바꾸거나 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요.
 
 ## 2단계: GPU 없는 클러스터와 c8i 노드 (`02_create_cluster.sh`)
 
@@ -143,7 +143,7 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 
 sandbox 이미지는 PyTorch CUDA 런타임 기반이고 CPU 경로에도 그대로 씁니다. 작업 PC가 arm64라면 x86_64 호스트에서 빌드하세요.
 
-**`04_install_gpu_stack.sh`는 건너뜁니다.** 이 스크립트는 NVIDIA device plugin과 GPU 노드의 gVisor를 설치합니다. 이 경로의 gVisor는 `02_create_cluster.sh`가 만든 c8i 노드가 부팅할 때 user data로 이미 설치됩니다.
+**`04_install_gpu_stack.sh`는 건너뜁니다.** 이 스크립트는 NVIDIA device plugin 설치, GPU용 `gvisor` RuntimeClass 등록, GPU 동작 검사를 맡습니다. gVisor는 EC2의 `sandbox-gvisor` 노드와 c8i 샌드박스 노드에 부팅할 때 user data로 설치되므로, `02_create_cluster.sh`가 만든 c8i 노드에는 이미 들어 있어요.
 
 ## 4단계: c8i 노드에 세 런타임 설치 (`kata/cpu_nodes.sh`)
 
@@ -174,7 +174,7 @@ kata-qemu: kernel seen inside: 6.18.56 #1 SMP Fri Oct 16 18:41:32 UTC 2026
 
 세 커널 버전이 모두 마지막 줄의 호스트 커널과 다르면 정상입니다. 일반 runc 컨테이너라면 호스트 커널 버전이 그대로 나옵니다. gVisor는 시스템 콜을 처리하는 사용자 공간 커널 Sentry가 정한 버전을, Kata는 VM 안의 guest 커널 버전을 보고해요.
 
-**문제가 생기면:** `no sandbox-kata-cpu node group: ...`이 나오면 클러스터 생성(`02_create_cluster.sh`)을 `--cpu-only`로 실행했는지 확인하세요. `kata runtime classes missing`이 나오거나 smoke pod가 끝나지 않으면 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요. `gvisor-cpu` smoke pod만 실패하면 노드의 user data 로그(`/var/log/cloud-init-output.log`)에서 gVisor 설치 단계를 확인합니다.
+**문제가 생기면:** `no sandbox-kata-cpu node group: ...`이 나오면 클러스터 생성(`02_create_cluster.sh`)을 `--cpu-only`로 실행했는지 확인하세요. 이 메시지는 노드 그룹 조회 권한(`eks:DescribeNodegroup`)이 없거나 `CLUSTER_NAME`, `AWS_REGION`이 다를 때도 나오므로, `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-cpu`를 직접 실행해 오류를 확인합니다. `kata runtime classes missing`이 나오거나 smoke pod가 끝나지 않으면 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요. `gvisor-cpu` smoke pod만 실패하면 노드의 user data 로그(`/var/log/cloud-init-output.log`)에서 gVisor 설치 단계를 확인합니다.
 
 ## 5단계: 네임스페이스와 routing 표 (`05_setup_namespaces_auth.sh`)
 
@@ -203,21 +203,21 @@ done
 
 ## 7단계: 모델 없는 reward 루프와 버전 교체 (`ops/simulate.sh`, `ops/rollout.sh`)
 
-터미널 두 개를 씁니다. 첫 번째 터미널의 reward 루프는 20초마다 한 배치씩 30배치(약 10분)를 채점해요.
+2단계에서 SSM 터널을 연 터미널은 그대로 두고, 작업 터미널 두 개를 더 씁니다. 첫 번째 작업 터미널의 reward 루프는 30배치를 차례로 채점하고, 배치 사이에 20초씩 쉽니다. 2026-11-17 c8i 노드에서는 약 16분 걸렸어요.
 
 ```bash
-# terminal 1
+# work terminal 1
 scripts/ops/simulate.sh 30 20
 ```
 
-몇 배치 뒤 두 번째 터미널에서 `kata-clh-cpu`를 v1에서 v2로 바꿉니다. `ops/rollout.sh`는 v2 풀 배포(1), 검증(2), v1과 같은 verdict를 내는지 확인하는 parity 검사(3), routing 표의 v2 전환(4)을 차례로 실행합니다.
+몇 배치 뒤 두 번째 작업 터미널에서 `kata-clh-cpu`를 v1에서 v2로 바꿉니다. `ops/rollout.sh`는 v2 풀 배포(1), 검증(2), v1과 같은 verdict를 내는지 확인하는 parity 검사(3), routing 표의 v2 전환(4)을 차례로 실행합니다.
 
 ```bash
-# terminal 2
+# work terminal 2
 scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
-**확인할 것:** 첫 번째 터미널에 아래와 같은 이벤트가 나옵니다(위 검증 상태에서 설명한 로컬 실행 출력을 줄인 것입니다). 클러스터에서는 ConfigMap 변경이 pod에 반영되기까지 최대 1분 정도 걸립니다(kubelet sync). 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다.
+**확인할 것:** 첫 번째 작업 터미널에 아래와 같은 이벤트가 나옵니다(위 검증 상태에서 설명한 로컬 실행 출력을 줄인 것입니다). 클러스터에서는 ConfigMap 변경이 kubelet 동기화와 캐시 전파를 거쳐 pod에 반영되고, 스크립트는 이 시간을 약 1분으로 안내합니다. 클라이언트도 routing 파일을 최대 2초에 한 번 다시 읽어요. 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다. 1분이 지나도 전환 이벤트가 없으면 시뮬레이터의 `reward_batch`에서 `version`을 확인하세요.
 
 ```text
 {"event": "simulate", "steps": 4, "device": "cpu", "note": "golden submissions stand in for model completions; this is not training"}
@@ -227,12 +227,12 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
 - **`sandbox_version_switch`가 배치 경계에서 한 번 나옵니다.** 배치 2까지는 v1, 배치 3부터는 v2예요.
-- **`served_versions`에 버전이 하나만 있습니다.** 한 배치의 verdict에 v1과 v2의 결과가 섞이지 않았다는 뜻입니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요해요.
-- **`status`와 `pass_rate`가 교체 전후로 같습니다.** golden 세트에서 v2가 v1과 같은 verdict를 낸다는 뜻이며, `ops/rollout.sh`의 parity 단계에서 미리 확인한 내용이에요.
+- **`served_versions`에 버전이 하나만 있습니다.** 한 배치의 verdict에 v1과 v2의 결과가 섞이지 않았다는 뜻입니다. 학습에서 필요한 결과가 모두 같은 풀의 캐시에 있는 배치는 샌드박스를 부르지 않아 `reward_batch` 줄이 없어요. 서로 다른 풀의 캐시가 섞이면 한 풀에서 다시 채점하고 그 줄을 남깁니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요해요.
+- **`status`와 `pass_rate`가 교체 전후로 같습니다.** 두 배치 모두 `ok` 1건과 `wrong_answer` 2건이에요. 이 값은 상태별 건수라서, 각 golden이 두 버전에서 같은 verdict를 받았는지는 `ops/rollout.sh` parity 출력의 제출물별 `PASS` 줄로 확인합니다.
 
 `n`이 4가 아니라 3인 이유는 trainer 쪽 AST 검사가 정책 위반 답안(호스트 파일 읽기)을 샌드박스에 보내기 전에 걸러 내기 때문입니다. `mean_speedup`은 CPU 측정 노이즈 때문에 배치마다 달라지므로(로컬 실행에서 0.66에서 1.65 사이) 런타임 비교에 쓰지 마세요.
 
-v2 전환을 확인했으면 v1을 0으로 줄입니다. Deployment는 남아 있으므로 바로 되돌릴 수 있어요.
+v2 전환을 확인했으면 v1을 0으로 줄입니다. v1 Deployment는 남지만 replica가 0이라 요청을 받지 못합니다. 되돌릴 때는 `scripts/ops/rollout.sh kata-clh-cpu v2 v1`이 v1 pod를 다시 띄우고 검증과 parity를 마친 뒤 routing을 바꿉니다. 8단계에서 세 런타임을 비교하려면 이 명령은 벤치마크를 마친 뒤에 실행하세요.
 
 ```bash
 scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
@@ -242,7 +242,7 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 
 ## 8단계 (선택): 세 런타임 비교 (`ops/bench.sh`)
 
-v1 풀마다 cold start(pod 생성에서 Ready까지)와 평가 지연을 측정합니다.
+v1 풀마다 cold start(pod 생성에서 Ready까지)와 평가 지연을 측정합니다. `ops/bench.sh`는 v1 pod가 없는 풀을 건너뜁니다. 7단계의 `--finish`로 `kata-clh-cpu` v1을 0으로 줄였다면 그 풀의 결과가 빠지니, v1 풀 세 개가 Ready인 상태에서 실행하세요.
 
 ```bash
 scripts/ops/bench.sh 16

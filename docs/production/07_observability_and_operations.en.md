@@ -6,9 +6,9 @@
 
 Sandbox-side failures usually do not stop training. Even under a flood of authentication failures (401), TRL drops `sandbox_error` samples by returning `None`, and when every sample is dropped the advantages are 0, so steps go by without learning. When the pool shrinks, a pod that is not Ready only disappears from the headless Service DNS, so requests pile onto the remaining pods and steps just get slower. Reward hacking even looks like improving rewards, because flags (`implausible_speedup`, `timed_output_mismatch` and others) live only in the verdicts and are not aggregated into metrics.
 
-![a: authentication failures (a flood of 401s) drop sandbox_error samples with None, so the advantage is 0 and steps go by; a shrinking pool takes pods that are not Ready out of DNS and loads the remaining pods, so steps just get slower; reward hacking flags live only in verdicts and are not aggregated into metrics, so rewards seem to improve. Training stops in none of the three. b: the same failures map to alarms: status.sandbox_error / n to the sandbox_error rate (TRL over 5%, 3 batches in a row), sum(sandbox_ready) to Ready pods short (below expected replicas for 10 minutes), and flag counts (an extension not in the repository, dashed) to a reward hacking signal (flag rate trending up)](../images/figures/production-07_observability_and_operations.svg)
+![a: authentication failures (a flood of 401s) drop sandbox_error samples with None, giving those samples an advantage of 0, and when every sample is dropped steps go by with no learning signal; a shrinking pool takes pods that are not Ready out of DNS and loads the remaining pods, so steps just get slower; reward hacking flags live only in verdicts and are not aggregated into metrics, so rewards seem to improve. Training stops in none of the three. b: the same failures map to alarms: status.sandbox_error / n to the sandbox_error rate (TRL over 5%, 3 batches in a row), available versus desired replicas per active pool Deployment to Ready pods short (available below desired for 10 minutes), and flag counts (an extension not in the repository, dashed) to a reward hacking signal (flag rate trending up)](../images/figures/production-07_observability_and_operations.svg)
 
-*Takeaway: Sandbox-side failures do not stop training: steps go by without learning, slow down, or rewards look better. Alarms on the reward quality signal each failure moves first are what catch them in time.*
+*Takeaway: Sandbox-side failures do not stop training. When every sample becomes unscorable, steps go by without learning; a shrinking pool slows steps down; reward hacking makes rewards look better than they are. The three failures are caught by alarms on the `sandbox_error` rate, the number of Ready pods and the flag count.*
 
 
 ## Why
@@ -22,7 +22,7 @@ Sandbox-side failures usually do not stop training. Even under a flood of authen
 ??? note "Terms"
     - **Counter, Gauge, Histogram**: Prometheus metric types. A counter only goes up, a gauge is a current value that goes up and down, and a histogram counts values per range (bucket) so that quantiles such as p95 can be computed.
     - **scrape, PromQL**: a scrape is the collector reading `/metrics` periodically; PromQL is the Prometheus query language that computes ratios and quantiles from the collected metrics.
-    - **`reward_batch` event**: the one JSON line the trainer writes to stdout per reward batch, with the version, the verdict distribution and latencies.
+    - **`reward_batch` event**: the one JSON line the trainer writes to stdout for each reward batch that calls the sandbox, with the version, the verdict distribution and latencies.
     - **flag**: a warning marker on a verdict (`implausible_speedup`, `timed_output_mismatch` and others) that carries reward hacking signals.
     - **`RewardStalled`**: the log-based stall rule in the HyperPod job template. It restarts the job when no `reward_batch` line appears for 30 minutes.
     - **kube-state-metrics, Container Insights**: kube-state-metrics exports the state of Kubernetes objects such as Deployment replicas as metrics; Container Insights is the container monitoring feature of CloudWatch.
@@ -64,7 +64,7 @@ The sandbox pod's `/metrics` verifies an audience `gpu-sandbox` token offline ag
 | Scrape the gateway only | Add the scraper SA to `GATEWAY_ALLOWED_SUBJECTS`, an audience `gpu-sandbox-gateway` token, a NetworkPolicy admitting port 8080 | Sandbox ingress stays limited to the gateway | Per-pod `busy`, `ready` and `reaped` are not visible |
 | Also scrape sandbox pods | The above, plus adding the SA to `SANDBOX_ALLOWED_SUBJECTS` and re-running `scripts/06_deploy_sandboxes.sh`, an audience `gpu-sandbox` token, a NetworkPolicy admitting port 8000 | Per-pod metrics | The allowlist does not distinguish routes, so that subject can also call `/v1/evaluate`. Use a dedicated scraper SA |
 
-When `SANDBOX_ALLOWED_SUBJECTS` is set, `06_deploy_sandboxes.sh` uses it instead of the default list (`grpo-trainer`, `sandbox-probe`, `gateway`), so include the three defaults. Applying it to a running pool changes the pod template, so pods restart one at a time (new VMs under Kata); do it between runs. Adapt the labels and paths of the Prometheus example below to your installation.
+When `SANDBOX_ALLOWED_SUBJECTS` is set, `06_deploy_sandboxes.sh` uses only that value instead of the default list (`grpo-trainer`, `sandbox-probe`, `gateway`), so add the scraper subject to the list the pool already uses. For a default deployment keep the three defaults; for the production setup in [02 Security](02_security.md) keep `gateway` and `sandbox-probe`. Pass the current replica count as the third argument, or the pool goes back to the profile's default replica count. Applying it to a running pool changes the pod template, so pods restart one at a time (new VMs under Kata); do it between runs. Adapt the labels and paths of the Prometheus example below to your installation.
 
 ```yaml
 # Prometheus pod: one projected token per audience (example)
@@ -74,6 +74,11 @@ volumes:
       sources:
         - serviceAccountToken: {audience: gpu-sandbox-gateway, expirationSeconds: 3600, path: gateway-token}
         - serviceAccountToken: {audience: gpu-sandbox, expirationSeconds: 3600, path: sandbox-token}
+# mount the tokens in the Prometheus container
+containers:
+  - name: prometheus
+    volumeMounts:
+      - {name: gpusandbox-tokens, mountPath: /var/run/secrets/gpusandbox, readOnly: true}
 ---
 # prometheus.yml scrape jobs (example)
 scrape_configs:
@@ -104,7 +109,7 @@ spec:
 
 ## Trainer-side JSON events
 
-`KernelRewards` (`src/gpusandbox/rewards.py`) and `train_grpo.py` write one JSON object per line to stdout and to `--metrics-file` (`/outputs/grpo/sandbox_metrics.jsonl` in the job templates). TRL also logs a value per reward function (`format_reward`, `correctness_reward`, `speedup_reward`).
+`KernelRewards` (`src/gpusandbox/rewards.py`) and `train_grpo.py` write one JSON object per line to stdout. The `reward_batch` and `sandbox_version_switch` events from `KernelRewards` also go to `--metrics-file` (`/outputs/grpo/sandbox_metrics.jsonl` in the job templates), while `routing` and `done` from `train_grpo.py` go to stdout only. TRL also logs a value per reward function (`format_reward`, `correctness_reward`, `speedup_reward`).
 
 | Event | When | Key fields |
 |---|---|---|
@@ -116,7 +121,7 @@ spec:
 | `jwks_synced` (tool) | JWKS sync | `keys` (list of kids) |
 
 !!! note "What `n` and `pass_rate` count"
-    `reward_batch` counts only completions sent to the sandbox. Completions without a code block, completions rejected by the static policy and duplicates within the batch are handled locally and left out, so `pass_rate` is "the share of completions that reached the sandbox and passed", and `n` shrinking relative to the batch size is itself a format collapse signal. If no completion reaches the sandbox, no `reward_batch` line is written for that batch.
+    `reward_batch` counts only completions sent to the sandbox in this call. Completions without a code block, completions rejected by the static policy and completions whose result is already cached from the same pool are not sent, so they are left out. Completions cached from another pool and scored again on this batch's pool are counted. An identical valid completion goes into a request only once. If a pool change makes it go out again, `n` and `status` still hold only its last result. So `pass_rate` is "the share of completions that reached the sandbox and passed". Cache hits also make `n` smaller, so judge format collapse from `n` together with TRL's `format_reward`. If no completion reaches the sandbox, no `reward_batch` line is written for that batch.
 
 Keep only the `reward_batch` lines of the trainer log and summarize the fields the alarms use. Your workstation needs `jq`, and `RUN_ID` is the value `scripts/07_run_grpo.sh` used in the Job name.
 
@@ -145,12 +150,12 @@ The conditions are starting-point examples, not values derived from a real run, 
 | Alarm | Signal | Starting condition (example) | Look first at |
 |---|---|---|---|
 | Pass rate collapse | `reward_batch.pass_rate`, `ok` share per version | Below half of the trailing 20-batch mean for 3 batches in a row | Whether `sandbox_version_switch` happened, pool health |
-| `sandbox_error` rate | `status.sandbox_error / n`, share of gateway `status="sandbox_error"` | Above 5% for 3 batches in a row on TRL, lower on veRL | Runbook entries for 401 and 403, pool size |
+| `sandbox_error` rate | TRL: `status.sandbox_error / n` of `reward_batch` (includes 401 and 403 rejected by the gateway). veRL: the `sandbox_error` value returned by `compute_score`, aggregated per sample (includes caller auth failures). The share of gateway `status="sandbox_error"` counts only requests that passed authentication and reached a pool | Above 5% for 3 batches in a row on TRL, lower on veRL | Runbook entries for 401 and 403, pool size |
 | p95 latency | `sandbox_evaluation_seconds`, `gateway_evaluation_seconds`, `eval_p95_s` | Twice the baseline | GPU health, recycling, nodes |
 | Reward hacking signals | Flag counts (extension), a jump in `wrong_answer`, `mean_speedup` stuck at 1.0 | Rising flag share | Review samples directly, page 04 |
-| Too few Ready pods | `sum(sandbox_ready)`, available replicas from kube-state-metrics | Below expected replicas for 10 minutes | Runbook entry "never Ready" |
-| Rising killed processes | `sandbox_reaped_processes_total` | Stays above 0 over 30 minutes | Review candidates that leave daemons behind |
-| Too many recycles | `gateway_recycled_pods_total` | Twice the evaluations ÷ `SANDBOX_MAX_EVALS` | `gpu_fault`, node GPU health |
+| Too few Ready pods | Desired and available replicas per active pool Deployment from kube-state-metrics. `sandbox_ready` has no runtime or version label, so its sum includes pods of other pools | Available below desired on the active pool for 10 minutes. If the routing points at a pool with 0 replicas, both values are 0 and the comparison is false, so add a separate alarm for available at 0 on the active pool that should take traffic. When every scrape target disappears the series disappears too, so add a separate missing-metric alarm | Runbook entry "never Ready" |
+| Rising killed processes | `sandbox_reaped_processes_total` | Increase over the last 30 minutes (`increase`) above 0 | Review candidates that leave daemons behind |
+| Too many recycles | `gateway_recycled_pods_total`. The recycle counter has no runtime or version label, so with several versions running it also counts v1 recycles after `gpu_fault` | Twice the evaluations of the version with count-based recycling (v2) ÷ `SANDBOX_MAX_EVALS`. Gateway evaluations include requests that never got a free pod and exclude evaluations the probe Job sent to the pool directly, so this denominator is approximate | `gpu_fault`, node GPU health |
 
 Example PromQL for the alarms above. Enter one query at a time in Prometheus or Amazon Managed Service for Prometheus and compare with the baseline.
 
@@ -161,11 +166,12 @@ sum(rate(gateway_evaluations_total{status="sandbox_error"}[10m])) / sum(rate(gat
 sum by (version) (rate(gateway_evaluations_total{status="ok"}[10m])) / sum by (version) (rate(gateway_evaluations_total[10m]))
 # p95 evaluation latency inside the sandbox
 histogram_quantile(0.95, sum by (le) (rate(sandbox_evaluation_seconds_bucket[10m])))
-# ready sandbox pods and stray processes
-sum(sandbox_ready)
+# available vs desired replicas of the active pool (kube-state-metrics), and stray processes
+kube_deployment_status_replicas_available{namespace="sandbox",deployment="sandbox-gvisor-v2"} < kube_deployment_spec_replicas{namespace="sandbox",deployment="sandbox-gvisor-v2"}
+kube_deployment_status_replicas_available{namespace="sandbox",deployment="sandbox-gvisor-v2"} == 0
 sum(increase(sandbox_reaped_processes_total[30m]))
-# actual recycles relative to the expected rate with SANDBOX_MAX_EVALS=200 (v2)
-sum(increase(gateway_recycled_pods_total[1h])) / (sum(increase(gateway_evaluations_total[1h])) / 200)
+# actual recycles relative to the expected rate with SANDBOX_MAX_EVALS=200 (v2 evaluations only)
+sum(increase(gateway_recycled_pods_total[1h])) / (sum(increase(gateway_evaluations_total{version="v2"}[1h])) / 200)
 ```
 
 A rising `sandbox_reaped_processes_total` means candidate code left processes behind after its evaluation. The server cleans up every time, so the next evaluation is protected, but it may be an attempt to tamper with it, so inspect those samples.
@@ -194,16 +200,17 @@ Whichever collector you use, the authentication and NetworkPolicy requirements a
 | Never Ready (GPU probe) | Log shows `device probe ok=False`. For gVisor, an nvproxy driver mismatch (an unknown driver cannot pass even with the allow flag), or a device plugin or CDI problem | On the node, compare `/usr/local/bin/runsc nvproxy list-supported-drivers` with `/proc/driver/nvidia/version`, look for `WARNING: NVIDIA driver ... is not supported` in the boot log, pin the AMI. For HyperPod nodes, `scripts/hyperpod/check_gvisor.sh` |
 | Kata pod Pending with `Insufficient nvidia.com/pgpu` | pgpu is not advertised: missing `nvidia.com/gpu.workload.config=vm-passthrough` label, `ccManager.defaultMode` not off (T4), no `intel_iommu=on` in the AMI, the host loaded the NVIDIA driver | Check `kubectl get node <node> -o jsonpath='{.status.allocatable.nvidia\.com/pgpu}'` and the `nvidia.com/cc.ready.state` label, re-check the output of `scripts/kata/gpu_nodes.sh` |
 | Kata pod stuck in `ContainerCreating` | VFIO pins all VM memory (default 8 GiB + limits) before boot, and CUDA initializes inside the guest | Check the node kubelet's `runtimeRequestTimeout: 20m` and the `kubectl describe pod` events. The startupProbe allows 10 minutes (5 s × 120) after the container starts |
-| Every call returns 401 (sandbox) | Stale JWKS (`unknown signing key` after a signing key rotation), missing JWKS ConfigMap (`token verification keys unavailable`), issuer or audience mismatch, auth not configured (fail closed) | Run `scripts/ops/sync_jwks.sh` or check the `jwks-sync` CronJob, compare `identity.oidc.issuer` from `aws eks describe-cluster` with `SANDBOX_AUTH_ISSUER`, reproduce with the probe to see the error body |
+| Sandbox pod stuck in ContainerCreating (`FailedMount`) | The JWKS ConfigMap `sandbox-auth-jwks` is missing. The Deployment mounts it as a required volume, so the server never starts | Create the ConfigMap with `scripts/ops/sync_jwks.sh` (the `jwks-sync` CronJob may only patch an existing ConfigMap) |
+| Every call returns 401 (sandbox) | Stale JWKS (`unknown signing key` after a signing key rotation), the mounted `jwks.json` cannot be read or is malformed (`token verification keys unavailable`), issuer or audience mismatch, auth not configured (fail closed) | Run `scripts/ops/sync_jwks.sh` or check the `jwks-sync` CronJob, compare `identity.oidc.issuer` from `aws eks describe-cluster` with `SANDBOX_AUTH_ISSUER`, reproduce with the probe to see the error body |
 | Every call returns 401 (gateway) | The caller token's audience is not `gpu-sandbox-gateway`, or `GATEWAY_AUTH_AUDIENCE` or `GATEWAY_ALLOWED_SUBJECTS` is empty | Check the projected token audience of the caller pod and the gateway env |
 | 403 | The subject is not on the allowlist (the error body names the subject) | Add it to `SANDBOX_ALLOWED_SUBJECTS` or `GATEWAY_ALLOWED_SUBJECTS` and redeploy |
-| A version switch is not seen | ConfigMap mounted with `subPath`, kubelet sync delay, only one namespace updated, the trainer runs with `--runtime`, no reward batch yet | Check `sandbox-routing` in both namespaces, check that the pod's `volumeMounts` have no `subPath`, check again a few minutes later |
+| A version switch is not seen | ConfigMap mounted with `subPath`, kubelet sync delay, only one namespace updated, a runtime-only switch while the trainer pins the runtime with `--runtime` (the version still follows the active one), every completion of the batch hit the cache so the sandbox was not called, no reward batch yet | Check `sandbox-routing` in both namespaces, check that the pod's `volumeMounts` have no `subPath`, check again a few minutes later |
 | HyperPod job restarts repeatedly (`RewardStalled`) | No `reward_batch` line for 30 minutes: a generation hang, a very slow reward batch, or no completion reaching the sandbox (format collapse) | Check the logs right before the restart, pool readiness and latency, and `format_reward`. If `/outputs` is an `emptyDir`, checkpoints vanish on restart ([06 Scaling with veRL](06_scaling_with_verl.md)) |
 | `sandbox_error` with `no free sandbox in ...` | No Ready endpoints, or the pool is too small for the batch to get a free pod within 600 s | Check the number of Ready pods, resize the pool |
 | The gateway never becomes Ready | No `sandbox-routing` ConfigMap in the `sandbox-gateway` namespace, or a malformed one | Create the ConfigMap (`ops/rollout.sh` only updates namespaces that already exist) |
 | More recycles than expected | Many pods drained because of `gpu_fault` | Check the GPU health of those nodes, replace a node if needed |
 
-The 401 error body is not written to the server log; it appears only in the client-side result (the `error` of a `sandbox_error`), so see the cause with the probe step of `scripts/ops/verify.sh <runtime> <version>`. Each golden entry then prints `expected ok, got sandbox_error: HTTP 401: ...`, but the probe calls as the `sandbox-probe` subject, so a 403 caused by only the trainer subject missing does not reproduce this way.
+The body of a 401 sent by a sandbox is not written to the server log; part of it appears in the client-side result (the `error` of a `sandbox_error`), so see the cause with the probe step of `scripts/ops/verify.sh <runtime> <version>`. Each golden entry then prints `expected ok, got sandbox_error: HTTP 401: ...`. The probe calls the sandbox directly as the `sandbox-probe` subject, so a 403 caused by only the trainer subject missing, or a 401 or 403 from the gateway, does not reproduce this way. When the gateway rejects a call, the trainer-side `error` keeps only the HTTP status, so call the gateway with the real caller's token and read the response body.
 
 To follow JWKS changes automatically, use the CronJob in `k8s/production/jwks-sync.yaml.tpl` (minute 17 of every hour), and create the `sandbox-gateway` namespace first. The commands below apply the CronJob, run one Job right away and check it, then print the routing tables of both namespaces for comparison.
 

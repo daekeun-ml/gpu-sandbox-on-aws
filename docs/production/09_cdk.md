@@ -1,19 +1,19 @@
 # 09 CDK로 프로비저닝하고 삭제하기
 
-**TL;DR** 핸즈온의 클러스터 생성 단계(`02_create_cluster.sh`)에서 실행하는 이 CDK 앱은 VPC, EKS(API endpoint는 private 전용), 시나리오별 노드 그룹, SSM 접속 인스턴스를 스택 하나로 만들고 명령 한 번으로 삭제합니다. 보안 기본값은 synth할 때마다 cdk-nag와 테스트가 확인합니다.
+**TL;DR** 핸즈온의 클러스터 생성 단계(`02_create_cluster.sh`)에서 실행하는 이 CDK 앱은 VPC, EKS(API endpoint는 private 전용), 시나리오별 노드 그룹, SSM 접속 인스턴스를 스택 하나로 만들고 명령 한 번으로 삭제합니다. synth할 때마다 cdk-nag가 보안 규칙을 검사하고, 템플릿 테스트(`cdk/tests`)는 따로 실행합니다.
 
 ## 기존 Pain Point
 
 클러스터, 노드 그룹, launch template을 여러 스크립트로 나눠 만들면 이해하기는 쉽지만, 환경을 다시 만들거나 팀에 공유할 때 순서를 놓치기 쉬워요. 삭제할 때도 단계별 리소스(launch template, 로그 그룹 등)를 따로 삭제해야 하고, 하나라도 남으면 비용이 계속 발생하거나 다음 생성이 실패합니다. 공개된 API endpoint, IMDSv1, 암호화하지 않은 볼륨, 넓게 열린 security group은 계정 보안 점검에서 바로 지적됩니다(예: Security Hub 컨트롤 EKS.1). eksctl은 private endpoint만 활성화한 클러스터를 처음부터 만들 수 없어(eksctl 문서) public endpoint가 활성화된 상태로 남습니다. 그래서 이 에셋은 eksctl을 쓰는 방법을 제거했습니다.
 
-![a: 여러 스크립트를 순서대로 실행해 단계 1에서 클러스터, 단계 2에서 노드 그룹, 단계 3에서 launch template과 로그 그룹을 만듭니다. 삭제할 때도 단계마다 리소스별로 따로 삭제해야 하고, 하나라도 남으면 비용이 나가거나 다음 생성이 실패합니다. b: cdk/deploy.sh가 같은 리소스를 CDK 스택 하나(CloudFormation)로 배포하고, cdk/destroy.sh가 스택 전체를 삭제합니다. 명령 한 번으로 빠짐없이 삭제됩니다.](../images/figures/production-09_cdk.svg)
+![a: 여러 스크립트를 순서대로 실행해 단계 1에서 클러스터, 단계 2에서 노드 그룹, 단계 3에서 launch template과 로그 그룹을 만듭니다. 삭제할 때도 단계마다 리소스별로 따로 삭제해야 하고, 하나라도 남으면 비용이 나가거나 다음 생성이 실패합니다. b: cdk/deploy.sh가 같은 리소스를 CDK 스택 하나(CloudFormation)로 배포하고, cdk/destroy.sh가 스택 전체를 삭제합니다. 스택 안의 리소스는 함께 삭제되고, HyperPod 클러스터, AMI, ECR은 따로 삭제합니다.](../images/figures/production-09_cdk.svg)
 
-*그림 요약: 단계마다 만든 리소스는 단계마다 따로 삭제해야 하고, 하나만 놓쳐도 비용이 나가거나 다음 생성이 실패합니다. CDK 스택 하나로 만들면 스택 단위로 삭제할 수 있어 명령 한 번으로 빠짐없이 삭제됩니다.*
+*그림 요약: 단계마다 만든 리소스는 단계마다 따로 삭제해야 하고, 하나만 놓쳐도 비용이 나가거나 다음 생성이 실패합니다. CDK 스택 하나로 만들면 스택에 든 리소스를 스택 단위로 삭제할 수 있습니다.*
 
 
 ## Why
 
-- **스택 하나를 삭제 단위로 씁니다.** 모든 인프라가 CloudFormation 스택 하나에 있으므로 삭제할 때 빠뜨리는 리소스가 없습니다.
+- **스택 하나를 삭제 단위로 씁니다.** VPC, EKS 클러스터, 관리형 노드 그룹, SSM 접속 인스턴스가 CloudFormation 스택 하나에 있어 스택과 함께 삭제됩니다. HyperPod 클러스터, AMI, ECR 저장소는 스택 밖에 있으니 따로 지워야 해요(아래 표의 "스택 밖에서 만드는 것").
 - **기본값이 private이고, 보안 검사를 통과해야 배포됩니다.** EKS API endpoint는 인터넷에 노출하지 않습니다(접속은 SSM Session Manager 포트 포워딩). synth할 때마다 실행되는 cdk-nag(AwsSolutions 규칙)가 예외 처리하지 않은 지적을 발견하면 배포가 중단돼요.
 - **핸즈온도 같은 스택을 씁니다.** `scripts/02_create_cluster.sh`가 `cdk/deploy.sh`를 호출하고 둘 다 `scripts/config.env`를 읽으므로, 인스턴스 유형과 고정 버전이 서로 달라지지 않습니다.
 
@@ -29,7 +29,7 @@
     - **access entry**: 어떤 IAM 역할이 EKS 클러스터에서 어떤 권한을 갖는지 정하는 EKS 리소스입니다.
 
 !!! warning "검증 상태"
-    저자는 2026-11-14 실습 계정(us-west-2)에서 시나리오 C를 두 번 배포, 확인, 삭제했습니다. 이때 확인한 항목은 클러스터와 노드 상태, private endpoint, c8i 노드의 nested virtualization과 `/dev/kvm`, 노드의 gVisor와 node guard, SSM 터널을 통한 kubectl 접속(터널은 `127.0.0.1`에서만 열림), Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)의 kata-deploy, `gvisor-cpu` RuntimeClass, 세 런타임의 smoke pod, 삭제 후 남은 리소스입니다. `05_setup_namespaces_auth.sh`와 그 뒤의 단계(`scripts/ops/`의 운영 스크립트 포함), 시나리오 A, B1, B2, Kata GPU 노드 그룹은 AWS에서 실행하지 않았습니다. 로컬에서는 synth로 보안 기본값(`cdk/tests`, 18개)과 cdk-nag를 확인합니다.
+    저자는 2026-11-14 실습 계정(us-west-2)에서 시나리오 C를 두 번 배포, 확인, 삭제했습니다. 이때 확인한 항목은 클러스터와 노드 상태, private endpoint, c8i 노드의 nested virtualization과 `/dev/kvm`, 노드의 gVisor와 node guard, SSM 터널을 통한 kubectl 접속(터널은 `127.0.0.1`에서만 열림), Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)의 kata-deploy, `gvisor-cpu` RuntimeClass, 세 런타임의 smoke pod, 삭제 후 남은 리소스입니다. 2026-11-18에는 같은 계정에서 시나리오 A의 gVisor 경로(이미지 빌드, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`, `ops/verify.sh gvisor v1`, 5 step GRPO, `08_cleanup.sh --images`)와 Kata GPU 노드 그룹(`scripts/kata/gpu_nodes.sh`)도 실행했어요. B1과 B2 스택은 시나리오 A 클러스터를 만드는 중간 단계로만 배포했고, HyperPod 단계(`scripts/hyperpod/`)와 시나리오 A의 학습 중 `ops/rollout.sh`는 AWS에서 실행하지 않았습니다. 로컬에서는 synth로 보안 기본값(`cdk/tests`, 18개)과 cdk-nag를 확인합니다.
 
 ## 구성
 
@@ -71,7 +71,7 @@ flowchart LR
 | 항목 | 값 | 이유 |
 |---|---|---|
 | EKS API endpoint | private 전용. public은 `EKS_PUBLIC_ACCESS_CIDR`에 /32 하나를 지정할 때만 활성화 | 클러스터 API를 인터넷에 노출하지 않음. `0.0.0.0/0`이나 /24 같은 범위는 설정 단계에서 거부 |
-| security group | inbound는 access instance에서 control plane으로 가는 443 하나 | 인터넷(`0.0.0.0/0`)에서 들어오는 규칙이 없음. access instance는 HTTPS egress만 |
+| security group | CDK가 추가한 control plane security group의 inbound는 access instance에서 오는 TCP 443 하나. 노드와 control plane 사이의 통신은 EKS가 만든 cluster security group을 사용 | 인터넷(`0.0.0.0/0`)에서 들어오는 규칙이 없음. access instance는 HTTPS egress만 |
 | 운영자 권한 | `ADMIN_PRINCIPAL_ARN`의 IAM 역할에 access entry(`AmazonEKSClusterAdminPolicy`) | CloudFormation 실행 역할에는 클러스터 관리자 권한을 주지 않음(`BootstrapClusterCreatorAdminPermissions: false`) |
 | 인스턴스 메타데이터 | 모든 노드와 access instance에 IMDSv2만, 노드는 hop limit 1 | pod가 노드의 자격 증명을 읽지 못하게 함 |
 | 저장소 암호화 | 모든 EBS 볼륨 암호화, Kubernetes secrets는 KMS 키(자동 교체)로 암호화 | 디스크와 secrets가 평문으로 남지 않음 |
@@ -85,12 +85,13 @@ flowchart LR
 2. **Python 환경:** 아래 패키지를 저장소의 가상 환경에 설치합니다. `cdk/cdk.json`이 `python3 app.py`를 호출하므로, 이 가상 환경을 활성화한 셸에서 `cdk/deploy.sh`를 실행하세요.
 
     ```bash
-    pip install -r cdk/requirements.txt
+    uv pip install -r cdk/requirements.txt
     ```
 
-3. **bootstrap:** 계정과 리전마다 한 번 실행합니다.
+3. **bootstrap:** 계정과 리전마다 한 번 실행합니다. 명령은 셸의 `AWS_REGION`을 쓰므로, 4단계의 `scripts/config.env`를 먼저 만들고 불러온 뒤 실행하세요.
 
     ```bash
+    source scripts/config.env   # AWS_REGION
     cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
     ```
 
@@ -147,7 +148,7 @@ cdk/tunnel.sh
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 ```
 
-시나리오 C라면 `system` 두 대와 `sandbox-kata` 한 대가 출력됩니다. EKS 콘솔의 클러스터 화면에는 노드 3, 노드 그룹 2, add-on 4, access entry 4(운영자 2개와 EKS가 만든 2개)가 표시돼요.
+시나리오 C라면 `system` 두 대와 `sandbox-kata` 한 대가 출력됩니다. 실습 화면의 EKS 콘솔에는 노드 3, 노드 그룹 2, add-on 4, access entry 4(운영자 2개와 EKS가 만든 2개)가 표시됐어요. 운영자 entry는 `ADMIN_PRINCIPAL_ARN`에 적은 역할이나 사용자마다 하나씩 생기니, 자신의 클러스터에서는 그 수와 맞는지 확인하세요.
 
 ![EKS 클러스터 개요: Kubernetes 1.36, standard support until August 2, 2027, 노드 3, 노드 그룹 2, add-on 4, access entry 4](../images/console/eks-cluster.png)
 
@@ -157,7 +158,8 @@ kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 
 ```bash
 aws ec2 describe-instances --region "$AWS_REGION" \
-  --filters "Name=tag:eks:nodegroup-name,Values=sandbox-kata-cpu" "Name=instance-state-name,Values=running" \
+  --filters "Name=tag:eks:cluster-name,Values=$CLUSTER_NAME" "Name=tag:eks:nodegroup-name,Values=sandbox-kata-cpu" \
+            "Name=instance-state-name,Values=running" \
   --query 'Reservations[].Instances[].CpuOptions'
 ```
 
@@ -171,15 +173,15 @@ aws ec2 describe-instances --region "$AWS_REGION" \
 
 | 시나리오 | 이어서 실행할 단계 |
 |---|---|
-| C | `scripts/kata/cpu_nodes.sh`(kata-deploy, `gvisor-cpu` RuntimeClass, smoke pod. 실습 계정에서 약 14분), `ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`, 그다음 [10 c8i 단독](../handson/10_cpu_only.md)의 6단계부터 |
+| C | [10 c8i 단독](../handson/10_cpu_only.md)의 준비 2대로 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가(CPU 프로필의 기본 replica 2로는 풀 4개가 `c8i.2xlarge` 한 대에 들어가지 않음), `scripts/kata/cpu_nodes.sh`(kata-deploy, `gvisor-cpu` RuntimeClass, smoke pod. 실습 계정에서 약 14분), `ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`, 그다음 [10 c8i 단독](../handson/10_cpu_only.md)의 6단계부터 |
 | A | `scripts/04_install_gpu_stack.sh`, `scripts/05_setup_namespaces_auth.sh`, `scripts/06_deploy_sandboxes.sh gvisor v1`, `scripts/ops/verify.sh gvisor v1`, 그다음 [05 On-policy GRPO 학습](../handson/05_grpo_training.md) |
-| B1, B2 | B1은 `scripts/hyperpod/create.sh`, B2는 `scripts/hyperpod/build_b2_ami.sh` 다음 `scripts/hyperpod/create.sh --b2`. HyperPod 스크립트는 CDK가 `kubernetes.io/role/internal-elb` 태그를 붙인 private subnet을 고릅니다. 이어지는 순서는 [07 HyperPod 시나리오](../handson/07_hyperpod.md) |
+| B1, B2 | B1은 `scripts/hyperpod/create.sh`, B2는 `scripts/hyperpod/build_b2_ami.sh`가 출력한 `export HYPERPOD_B2_AMI_ID=...` 줄을 `scripts/config.env`에 넣은 뒤 `scripts/hyperpod/create.sh --b2`(값이 비어 있으면 생성이 중단됨). HyperPod 스크립트는 CDK가 `kubernetes.io/role/internal-elb` 태그를 붙인 private subnet을 고릅니다. 이어지는 순서는 [07 HyperPod 시나리오](../handson/07_hyperpod.md) |
 
-이미지는 핸즈온과 같이 `scripts/03_build_push_images.sh`로 만듭니다(시나리오 C는 `--no-trainer`).
+이미지는 핸즈온과 같이 `scripts/03_build_push_images.sh`로 만듭니다. 시나리오 C는 `--no-trainer`를 붙이고, B1과 B2에서 `HyperPodPyTorchJob`으로 학습하려면 trainer 이미지에 `hyperpodrun`이 들어가도록 `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드하세요.
 
 ## 4단계: 지우기 (cdk/destroy.sh)
 
-다음 명령은 터널이 연결되어 있으면 샌드박스 풀과 Job을 먼저 삭제한 뒤 스택 전체를 삭제합니다. 클러스터 이름을 직접 입력해야 삭제가 진행돼요. 핸즈온의 `scripts/08_cleanup.sh`는 클러스터 이름을 확인한 뒤 이 스크립트를 `--yes`로 호출합니다. 이어서 IOMMU AMI와 B2 AMI의 삭제 여부를 묻고, `--images`를 지정하면 ECR 저장소까지 삭제합니다.
+삭제를 시작하기 전에 `kubectl config current-context`가 `<CLUSTER_NAME>-tunnel`인지 확인하세요. 아래 두 스크립트 모두 현재 컨텍스트를 그대로 씁니다. B1과 B2에서는 이 단계 전에 `scripts/hyperpod/delete.sh`로 HyperPod 클러스터를 먼저 삭제합니다. 이 스크립트는 HyperPod CRD가 있으면 현재 컨텍스트의 `rl-trainer`에 있는 `HyperPodPyTorchJob`을 모두 지운 뒤 HyperPod 클러스터를 삭제해요. 다음 명령은 현재 kubectl 컨텍스트에서 `sandbox` namespace가 보이면 그 컨텍스트의 `rl-trainer` Job 전체와 `sandbox`의 Deployment, Service 전체를 앱 label과 관계없이 먼저 삭제한 뒤, `CLUSTER_NAME`의 스택 `<CLUSTER_NAME>-cdk` 전체를 삭제합니다. 스크립트는 현재 컨텍스트가 `CLUSTER_NAME`의 클러스터인지 검사하지 않습니다. 클러스터 이름을 직접 입력해야 삭제가 진행돼요. 핸즈온의 `scripts/08_cleanup.sh`는 클러스터 이름을 확인한 뒤 이 스크립트를 `--yes`로 호출합니다. 이어서 IOMMU AMI와 B2 AMI의 삭제 여부를 묻고, `--images`를 지정하면 ECR 저장소까지 삭제합니다.
 
 ```bash
 cdk/destroy.sh
@@ -189,9 +191,9 @@ cdk/destroy.sh
 
 ## 적용 범위와 한계
 
-- **AWS에서 실행한 것은 시나리오 C뿐입니다.** 나머지는 위 "검증 상태"대로 synth, cdk-nag, 템플릿 assertion 테스트(`cdk/tests`)로만 확인했습니다.
+- **HyperPod 단계는 AWS에서 실행하지 않았습니다.** 시나리오 C(2026-11-14)와 시나리오 A, Kata GPU 노드 그룹(2026-11-18)은 위 "검증 상태"대로 실습 계정에서 실행했어요. B1과 B2는 스택 배포만 중간 단계로 거쳤고, 그 밖의 확인은 synth, cdk-nag, 템플릿 assertion 테스트(`cdk/tests`)입니다.
 - **CDK 스택 밖에 있는 것:** HyperPod 클러스터(`scripts/hyperpod/create.sh`), IOMMU AMI(`scripts/kata/gpu_nodes.sh`)와 B2 AMI(`scripts/hyperpod/build_b2_ami.sh`) 빌드, Karpenter, gateway 같은 Production 구성 요소, ECR 저장소는 스크립트로 만듭니다.
-- **c8i의 CPU 토폴로지:** nested virtualization을 활성화할 때 함께 지정하는 `CoreCount`, `ThreadsPerCore`는 `cdk/gpusandbox_cdk/config.py`의 표(`c8i.2xlarge`: 4, 2)에서 읽습니다. 다른 인스턴스 유형을 쓰거나 첫 배포 전이라면 그 파일 주석의 `describe-instance-types` 명령으로 값을 확인하세요.
+- **c8i의 CPU 토폴로지:** nested virtualization을 활성화할 때 함께 지정하는 `CoreCount`, `ThreadsPerCore`는 `cdk/gpusandbox_cdk/config.py`의 표(`c8i.2xlarge`: 4, 2)에서 읽습니다. 표에 없는 유형은 CDK 설정 단계에서 거부되므로, 다른 Kata CPU 인스턴스 유형을 쓰려면 그 파일 주석의 `describe-instance-types` 명령으로 코어 수와 코어당 스레드 수를 확인해 `CPU_TOPOLOGY`에 추가한 뒤 배포하세요.
 - **EKS 암호화 설정:** EKS 1.28 이상은 모든 Kubernetes API 데이터를 기본으로 envelope 암호화하므로, CloudFormation은 `EncryptionConfig.Resources`를 deprecated로 표시합니다(W9009). 스택은 `Resources` 없이 KMS 키(`Provider`)만 지정해요. CloudFormation 문서상 이 속성의 변경은 Replacement이므로, `Resources: [secrets]`로 이미 배포한 스택에 그대로 배포하면 클러스터 교체가 계획될 수 있습니다. 먼저 `cdk diff`로 확인하고, 교체가 보이면 스택을 지운 뒤 새로 만드세요.
 - **VPC CNI 권한:** 이 스택은 `AmazonEKS_CNI_Policy`를 노드 역할에 붙입니다. EKS 문서는 이 정책을 `aws-node` service account에 Pod Identity나 IRSA로 연결하도록 권장하므로, 운영 환경에서는 이 방식으로 옮기는 것을 검토하세요.
 - **nested virtualization 전달:** EKS 관리형 노드 그룹이 launch template의 `CpuOptions.NestedVirtualization`을 노드에 전달한다는 내용은 문서에 없습니다. 실습 계정 배포(2026-11-14)에서는 `enabled`로 전달됐지만(노드에 `/dev/kvm` 있음) 바뀔 수 있으니 2단계의 `describe-instances` 확인을 생략하지 마세요.

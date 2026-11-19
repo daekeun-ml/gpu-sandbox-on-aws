@@ -4,18 +4,17 @@
 
 ## Pain points
 
-A container only makes files and processes look separate and shares the kernel underneath with the server, so one weakness in the kernel becomes a weakness of every container. The alternatives come with many names too (runc, gVisor, Kata, Firecracker, QEMU, Cloud Hypervisor), and it is confusing which is an alternative to which, and which goes inside which. To choose, you also need to know what you lose when the wall gets thicker (speed, compatibility, the servers you can use).
+A container makes files and processes look separate and can also limit privileges and system calls, but it shares the kernel underneath with the server. So a kernel weakness that one container can exploit can put other containers on the same server at risk. The alternatives come with many names too (runc, gVisor, Kata, Firecracker, QEMU, Cloud Hypervisor), and it is confusing which is an alternative to which, and which goes inside which. To choose, you also need to know what you lose when the wall gets thicker (speed, compatibility, the servers you can use).
 
-![a: containers A, B and C share one server kernel, so one kernel weakness puts A, B and C at risk. b: a Sentry or a VM kernel stands in front of the server kernel for each container, adding one more wall in front of A, B and C](../images/figures/beginner-02_container_vs_sandbox.svg)
+![a: containers A, B and C share one server kernel, so a kernel weakness that one container can exploit may put A, B and C at risk. b: in each sandbox pod, a Sentry or a VM kernel stands between the containers inside it and the server kernel, adding one more wall in front of A, B and C](../images/figures/beginner-02_container_vs_sandbox.svg)
 
-*Takeaway: With one kernel, a kernel weakness spreads to every container. A sandbox runtime keeps a Sentry or a VM kernel for each pod and puts one more wall between the container and the server kernel.*
+*Takeaway: With one shared kernel, a kernel weakness that one container can exploit can threaten the other containers too. A sandbox runtime keeps a Sentry or a VM kernel for each pod and puts one more wall between the container and the server kernel.*
 
 
 ## Why
 
-- **Once you understand the kernel, the rest follows.** In the end, the difference between the three runtimes is "what gets inserted on the path where code asks the kernel for things."
-- **We start with an analogy, and also point out where the analogy is wrong.**
-- **We look at the cost with real measurements.** The numbers are from part 2 of the blog, which compared a regular container and gVisor on the same node.
+- **The three runtimes handle system calls in different places.** runc uses the server kernel, gVisor uses the Sentry, and Kata uses the kernel inside a VM.
+- **Stronger isolation has a cost.** Part 2 of the blog compared the performance of runc and gVisor on the same node.
 
 **Before you start:** If you look at the list of risks in [chapter 01](01_why_sandbox.md) first, you will see more clearly "what the wall blocks."
 
@@ -31,7 +30,7 @@ A container only makes files and processes look separate and shares the kernel u
 
 ## What sharing the kernel means
 
-To read a file or send something over the network, a program must ask the kernel (a system call). A regular container (runc) only splits "what it can see" and "how much it can use" with namespaces and cgroups. The kernel that takes the requests is still the server's one kernel.
+To read a file or send something over the network, a program must ask the kernel (a system call). A regular container (runc) splits "what it can see" and "how much it can use" with namespaces and cgroups, and can add a system call filter (seccomp) and dropped privileges. The kernel that takes the requests is still the server's one kernel.
 
 In part 1 of the blog, typing `uname -r` (show the kernel version) inside a container on the same node showed the node's kernel version (`6.18.51-120.162.amzn2023`) under runc and `4.19.0-gvisor` under gVisor (blog measurement, EKS 1.36). A program inside gVisor talks to a kernel that gVisor imitates.
 
@@ -44,7 +43,7 @@ In part 1 of the blog, typing `uname -r` (show the kernel version) inside a cont
 
 **If we compare it to buildings**
 
-- **runc is a shared house.** The rooms are separate, but everyone shares the kitchen and the plumbing (the kernel). If one pipe bursts, every room is affected.
+- **runc is a shared house.** The rooms are separate, but everyone shares the kitchen and the plumbing (the kernel). Each room can lock some doors (privileges and system call limits), but a burst pipe that one room can cause can still reach the other rooms.
 - **gVisor is a front desk kept separately for each unit.** Most of a resident's requests are handled directly by that unit's own desk (Sentry), and only a necessary few are passed on to the building's management office (the server kernel), so the paths that reach the office directly shrink a lot.
 - **Kata is a small detached house built separately for each pod.** Each house has its own management office (the kernel inside the VM), and the boundary between houses is guarded by hardware virtualization (KVM).
 
@@ -69,11 +68,11 @@ Part 2 of the blog compared runc and gVisor on the same node (EKS 1.36, `m7i.xla
 | Creating 1,000 files | 0.041 s | 0.195 s | About 4.7 times |
 | Running Python 5 times | 0.206 s | 0.399 s | About 1.9 times |
 
-The more system calls code makes, the slower it gets, and the blog says the cost of one system call went from about 0.18 µs to 2.2 µs. Grading GPU kernels in this repository is mostly GPU computation, so we expect this effect to be relatively small (inference).
+The more system calls code makes, the slower it gets, and the blog says the cost of one system call went from about 0.18 µs to 2.2 µs. What the blog measured is the system call cost of CPU work. For GPU grading, keep the run time of one call of the submitted function apart from the time the server takes to grade one answer. In this repository's A10G gVisor recording, one call of the vector-add function, until its GPU work finished, took about 0.47 ms (including the output tensor allocation, median of several runs). The sandbox server took about 9.4 s to grade that one answer, from process start through CUDA initialization, checks and cleanup. Time the client spent waiting for a free pod is not part of this value ([08 Runtime benchmark](../handson/08_benchmark.md)).
 
 ## Choosing a runtime per pod
 
-In Kubernetes, you choose a runtime per pod with `RuntimeClass`, so pods in one cluster can use runc, gVisor or Kata. This repository keeps one sandbox image and one set of server code and compares the three runtimes by changing only the `RuntimeClass` name.
+In Kubernetes, you choose a runtime per pod with `RuntimeClass`, so pods in one cluster can use runc, gVisor or Kata. The CPU exercise in [chapter 05](05_hands_on.md) starts gVisor, Kata (Cloud Hypervisor) and Kata (QEMU) pods from the same test image on one node, starts a regular container (runc) pod separately, and compares the kernel each pod sees. The GPU grading pools have one profile per runtime, so the node selector and the GPU resource name change along with the RuntimeClass.
 
 !!! question "❓ Misconception: Using Agent Sandbox makes isolation stronger"
     Agent Sandbox is a management tool that starts sandboxes ahead of time (warm pool) and lends them out. The actual isolation is decided by the `RuntimeClass` underneath. The production case in part 3 of the blog (Ably) also uses Agent Sandbox with regular containers (runc) and plans to evaluate microVMs.

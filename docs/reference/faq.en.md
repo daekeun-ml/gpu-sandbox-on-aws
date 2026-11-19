@@ -6,15 +6,14 @@
 
 Since 2026-02, EC2 supports nested virtualization on some virtual instance types such as C8i, M8i and R8i, so "Kata needs `.metal`" now holds only when Kata assigns a GPU directly to the VM. gVisor, Kata and Firecracker are all called sandboxes, but each handles GPUs differently. It is also easy to assume that the default network policy of an open-source template, or a managed service, blocks all the traffic it should. And some errors go unnoticed because training keeps running: a rolling update, or scoring infrastructure errors as 0, makes the rewards wrong without stopping training.
 
-![a: a mid-run sandbox version change done as a rolling update scores one group by two rules, and reward 0 on infrastructure errors such as a pod failure suppresses correct answers that were zeroed; in both cases training does not stop and rewards drift silently. b: version changes switch blue/green pools at step boundaries only, and infrastructure errors become sandbox_error, which TRL returns as None to leave out of the baseline, so the group-relative advantage holds one version and scored samples only](../images/figures/reference-faq.svg)
+![a: a mid-run sandbox version change done as a rolling update scores one group by two rules, and reward 0 on infrastructure errors such as a pod failure suppresses correct answers that were zeroed; in both cases training does not stop and rewards drift silently. b: version changes switch blue/green pools, and each reward batch is scored by one version only, and infrastructure errors become sandbox_error, which TRL returns as None to leave out of the baseline, so the group-relative advantage holds one version and scored samples only](../images/figures/reference-faq.svg)
 
-*Takeaway: In both cases training keeps running, so nothing looks wrong while the rewards drift. Switching blue/green pools only at step boundaries and dropping unscored samples with None, as TRL does, keeps the group-relative advantage sound.*
+*Takeaway: In both cases training keeps running, so nothing looks wrong while the rewards drift. Changing versions through blue/green pools while scoring each batch with one version only, and dropping unscored samples with None, as TRL does, keeps the group-relative advantage sound.*
 
 
 ## Why
 
-- **The correct fact comes first.** A short reason follows, and each entry says whether the fact comes from official documentation, upstream code and docs, or this repository's code.
-- **Each entry links to the detailed page.** Every misconception points to the page with the longer explanation.
+- **Kata has different requirements for CPU and GPU sandboxes.** A CPU sandbox needs only `/dev/kvm`; assigning a GPU directly to the VM also needs the host to use the IOMMU directly.
 
 **Before you start:** the scenarios A, B1 and B2 and the validation status on [Home](../index.md), how gVisor and Kata handle GPUs in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and GRPO groups and advantages in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md) make this page easier to read.
 
@@ -80,9 +79,9 @@ Since 2026-02, EC2 supports nested virtualization on some virtual instance types
 ## Platforms and managed services
 
 !!! question "❓ Misconception: these sandboxes can run on default-AMI HyperPod nodes today"
-    **Actually:** with the default AMI (Kubernetes 1.36), neither gVisor GPU sandboxes nor Kata sandboxes can run on HyperPod nodes. The default scenario B1 runs only the training on HyperPod and keeps the sandboxes on EC2 nodes in the same EKS cluster. gVisor becomes possible with a custom AMI with a replaced driver (B2, experimental).
+    **Actually:** with the default AMI (Kubernetes 1.36), neither gVisor GPU sandboxes nor Kata GPU sandboxes can run on HyperPod nodes. The default scenario B1 runs only the training on HyperPod and keeps the sandboxes on EC2 nodes in the same EKS cluster. B2 is configured to run gVisor sandboxes on HyperPod nodes with a custom AMI that carries a supported driver, but it has not been run on AWS yet.
 
-    The default AMI is blocked because the nvproxy of gVisor release-20261109.0 does not know the NVIDIA driver 595.91.07 in the HyperPod EKS AMIs (1.34 to 1.36) (unknown versions, which are not on the list, fail regardless of flags). B2 meets the condition by baking a custom AMI from the HyperPod public base AMI with only the driver replaced by 580.178.04 ([B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)). Kata is not possible regardless of the Kubernetes version or the AMI. There are no `ml.*.metal` types, CreateCluster has no nested virtualization CPU option, and the G and P families do not support nested virtualization. The following command prints, for each HyperPod node, the driver and whether gVisor supports it (read-only, uses short-lived debug pods).
+    The default AMI is blocked because the nvproxy of gVisor release-20261109.0 does not know the NVIDIA driver 595.91.07 in the HyperPod EKS AMIs (1.34 to 1.36) (unknown versions, which are not on the list, fail regardless of flags). B2 meets the condition by baking a custom AMI from the HyperPod public base AMI with the driver replaced by 580.178.04 and the pinned gVisor installed. When a node starts, the lifecycle script registers `runsc` with containerd ([B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)). Kata GPU sandboxes are not possible regardless of the Kubernetes version or the AMI. There are no `ml.*.metal` types, CreateCluster has no nested virtualization CPU option, and the G and P families do not support nested virtualization. Kata without a GPU is probably blocked by the same `/dev/kvm` requirement, but this is untested (inference), and the repository has no Kata setup for HyperPod. The following command starts a debug pod on each HyperPod node and prints the driver and whether gVisor supports it. At the end it deletes every pod in the `default` namespace whose name starts with `node-debugger-`, so if someone else is inspecting a node with `kubectl debug node`, wait until they finish.
 
     ```bash
     scripts/hyperpod/check_gvisor.sh
@@ -128,13 +127,13 @@ Since 2026-02, EC2 supports nested virtualization on some virtual instance types
 !!! question "❓ Misconception: a rolling update of the sandbox Deployment is safe during training"
     **Actually:** during a rolling update, old and new pods answer side by side, so completions of the same GRPO group can be scored by different rules. That corrupts the group-relative advantage.
 
-    This asset starts a separate blue/green pool per (runtime, version) and switches the routing only at a step boundary, after isolation checks and golden parity pass. The following command runs that procedure (deploy, verify, parity, switch) in order.
+    This asset starts a separate blue/green pool per (runtime, version). Once isolation checks and golden parity pass, the script updates the routing table, and because the trainer reads the routing table on every sandbox call, the new pool answers from the first request sent after the change is visible. A batch is always scored by one version. If the pool changes while a batch is being scored, results from the other pool are scored again on the new pool, and a batch whose results are all cached from one pool uses that pool's results without calling the sandbox. With TRL defaults a batch boundary is a step boundary. The following command runs that procedure (deploy, verify, parity, switch) in order. In the default scenario A, v1 already uses the GPUs of the two `sandbox-gvisor` nodes, so first scale that node group to 4 and check that the nodes are `Ready`. Otherwise the v2 pods get no GPU and step 1 waits up to 30 minutes and fails (the scaling command is in the preparation section of [06 Updating the sandbox during training](../handson/06_sandbox_update.md)).
 
     ```bash
     scripts/ops/rollout.sh gvisor v1 v2
     ```
 
-    **What to look for:** a `PASS` line per golden entry and `{"event": "parity", ..., "passed": true}` are printed, and at the next reward batch the trainer logs `sandbox_version_switch`. **If it fails:** see the "Version switches (routing)" table in [Troubleshooting](troubleshooting.md). Details: [05 Sandbox versioning](../production/05_sandbox_updates.md), [06 Updating the sandbox during training](../handson/06_sandbox_update.md)
+    **What to look for:** a `PASS` line per golden entry and `{"event": "parity", ..., "passed": true}` are printed, and once the routing change reaches the pod (kubelet sync, about a minute) the trainer logs `sandbox_version_switch` when a batch is answered by a different pool than the previous one. If every result of a batch is cached from one pool, the sandbox is not called and that batch logs no such event. **If it fails:** see the "Version switches (routing)" table in [Troubleshooting](troubleshooting.md). Details: [05 Sandbox versioning](../production/05_sandbox_updates.md), [06 Updating the sandbox during training](../handson/06_sandbox_update.md)
 
 !!! question "❓ Misconception: giving reward 0 on infrastructure errors is conservative and therefore safe"
     **Actually:** a 0 is a learning signal that says "this answer is bad", so giving 0 to samples that could not be scored distorts the reward.
@@ -142,7 +141,7 @@ Since 2026-02, EC2 supports nested virtualization on some virtual instance types
     If a sample with a correct answer gets 0 because of a pod failure, that behavior is suppressed. If errors cluster on certain nodes, the noise is systematic as well. On the TRL path, all three reward functions return `None` for `sandbox_error`, which removes the sample from the group baseline. The veRL path has no skip signal and leaves the format score 0.1 with `sandbox_error: 1`, so watch that share. Details: [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), [04 Reward integrity](../production/04_reward_integrity.md)
 
 !!! question "❓ Misconception: if parity passes, rewards stay the same"
-    **Actually:** parity only checks that golden submissions with known verdicts produce the same results.
+    **Actually:** parity checks only the golden submissions. Both versions must return each golden's expected status (and the expected `custom_kernel` where one is set), and when both are `ok` and report a speedup, the new-to-old speedup ratio must also fall within 0.65 to 1.35 by default.
 
     With changes like v2's (seeds from 3 to 5, a 10x speedup cap), the goldens still pass, while policy samples near a boundary can get a different verdict or speedup. Record an intended reward change as a reward-function change, not as a version swap. Details: [05 Sandbox versioning](../production/05_sandbox_updates.md)
 
@@ -176,12 +175,12 @@ Since 2026-02, EC2 supports nested virtualization on some virtual instance types
     This asset does not use the 3B model. When you change models, check the license field of the Hugging Face model card yourself, and check the dataset licenses as well. Details: [Home](../index.md)
 
 !!! question "❓ Misconception: the demo site is connected to a real GPU cluster"
-    **Actually:** the demo is a static site (HTML, CSS, JS, no external scripts) that only replays a JSON recording made by `python -m gpusandbox.tools record`. Visitors never reach the cluster or a GPU.
+    **Actually:** the demo is a static site (HTML, CSS, JS, no external scripts). It replays the scoring recording (`recording.json`) made by `python -m gpusandbox.tools record`, and when `extras.json` from `demo/build_extras.py` is present it also shows the benchmark and training records. Visitors never reach the cluster or a GPU.
 
-    The site lives in a private S3 bucket with Block Public Access on, and CloudFront reads it only through Origin Access Control. The recording shipped in the repository is labeled as made on a laptop CPU pool, and it is meant to be replaced by a recording from a GPU cluster. Details: [09 Demo site (CloudFront)](../handson/09_demo_site.md)
+    The site lives in a private S3 bucket with Block Public Access on, and CloudFront reads it only through Origin Access Control. The scoring recording published by default (`demo/site/data/recording.json`) was made on a laptop CPU pool and is meant to be replaced by a recording from a GPU cluster. A recording made on 2026-11-18 on the EKS gVisor A10G pool and Kata QEMU T4 pool is in `demo/recordings/2026-11-18-eks-gpu.json`. Details: [09 Demo site (CloudFront)](../handson/09_demo_site.md)
 
 !!! question "❓ Misconception: the numbers in this guide were measured on AWS by this repository"
-    **Actually:** no. Numbers such as prices, versions and latencies come from official documentation and public material, and the author has not run the AWS steps end to end. In the practice account on 2026-11-18, scenario A's gVisor path (`03` through `08`) ran on `g5`, and the same day `ops/bench.sh` measured five pools once (gVisor A10G, Kata QEMU T4 and the three CPU runtimes). Those values are in [08 Runtime benchmark](../handson/08_benchmark.md) with the measurement conditions; other numbers still come from official documentation and public material.
+    **Actually:** only some of them. Prices and supported versions are cited from official documentation and public material, and the AWS steps have not all been run end to end. In the practice account on 2026-11-18, scenario A's gVisor path (`03` through `08`) ran on `g5`, and the same day `ops/bench.sh` measured five pools (gVisor A10G, Kata QEMU T4 and the three CPU runtimes) twice, right after deployment and after a pool restart. The result table in [08 Runtime benchmark](../handson/08_benchmark.md) holds the second pass, with the measurement conditions. A recording of golden submissions scored the same day on the A10G and T4 pools is in `demo/recordings/2026-11-18-eks-gpu.json`. Other numbers still come from official documentation and public material.
 
     What was verified locally are the pytest tests that run on CPU and a TRL GRPO dry run (2 steps). If you need latencies and speedups per runtime, measure them yourself with `scripts/ops/bench.sh`. Sources and evidence levels are collected in [Verified facts and sources](sources.md). Details: [Home](../index.md), [08 Runtime benchmark](../handson/08_benchmark.md)
 

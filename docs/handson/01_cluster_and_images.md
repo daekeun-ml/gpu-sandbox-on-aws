@@ -13,8 +13,7 @@ EKS 클러스터를 기본값으로 만들면 샌드박스에 위험한 설정�
 
 ## Why
 
-- **인프라는 CDK 스택 하나이고, 다시 실행하면 달라진 부분만 변경합니다.** 스택은 EKS의 CloudFormation 리소스만 쓰고 Kubernetes manifest는 적용하지 않습니다. 그래서 `04_install_gpu_stack.sh` 이후 스크립트가 설치하는 device plugin, RuntimeClass, kata-deploy와 겹치지 않고, 설치 순서도 충돌하지 않아요.
-- **API endpoint는 private만 활성화하고 터널로 접속합니다.**
+- **인프라는 CDK 스택 하나이고, 다시 실행하면 달라진 부분만 변경합니다.** 스택은 VPC, EKS 클러스터와 노드 그룹, access instance, KMS 키를 만듭니다. EKS는 CloudFormation 리소스(L1)로만 정의하고 Kubernetes manifest는 적용하지 않습니다. 그래서 `04_install_gpu_stack.sh` 이후 스크립트가 설치하는 device plugin, RuntimeClass, kata-deploy와 겹치지 않고, 설치 순서도 충돌하지 않아요.
 - **노드 설정을 부팅 과정에 포함했습니다.** 런타임별 설정 작업이 launch template의 user data에 들어 있어서, 노드가 교체돼도 같은 상태로 부팅됩니다.
 
 **사전 지식:** [00 전체 흐름](00_overview.md)의 단계 표와 [시작하기](../getting_started.md)의 로컬 Python 환경을 먼저 보세요. CDK 스택의 보안 기본값 전체는 [Production 09 CDK](../production/09_cdk.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
@@ -39,24 +38,24 @@ EKS 클러스터를 기본값으로 만들면 샌드박스에 위험한 설정�
 
 ## 준비 1: `scripts/config.env`
 
-설정 파일을 만듭니다.
+[시작하기](../getting_started.md)에서 만든 파일이 있으면 그대로 쓰고, 없을 때만 예시 파일을 복사합니다.
 
 ```bash
-cp scripts/config.env.example scripts/config.env
+test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 ```
 
-**확인할 것:** `scripts/config.env` 파일이 생깁니다. 기본값 그대로면 `02_create_cluster.sh`가 시나리오 A를 만듭니다.
+**확인할 것:** `scripts/config.env`가 있고 `AWS_REGION`, `CLUSTER_NAME`, `SCENARIO`가 원하는 값인지 확인하세요. 예시값 그대로면 `02_create_cluster.sh`가 시나리오 A를 만듭니다.
 
 모든 스크립트는 `scripts/lib.sh`를 통해 이 파일을 읽습니다. 필요한 값이 비었거나 `__SET_ME__`를 포함하면 `require_vars`가 `set <VAR> in scripts/config.env`를 출력하고 스크립트를 멈춥니다. `cdk/deploy.sh`도 같은 파일을 읽으므로 스크립트와 CDK가 쓰는 인스턴스 유형과 고정 버전이 일치해요.
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|
-| `AWS_REGION` | `us-west-2` | 모든 리소스를 만드는 리전 |
-| `CLUSTER_NAME` | `gpu-sandbox` | EKS 클러스터 이름. CDK 스택 이름(`<CLUSTER_NAME>-cdk`), kubectl context(`<CLUSTER_NAME>-tunnel`), AMI 이름에도 쓰임 |
+| `AWS_REGION` | `us-west-2` | 클러스터, ECR 이미지, HyperPod 리소스를 만드는 리전. 09 데모 사이트(`demo/deploy.sh`)는 이 값과 관계없이 `us-east-1`에 배포 |
+| `CLUSTER_NAME` | `gpu-sandbox` | EKS 클러스터 이름. CDK 스택 이름(`<CLUSTER_NAME>-cdk`), kubectl context(`<CLUSTER_NAME>-tunnel`), AMI 빌더 인스턴스 이름에도 쓰임. AMI 이름에는 쓰이지 않음 |
 | `K8S_VERSION` | `1.36` | EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 버전 안 (HyperPod 전제조건 페이지는 아직 1.35까지) |
 | `SCENARIO` | `A` | `02_create_cluster.sh`가 만드는 구성(A, B1, B2, C). `02_create_cluster.sh`에 옵션(`--hyperpod` 등)을 주면 옵션이 우선 |
 | `WITH_KATA_CPU`, `WITH_KATA_GPU` | `0`, `0` | `1`이면 Kata CPU 노드(`c8i.2xlarge`)와 Kata GPU 노드(`g4dn.metal`, `KATA_IOMMU_AMI_ID` 필요)를 어느 시나리오에든 추가함 ([03 Kata 샌드박스](03_kata.md)) |
-| `ADMIN_PRINCIPAL_ARN` | 빈 값 | 클러스터 관리자 access entry를 받을 IAM 역할 또는 사용자 ARN(쉼표로 여러 개). 비우면 `cdk/deploy.sh`가 지금 세션의 역할 ARN을 씀 |
+| `ADMIN_PRINCIPAL_ARN` | 빈 값 | 클러스터 관리자 access entry를 받을 IAM 역할 또는 사용자 ARN(쉼표로 여러 개). 비우면 `cdk/deploy.sh`가 IAM 사용자는 현재 사용자 ARN을, 역할 세션은 세션 정보로 추정한 역할 ARN을 씀. path가 있는 역할은 전체 ARN을 직접 지정 |
 | `EKS_PUBLIC_ACCESS_CIDR` | 없음 (주석 처리됨) | public endpoint를 허용할 때만 작업 PC의 IPv4 주소 하나를 `/32`로. 다른 범위는 설정 단계에서 거부 |
 | `ECR_REPO_PREFIX`, `IMAGE_TAG` | `gpu-sandbox`, `v1` | ECR 리포지토리 접두사와 이미지 태그 |
 | `GVISOR_RELEASE` | `20261109.0` | gVisor 노드에 설치할 릴리스 |
@@ -91,7 +90,7 @@ cp scripts/config.env.example scripts/config.env
 
     ```bash
     source .venv/bin/activate
-    uv pip install -r cdk/requirements.txt    # or: pip install -r cdk/requirements.txt
+    uv pip install -r cdk/requirements.txt
     ```
 
     **확인할 것:** `aws-cdk-lib`, `constructs`, `cdk-nag` 설치가 오류 없이 끝납니다.
@@ -112,13 +111,13 @@ cp scripts/config.env.example scripts/config.env
 
 ## 사전 확인: `01_check_prereqs.sh`
 
-읽기 전용 점검이며 다음을 차례로 출력합니다.
+읽기 전용 점검입니다. 1번 검사는 통과하면 아무것도 출력하지 않고, 빠진 도구나 변수가 있으면 `missing tool: <이름>`이나 `set <VAR> in scripts/config.env`를 출력하고 멈춥니다. 통과하면 2번부터 차례로 출력해요.
 
 ```bash
 scripts/01_check_prereqs.sh
 ```
 
-1. 로컬 도구(`aws`, `cdk`, `node`, `kubectl`, `helm`, `docker`, `python3`, `jq`, `session-manager-plugin`)와 필수 변수(`AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`)
+1. 로컬 도구(`aws`, `cdk`, `node`, `kubectl`, `helm`, `docker`, `python3`, `jq`, `session-manager-plugin`)와 필수 변수(`AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`) 검사
 2. 현재 AWS identity(`aws sts get-caller-identity`)
 3. cdk, node, kubectl, helm, docker 버전
 4. `Running On-Demand G and VT instances` 쿼터 (vCPU)
@@ -126,7 +125,14 @@ scripts/01_check_prereqs.sh
 6. Kata CPU 노드용 `KATA_CPU_INSTANCE_TYPE`(`c8i.2xlarge`)의 `SupportedFeatures`
 7. trainer, gVisor, Kata GPU 인스턴스 타입이 제공되는 AZ 목록 (없으면 `NOT OFFERED`)
 
-**확인할 것:** G and VT 쿼터가 최소 경로 16 이상(전체 경로 112 이상), Standard 쿼터가 최소 경로 6 이상(system 노드 4와 access instance 2, 시나리오 C는 14, 전체 경로는 최대 16)인지 확인하세요. 6번 줄에 `nested-virtualization`이 있고, 7번 목록에 `NOT OFFERED`가 없어야 합니다. 마지막 로그는 `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.`입니다.
+**확인할 것:** 마지막 로그는 `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.`입니다. 만들 노드를 기준으로 아래 조건을 확인하세요.
+
+| 출력 | 통과 조건 |
+|---|---|
+| 4번 G and VT 쿼터 | 시나리오 A 최소 경로 16 이상(버전 교체 중 24), 전체 경로 112 이상(버전 교체 중 120). 시나리오 C는 GPU 노드가 없어 필요 없지만, Kata GPU(`g4dn.metal`)를 추가하면 96 이상 |
+| 5번 Standard 쿼터 | 최소 경로 6 이상(system 노드 4, access instance 2), 시나리오 C는 14, 전체 경로는 최대 16 |
+| 6번 `SupportedFeatures` | Kata CPU 노드를 쓰면 `nested-virtualization`이 있음 |
+| 7번 AZ 목록 | 쓸 GPU 타입이 스택의 두 private subnet이 있는 AZ(CDK가 조회한 리전 AZ 목록의 앞 두 곳) 중 한 곳 이상에 나옴. 쓰지 않는 타입은 `NOT OFFERED`여도 됨(예: gVisor만 쓸 때의 `g4dn.metal`) |
 
 부족하면 Service Quotas 콘솔에서 증가를 요청하세요(vCPU 계산은 [00 전체 흐름](00_overview.md)의 사전 준비 절).
 
@@ -153,7 +159,7 @@ scripts/02_create_cluster.sh --cpu-only      # scenario C: the c8i node only, no
 
 **확인할 것:**
 
-1. `ADMIN_PRINCIPAL_ARN`이 비어 있으면 시작할 때 `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` 경고가 나옵니다. 역할에 path가 있다면 4번 질문에 `n`으로 답하고, 경고에 나온 `aws iam get-role` 명령으로 얻은 ARN을 `ADMIN_PRINCIPAL_ARN`에 넣은 뒤 다시 실행하세요.
+1. `ADMIN_PRINCIPAL_ARN`을 비우고 역할 세션(STS assumed-role)으로 실행하면 시작할 때 `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` 경고가 나옵니다. IAM 사용자로 실행하면 경고 없이 현재 사용자 ARN을 씁니다. 역할에 path가 있다면 4번 질문에 `n`으로 답하고, 경고에 나온 `aws iam get-role` 명령으로 얻은 ARN을 `ADMIN_PRINCIPAL_ARN`에 넣은 뒤 다시 실행하세요.
 2. IAM과 security group 변경 목록에서 inbound 규칙이 `0.0.0.0/0`에 열려 있지 않은지 확인하고 `y`를 입력합니다. 스택이 만드는 inbound 규칙은 access instance에서 control plane으로 향하는 443 포트 규칙 하나뿐이에요.
 3. 끝나면 `Outputs` 아래에 `ClusterName`, `ClusterEndpoint`, `AccessInstanceId`, `EndpointPublicAccess = false`가 나오고, 이어서 다음 안내가 출력됩니다.
 
@@ -341,7 +347,7 @@ iptables -w -C INPUT -i eni+ -j GPUSANDBOX-GUARD 2>/dev/null \
 
 ### 매니페스트 렌더링 (render.py)
 
-`04_install_gpu_stack.sh` 이후 스크립트는 `scripts/render.py`로 `k8s/` 아래 템플릿(`*.tpl`)에 값을 채운 뒤 적용합니다. `${VAR}`는 환경변수와 `KEY=VALUE` 인자 값으로 치환됩니다. envsubst와 달리 값이 없는 변수는 에러로 처리하므로, 오타 때문에 이미지 이름이나 네임스페이스가 빈 매니페스트가 만들어지지 않아요. `$$`(리터럴 `$`)와 `@@include path@@` 문법 설명은 [저장소 구조](../reference/repository_map.md)에 있습니다.
+`04_install_gpu_stack.sh` 이후 스크립트는 `scripts/render.py`로 `k8s/` 아래 템플릿(`*.tpl`)에 값을 채운 뒤 적용합니다. `${VAR}`는 환경변수와 `KEY=VALUE` 인자 값으로 치환됩니다. envsubst와 달리 템플릿이 참조한 변수 이름이 환경이나 인자에 없으면 렌더링이 중단되므로, 변수 이름의 오타 때문에 이미지 이름이나 네임스페이스가 빈 매니페스트가 만들어지지 않아요. 이미 정의된 빈 문자열(예: `ACTIVE_RUNTIME=`)은 그대로 들어갑니다. `$$`(리터럴 `$`)와 `@@include path@@` 문법 설명은 [저장소 구조](../reference/repository_map.md)에 있습니다.
 
 렌더링 결과는 AWS 접속 없이 로컬에서 확인할 수 있습니다.
 
@@ -358,7 +364,7 @@ python3 scripts/render.py k8s/base/routing.json.tpl ACTIVE_RUNTIME=gvisor ACTIVE
   "pools": {
 ```
 
-**문제가 생기면:** `render: <template>: missing variable 'X'`는 그 변수가 config.env, 셸, 인자 어디에도 없다는 뜻이니 [문제 해결](../reference/troubleshooting.md)의 "설정과 스크립트" 항목을 보세요.
+**문제가 생기면:** `render: <template>: missing variable 'X'`는 렌더러가 환경변수나 `KEY=VALUE` 인자로 `X`를 받지 못했다는 뜻입니다. `config.env`나 셸에 값이 있어도 `export`하지 않았으면 렌더러에 전달되지 않으니, `export X=...`로 적었는지 확인하거나 `render.py` 명령에 `X=...` 인자를 주세요. 그래도 안 되면 [문제 해결](../reference/troubleshooting.md)의 "설정과 스크립트" 항목을 보세요.
 
 ## 이미지 빌드와 push: `03_build_push_images.sh`
 
@@ -455,7 +461,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 ## 다음 단계
 
-터널을 열어 둔 상태로 [02 gVisor GPU 샌드박스](02_gvisor.md)의 `04_install_gpu_stack.sh`를 실행합니다.
+터널을 열어 둔 상태로 시나리오에 맞는 페이지로 이어 갑니다. A는 [02 gVisor GPU 샌드박스](02_gvisor.md)의 `04_install_gpu_stack.sh`를 실행하고, B1과 B2는 [07 HyperPod 시나리오](07_hyperpod.md)로 이어 갑니다. 이 장에서 `--hyperpod`(B2는 `--hyperpod-b2`)로 클러스터를 만들고 `HYPERPOD=1`로 올린 이미지의 `export` 세 줄을 `config.env`에 넣었다면, B1은 "B1 단계"의 3단계부터, B2는 [B2 절차](07_hyperpod.md#b2) 1단계의 `scripts/04_install_gpu_stack.sh`부터 실행하세요. 같은 `IMAGE_TAG`로 이미지를 다시 빌드하면 IMMUTABLE 태그라 push가 거부될 수 있어요. C는 [10 c8i 단독 저비용 경로](10_cpu_only.md)의 `kata/cpu_nodes.sh`로 진행하세요.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

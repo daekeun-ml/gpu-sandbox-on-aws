@@ -8,9 +8,9 @@ gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, �
 
 ## Why
 
-- **사실마다 출처를 붙입니다.** 표의 각 행에 출처 하나와 그 출처가 뒷받침하는 사실을 적었어요.
-- **근거 수준을 구분합니다.** 로컬 테스트, 공식 문서, 제3자 보고, 블로그 측정값, 추론 가운데 어느 근거인지 표시했어요.
-- **다시 확인할 목록을 둡니다.** 배포 전에 바뀌었을 가능성이 큰 값과 확인 방법을 체크리스트로 모았어요.
+- **warm pool의 약 55 ms는 AWS 블로그의 측정값입니다.** 이 저장소가 측정한 풀 지연은 2026-11-18 실행 기록([08 런타임 벤치마크](../handson/08_benchmark.md))에 있어요.
+- **근거 수준은 로컬 테스트, 공식 문서, 제3자 보고, 블로그 측정값, 추론, AWS 실행 기록으로 나뉩니다.**
+- **가격과 quota는 배포할 계정과 리전에서 다시 확인하세요.** 바뀌었을 가능성이 큰 값과 확인 방법은 아래 체크리스트에 있어요.
 
 **사전 지식:** [홈](../index.md)의 "검증 상태"와 [자주 하는 오해](faq.md)를 먼저 보면 좋습니다.
 
@@ -32,8 +32,8 @@ gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, �
 | 블로그의 측정값 | 다른 사람이 다른 환경에서 측정한 값 | AWS 기술 블로그 2부의 warm pool claim 약 55 ms, AWS China 블로그의 cold start 약 3 s |
 | 추론 | 근거에서 이끌어 낸 판단, 미검증 | NodeConfig `imports`가 kata-deploy drop-in을 유지하는 효과 |
 | AWS에서 저자가 실행 | 실습 계정에서 실제로 실행하고 출력을 확인 | 시나리오 C의 CDK 배포와 삭제, SSM 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`)의 세 런타임 smoke pod(2026-11-14) |
-| 실습 계정에서 실행 (2026-11-18) | us-west-2 실습 계정에서 실행하고 출력을 확인(데모 사이트는 us-east-1) | 시나리오 A의 `02_create_cluster.sh`(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 갱신), `03_build_push_images.sh`(이미지 3개), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1)과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images`. 같은 날 다른 클러스터 구성(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가)에서: `g4dn.metal`의 Kata GPU(`kata/gpu_nodes.sh`, `kata-qemu` replica 4, `ops/verify.sh kata-qemu v1`), `ops/bench.sh 32`(GPU 풀 2개와 CPU 풀 3개, 2회 측정), 데모 사이트(recorder pod의 `record`, `demo/deploy.sh`와 외부 점검) |
-| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 학습 중의 시나리오 A `ops/rollout.sh`, 기본값 60 step 학습, `ml.g5`의 HyperPod B1과 B2(HyperPod 생성 포함), 실험용 CLH GPU(시도했지만 VM이 시작되지 않음) |
+| 실습 계정에서 실행 (2026-11-18) | us-west-2 실습 계정에서 실행하고 출력을 확인(데모 사이트는 us-east-1) | 시나리오 A의 `02_create_cluster.sh`(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 갱신), `03_build_push_images.sh`(이미지 3개), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1)과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images`. 같은 날 다른 클러스터 구성(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가)에서: `g4dn.metal`의 Kata GPU(`kata/gpu_nodes.sh`, `kata-qemu` replica 4, `ops/verify.sh kata-qemu v1`), `ops/bench.sh 32`(GPU 풀 2개와 CPU 풀 3개, 2회 측정), 데모 사이트(recorder pod의 `record`, `demo/deploy.sh`와 외부 점검). 실험용 CLH GPU(`kata-clh`) 풀도 시도했지만 VM이 시작되지 않아(`create container timeout`) 측정하지 못했습니다 |
+| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 학습 중의 시나리오 A `ops/rollout.sh`, 기본값 60 step 학습, `ml.g5`의 HyperPod B1과 B2(HyperPod 생성 포함) |
 
 ## 이 저장소에서 확인한 것
 
@@ -42,23 +42,23 @@ gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, �
 ```bash
 # Full local test suite on CPU (no AWS, no GPU)
 python -m pytest -q
-# CDK stack tests: offline synth with cdk-nag (after pip install -r cdk/requirements.txt)
+# CDK stack tests: offline synth with cdk-nag (after uv pip install -r cdk/requirements.txt)
 (cd cdk && python -m pytest -q tests)
 ```
 
-**확인할 것:** 실패 없이 `passed`로 끝납니다. 이 페이지를 쓰는 동안(2026-11-13) macOS(CPU 전용)에서 전체 테스트가 통과했어요. 테스트 수는 저장소가 바뀌면 달라지므로 여기에 적지 않습니다(현재 수는 [시작하기](../getting_started.md)의 3장). **문제가 생기면:** [문제 해결](troubleshooting.md)
+**확인할 것:** 실패 없이 `passed`로 끝납니다. 이 페이지를 쓰는 동안(2026-11-13) macOS(CPU 전용)에서 전체 테스트가 통과했어요. 테스트 수는 저장소가 바뀌면 달라지므로 여기에 적지 않습니다. 현재 체크아웃의 테스트 수는 저장소 루트에서 `python -m pytest --collect-only -q`로 확인하세요(CDK 스택 테스트는 따로). **문제가 생기면:** [문제 해결](troubleshooting.md)
 
 | 테스트 파일 | 로컬 테스트로 확인한 것 |
 |---|---|
 | `tests/test_policy.py` | AST 정책의 허용(Triton 예시, autotune 커널, `input` 매개변수, 타입 힌트)과 거부(금지 import와 builtin, 별칭을 거친 monkeypatch, dunder와 private, stream과 graph, Tensor 상속) |
 | `tests/test_harness_cpu.py` | CPU에서 실제 2-프로세스 harness: 정답, 오답, 크래시, 문법 오류, timeout, 벤치마크 치팅, monkeypatch, 과제 reference의 일관성 |
-| `tests/test_routing_and_rewards.py` | routing 표 다시 읽기와 revision, 없는 풀의 `RoutingError`, 코드 추출, speedup 점수, verdict별 reward와 인프라 오류 제외, 정책 위반 코드는 샌드박스로 보내지 않음 |
+| `tests/test_routing_and_rewards.py` | routing 표 다시 읽기와 revision, 없는 풀의 `RoutingError`, 코드 추출, speedup 점수, verdict별 reward와 인프라 오류 제외, 버전 전환 뒤 다른 풀로 캐시된 결과를 이번 batch의 풀에서 다시 채점, 정책 위반 코드는 샌드박스로 보내지 않음 |
 | `tests/test_server_and_client.py` | audience와 subject를 확인하는 fail-closed 인증, loopback 서버 2개를 쓰는 클라이언트, 평가 중인 pod의 503, egress 차단을 확인한 뒤의 Ready, CPU 풀의 probe와 parity, routing 전환 중에도 유지되는 gateway group pin |
 | `tests/test_manifests.py` | 프로필과 버전 조합의 샌드박스 매니페스트, 정적 매니페스트, 노드 user data(`infra/eks/userdata.py`), Karpenter 템플릿, Agent Sandbox template 렌더링 |
 | `tests/test_agent_sandbox.py` | 가짜 API로 SandboxClaim 본문, Ready 대기와 `serviceFQDN` 선택, claim과 해제, Ready가 되지 않을 때의 해제 |
 | `tests/test_multiturn.py` | 가짜 API와 loopback CPU 샌드박스 서버로 에피소드 하나가 claim 하나를 쓰는지, 정답에서 멈추는지, 오류가 나도 claim을 삭제하는지, 이벤트와 episode reward, veRL tool 로직(veRL 미설치) |
 | `tests/test_demo.py` | 데모 CloudFormation 템플릿(private bucket, `AWS:SourceArn` 조건이 붙은 CloudFront 허용, TLS가 아닌 요청 거부, HTTPS 리디렉션과 보안 헤더), 외부 리소스와 HTML 주입이 없는 정적 사이트, 녹화 스키마와 reward 일관성 |
-| `cdk/tests/test_stack.py` | synth한 CDK 템플릿: private endpoint(public은 /32 opt-in만), `0.0.0.0/0` inbound 없음, 모든 launch template의 IMDSv2와 hop limit 1과 볼륨 암호화, 시나리오별 노드 그룹, c8i의 nested virtualization, Kata GPU 노드 그룹의 IOMMU AMI, 시나리오마다 cdk-nag 통과 |
+| `cdk/tests/test_stack.py` | synth한 CDK 템플릿: private endpoint(public은 /32 opt-in만), `0.0.0.0/0` inbound 없음, 시나리오 A에 Kata CPU를 추가해 synth한 모든 launch template의 IMDSv2 필수(hop limit과 EBS 볼륨은 템플릿에 명시된 경우에만 hop limit 1과 암호화를 확인), 시나리오별 노드 그룹, c8i의 nested virtualization, Kata GPU 노드 그룹의 IOMMU AMI와 user data(이 구성의 IMDSv2는 검사하지 않음), 시나리오마다 cdk-nag 통과 |
 
 TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 셸 스크립트는 shellcheck 검사를 통과했습니다(저자 기록, 2026-11). AWS 단계 중에서는 시나리오 C의 CDK 배포, 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 삭제를 실습 계정에서 실행했습니다(2026-11-14). 시나리오 A의 gVisor 경로는 실습 계정에서 2026-11-18에 실행했어요(us-west-2, `g5.xlarge`와 `g5.2xlarge`, 학습은 5 step). 같은 날 Kata GPU, 런타임 벤치마크, 데모 사이트도 실행했고, 결과는 [03 Kata 샌드박스](../handson/03_kata.md), [08 런타임 벤치마크](../handson/08_benchmark.md), [09 데모 사이트](../handson/09_demo_site.md)에 있습니다. 실행한 스크립트는 위 표에 있습니다. 나머지는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
 
@@ -66,7 +66,7 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 
 아래 값은 2026-11 기준이며, 배포나 공유 전에 하나씩 다시 확인하세요.
 
-- [ ] **버전 고정 값:** gVisor `GVISOR_RELEASE=20261109.0`, Kata `KATA_VERSION=4.3.1`, GPU Operator `v26.7.2`, NVIDIA device plugin `0.20.1`, Karpenter v1.15.2(LTS v1.14.3), AWS CDK CLI 2.1148.1 이상과 `aws-cdk-lib` 2.276.0, cdk-nag 3.0.2, Agent Sandbox v1.0.11, TRL 1.18.0, vLLM 0.33.0, veRL 0.9.1, KubeRay v1.7.2. 각 프로젝트의 릴리스 페이지에서 새 버전과 변경점을 확인합니다.
+- [ ] **버전 고정 값:** gVisor `GVISOR_RELEASE=20261109.0`, Kata `KATA_VERSION=4.3.1`, GPU Operator `v26.7.2`, NVIDIA device plugin `0.20.1`, Karpenter v1.15.2(LTS v1.14.3), AWS CDK CLI 2.1148.1 이상과 `aws-cdk-lib` 2.276.0, cdk-nag 3.0.2, Agent Sandbox v1.0.11, TRL 1.18.0(trainer 이미지의 vLLM 0.33.0), veRL 0.9.1(veRL 이미지의 vLLM 0.24.0), KubeRay v1.7.2. 각 프로젝트의 릴리스 페이지에서 새 버전과 변경점을 확인합니다.
 - [ ] **노드 드라이버와 nvproxy 목록:** EKS AL2023 NVIDIA AMI v20261107의 기본 드라이버는 580.178.04(g5에서는 proprietary 모듈에 GSP 꺼짐, g6에서는 open 모듈), HyperPod EKS AMI 1.34~1.36(2026-10-16)은 595.91.07, 1.33은 580.178.04입니다. B2 custom AMI의 `B2_NVIDIA_DRIVER_VERSION`과 노드 드라이버가 고정한 gVisor 릴리스의 supported 목록에 있는지 확인합니다.
 - [ ] **가격:** EC2 온디맨드 요금과 SageMaker AI(HyperPod `ml.*`) 요금. 이 가이드의 값(`c8i.2xlarge` 0.37484 USD/시간 등)은 2026-11 기준입니다.
 - [ ] **quota:** Running On-Demand G and VT instances(vCPU 기준, 새 계정은 0일 수 있음), Running On-Demand Standard instances, HyperPod의 `ml.<type> for cluster usage`.
@@ -81,8 +81,8 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 아래 명령은 노드 드라이버가 고정한 gVisor 릴리스의 지원 목록에 있는지 확인합니다. 노드의 debug 셸(`kubectl debug node`, [문제 해결](troubleshooting.md)의 "노드에서 확인")에서 `chroot /host` 뒤에 실행하세요.
 
 ```bash
-cat /proc/driver/nvidia/version                                        # loaded driver version
-/usr/local/bin/runsc nvproxy list-supported-drivers | grep -wF <driver-version>
+driver="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)"; echo "$driver"   # loaded driver version
+/usr/local/bin/runsc nvproxy list-supported-drivers | grep -wF "$driver"
 ```
 
 **확인할 것:** 두 번째 명령이 그 드라이버 버전을 한 줄 출력하면 지원 목록에 있습니다. 아무것도 나오지 않으면 그 노드에서 gVisor GPU 샌드박스가 Ready가 되지 않아요. HyperPod 노드는 `scripts/hyperpod/check_gvisor.sh`가 같은 확인을 해 줍니다.
@@ -148,14 +148,13 @@ scripts/01_check_prereqs.sh
 | [kata-containers/kata-containers](https://github.com/kata-containers/kata-containers) | 4.3.1(2026-10-21), runtime-rs 기본(4.0.0부터), Go runtime은 deprecated지만 지원, Helm chart `oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy`의 `deploymentMode` 기본 `job`, RuntimeClass `overhead.podFixed` |
 | [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/main/FAQ.md), [CHANGELOG](https://github.com/firecracker-microvm/firecracker/blob/main/CHANGELOG.md) | 최소 장치 모델, 1.13.0의 PCI 지원 추가, 변경 이력에 VFIO GPU passthrough 없음 |
 | [Modal Sandboxes](https://modal.com/docs/guide/sandbox) | "GPU Sandboxes are only supported with `runtime="gvisor"`" |
-| Northflank (URL 미기록) | Kata에서 GPU를 쓰고, nested virtualization이 없으면 gVisor로 대체한다는 공개 자료. 원문을 직접 확인하세요 |
 | [NVIDIA GPU Operator with Kata](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/deploy-kata-containers.html), [NVIDIA/gpu-operator](https://github.com/NVIDIA/gpu-operator) | v26.7.2의 sandbox 모드 값, `nvidia.com/pgpu`, "A node can only run one container runtime at a time", EKS 검증은 Ubuntu(AL2023은 목록에 없음) |
 | [NVIDIA/k8s-device-plugin](https://github.com/NVIDIA/k8s-device-plugin), [NVIDIA/nvidia-container-toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) | `deviceListStrategy: cdi-cri`, 호스트에 필요한 container toolkit |
 | [awslabs/amazon-eks-ami v20261107](https://github.com/awslabs/amazon-eks-ami/releases/tag/v20261107) | AL2023 NVIDIA AMI: 드라이버 580.178.04 기본(595.91.07은 g7 전용), toolkit 1.20.1, containerd 2.3.7, device plugin 없음, kubelet 1.32 이상에서 CDI, user data는 nodeadm-config와 nodeadm-run 사이에 실행 |
 | [aws/aws-network-policy-agent](https://github.com/aws/aws-network-policy-agent) | 노드 IP는 ingress와 egress 맵 모두에서 허용("ensures kubelet liveness/readiness probes are never blocked") |
 | [Karpenter 문서](https://karpenter.sh/docs/), [aws/karpenter-provider-aws](https://github.com/aws/karpenter-provider-aws) | v1.15.2(LTS v1.14.3), `karpenter.sh/v1`, `karpenter.k8s.aws/v1`, IMDS hop limit 1 기본, user MIME part 병합, EC2NodeClass `spec.cpuOptions.nestedVirtualization` |
 | [eksctl 문서: Cluster Access](https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html) | "EKS does allow creating a configuration that allows only private access to be enabled, but eksctl doesn't support it during cluster creation": private endpoint만 있는 클러스터는 eksctl로 만들 수 없어서, 이 에셋은 인프라를 CDK로 만듦 |
-| [aws/aws-cdk](https://github.com/aws/aws-cdk), [cdklabs/cdk-nag](https://github.com/cdklabs/cdk-nag) | `aws-cdk-lib` 2.276.0과 cdk-nag 3.0.2 고정. `aws-cdk-lib` 2.277.0은 CLI 2.1148.2 이상이 필요한데 2026-11-14에 npm에 없었음(저장소 `cdk/requirements.txt` 주석 기준) |
+| [aws/aws-cdk](https://github.com/aws/aws-cdk), [cdklabs/cdk-nag](https://github.com/cdklabs/cdk-nag) | `aws-cdk-lib` 2.276.0과 cdk-nag 3.0.2 고정. 2.276.0은 CDK CLI 2.1148.1과 호환되고, `aws-cdk-lib` 2.277.0으로 올리려면 CLI 2.1148.2 이상이 필요(저장소 `cdk/requirements.txt` 주석 기준) |
 | [aws/sagemaker-hyperpod-cli](https://github.com/aws/sagemaker-hyperpod-cli) | HyperPod 의존성 Helm chart(`helm_chart/HyperPodHelmChart`): health monitoring agent, deep health check RBAC, job-auto-restart, MPI operator, device plugin, Kueue |
 | [awslabs/awsome-distributed-ai veRL 예제](https://github.com/awslabs/awsome-distributed-ai/tree/main/examples/training/verl/hyperpod-eks/rlvr) | HyperPod EKS의 veRL RLVR 예제, veRL v0.6.1 고정(이전 키), 이전 aws-samples/awsome-distributed-training에서 이동 |
 | [TRL 문서](https://huggingface.co/docs/trl), [huggingface/trl](https://github.com/huggingface/trl), [PyPI trl 1.18.0](https://pypi.org/project/trl/1.18.0/) | TRL 1.18.0(2026-11-13), vLLM 0.23부터 0.33.x 지원, GRPOConfig 기본값(`num_generations` 8, `beta` 0.0, `loss_type` "dapo", `scale_rewards` "group"), reward 함수의 `None` 처리, async reward 함수 |
@@ -179,8 +178,14 @@ scripts/01_check_prereqs.sh
 | [Sakana AI CUDA Engineer](https://sakana.ai/ai-cuda-engineer/) | 메모리 exploit으로 정확성 검사를 건너뛴 사례 |
 | [Kevin-32B (Cognition)](https://cognition.com/blog/kevin-32b) | reference 복사, try/except fallback, reference 클래스 상속, PyTorch만 쓴 completion에 0점 |
 | [CUDA-L1 (arXiv 2507.14111)](https://arxiv.org/abs/2507.14111) | 추가 stream이 250건 중 82건(32.8%)에서 timing을 속임, lazy evaluation, caching |
-| TritonRL (URL 미기록) | 규칙 기반 linter와 LLM judge를 함께 쓰는 접근. 원문을 직접 확인하세요 |
-| KernelBench-Verified (URL 미기록) | reward hacking 대응과 관련해 함께 언급되는 작업. 원문을 직접 확인하세요 |
 | [INTELLECT-3 (arXiv 2512.16144)](https://arxiv.org/abs/2512.16144) | API를 거친 `kubectl exec`가 명령당 약 2.5 s, gateway + headless Service + sidecar 구성, environment를 trainer와 독립적으로 버전 관리 |
+
+### 원출처 미확인
+
+아래 자료는 1차 출처 URL을 확인하지 못했습니다. 인용하려면 원문을 직접 찾아 확인하세요.
+
+- **Northflank**: GPU에 Kata를 쓰고, nested virtualization을 쓸 수 없으면 gVisor로 대체한다는 공개 자료
+- **TritonRL**: 규칙 기반 linter와 LLM judge를 함께 쓰는 접근
+- **KernelBench-Verified**: reward hacking 대응과 관련해 함께 언급되는 작업
 
 관련 페이지: [자주 하는 오해](faq.md), [문제 해결](troubleshooting.md), [04 Reward 무결성](../production/04_reward_integrity.md), [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)

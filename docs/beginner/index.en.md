@@ -6,16 +6,15 @@
 
 When one sentence has three or four words you have never seen (sandbox, gVisor, Kata, nvproxy, RuntimeClass, GRPO, reward hacking), it is easy to miss what matters. If you type the commands without knowing what the setup is meant to prevent, you cannot adapt when the situation changes even a little. Turning on a GPU in the cloud costs money and a setting left open by mistake becomes a security problem, so the newer you are, the more you hesitate to start.
 
-![a: many new words arrive at once (gVisor, Kata, nvproxy, RuntimeClass, GRPO), and typing commands without knowing why leaves you stuck when things change even a little. b: chapters 1 to 4 explain each term in one line with pictures, and chapter 5 runs it on your PC (free) and AWS (optional), so you see what each command blocks](../images/figures/beginner-index.svg)
+![a: many new words arrive at once (gVisor, Kata, nvproxy, RuntimeClass, GRPO), and typing commands without knowing why leaves you stuck when things change even a little. b: chapters 1 to 4 explain each term in one line with pictures, and in chapter 5 you check the grading results of test answers on your PC (free) and, on AWS (optional), compare the kernel each runtime shows](../images/figures/beginner-index.svg)
 
-*Takeaway: Skipping the words and the reasons and copying commands first gets you through the screens but leaves nothing behind. With the reasons from chapters 1 to 4 first, you see what each command in chapter 5 protects against.*
+*Takeaway: Skipping the words and the reasons and copying commands first gets you through the screens but leaves nothing behind. Read the concepts in chapters 1 to 4 first. In chapter 5 you check the grading results of test answers, and if you choose the AWS exercise, you also compare which kernel each runtime shows.*
 
 
 ## Why
 
-- **Pictures and examples come first.** Each chapter answers one question, and each term is explained in one line the first time it appears.
-- **"Why" comes first, "how" comes later.** After chapters 1 to 4, you see what each command in chapter 5 protects against.
-- **We start with the path that costs nothing.** Chapter 5 runs on your PC first; the AWS stage is optional and shows screenshots from a real deployment.
+- **Chapters 1 to 4 are concepts, chapter 5 is hands-on.** In chapter 5 you check the grading program with test answers and compare, with `uname` output, the kernel seen inside a regular container and inside a sandbox.
+- **The exercise on your PC in chapter 5 is free.** The AWS exercise is optional and costs a few dollars.
 
 **Before you start:** None. If you can paste commands into a terminal, that is enough; the guide explains as much Kubernetes and reinforcement learning as you need.
 
@@ -26,13 +25,13 @@ When one sentence has three or four words you have never seen (sandbox, gVisor, 
 | [01](01_why_sandbox.md) | Why should code that AI wrote be locked up and run separately? | A model can write dangerous code regardless of intent, and if that code reaches your server's files, credentials, or network, it becomes an incident |
 | [02](02_container_vs_sandbox.md) | Is a container not enough? | A regular container shares the host's kernel, so a single kernel vulnerability can bring the wall down. A sandbox puts up one more wall in between |
 | [03](03_gpu_sandbox.md) | What is harder about code that uses a GPU? | The GPU driver lives inside the kernel, so the way you hand over the GPU decides the isolation level and which instances you can use |
-| [04](04_rl_and_sandbox.md) | What does a sandbox do in reinforcement learning? | It is the grader that runs the code a model wrote and gives it a score. If the grader is fooled or the standard changes, the model learns the wrong thing |
+| [04](04_rl_and_sandbox.md) | What does a sandbox do in reinforcement learning? | It runs and grades the code a model wrote. If cheating code gets a high score, or answers to the same problem are graded by different standards, the model can learn the wrong thing |
 | [05](05_hands_on.md) | Where do I start if I want to try it myself? | Launch a sandbox server on your PC and grade with it, and if you want, create a cluster on AWS with isolation runtimes installed, then delete it |
 | [06](06_multi_turn_agent.md) | How should a multi-turn agent use sandboxes? | Every turn of one episode has to be graded in the same sandbox, so Agent Sandbox assigns one sandbox to each episode and deletes it when the episode ends |
 
 ```mermaid
 flowchart LR
-    A["01 Why isolate"] --> B["02 Containers and sandboxes"]
+    A["01 Reasons to isolate"] --> B["02 Containers and sandboxes"]
     B --> C["03 Isolating the GPU too"]
     C --> D["04 RL and grading"]
     D --> E["05 Try it yourself<br/>Your PC (free) → AWS (optional)"]
@@ -46,7 +45,7 @@ flowchart LR
 
 - **Terms box:** Expand the "Terms" box near the top of each chapter for that chapter's words, one line each. More words are in the [Glossary](../reference/glossary.md).
 - **❓ Misconception box:** Corrects points that new learners often mix up.
-- **In one line:** At the end of each chapter, one or two sentences to remember.
+- **In one line:** At the end of the concept chapters (1 to 4 and 6), one or two sentences to remember.
 - **Analogies are a starting point.** We note separately where the analogy and reality differ.
 
 ## After you finish

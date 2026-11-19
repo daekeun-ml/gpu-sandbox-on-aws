@@ -4,7 +4,7 @@
 
 ## Pain point
 
-Kata starts a lightweight VM per pod, so the node needs `/dev/kvm` (QEMU and Cloud Hypervisor use KVM), and regular GPU VMs such as `g5.xlarge` do not have it. Passing a GPU through also needs an IOMMU and a host that owns the physical GPU directly (vfio-pci), and on AWS the only x86 NVIDIA instance that meets this is the bare-metal `g4dn.metal` (7.824 USD per hour). Even mistakes unrelated to the GPU, such as kata-deploy, containerd drop-ins or RuntimeClasses, then get debugged on this node. On top of that, the AL2023 kernel does not turn the IOMMU on by default, and nodeadm rewrites `/etc/containerd/config.toml` on every boot, so the runtime handlers kata-deploy adds may disappear after a reboot.
+Kata starts a lightweight VM per pod, so the node needs `/dev/kvm` (QEMU and Cloud Hypervisor use KVM), and regular GPU VMs such as `g5.xlarge` do not have it. Passing a GPU through also needs the IOMMU turned on and a host that leaves the NVIDIA driver unloaded and binds the GPU to `vfio-pci` to hand it to the VM. On AWS the only x86 NVIDIA instance that meets this is the bare-metal `g4dn.metal` (7.824 USD per hour). Even mistakes unrelated to the GPU, such as kata-deploy, containerd drop-ins or RuntimeClasses, then get debugged on this node. On top of that, the AL2023 kernel does not turn the IOMMU on by default, and nodeadm rewrites `/etc/containerd/config.toml` on every boot, so the runtime handlers kata-deploy adds may disappear after a reboot.
 
 ![a: settings unrelated to the GPU (kata-deploy and containerd drop-ins, RuntimeClasses and NetworkPolicy, node guard and boot time) and GPU passthrough (VFIO, IOMMU) are all checked on g4dn.metal (7.824 USD per hour), the only x86 NVIDIA instance that can hand a GPU to a Kata VM. b: the GPU-unrelated settings are checked first on c8i.2xlarge (0.37484 USD per hour) with nested virtualization (/dev/kvm), and only GPU passthrough on g4dn.metal booted from the IOMMU AMI](../images/figures/handson-03_kata.svg)
 
@@ -13,8 +13,8 @@ Kata starts a lightweight VM per pod, so the node needs `/dev/kvm` (QEMU and Clo
 
 ## Why
 
-- **Split into two stages to cut cost.** Check everything unrelated to the GPU (kata-deploy, RuntimeClasses, NetworkPolicy, node guard, boot time) on `c8i.2xlarge` first, and use `g4dn.metal` only for GPU passthrough.
-- **Bake the kernel arguments into an AMI.** There is a third-party report of a `g4dn.metal` warm reboot that did not come back, so instead of rebooting in user data, a cheap `m6i.large` builds an AMI with `intel_iommu=on iommu=pt`.
+- **Split into two stages to cut cost.** The CPU stage (`c8i.2xlarge`) installs kata-deploy and the RuntimeClasses and checks the kernels of the three runtimes. If you deploy the CPU pools of [04](04_sandbox_pools.md) before adding the GPU node, `scripts/ops/verify.sh` checks the network blocking (NetworkPolicy, node guard) and `scripts/ops/bench.sh` shows the time from pod creation to Ready.
+- **Bake the kernel arguments into an AMI.** A cheap `m6i.large` builder puts `intel_iommu=on iommu=pt` into the AMI. `g4dn.metal` applies them from its first boot, so it needs no reboot for this setting.
 - **The upstream-supported GPU path is the default.** That is QEMU, cold-plug and the Go shim (`kata-qemu-nvidia-gpu`); Cloud Hypervisor GPU is an experiment that turns on only with an environment variable (RuntimeClass label `gpusandbox/support: experimental`).
 
 **Before you start:** finish [01 Cluster and images](01_cluster_and_images.md). How Kata handles GPUs is in the "Kata + VFIO passthrough" section of [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and unfamiliar terms in the "Terms" box below and the [Glossary](../reference/glossary.md).
@@ -69,7 +69,7 @@ scripts/kata/cpu_nodes.sh    # kata-deploy, the gvisor-cpu RuntimeClass, smoke p
 
 The script first checks that the `sandbox-kata-cpu` node group exists. In the practice account it took about 14 minutes, mostly for kata-deploy.
 
-**If it fails:** `no sandbox-kata-cpu node group: set WITH_KATA_CPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again` means the node group does not exist yet, so rerun `02_create_cluster.sh` with the commands above. If `c8i.2xlarge` does not support nested virtualization in your Region, the node group creation fails or the smoke pods never finish; see the `SupportedFeatures` output of `01_check_prereqs.sh` and the "Kata" section of [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:** `no sandbox-kata-cpu node group: set WITH_KATA_CPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again` appears whenever the node group lookup fails, whatever the cause. Run the `aws eks describe-nodegroup` command above yourself: on `ResourceNotFoundException`, check `CLUSTER_NAME` and `AWS_REGION`, then rerun `02_create_cluster.sh` with the commands above; on `AccessDeniedException`, check the `eks:DescribeNodegroup` permission. If `c8i.2xlarge` does not support nested virtualization in your Region, the node group creation fails or the smoke pods never finish; see the `SupportedFeatures` output of `01_check_prereqs.sh` and the "Kata" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ### Launch template of the Kata CPU node (CDK stack)
 
@@ -84,11 +84,11 @@ The CDK stack (`cdk/gpusandbox_cdk/stack.py`) creates this node group's EC2 laun
 | `ImageId` | not set | EKS picks the EKS-optimized AMI (`AL2023_x86_64_STANDARD`) and merges its own bootstrap user data |
 | Node group | desired 1, min 0, max 2, labels `gpusandbox/role=sandbox-kata` and `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | dedicated to Kata sandboxes. The smoke pods and the CPU pools select this node with `gpusandbox/kata-gpu=false` |
 
-The EKS documentation does not say whether a managed node group passes the launch template's `NestedVirtualization` on to the node. It was passed in the practice account (2026-11-14, the node had `/dev/kvm`), but this may change, so check it after the first deployment.
+The EKS documentation does not say whether a managed node group passes the launch template's `NestedVirtualization` on to the node. It was passed in the practice account (2026-11-14, the node had `/dev/kvm`), but this may change, so check it after the first deployment. The command below reads the instance ID from the Kata CPU node of the current kubectl context (the tunnel), so it never reads a node of another cluster that this repository created in the same Region.
 
 ```bash
-aws ec2 describe-instances --region "$AWS_REGION" \
-  --filters "Name=tag:eks:nodegroup-name,Values=sandbox-kata-cpu" "Name=instance-state-name,Values=running" \
+provider_id="$(kubectl get nodes -l gpusandbox/kata-gpu=false -o jsonpath='{.items[0].spec.providerID}')"
+aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "${provider_id##*/}" \
   --query 'Reservations[].Instances[].CpuOptions'
 ```
 
@@ -158,18 +158,19 @@ If all three kernels differ from the host kernel on the last line, the pods ran 
 !!! warning "Cost: g4dn.metal is 7.824 USD per hour"
     That is the On-Demand list price in us-east-1 and us-west-2; in the Seoul Region it is 9.624 USD. When you rerun `02_create_cluster.sh` with `WITH_KATA_GPU=1`, `cdk/deploy.sh` asks `This adds g4dn.metal (about 7.8 USD/hour) to the stack. Type 'metal' to continue:`, and the node enters the stack only after you type `metal`. When you are not using it, scale it to zero right away with the commands at the end of this page.
 
-Run `kata/gpu_nodes.sh` twice, with a rerun of `02_create_cluster.sh` in between.
+Run `kata/gpu_nodes.sh` twice, with a rerun of `02_create_cluster.sh` in between. It bakes the AMI only when `KATA_IOMMU_AMI_ID` is empty. `08_cleanup.sh` deletes the AMI but leaves the ID in `config.env`, so if an ID from an earlier run is still there, check that the AMI exists with `aws ec2 describe-images --region "$AWS_REGION" --image-ids <ID>`, and clear the value if it does not.
 
 ```bash
-scripts/kata/gpu_nodes.sh       # first run: bakes the IOMMU AMI, then stops
-# add KATA_IOMMU_AMI_ID="ami-..." and WITH_KATA_GPU="1" to scripts/config.env
+scripts/kata/gpu_nodes.sh       # KATA_IOMMU_AMI_ID empty: bakes the IOMMU AMI, then stops
+# in scripts/config.env: paste the printed line  export KATA_IOMMU_AMI_ID="ami-..."
+#                        and change  export WITH_KATA_GPU="0"  to  export WITH_KATA_GPU="1"
 scripts/02_create_cluster.sh    # same option as your first run; type 'metal' to add g4dn.metal
 scripts/kata/gpu_nodes.sh       # second run: GPU Operator, kata-deploy, pgpu check
 ```
 
-**What to look for (first run):** the script announces about 10 minutes (in the 2026-11-18 run the builder stopped after about 30 s and the AMI was available after about 2 minutes). When it finishes it prints `export KATA_IOMMU_AMI_ID="ami-..."` under `Add to scripts/config.env:` and ends with `[error] add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`. This error is expected behavior.
+**What to look for (first run):** the script announces about 10 minutes (in the 2026-11-18 run the builder stopped after about 30 s and the AMI was available after about 2 minutes). When it finishes it prints `export KATA_IOMMU_AMI_ID="ami-..."` under `Add to scripts/config.env:` and ends with `[error] add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`. This error is expected behavior. Paste the line with its `export`; a bare `KATA_IOMMU_AMI_ID=...` does not reach the CDK Python process as an environment variable.
 
-**What to look for (rerun of `02_create_cluster.sh`):** after you type `metal`, CDK adds the `sandbox-kata-gpu` node group and its launch template. `g4dn.metal` bills from this moment. The second run of `kata/gpu_nodes.sh` stops with `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again ...` if this node group is missing. Even if you skipped the Kata CPU node step (`kata/cpu_nodes.sh`), `kata/gpu_nodes.sh` installs kata-deploy.
+**What to look for (rerun of `02_create_cluster.sh`):** after you type `metal`, CDK adds the `sandbox-kata-gpu` node group and its launch template. `g4dn.metal` bills from this moment. The second run of `kata/gpu_nodes.sh` stops with `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again ...` if it cannot look up this node group. A missing permission gives the same message, so run `aws eks describe-nodegroup ... --nodegroup-name sandbox-kata-gpu` yourself to find the cause. Even if you skipped the Kata CPU node step (`kata/cpu_nodes.sh`), `kata/gpu_nodes.sh` installs kata-deploy.
 
 ### Baking the IOMMU-enabled AMI (build-iommu-ami.sh)
 
@@ -190,8 +191,8 @@ AL2023 kernels have `CONFIG_INTEL_IOMMU_DEFAULT_ON` unset, so `intel_iommu=on` m
 
 AL2023 kernels also build the VFIO type1 IOMMU backend as a module (`CONFIG_VFIO_IOMMU_TYPE1=m`), and on the `g4dn.metal` node of 2026-11-18 nothing loaded it. Without this module QEMU cannot attach the GPU and the Kata GPU pods do not start (see "Pods stuck with `create container timeout`" below), so step 2 puts the `modules-load.d` setting into the AMI.
 
-!!! note "How the builder wait works (fixed on 2026-11-18)"
-    The previous script waited with `aws ec2 wait instance-stopped`. That waiter treats the `pending` state as a terminal failure, so it failed at once with `Waiter InstanceStopped failed ... "pending"` while the builder was not running yet, and the previous script did not terminate the builder when it stopped midway like this. The script now polls the state as in step 3 and always cleans up the builder with an EXIT trap. If an earlier version failed for you, check for a leftover instance named `<CLUSTER_NAME>-iommu-ami-builder` and terminate it.
+!!! note "If an earlier version of the script failed"
+    If an earlier version stopped with `Waiter InstanceStopped failed ... "pending"`, the builder may still be there. Check for an instance named `<CLUSTER_NAME>-iommu-ami-builder` and terminate it.
 
 ### The sandbox-kata-gpu node group
 
@@ -241,7 +242,7 @@ flowchart TB
 | `vfioManager.enabled` | `true` | binds the 8 T4s to vfio-pci |
 | `kataSandboxDevicePlugin.enabled` | `true` | advertises the T4s as `nvidia.com/pgpu` |
 
-The trainer and gVisor nodes carry the label `nvidia.com/gpu.deploy.operands=false`, so the GPU Operator deploys nothing there. Per the NVIDIA documentation a node runs one container runtime mode at a time, so container GPU workloads and VM passthrough do not share a node.
+The trainer and gVisor nodes carry the label `nvidia.com/gpu.deploy.operands=false`, so the GPU Operator deploys no NVIDIA GPU operands there. The NFD worker, though, is set to tolerate the `gpusandbox/role` taint and runs on these nodes too. Per the NVIDIA documentation a node runs one container runtime mode at a time, so container GPU workloads and VM passthrough do not share a node.
 
 ### kata-qemu-nvidia-gpu and VM sizing
 
@@ -389,7 +390,7 @@ exit
 |---|---|---|
 | Rerun of `02_create_cluster.sh` (`WITH_KATA_CPU=1`) | node group creation (not timed) | `c8i.2xlarge` x1 (0.37484 USD/hour) |
 | `kata/cpu_nodes.sh` | about 14 min (measured, mostly kata-deploy). Timeouts: kata-deploy 20 min, smoke pods 10 min each | none |
-| `kata/gpu_nodes.sh` first run | the script announces about 10 min. Measured on 2026-11-18: the builder stopped after about 30 s, the AMI was available after about 2 min | builder `m6i.large` (0.096 USD/hour, until the AMI is available), AMI snapshot (EBS snapshot pricing) |
+| `kata/gpu_nodes.sh` first run | the script announces about 10 min. Measured on 2026-11-18: the builder stopped after about 30 s, the AMI was available after about 2 min | builder `m6i.large` (0.096 USD/hour, until the builder is stopped), then the builder's EBS volume while the AMI is created, AMI snapshot (EBS snapshot pricing) |
 | Rerun of `02_create_cluster.sh` (`WITH_KATA_GPU=1`) | the `g4dn.metal` node joined in about 3 min (measured on 2026-11-18) | `g4dn.metal` x1 (7.824 USD/hour) |
 | `kata/gpu_nodes.sh` second run | about 1 min (measured on 2026-11-18). Timeouts: GPU Operator 20 min, kata-deploy 20 min, pgpu wait up to 20 min | none |
 | Stage 3 | `check-clh-gpu.sh` 20 min | none |
@@ -404,7 +405,9 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
   --nodegroup-name sandbox-kata-cpu --scaling-config minSize=0,maxSize=2,desiredSize=0
 ```
 
-**What to look for:** each command returns JSON with `"type": "ConfigUpdate"`, and after a few minutes `kubectl get nodes -l gpusandbox/role=sandbox-kata` lists no nodes. When you continue, run them with `desiredSize=1`. If you will not use the Kata GPU node again, rerun `02_create_cluster.sh` with `WITH_KATA_GPU="0"` to remove it from the stack. [99 Cleanup](99_cleanup.md) deletes the Kata node groups and launch templates with the stack, and after the confirmation word `ami` the IOMMU AMI and its snapshot.
+Run only the commands for the node groups you created: `sandbox-kata-gpu` for the Kata GPU node, `sandbox-kata-cpu` for the Kata CPU node.
+
+**What to look for:** each command you ran returns JSON with `"type": "ConfigUpdate"`, and after a few minutes `kubectl get nodes -l gpusandbox/role=sandbox-kata` lists no nodes. When you continue, run them with `desiredSize=1`. If you will not use the Kata GPU node again, rerun `02_create_cluster.sh` with `WITH_KATA_GPU="0"` to remove it from the stack. [99 Cleanup](99_cleanup.md) deletes the Kata node groups and launch templates with the stack, and after the confirmation word `ami` the IOMMU AMI and its snapshot.
 
 ## Next step
 

@@ -13,7 +13,7 @@ T = {
     "ko": {
         # production/05_sandbox_updates
         "p05.a": "rolling update: 함께 응답하는 구버전과 신버전 pod",
-        "p05.b": "blue/green: 검증과 parity 뒤 step 경계에서 전환",
+        "p05.b": "blue/green: 검증과 parity 뒤 batch나 group 단위로 전환",
         "p05.ans": "completion", "p05.ans_sub": "GRPO group 하나",
         "p05.dep": "rolling update 중인 Deployment",
         "p05.old": "구버전 pod", "p05.old_s": "기존 채점 규칙",
@@ -21,17 +21,17 @@ T = {
         "p05.pools": "(runtime, version)마다 풀 하나",
         "p05.v1": "sandbox-gvisor-v1", "p05.v1s": "active, 롤백용으로 유지",
         "p05.v2": "sandbox-gvisor-v2", "p05.v2s": "검증, parity 전 트래픽 없음",
-        "p05.some": "일부", "p05.rest": "나머지", "p05.all": "전부", "p05.switch": "step 경계에서 전환",
+        "p05.some": "일부", "p05.rest": "나머지", "p05.all": "전부", "p05.switch": "다음 batch나 group부터",
         "p05.adv": "group 기준 advantage",
         "p05.bad": "섞이는 두 규칙의 점수", "p05.good": "한 버전의 점수만",
         # production/06_scaling_with_verl
-        "p06.a": "GPU 한 장에서 차례로 실행되는 세 단계",
+        "p06.a": "trainer GPU 한 장과 샌드박스가 차례로 실행하는 세 단계",
         "p06.b": "여러 GPU로: group_key마다 버전을 고정하는 gateway",
         "p06.gpu": "trainer: A10G 한 장 (24 GB)",
         "p06.gen": "vLLM 생성", "p06.upd": "업데이트", "p06.next": "다음 step",
         "p06.mem": "24 GB", "p06.w": "7B bf16 가중치만 약 15 GB",
         "p06.rw": "reward 채점", "p06.rw_s": "샌드박스",
-        "p06.batch": "routing snapshot 하나", "p06.per_batch": "batch마다", "p06.reward": "reward",
+        "p06.batch": "샌드박스 호출마다 snapshot 하나", "p06.per_batch": "한 batch는 한 버전", "p06.reward": "reward",
         "p06.rc": "RayCluster verl (rl-trainer)",
         "p06.wk": "GPU worker", "p06.wk_s": "actor, vLLM rollout, reward worker",
         "p06.req": "POST /v1/evaluate + group_key", "p06.per_sample": "샘플마다",
@@ -49,13 +49,13 @@ T = {
         "p07.e2": "DNS에서 빠지고 남은 pod로 몰리는 요청",
         "p07.e3": "지표 집계 없음",
         "p07.out": "trainer에서 보이는 결과",
-        "p07.o1": "advantage 0", "p07.o1s": "학습 신호 없이 진행되는 step",
+        "p07.o1": "advantage 0", "p07.o1s": "모두 제외되면 신호 없는 step",
         "p07.o2": "느려지기만 하는 step", "p07.o3": "오르는 것처럼 보이는 reward",
         "p07.alarm": "경보",
-        "p07.s1": "status.sandbox_error / n", "p07.s2": "sum(sandbox_ready)",
+        "p07.s1": "status.sandbox_error / n", "p07.s2": "Deployment별 available, desired",
         "p07.s3": "flag 개수 (확장 필요)",
         "p07.l1": "sandbox_error 비율", "p07.l1s": "TRL 5% 초과, 3 batch 연속",
-        "p07.l2": "Ready pod 부족", "p07.l2s": "기대 replicas 미만 10분",
+        "p07.l2": "Ready pod 부족", "p07.l2s": "available이 desired 미만 10분",
         "p07.l3": "reward hacking 신호", "p07.l3s": "flag 비율 상승 추세",
         # production/08_cost
         "p08.a": "노드 단위 과금: 유휴 상태에도, run이 끝난 뒤에도 과금",
@@ -65,15 +65,15 @@ T = {
         "p08.idle": "유휴", "p08.busy": "사용 중",
         "p08.end_a": "run 종료, 풀은 그대로", "p08.end_b": "run 종료, replicas 0",
         "p08.left": "g4dn.metal 방치", "p08.left_s": "7.824 USD/시간",
-        "p08.wait": "30분 대기 뒤 반납", "p08.wait_s": "consolidateAfter 30분",
+        "p08.wait": "30분 비면 반납 시작", "p08.wait_s": "consolidateAfter 30분",
         "p08.br_a": "사용 여부와 관계없이 노드 단위로 과금", "p08.br_a2": "주말 48시간이면 375.552 USD",
-        "p08.br_b": "reward 구간의 몰림에 맞춘 풀 크기", "p08.br_b2": "빈 기간 한 번에 최대 3.912 USD",
+        "p08.br_b": "reward 구간의 몰림에 맞춘 풀 크기", "p08.br_b2": "빈 기간마다 약 3.912 USD", "p08.br_b3": "노드가 종료될 때까지 과금",
         "p08.node": "g4dn.metal (T4 8개)",
         "p08.used_a": "T4 4개만 사용", "p08.price_a": "사용한 T4당 1.956 USD/시간",
         "p08.used_b": "T4 8개 모두 사용", "p08.price_b": "T4당 0.978 USD/시간",
         # production/09_cdk
         "p09.a": "단계별 생성, 단계별 삭제",
-        "p09.b": "스택 하나로 생성, 한 번에 삭제",
+        "p09.b": "스택 하나로 생성, 스택 단위로 삭제",
         "p09.mk_a": "여러 스크립트", "p09.mk_a_s": "순서대로 실행",
         "p09.mk_b": "cdk/deploy.sh", "p09.mk_b_s": "스택 하나 배포",
         "p09.step": "단계 {}",
@@ -82,7 +82,7 @@ T = {
         "p09.del_a": "단계마다 삭제", "p09.del_a_s": "리소스별로 따로",
         "p09.del_b": "cdk/destroy.sh", "p09.del_b_s": "스택 전체 삭제",
         "p09.out_a": "하나라도 남으면", "p09.out_a_s": "비용, 다음 생성 실패",
-        "p09.out_b": "빠짐없는 삭제", "p09.out_b_s": "명령 한 번으로 삭제",
+        "p09.out_b": "스택과 함께 삭제", "p09.out_b_s": "AMI, ECR은 따로 삭제",
         # reference/faq
         "faq.a": "눈에 띄지 않는 오류: 학습은 계속되고 reward만 잘못 계산되는 상황",
         "faq.b": "blue/green 전환, 채점하지 못한 샘플은 제외",
@@ -90,14 +90,14 @@ T = {
         "faq.ev2": "인프라 오류", "faq.ev2s": "pod 장애",
         "faq.m1a": "rolling update", "faq.m1as": "한 group을 두 규칙으로 채점",
         "faq.m2a": "reward 0", "faq.m2as": "장애로 0점을 받아 억제되는 정답",
-        "faq.m1b": "blue/green 풀", "faq.m1bs": "step 경계에서만 전환",
+        "faq.m1b": "blue/green 풀", "faq.m1bs": "batch마다 한 버전으로 전환",
         "faq.m2b": "sandbox_error", "faq.m2bs": "TRL은 None으로 baseline에서 제외",
         "faq.oa": "멈추지 않는 학습", "faq.oas": "reward만 잘못 계산되는 상태",
         "faq.ob": "group 기준 advantage", "faq.obs": "한 버전, 채점한 샘플만",
     },
     "en": {
         "p05.a": "Rolling update: old and new pods answer side by side",
-        "p05.b": "Blue/green: switch at a step boundary after verification and parity",
+        "p05.b": "Blue/green: switch per batch or group after verification and parity",
         "p05.ans": "completions", "p05.ans_sub": "one GRPO group",
         "p05.dep": "Deployment in a rolling update",
         "p05.old": "old pod", "p05.old_s": "old scoring rules",
@@ -105,16 +105,16 @@ T = {
         "p05.pools": "one pool per (runtime, version)",
         "p05.v1": "sandbox-gvisor-v1", "p05.v1s": "active, kept for rollback",
         "p05.v2": "sandbox-gvisor-v2", "p05.v2s": "no traffic before checks",
-        "p05.some": "some", "p05.rest": "the rest", "p05.all": "all", "p05.switch": "switch at a step boundary",
+        "p05.some": "some", "p05.rest": "the rest", "p05.all": "all", "p05.switch": "next batch or group",
         "p05.adv": "group-relative advantage",
         "p05.bad": "scores of two rules mixed", "p05.good": "scores of one version",
-        "p06.a": "One GPU runs the three phases in turn",
+        "p06.a": "One trainer GPU and the sandbox run the three phases in turn",
         "p06.b": "Many GPUs: the gateway pins a version per group_key",
         "p06.gpu": "trainer: one A10G (24 GB)",
         "p06.gen": "vLLM generation", "p06.upd": "update", "p06.next": "next step",
         "p06.mem": "24 GB", "p06.w": "7B bf16 weights alone about 15 GB",
         "p06.rw": "reward scoring", "p06.rw_s": "sandbox",
-        "p06.batch": "one routing snapshot", "p06.per_batch": "per batch", "p06.reward": "rewards",
+        "p06.batch": "one snapshot per sandbox call", "p06.per_batch": "one version per batch", "p06.reward": "rewards",
         "p06.rc": "RayCluster verl (rl-trainer)",
         "p06.wk": "GPU worker", "p06.wk_s": "actor, vLLM rollout, reward worker",
         "p06.req": "POST /v1/evaluate + group_key", "p06.per_sample": "per sample",
@@ -131,13 +131,13 @@ T = {
         "p07.e2": "out of DNS, load on the remaining pods",
         "p07.e3": "not aggregated into metrics",
         "p07.out": "what the trainer shows",
-        "p07.o1": "advantage 0", "p07.o1s": "steps go by, nothing learned",
+        "p07.o1": "advantage 0", "p07.o1s": "all dropped: nothing learned",
         "p07.o2": "steps just get slower", "p07.o3": "rewards seem to improve",
         "p07.alarm": "alarms",
-        "p07.s1": "status.sandbox_error / n", "p07.s2": "sum(sandbox_ready)",
+        "p07.s1": "status.sandbox_error / n", "p07.s2": "available vs desired per Deployment",
         "p07.s3": "flag counts (extension needed)",
         "p07.l1": "sandbox_error rate", "p07.l1s": "TRL over 5%, 3 batches in a row",
-        "p07.l2": "Ready pods short", "p07.l2s": "below expected replicas, 10 min",
+        "p07.l2": "Ready pods short", "p07.l2s": "available below desired, 10 min",
         "p07.l3": "reward hacking signal", "p07.l3s": "flag rate trending up",
         "p08.a": "Per-node billing: it bills when idle and after the run",
         "p08.b": "Pool sized to the reward phase, empty nodes returned quickly",
@@ -146,14 +146,14 @@ T = {
         "p08.idle": "idle", "p08.busy": "busy",
         "p08.end_a": "run ends, pool kept", "p08.end_b": "run ends, replicas 0",
         "p08.left": "g4dn.metal left on", "p08.left_s": "7.824 USD per hour",
-        "p08.wait": "returned after 30 min", "p08.wait_s": "consolidateAfter 30 min",
+        "p08.wait": "released from 30 min", "p08.wait_s": "consolidateAfter 30 min",
         "p08.br_a": "billed per node, busy or idle", "p08.br_a2": "48-hour weekend: 375.552 USD",
-        "p08.br_b": "pool sized to the reward phase", "p08.br_b2": "at most 3.912 USD per empty period",
+        "p08.br_b": "pool sized to the reward phase", "p08.br_b2": "about 3.912 USD per empty period", "p08.br_b3": "billed until the node ends",
         "p08.node": "g4dn.metal (8 T4s)",
         "p08.used_a": "only 4 T4s in use", "p08.price_a": "1.956 USD/hour per T4 used",
         "p08.used_b": "all 8 T4s in use", "p08.price_b": "0.978 USD/hour per T4",
         "p09.a": "Created step by step, deleted step by step",
-        "p09.b": "Created as one stack, deleted at once",
+        "p09.b": "Created as one stack, deleted as a stack",
         "p09.mk_a": "several scripts", "p09.mk_a_s": "run in order",
         "p09.mk_b": "cdk/deploy.sh", "p09.mk_b_s": "one stack",
         "p09.step": "step {}",
@@ -162,14 +162,14 @@ T = {
         "p09.del_a": "delete per step", "p09.del_a_s": "one by one",
         "p09.del_b": "cdk/destroy.sh", "p09.del_b_s": "whole stack",
         "p09.out_a": "one leftover", "p09.out_a_s": "cost, next create fails",
-        "p09.out_b": "nothing missed", "p09.out_b_s": "with one command",
+        "p09.out_b": "stack deleted whole", "p09.out_b_s": "AMI, ECR: separately",
         "faq.a": "Silent errors: training keeps running while rewards drift",
         "faq.b": "Blue/green switches, unscored samples excluded",
         "faq.ev1": "New sandbox version", "faq.ev1s": "mid-run",
         "faq.ev2": "Infrastructure error", "faq.ev2s": "pod failure",
         "faq.m1a": "rolling update", "faq.m1as": "one group scored by two rules",
         "faq.m2a": "reward 0", "faq.m2as": "zeroed correct answers suppressed",
-        "faq.m1b": "blue/green pools", "faq.m1bs": "switch at step boundaries only",
+        "faq.m1b": "blue/green pools", "faq.m1bs": "switch with one version per batch",
         "faq.m2b": "sandbox_error", "faq.m2bs": "TRL: None, out of the baseline",
         "faq.oa": "training does not stop", "faq.oas": "rewards drift silently",
         "faq.ob": "group-relative advantage", "faq.obs": "one version, scored samples",
@@ -213,7 +213,7 @@ def _slots(fig: Figure, x, y, n_used, *, fill, stroke):
 
 def production_05(lang: str) -> Figure:
     """docs/production/05_sandbox_updates: rolling update mixes two scoring rules in one group (a) vs
-    blue/green pools that switch at a step boundary after verify and parity (b)."""
+    blue/green pools that switch per reward batch (TRL) or per group (veRL) after verify and parity (b)."""
     t = T[lang]
     fig = Figure(760, 566)
     sx, sw, cx, cw, bx, bw, ox, ow = 16, 120, 314, 228, 330, 196, 578, 166
@@ -241,6 +241,7 @@ def production_05(lang: str) -> Figure:
             fig.arrow([(e0, y1), (e1, y1)], label=t["p05.all"], label_at=(lx, y1 - 8))
             fig.arrow([(e0, y2), (e1, y2)], color=MUTED_STROKE, dash="5 4", label=t["p05.switch"],
                       label_at=(lx, y2 - 8))
+            assert text_width(t["p05.switch"], SMALL) + 8 <= 2 * (cx - lx), "switch label crosses the pool frame"
             fig.arrow([(bx + bw, y1), (ox - 2, y1)], color=ACCENT)
             fig.box(ox, top, ow, 186, t["p05.adv"], t["p05.good"], icon="check-circle", fill=ACCENT_FILL,
                     stroke=ACCENT, gid="n:outcome-b")
@@ -358,6 +359,9 @@ def production_08(lang: str) -> Figure:
             _seg(fig, ax, l2, aw, 40, t["p08.wait"], t["p08.wait_s"], gid="n:wait")
             fig.line([(ax + aw, l2 - 6), (ax + aw, l2 + 46)], color=ACCENT, width=2.4)
             fig.text(ax + aw / 2, l2 + 70, t["p08.br_b2"], size=SMALL)
+            fig.text(ax + aw / 2, l2 + 86, t["p08.br_b3"], size=SMALL)
+            for s in (t["p08.br_b2"], t["p08.br_b3"]):
+                assert text_width(s, SMALL) + 8 <= 2 * (nx - ax - aw / 2), f"cost note too wide: {s!r}"
         stroke, color = (MUTED_STROKE, INK) if p == 0 else (ACCENT, ACCENT)
         fig.container(nx, oy + 50, nw, 150, t["p08.node"], icon="server", stroke=stroke, color=color, bold=p == 1)
         _slots(fig, nx + (nw - 128) / 2, oy + 80, 4 if p == 0 else 8, fill=GREY_FILL if p == 0 else ACCENT_FILL,

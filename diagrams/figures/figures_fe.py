@@ -30,10 +30,10 @@ T = {
         "p00.oa1": "503 재시도 증가", "p00.oa1s": "같은 pod로 몰리는 요청",
         "p00.oa2": "섞일 수 있는 v1과 v2", "p00.oa2s": "한 group 안에서",
         "p00.oa3": "부하와 무관한 GPU 노드", "p00.oa3s": "계속 실행되거나 늦게 증설",
-        "p00.oa4": "서명 키가 바뀌면", "p00.oa4s": "모든 요청 거부 (fail closed)",
+        "p00.oa4": "서명 키가 바뀌면", "p00.oa4s": "새 키로 서명한 토큰 거부 (fail closed)",
         "p00.ob1": "pod마다 평가 1건", "p00.ob1s": "gateway가 고르는 빈 pod",
-        "p00.ob2": "group마다 한 버전", "p00.ob2s": "batch 스냅샷, group_key pin",
-        "p00.ob3": "수요에 맞춰 조정되는 노드", "p00.ob3s": "g4dn.metal은 warm 한 대",
+        "p00.ob2": "batch나 group마다 한 버전", "p00.ob2s": "TRL 스냅샷, veRL group_key pin",
+        "p00.ob3": "Karpenter 노드는 자동 증감", "p00.ob3s": "CDK 노드 그룹은 직접 축소",
         "p00.ob4": "서명 키 회전 반영", "p00.ob4s": "ConfigMap을 자동 갱신",
         # 00 overview
         "o00.tr": "rl-trainer: trainer NodePool (g6e, p5) 또는 HyperPod 인스턴스 그룹",
@@ -71,7 +71,7 @@ T = {
         "p01.raise": "통과할 때만 함께 승격", "p01.raise_sub": "AMI와 GVISOR_RELEASE",
         # 02 Pain point
         "p02.a": "하드닝하지 않은 runc pod",
-        "p02.b": "계층마다 다른 경로 차단",
+        "p02.b": "계층마다 다른 경로를 막거나 줄임",
         "p02.code": "후보 코드", "p02.code_a": "runc pod", "p02.code_b": "gVisor 또는 Kata",
         "p02.pod": "샌드박스 pod",
         "p02.r1": "호스트 커널", "p02.r1s": "NVIDIA 드라이버",
@@ -82,7 +82,7 @@ T = {
         "p02.a4": "남은 프로세스, 캐시, GPU 상태",
         "p02.b1": ["gVisor Sentry 또는 Kata VM", "호스트 드라이버를 공유하는 gVisor"],
         "p02.b2": "토큰, 시크릿을 넣지 않는 설정", "p02.b3": "노드 가드, readiness 확인",
-        "p02.b4": "프로세스 정리, 요청별 캐시, pod 재활용",
+        "p02.b4": ["프로세스 정리, 요청별 캐시로 줄임", "v1은 pod 재활용 꺼짐"],
         # 02 threat model
         "o02.layers": [
             ("globe", "네트워크", "기본 거부, gateway만 ingress"),
@@ -113,7 +113,7 @@ T = {
         "p04.r2": "reference, 비교 함수", "p04.r2s": "정답과 판정",
         "p04.r3": "측정 구간", "p04.r3s": "timed iteration",
         "p04.a1": "바꿔치기", "p04.a2": "바꿔치기", "p04.a3": "추가 stream, 캐시, lazy 출력",
-        "p04.b1": "정적 정책: 속성 대입 거부", "p04.b2": "부모 프로세스에만 보관",
+        "p04.b1": "정적 정책: 속성 대입 거부", "p04.b2": "정답 출력과 판정은 부모가",
         "p04.b3": "synchronize, 새 입력, checksum",
         # 04 two-process
         "o04.server": "샌드박스 서버 (uvicorn)", "o04.server_sub": "torch import 없음",
@@ -125,10 +125,10 @@ T = {
         "o04.s3b": "timing, checksum", "o04.s3bs": "runner.json 작성",
         "o04.s4": "4. reference 출력과 비교", "o04.s4s": "같은 seed, weights_only=True로 읽기",
         "o04.s5": "5. reference timing", "o04.s5s": "timed 출력 checksum 비교",
-        "o04.s6": "6. verdict JSON 작성", "o04.s6s": "자식 트리가 끝난 뒤",
+        "o04.s6": "6. verdict JSON 작성", "o04.s6s": "runner.py가 끝난 뒤 마지막에",
         "o04.none": "자식에게 없는 것", "o04.none_sub": "reference 출력, 토큰 같은 pod env",
         "o04.out_top": ["후보 코드, seed"], "o04.out_bot": ["env allowlist,", "새 session, timeout"],
-        "o04.in_top": ["seed별 출력,", "runner.json"], "o04.in_bot": ["크기 제한, 타입 검사"],
+        "o04.in_top": ["seed별 출력,", "runner.json"], "o04.in_bot": ["runner.json은", "1 MiB 제한, 타입 검사"],
     },
     "en": {
         "p00.a": "The hands-on setup scaled up as is",
@@ -145,10 +145,10 @@ T = {
         "p00.oa1": "more 503 retries", "p00.oa1s": "requests pile onto one pod",
         "p00.oa2": "v1 and v2 can mix", "p00.oa2s": "inside one group",
         "p00.oa3": "GPU nodes ignore load", "p00.oa3s": "idle, or grow too late",
-        "p00.oa4": "signing key changes", "p00.oa4s": "every request rejected",
+        "p00.oa4": "signing key changes", "p00.oa4s": "new-key tokens rejected",
         "p00.ob1": "one evaluation per pod", "p00.ob1s": "the gateway picks free pods",
-        "p00.ob2": "one version per group", "p00.ob2s": "batch snapshot, group_key pin",
-        "p00.ob3": "nodes follow demand", "p00.ob3s": "one warm g4dn.metal",
+        "p00.ob2": "one version per batch or group", "p00.ob2s": "TRL snapshot, veRL group_key pin",
+        "p00.ob3": "Karpenter nodes follow load", "p00.ob3s": "CDK node groups: by hand",
         "p00.ob4": "follows key rotation", "p00.ob4s": "patches the ConfigMap",
         "o00.tr": "rl-trainer: trainer NodePool (g6e, p5) or HyperPod instance group",
         "o00.trl": "TRL ranks", "o00.trl_sub": "Job",
@@ -183,7 +183,7 @@ T = {
         "p01.ci": "CI checks support", "p01.ci_sub": "nvproxy list-supported-drivers",
         "p01.raise": "raised together on pass", "p01.raise_sub": "AMI and GVISOR_RELEASE",
         "p02.a": "An unhardened runc pod",
-        "p02.b": "Each layer stops a different failure",
+        "p02.b": "Each layer stops or narrows one path",
         "p02.code": "candidate code", "p02.code_a": "runc pod", "p02.code_b": "gVisor or Kata",
         "p02.pod": "sandbox pod",
         "p02.r1": "host kernel", "p02.r1s": "NVIDIA driver",
@@ -194,7 +194,7 @@ T = {
         "p02.a4": "leftover processes, caches, GPU state",
         "p02.b1": ["gVisor Sentry or Kata VM", "gVisor shares the host driver"],
         "p02.b2": "no token, no secrets mounted", "p02.b3": "node guard, readiness check",
-        "p02.b4": "reaping, per-request caches, pod recycling",
+        "p02.b4": ["narrowed by reaping, per-request caches", "pod recycling off in v1"],
         "o02.layers": [
             ("globe", "network", "default deny, gateway-only ingress"),
             ("server", "node", "dedicated taint, node guard, IMDS hop 1"),
@@ -222,7 +222,7 @@ T = {
         "p04.r2": "reference, compare", "p04.r2s": "answer and verdict",
         "p04.r3": "timed window", "p04.r3s": "timed iterations",
         "p04.a1": "replaces", "p04.a2": "replaces", "p04.a3": "extra stream, caching, lazy outputs",
-        "p04.b1": "static policy: no attribute writes", "p04.b2": "lives in the parent only",
+        "p04.b1": "static policy: no attribute writes", "p04.b2": "answers, verdicts in the parent",
         "p04.b3": "synchronize, new inputs, checksums",
         "o04.server": "Sandbox server (uvicorn)", "o04.server_sub": "never imports torch",
         "o04.spawn": "new process per request",
@@ -233,10 +233,10 @@ T = {
         "o04.s3b": "Timing, checksums", "o04.s3bs": "write runner.json",
         "o04.s4": "4. Compare with reference outputs", "o04.s4s": "same seeds, read with weights_only=True",
         "o04.s5": "5. Reference timing", "o04.s5s": "compare timed output checksums",
-        "o04.s6": "6. Write the verdict JSON", "o04.s6s": "after the child tree ends",
+        "o04.s6": "6. Write the verdict JSON", "o04.s6s": "last, after runner.py exits",
         "o04.none": "What the child never gets", "o04.none_sub": "reference outputs, tokens in pod env",
         "o04.out_top": ["candidate code, seeds"], "o04.out_bot": ["env allowlist,", "new session, timeout"],
-        "o04.in_top": ["outputs per seed,", "runner.json"], "o04.in_bot": ["size limit, type checks"],
+        "o04.in_top": ["outputs per seed,", "runner.json"], "o04.in_bot": ["runner.json:", "1 MiB cap, type checks"],
     },
 }
 
@@ -390,6 +390,10 @@ def production_02(lang: str) -> Figure:
             fig.box(540, cy - bh / 2, 204, bh, t[res], t[res_sub], icon=ico, gid=f"n:res{i}-{letter}")
             if p == 0:
                 fig.arrow([(188, cy), (538, cy)], color=RED, label=t[act], label_at=(363, cy - 8))
+            elif i == 3:
+                # Narrowed, not closed: the path stays, drawn muted and dashed with no stop mark.
+                fig.arrow([(188, cy), (538, cy)], color=MUTED_STROKE, dash="5 4")
+                texts(fig, 363, cy - 8, t[layer])
             else:
                 fig.line([(188, cy), (468, cy)], color=INK)
                 fig.block(470, cy)

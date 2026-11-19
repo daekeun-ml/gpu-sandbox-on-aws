@@ -4,17 +4,17 @@
 
 ## Pain point
 
-The runtime smoke test (`04_install_gpu_stack.sh`) needs the images (`03_build_push_images.sh`) and the sandbox pools (`06_deploy_sandboxes.sh`) need the namespaces and auth (`05_setup_namespaces_auth.sh`), so skipping ahead ends in `set ... in scripts/config.env` errors or pods that never turn Ready. If you do not know which step starts which billable node, costs keep running after you finish. The smallest unit for Kata + GPU is one `g4dn.metal` (8x T4), so even mistakes unrelated to the GPU get debugged on a 7.8 USD per hour node. The `Running On-Demand G and VT instances` quota counts vCPUs and its documented default can be 0; unless you raise it first, node group creation in `02_create_cluster.sh` fails.
+The runtime smoke test (`04_install_gpu_stack.sh`) needs the images (`03_build_push_images.sh`) and the sandbox pools (`06_deploy_sandboxes.sh`) need the namespaces and auth (`05_setup_namespaces_auth.sh`). Skip the images and the scripts stop with `set ... in scripts/config.env` because the image URI is missing; skip the namespace setup and the pool deployment fails because the `sandbox` namespace does not exist. If you do not know which step starts which billable node, costs keep running after you finish. The smallest unit for Kata + GPU is one `g4dn.metal` (8x T4), so even mistakes unrelated to the GPU get debugged on a 7.8 USD per hour node. The `Running On-Demand G and VT instances` quota counts vCPUs and its documented default can be 0; unless you raise it first, node group creation in `02_create_cluster.sh` fails.
 
-![a: four things that are easy to miss. Skipping 03_build_push_images.sh or 05_setup_namespaces_auth.sh gives a config.env error and pods that never turn Ready, an unraised G and VT quota makes node group creation in 02_create_cluster.sh fail, not knowing which step starts which node keeps nodes billing after you finish, and GPU-unrelated mistakes get debugged on g4dn.metal at 7.824 USD per hour. b: running in number order, scripts stop at an empty or __SET_ME__ value; running the prerequisite check (01_check_prereqs.sh) before 02_create_cluster.sh reads the G and VT quota; running the cleanup (08_cleanup.sh) when done releases every billable resource after a typed confirmation word; running the Kata CPU node step (kata/cpu_nodes.sh) before the Kata GPU node step (kata/gpu_nodes.sh) rehearses on c8i.2xlarge so g4dn.metal is used only for GPU passthrough](../images/figures/handson-00_overview.svg)
+![a: four things that are easy to miss. Skipping 03_build_push_images.sh leaves no image URI and stops with a config.env error, skipping 05_setup_namespaces_auth.sh leaves no sandbox namespace so the pool deploy fails, an unraised G and VT quota makes node group creation in 02_create_cluster.sh fail, not knowing which step starts which node keeps nodes billing after you finish, and GPU-unrelated mistakes get debugged on g4dn.metal at 7.824 USD per hour. b: run in number order, and each script stops when a setting its step needs is empty or __SET_ME__; running the prerequisite check (01_check_prereqs.sh) before 02_create_cluster.sh reads the G and VT quota; running the cleanup (08_cleanup.sh) when done deletes the CDK stack after you type the cluster name, then each AMI recorded in the settings after its own confirmation, and the ECR repositories only with --images; running the Kata CPU node step (kata/cpu_nodes.sh) before the Kata GPU node step (kata/gpu_nodes.sh) rehearses on c8i.2xlarge so g4dn.metal is used only for GPU passthrough](../images/figures/handson-00_overview.svg)
 
-*Takeaway: Miss the order, the quota, a running node or the node you debug on, and you spend more time on debugging and cost control than on the exercise. Number order, the prerequisite check (`01_check_prereqs.sh`), the cleanup (`08_cleanup.sh`) and a `c8i.2xlarge` rehearsal handle each one.*
+*Takeaway: Miss the order, the quota, a running node or the node you debug on, and you spend more time on debugging and cost control than on the exercise. Run the scripts in number order, check the quota before you create the cluster (`01_check_prereqs.sh`) and clean up when you finish (`08_cleanup.sh`). Check GPU-unrelated settings on `c8i.2xlarge` first.*
 
 
 ## Why
 
-- **The number is the run order, and missing values stop it.** Scripts stop at an empty or `__SET_ME__` value in `scripts/config.env`, and the deploy that adds `g4dn.metal` and the delete (`08_cleanup.sh`) wait for a typed confirmation word.
-- **Node groups are added to one CDK stack.** Rerun `02_create_cluster.sh` after changing the scenario, `WITH_KATA_CPU` or `WITH_KATA_GPU`, and CDK changes only what differs, so you can verify the gVisor minimal path before adding Kata.
+- **The number is the run order, and missing values stop it.** Each script stops when a `scripts/config.env` variable that its step needs is empty or contains `__SET_ME__`, and the deploy that adds `g4dn.metal` and the delete (`08_cleanup.sh`) wait for a typed confirmation word.
+- **Node groups are added to one CDK stack.** Rerun `02_create_cluster.sh` after changing `WITH_KATA_CPU` or `WITH_KATA_GPU`, and CDK changes only what differs, so you can verify the gVisor minimal path before adding Kata. Changing the scenario itself also needs `CHANGE_SCENARIO=1`; without it the deploy script stops.
 - **Kata starts with a cheap rehearsal.** Bring up `kata-clh` and `kata-qemu` first on `c8i.2xlarge`, which supports nested virtualization, and turn on `g4dn.metal` only when you need GPU passthrough.
 
 **Before you start:** finish the local smoke test and the `scripts/config.env` setup in [Getting started](../getting_started.md) first. Runtime differences are in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and unfamiliar terms in the "Terms" box below and the [Glossary](../reference/glossary.md).
@@ -65,7 +65,7 @@ The four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key,
 
 ### Node groups and namespaces
 
-Training jobs and sandbox pods use separate node groups and namespaces, and a dedicated taint (`gpusandbox/role`) on the sandbox node groups admits only sandbox pods with the matching toleration.
+Training jobs and sandbox pods use separate node groups and namespaces, and a dedicated taint (`gpusandbox/role`) on the sandbox node groups keeps out every pod without the matching toleration. Node-level DaemonSets such as the NVIDIA device plugin tolerate it too and run there next to the sandbox pods.
 
 ```mermaid
 flowchart LR
@@ -89,7 +89,7 @@ flowchart LR
     T == "POST /v1/evaluate :8000" ==> G & KCP & KGP
 ```
 
-*Takeaway: only the trainer calls the sandbox pools, and the routing ConfigMap decides which pool it calls.*
+*Takeaway: during training the trainer calls the pool the routing ConfigMap points to; during pool verification a Job running as the `sandbox-probe` account calls it.*
 
 | Node group | Default instance | RuntimeClass | Sandbox pool (argument to `06_deploy_sandboxes.sh`) | Created by |
 |---|---|---|---|---|
@@ -115,7 +115,7 @@ sequenceDiagram
     participant CM as ConfigMap sandbox-routing
     participant DNS as CoreDNS
     participant S as sandbox pod (ns sandbox)
-    T->>CM: read a snapshot per reward batch
+    T->>CM: read a snapshot per sandbox call
     CM-->>T: active runtime gvisor, version v1
     T->>DNS: sandbox-gvisor-v1.sandbox.svc.cluster.local
     DNS-->>T: IPs of the Ready pods
@@ -153,12 +153,12 @@ Expected durations are the scripts' guidance or timeouts; only values marked "me
 |---|---|---|---|
 | `scripts/01_check_prereqs.sh` | checks tools (including the CDK CLI and the Session Manager plugin), AWS identity, the G and VT and Standard vCPU quotas, nested virtualization support and which AZs offer the GPU instances (read-only) | short (lookups only) | none |
 | `scripts/02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) | one CDK stack: VPC, EKS control plane (private endpoint), add-ons, system nodes, the node groups of the scenario (A: trainer and gVisor, B1: gVisor, C: Kata CPU), access instance | 20 to 30 min (guidance), about 20 min for scenario C (measured) | EKS control plane, NAT gateway, `m6i.large` x2, `t4g.nano`, `g5.xlarge` x2 (A, B1), `g5.2xlarge` (A only), `c8i.2xlarge` (C or `WITH_KATA_CPU=1`), `g4dn.metal` (`WITH_KATA_GPU=1`) |
-| `scripts/03_build_push_images.sh` (`--no-trainer`) | builds the sandbox, trainer and control images for `linux/amd64` and pushes them to ECR | depends on the build host and network | ECR storage |
+| `scripts/03_build_push_images.sh` (`--no-trainer`) | builds the sandbox, trainer and control images for `linux/amd64` and pushes them to ECR; `--no-trainer` skips the trainer image | depends on the build host and network | ECR storage |
 | `scripts/04_install_gpu_stack.sh` | NVIDIA device plugin (CDI mode), then the `gvisor` RuntimeClass and a smoke pod | Helm `--wait` for the device plugin, smoke pod timeout 15 min | none |
 | `scripts/05_setup_namespaces_auth.sh` | namespaces, NetworkPolicies, ServiceAccounts, JWKS, routing ConfigMap | short | none |
 | `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]` | sandbox pool (Deployment + headless Service) | rollout timeout 30 min | none (uses existing nodes) |
 | `scripts/07_run_grpo.sh [max_steps]` | GRPO training Job (60 steps by default) | see [05](05_grpo_training.md); 5 steps took about 12 min including the image pull and model download (measured, `g5.2xlarge`) | none |
-| `scripts/08_cleanup.sh` (`--images`) | deletes pools, Jobs, the CDK stack (cluster, node groups, VPC, access instance), the AMIs and (ECR) | not recorded (waits for the CloudFormation deletion) | releases everything (the secrets KMS key waits 7 days for deletion) |
+| `scripts/08_cleanup.sh` (`--images`) | deletes pools, Jobs, the CDK stack (cluster, node groups, VPC, access instance), the AMIs and (ECR) | not recorded (waits for the CloudFormation deletion) | releases the CDK stack's resources (the secrets KMS key waits 7 days for deletion). The AMIs are deleted after a prompt when their IDs are in `config.env`; ECR only with `--images`. Lists any remaining instances at the end |
 
 After deploying a pool with `06_deploy_sandboxes.sh`, run the pool verification (`scripts/ops/verify.sh`); after starting training with `07_run_grpo.sh`, run the version switch (`scripts/ops/rollout.sh`). Both are in the table below, and the full run order is in the figure under "Minimal path and full path".
 
@@ -167,22 +167,22 @@ After deploying a pool with `06_deploy_sandboxes.sh`, run the pool verification 
 | Script | What it does | Expected duration | Resources that start billing here |
 |---|---|---|---|
 | `scripts/kata/cpu_nodes.sh` | checks that the Kata CPU node group exists, kata-deploy, the `gvisor-cpu` RuntimeClass, `gvisor-cpu`, `kata-clh` and `kata-qemu` smoke pods | about 14 min (measured, mostly kata-deploy), kata-deploy timeout 20 min | none (the node comes from `02_create_cluster.sh`) |
-| `scripts/kata/gpu_nodes.sh` | the first run bakes the IOMMU AMI and stops; after rerunning `02_create_cluster.sh`: GPU Operator, kata-deploy, checks `nvidia.com/pgpu` | AMI about 10 min (guidance), pgpu wait up to 20 min | AMI builder `m6i.large` (briefly), AMI snapshot (`g4dn.metal` when `02_create_cluster.sh` is rerun) |
+| `scripts/kata/gpu_nodes.sh` | bakes the IOMMU AMI and stops when `KATA_IOMMU_AMI_ID` is empty; after rerunning `02_create_cluster.sh`: GPU Operator, kata-deploy, checks `nvidia.com/pgpu` | AMI about 10 min (guidance), pgpu wait up to 20 min | AMI builder `m6i.large` (briefly), AMI snapshot (`g4dn.metal` when `02_create_cluster.sh` is rerun) |
 | `scripts/ops/verify.sh <runtime> [version]` | isolation evidence, egress denial, golden verdicts, NetworkPolicy check | a few minutes (including the probe Job) | none |
-| `scripts/ops/simulate.sh [steps] [interval_s]` (scenario C) | sends reward batches of golden submissions without a model to watch a version swap; not training | 30 batches x 20 s by default (about 10 min) | none |
-| `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | switches v1 to v2 during training | see [06](06_sandbox_update.md) | none |
+| `scripts/ops/simulate.sh [steps] [interval_s]` (scenario C) | sends reward batches of golden submissions without a model to watch a version swap; not training | 30 batches by default, with 29 waits of 20 s between them. The 2026-11-17 run (`kata-clh-cpu`) took about 16 min (each batch adds its evaluation time) | none |
+| `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | deploys v2 next to v1 during training, verifies it and switches routing to v2. After the trainer log shows the switch, the same command with `--finish` scales v1 to zero (`--finish` skips the deploy and the switch) | see [06](06_sandbox_update.md) | gVisor: two more `g5.xlarge` for v2 (2.012 USD/hour while the node group runs 4 nodes). Kata QEMU: no extra node (v1 and v2 use four each, all eight T4s of the `g4dn.metal`; if experimental `kata-clh` pods hold GPUs, v2 cannot be scheduled) |
 | `scripts/ops/bench.sh [requests]` | compares cold start, latency and speedup per runtime | see [08](08_benchmark.md) | none |
 | `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | claims one sandbox per episode from an Agent Sandbox warm pool and runs multi-turn episodes ([11 Multi-turn episodes](11_multi_turn.md)) | not recorded (local tests only, not run on AWS) | none (uses existing nodes). Each idle warm sandbox holds one accelerator |
 | `scripts/hyperpod/build_b2_ami.sh` (scenario B2) | builds the custom AMI for the sandbox instance group; run before `hyperpod/create.sh --b2` | 20 to 40 min (estimate) | builder `m6i.large` (during the build), AMI snapshot |
 | `scripts/hyperpod/create.sh` (`--b2`) | creates the HyperPod cluster and attaches it to the same EKS cluster; `--b2` adds the sandbox instance group | 15 to 30 min until InService (guidance) | HyperPod `ml.g5.2xlarge` (B2 adds `ml.g5.xlarge` x2) |
-| `scripts/hyperpod/check_gvisor.sh` (scenario B2) | prints each HyperPod node's driver version and whether gVisor nvproxy supports it (read-only apart from short-lived debug pods) | see [07](07_hyperpod.md) | none |
+| `scripts/hyperpod/check_gvisor.sh` (scenario B2) | prints each HyperPod node's driver version and whether gVisor nvproxy supports it (creates a debug pod per node and, at the end, deletes every pod in the `default` namespace whose name starts with `node-debugger-`) | see [07](07_hyperpod.md) | none |
 | `scripts/hyperpod/run_grpo.sh [max_steps]` | GRPO training that scenario B runs instead of `07_run_grpo.sh` | see [07](07_hyperpod.md) | none |
 | `scripts/hyperpod/delete.sh` | deletes the HyperPodPyTorchJobs, the HyperPod cluster, the execution role and the lifecycle bucket | see [07](07_hyperpod.md) | releases the HyperPod resources |
-| see [09 Demo site](09_demo_site.md) (optional) | deploys a static demo site that replays a recorded evaluation log (JSON) through a private S3 bucket and CloudFront. Visitors never reach the cluster or a GPU | see [09](09_demo_site.md) | S3 storage, CloudFront requests and transfer |
+| see [09 Demo site](09_demo_site.md) (optional) | deploys a static demo site that replays a recorded evaluation log (JSON) through a private S3 bucket and CloudFront. Visitors never reach the cluster or a GPU | see [09](09_demo_site.md) | S3 storage, CloudFront requests and transfer, AWS WAF (about 10 USD a month even with no visitors) |
 
-Scenario B runs `scripts/hyperpod/create.sh` after `02_create_cluster.sh` (15 to 30 min until InService, per its guidance) and uses `scripts/hyperpod/run_grpo.sh` instead of `07_run_grpo.sh`. For cleanup, run `scripts/hyperpod/delete.sh` before `08_cleanup.sh`.
+Scenario B runs `scripts/hyperpod/create.sh` after `02_create_cluster.sh` (15 to 30 min until InService, per its guidance; B2 builds the custom AMI first and adds `--b2` to create the sandbox instance group too) and uses `scripts/hyperpod/run_grpo.sh` instead of `07_run_grpo.sh`. For cleanup, run `scripts/hyperpod/delete.sh` before `08_cleanup.sh`.
 
-The Kata node groups have no script of their own; rerunning `02_create_cluster.sh` adds them. For Kata CPU, add `WITH_KATA_CPU=1` to `scripts/config.env`, then run `02_create_cluster.sh` and `kata/cpu_nodes.sh`. For Kata GPU, the first run of `kata/gpu_nodes.sh` bakes the AMI; add `KATA_IOMMU_AMI_ID` and `WITH_KATA_GPU=1`, then run `02_create_cluster.sh` and `kata/gpu_nodes.sh` again. Rerun `02_create_cluster.sh` with the same option as the first time (`--hyperpod`, `--cpu-only` and so on).
+The Kata node groups have no script of their own; rerunning `02_create_cluster.sh` adds them. For Kata CPU, add `WITH_KATA_CPU=1` to `scripts/config.env`, then run `02_create_cluster.sh` and `kata/cpu_nodes.sh`. For Kata GPU, run `kata/gpu_nodes.sh` with `KATA_IOMMU_AMI_ID` empty to bake the AMI; add the printed `export KATA_IOMMU_AMI_ID=...` line as is and set `WITH_KATA_GPU` to `"1"`, then run `02_create_cluster.sh` and `kata/gpu_nodes.sh` again. Rerun `02_create_cluster.sh` with the same option as the first time (`--hyperpod`, `--cpu-only` and so on).
 
 ## Minimal path and full path
 
@@ -202,7 +202,7 @@ flowchart LR
 | Steps | 01 to 08, pool verification (`ops/verify.sh`), version switch (`ops/rollout.sh`) (the benchmark `ops/bench.sh` and the 09 demo site are optional) | minimal path + rerun of `02_create_cluster.sh` (`WITH_KATA_CPU`, `WITH_KATA_GPU`), `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh`, `06_deploy_sandboxes.sh` and `ops/verify.sh` for the Kata pools, `ops/bench.sh` |
 | Sandbox pools | `gvisor` | `gvisor`, `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`, `kata-qemu` (experimental `kata-clh`) |
 | Extra nodes | none | `c8i.2xlarge` x1, `g4dn.metal` x1 |
-| G and VT vCPUs (scenario A) | 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2) | 112 (16 + `g4dn.metal` 96) |
+| G and VT vCPUs (scenario A) | 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2), 24 during a version switch (4 `g5.xlarge`) | 112 (16 + `g4dn.metal` 96), 120 during a version switch |
 | When | your first run, or when gVisor's isolation level is enough | to compare VM-boundary isolation, or when you need Kata + GPU |
 
 Every runtime uses the same sandbox image, `/v1/evaluate` API and verification script (`ops/verify.sh`). The 09 demo site is optional and independent of the cluster, so you can deploy it right away with the recording shipped in the repository (made on a laptop CPU pool).
@@ -221,8 +221,8 @@ The table below is an **estimate** from On-Demand list prices, not a measured bi
 | **Compute total** | | | **about 3.42** | **about 11.61** |
 | EKS control plane (standard support) | 1 | 0.10 | 0.10 | 0.10 |
 
-- In scenario B the trainer becomes `ml.g5.2xlarge` (1.515 USD/hour), so the compute total is about 3.72 for the minimal path and about 11.92 for the full path.
-- Not included above: the access instance (`t4g.nano`), the secrets KMS key, CloudWatch logs (control plane logs, VPC flow log), the NAT gateway (hourly and per-GB charges), EBS volumes (system 50 GB x2, trainer 200 GB, gVisor 100 GB x2, Kata CPU 100 GB, Kata GPU 200 GB), data transfer, ECR storage, AMI snapshots, the image build host, and S3 and CloudFront for the 09 demo site.
+- In scenario B1 the trainer becomes `ml.g5.2xlarge` (1.515 USD/hour), so the compute total is about 3.72 for the minimal path and about 11.92 for the full path. B2 also moves the sandboxes to two `ml.g5.xlarge`, about 4.52 for the default layout ([07](07_hyperpod.md)).
+- Not included above: the access instance (`t4g.nano`), the secrets KMS key, CloudWatch logs (control plane logs, VPC flow log), the NAT gateway (hourly and per-GB charges), EBS volumes (system 50 GB x2, trainer 200 GB, gVisor 100 GB x2, Kata CPU 100 GB, Kata GPU 200 GB), data transfer, ECR storage, AMI snapshots, the image build host, and S3, CloudFront and AWS WAF for the 09 demo site.
 - `g4dn.metal` in the Seoul Region (ap-northeast-2) is 9.624 USD per hour.
 
 !!! warning "GPU nodes bill until you delete them"
@@ -238,14 +238,14 @@ The table below is an **estimate** from On-Demand list prices, not a measured bi
 
 ## Prerequisites
 
-1. **Tools:** `aws`, `cdk` (AWS CDK CLI 2.1148.1 or later), `node` (Node.js 22 or 24), `kubectl`, `helm`, `docker` (with buildx), `python3`, `jq`, `session-manager-plugin` (Session Manager plugin for the AWS CLI). Scenario B also needs `git`, and `01_check_prereqs.sh` checks this list. The one-time CDK setup (installing `cdk/requirements.txt`, `cdk bootstrap`) is in [01 Cluster and images](01_cluster_and_images.md).
-2. **Settings file:** `cp scripts/config.env.example scripts/config.env`, then check `SCENARIO`, `WITH_KATA_CPU` and `WITH_KATA_GPU`. If you leave `ADMIN_PRINCIPAL_ARN` empty, the IAM role you are using becomes the cluster admin (details in [01 Cluster and images](01_cluster_and_images.md)).
+1. **Tools:** `aws`, `cdk` (AWS CDK CLI 2.1148.1 or later), `node` (Node.js 22 or 24), `kubectl`, `helm`, `docker`, `python3`, `jq`, `session-manager-plugin` (Session Manager plugin for the AWS CLI). `01_check_prereqs.sh` checks this list. It does not check buildx, which the image build uses, so run `docker buildx version` yourself. Scenario B also needs `git` (checked by `hyperpod/create.sh`). The one-time CDK setup (installing `cdk/requirements.txt`, `cdk bootstrap`) is in [01 Cluster and images](01_cluster_and_images.md).
+2. **Settings file:** open the `scripts/config.env` you made in [Getting started](../getting_started.md) and check `SCENARIO`, `WITH_KATA_CPU` and `WITH_KATA_GPU`. Only if the file does not exist, create it with `cp scripts/config.env.example scripts/config.env`; copying over a filled-in file resets it to the example values. If you leave `ADMIN_PRINCIPAL_ARN` empty, the IAM user or role you are using becomes the cluster admin. From a role session the script derives the role ARN from the session, so if the role has a path, put its full ARN in `ADMIN_PRINCIPAL_ARN` (details in [01 Cluster and images](01_cluster_and_images.md)).
 3. **EC2 quotas (vCPU-based):**
-    - `Running On-Demand G and VT instances`: 16 for the minimal path, 112 for the full path (one `g4dn.metal` is 96). The documented default can be 0.
+    - `Running On-Demand G and VT instances`: 16 for the minimal path, 112 for the full path (one `g4dn.metal` is 96). A version switch (`ops/rollout.sh`) starts two v2 pods while v1 keeps running, so it needs two more `g5.xlarge` (8) in the meantime: 24 and 120. The documented default can be 0.
     - `Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances`: the system nodes 4 (`m6i.large` 2 x 2) plus the access instance 2 (`t4g.nano`, T family) make 6 for the minimal path; the full path adds `c8i.2xlarge` 8 and the AMI builder 2, up to 16. The documented default is 5, so check it even for the minimal path (vCPU counts computed from the instance specs).
     - Scenario B: the SageMaker `ml.g5.2xlarge for cluster usage` quota. B2 also needs 2 of the `ml.g5.xlarge for cluster usage` quota for the `sandbox` instance group (`HYPERPOD_SANDBOX_COUNT`).
 
-    Find the quotas in the Service Quotas console → AWS services → Amazon EC2 by searching for `Running On-Demand`, in `AWS_REGION` because values differ by Region. The "Applied account-level quota value" must exceed what you need.
+    Find the EC2 vCPU quotas in the Service Quotas console → AWS services → Amazon EC2 by searching for `Running On-Demand`. Check the scenario B `ml.* for cluster usage` quotas separately under Amazon SageMaker in the same console (`01_check_prereqs.sh` reads only the two EC2 quotas). Quotas differ by Region, so check them in `AWS_REGION`. The "Applied account-level quota value" must exceed what you need.
 
     ![Service Quotas: Running On-Demand G and VT instances, applied value 768, AWS default 0](../images/console/quotas-gvt.png)
 
@@ -262,13 +262,13 @@ The detailed output is under "What to look for" on each page; when something fai
 |---|---|
 | `01_check_prereqs.sh` | quota values, `nested-virtualization` support and AZ lists are printed, and the last log line is `Done. Request quota increases before 02_create_cluster.sh ...` |
 | `02_create_cluster.sh` | the CDK `Outputs` show `EndpointPublicAccess = false`; with the tunnel open, `kubectl get nodes` shows 2 system nodes plus the scenario's nodes (A: 1 trainer, 2 sandbox-gvisor; C: 1 sandbox-kata) |
-| `03_build_push_images.sh` | three export lines: `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI`, `CONTROL_IMAGE_URI` |
-| `04_install_gpu_stack.sh` | GPU 1 on every `gpusandbox/device-plugin=cdi` node (it can briefly be `0` right after the plugin restarts), then `cuda ok: NVIDIA A10G 2048.0` from the smoke pod |
+| `03_build_push_images.sh` | three export lines: `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI`, `CONTROL_IMAGE_URI` (two without `TRAINER_IMAGE_URI` with `--no-trainer`) |
+| `04_install_gpu_stack.sh` | GPU 1 on every `gpusandbox/device-plugin=cdi` node (it can briefly be `0` right after the plugin restarts). A and B1 then show `cuda ok: NVIDIA A10G 2048.0` from the smoke pod; B2 and C end with the log `skipping the gvisor RuntimeClass and the smoke pod` (the GPU table is empty while there is no GPU node yet) |
 | `kata/cpu_nodes.sh` | the `kernel seen inside: ...` kernels of `gvisor-cpu`, `kata-clh` and `kata-qemu` all differ from the host kernel |
 | `kata/gpu_nodes.sh` | `pgpu=8  cc.ready.state=false` |
-| `05_setup_namespaces_auth.sh` | the start of routing.json shows `"active": {"runtime": "gvisor", "version": "v1"}` |
+| `05_setup_namespaces_auth.sh` | `"active"` at the start of routing.json matches the pool you use first: the default `{"runtime": "gvisor", "version": "v1"}` for A and B1, `gvisor-hyperpod` for B2, `kata-clh-cpu` for C (each set with `ACTIVE_RUNTIME`) |
 | `06_deploy_sandboxes.sh` | rollout complete, pods `1/1 Running` |
-| `ops/verify.sh` | `pool sandbox-<runtime>-<version> verified` after all four checks pass |
+| `ops/verify.sh` | `pool sandbox-<runtime>-<version> verified` after checks 2 to 4 pass. The script does not judge check 1 (kernel comparison), so confirm that the two printed values differ |
 
 !!! warning "Validation status"
     What has been run on AWS:
@@ -279,7 +279,7 @@ The detailed output is under "What to look for" on each page; when something fai
     - **2026-11-18 (continued):** the same day, on another cluster, `kata/gpu_nodes.sh` (IOMMU AMI, GPU Operator, `pgpu=8`), `kata/cpu_nodes.sh`, `ops/verify.sh` for `kata-qemu` and the three CPU pools, and `ops/bench.sh` on five pools were run ([08](08_benchmark.md), [03](03_kata.md)).
     - **Not run:** `ops/rollout.sh` during training (scenario A), HyperPod B1 and B2 (from the HyperPod cluster creation on), and the experimental Kata CLH GPU (attempted; the VM did not start). The signals of these steps come from the script code.
 
-    Locally (CPU, no AWS) the 94 `pytest` tests (including manifest rendering and user data) and the 18 CDK tests in `cdk/tests` pass, so verify each step yourself with the "What to look for" checks on each page.
+    Locally (CPU, no AWS) the `pytest` tests (94 at the time, 105 now, including manifest rendering and user data) and the 18 CDK tests in `cdk/tests` pass, so verify each step yourself with the "What to look for" checks on each page.
 
 ## Next step
 

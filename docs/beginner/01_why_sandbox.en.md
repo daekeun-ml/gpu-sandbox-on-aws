@@ -13,9 +13,8 @@ A model can write dangerous code even without bad intent. You only know whether 
 
 ## Why
 
-- **When you split the risks up concretely, you can see where to block them.** Instead of the vague word "hacking," we look at them one by one, such as reading files or stealing credentials.
-- **We stack defenses in layers.** Setting things up so the next layer stops an attack even if one layer is broken is called defense in depth.
-- **We rely on experiment results.** We use the AWS tech blog series' EKS experiments together with the design of this repository.
+- **Each risk is blocked by a different setting.** Pod security settings and the isolation runtime stop reads of server files, network rules and node settings stop credential theft, and network rules stop data from being sent out.
+- **Defenses are stacked in layers.** For example, network rules and the EC2 metadata settings both guard the path to node credentials. Stacking more than one defense on a risk like this is called defense in depth. Some risks, such as sending data to the internet, are blocked by one layer only.
 
 **Before you start:** None. The overall order is in [Before you begin](index.md).
 
@@ -34,20 +33,20 @@ What a program run for grading can do falls into the six risks below, and each i
 
 | Risk | Picture code like this | What blocks it |
 |---|---|---|
-| Reading server files | Opens `/etc/shadow` or another user's files | pod security settings (non-root user, dropped privileges, read-only file system) and the isolation runtime |
+| Reading server files | Opens `/etc/shadow` or another user's files | Not mounting the host file system into the pod, pod security settings (non-root user, dropped privileges), and the isolation runtime |
 | Stealing credentials | Connects to `169.254.169.254` (IMDS) and takes the node's AWS permissions | NetworkPolicy, and the node settings of IMDSv2 required and hop limit 1 |
 | Spreading elsewhere | Calls the Kubernetes API or connects to a neighboring sandbox | NetworkPolicy, and the setting that puts no token in the pod |
 | Kernel attack | Triggers a kernel bug to escape from the container | Isolation runtime (gVisor, Kata) |
-| Hogging resources | Freezes the whole node with infinite recursion or a burst of processes | CPU and memory limits and an execution time limit |
+| Hogging resources | Keeps using CPU and memory with a computation that never ends | CPU and memory limits and an execution time limit |
 | Exfiltrating data | Sends results or data to another server on the internet | Blocking outbound traffic (egress) |
 
 A model in reinforcement learning tries every way to raise its score and really does open files or touch the code that measures time along the way, so these are blocked regardless of intent.
 
 ## Not one layer but many
 
-![An arrow from the code the model wrote to the server's files, credentials and network passes six layers in turn: 1 pod security settings (reading server files), 2 isolation runtime, gVisor or Kata (kernel attack), 3 network rules, NetworkPolicy (exfiltrating data, spreading), 4 node settings, IMDSv2, hop limit 1, node guard (stealing credentials), 5 no credentials (spreading elsewhere), 6 resource and time limits (hogging resources). The parentheses give the main risk each layer blocks](../images/figures/beginner-01_why_sandbox--layers.svg)
+![A table of the six layers and the risks each one blocks. The rows are 1 pod security settings (non-root user, dropped privileges), 2 isolation runtime (gVisor or Kata), 3 network rules (NetworkPolicy, outbound denied by default; new connections a pod opens to its own node are blocked by the node guard in 4), 4 node settings (IMDSv2 required, hop limit 1, node guard), 5 no credentials (no AWS keys and no service account token of its own in the sandbox pod; the server uses the token the caller sends to verify the caller), 6 resource and time limits (CPU, memory, execution time). A dot marks a risk the layer blocks: reading server files by 1 and 2, stealing credentials by 3 and 4, spreading elsewhere by 3 and 5, kernel attack by 2, hogging resources by 6, exfiltrating data by 3. Some risks are blocked by several layers](../images/figures/beginner-01_why_sandbox--layers.svg)
 
-*Takeaway: To reach the server's files, credentials or network, code has to pass all six layers, and each layer handles a different risk.*
+*Takeaway: Each of the six layers mainly handles a different risk. File access is limited by the pod's permissions and the isolation runtime, and outbound connections are blocked by the network rules. Several layers can work against the same risk.*
 
 
 Part 1 of the AWS tech blog tried the same attacks on EKS against a regular container and against gVisor, and reports that of the four check items, three were blocked by the pod security settings, not by gVisor.
@@ -56,9 +55,9 @@ Part 1 of the AWS tech blog tried the same attacks on EKS against a regular cont
 |---|---|---|
 | 1. pod security settings | Runs as a non-root user, drops privileges, uses a read-only file system, turns off automatic token mounting | Defaults of the sandbox pod (`uid 10001`, `capabilities: drop ALL`, `readOnlyRootFilesystem`) |
 | 2. Isolation runtime | Intercepts system calls (gVisor) or runs in a separate VM altogether (Kata) | Chosen per pod with `RuntimeClass`. Details in [chapter 02](02_container_vs_sandbox.md) |
-| 3. Network rules | Allows inbound connections only from whoever asked for grading, and blocks all outbound connections | Default deny in the `sandbox` namespace |
+| 3. Network rules | Allows inbound connections only from whoever asked for grading, and blocks outbound connections by default. The EKS VPC CNI always allows traffic between a pod and its own node. The node guard in layer 4 drops new connections that a pod opens to its own node, and allows the node's health checks on the pod and their replies | Default deny in the `sandbox` namespace |
 | 4. Node settings | Keeps pods from reaching the node's credentials (IMDS) and the node's own services | IMDSv2 required, hop limit 1, node guard |
-| 5. No credentials | Keeps no AWS keys or Kubernetes tokens inside the sandbox | The sandbox holds no secret values |
+| 5. No credentials | Mounts no AWS keys and no service account token of its own into the sandbox pod | `automountServiceAccountToken: false`, no secrets. The server uses the caller's token, sent with each grading request, to verify the caller |
 | 6. Resource and time limits | Caps CPU, memory, and execution time | The pod's requests and limits, a time limit per evaluation |
 
 !!! question "❓ Misconception: I created NetworkPolicy rules, so traffic is already blocked"

@@ -1,21 +1,20 @@
 # 보안
 
-**TL;DR** 모델이 만든 코드는 신뢰할 수 없는 입력으로 취급하고, 런타임 격리(gVisor 또는 Kata)와 함께 pod, 네트워크, 노드, 토큰, 프로세스 통제를 여러 계층으로 적용합니다. 이 통제로 막지 못하는 위험은 별도로 정리해 둡니다.
+**TL;DR** 모델이 만든 코드는 신뢰할 수 없는 입력으로 취급하고, 런타임 격리(gVisor 또는 Kata)와 함께 pod, 네트워크, 노드, 토큰, 프로세스 통제를 여러 계층으로 적용합니다. gVisor의 호스트 드라이버 공유처럼 이 통제로 막지 못하는 위험도 남습니다.
 
 ## 기존 Pain Point
 
 일반 컨테이너(runc)는 호스트 커널과 NVIDIA 드라이버를 그대로 사용합니다. 샌드박스 pod에 ServiceAccount token이나 시크릿이 있으면 후보 코드가 이를 읽을 수 있습니다. VPC CNI NetworkPolicy는 standard 모드에서 pod가 시작된 뒤 비동기로 적용되고, pod와 그 pod가 실행 중인 노드 IP 사이의 통신은 정책과 관계없이 허용해요. 같은 pod에서 다음 평가를 실행하면 이전 평가가 남긴 프로세스, 캐시, GPU 상태가 그대로 남아 있을 수도 있습니다.
 
-![a: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 NVIDIA 드라이버를 그대로 공유합니다. 또 pod 안의 ServiceAccount token과 시크릿을 읽고, NetworkPolicy와 관계없이 허용되는 자기 노드 IP의 로컬 서비스에 접속하며, 같은 pod에서 이어서 실행되는 다음 평가에 남은 프로세스, 캐시, GPU 상태를 넘깁니다. b: 샌드박스 pod(gVisor 또는 Kata)에서는 네 경로를 각각 다른 통제로 차단합니다. 커널 경로는 gVisor Sentry 또는 Kata VM이 차단하고(gVisor는 호스트 드라이버를 공유), 토큰과 시크릿은 pod에 넣지 않습니다. 노드 경로는 노드 가드와 readiness 확인이, 다음 평가 경로는 프로세스 정리, 요청별 캐시, pod 재활용이 차단합니다.](../images/figures/production-02_security.svg)
+![a: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 NVIDIA 드라이버를 그대로 공유합니다. 또 pod 안의 ServiceAccount token과 시크릿을 읽고, NetworkPolicy와 관계없이 허용되는 자기 노드 IP의 로컬 서비스에 접속하며, 같은 pod에서 이어서 실행되는 다음 평가에 남은 프로세스, 캐시, GPU 상태를 넘깁니다. b: 샌드박스 pod(gVisor 또는 Kata)에서는 네 경로를 각각 다른 통제로 막거나 줄입니다. 커널 경로는 gVisor Sentry 또는 Kata VM이 차단하고(gVisor는 호스트 드라이버를 공유), 토큰과 시크릿은 pod에 넣지 않습니다. 노드 경로는 노드 가드가 차단하고 readiness가 그 차단을 확인합니다. 다음 평가로 가는 경로는 프로세스 정리와 요청별 캐시로 줄일 뿐 막지는 못합니다(점선). v1은 pod 재활용을 끄고, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 씁니다.](../images/figures/production-02_security.svg)
 
-*그림 요약: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 드라이버, pod 안의 자격 증명, 자기 노드, 다음 평가에 모두 접근할 수 있습니다. 샌드박스 pod에서는 계층마다 이 중 한 경로를 차단합니다.*
+*그림 요약: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 드라이버, pod 안의 자격 증명, 자기 노드, 다음 평가에 모두 접근할 수 있습니다. 샌드박스 pod에서는 계층마다 이 중 한 경로를 막습니다. 다음 평가로 가는 경로는 프로세스 정리와 요청별 캐시로 줄이지만, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 계속 쓰고 v1은 pod 재활용을 끕니다.*
 
 
 ## Why
 
 - **계층마다 다른 위험을 차단합니다.** 런타임은 커널 접근을, NetworkPolicy는 egress를, 노드 가드는 VPC CNI의 노드 IP 예외를 담당합니다. pod는 egress가 실제로 차단됐는지 확인한 뒤에만 Ready가 돼요.
 - **pod에 없는 자격 증명은 탈취할 수 없습니다.** 샌드박스 pod에는 API token도 시크릿도 넣지 않습니다.
-- **남는 위험을 문서로 명시합니다.** 운영자는 이 목록을 보고 런타임과 노드 분리 수준을 결정할 수 있습니다.
 
 **사전 지식**: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md)에서 풀과 토큰 배포 절차를 먼저 보세요.
 
@@ -59,7 +58,7 @@
 | 컨테이너 | UID 10001 non-root, 읽기 전용 root FS, `drop: ["ALL"]`, `allowPrivilegeEscalation: false`, seccomp `RuntimeDefault`, `/work` 8Gi와 `/tmp` 2Gi emptyDir, ephemeral-storage 12Gi | [`deployment.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/deployment.yaml.tpl), [`sandbox/Dockerfile`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/sandbox/Dockerfile) | |
 | 네트워크 | `sandbox` namespace 기본 거부(ingress, egress), 허용된 호출자만 TCP 8000 | [`networkpolicies.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/networkpolicies.yaml), [`gateway.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/gateway.yaml.tpl) | standard 모드에서는 정책이 적용되기 전까지 새 pod가 default allow로 시작합니다. 이 구간은 readiness 확인이 보완합니다. |
 | 클러스터 API | EKS API endpoint는 private 전용. 운영자는 inbound 규칙이 없는 SSM access instance를 거쳐 포트 포워딩으로 접속 | [`stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py), [`tunnel.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/tunnel.sh) | public endpoint는 `EKS_PUBLIC_ACCESS_CIDR`에 /32 하나를 지정할 때만 활성화됩니다. |
-| IMDS | hop limit 1 (Karpenter 기본값, CDK 스택의 모든 launch template은 IMDSv2 필수와 hop limit 1) | [`nodeclasses.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodeclasses.yaml.tpl), [`stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py) | |
+| IMDS | hop limit 1 (Karpenter 기본값). CDK 스택의 노드 launch template은 IMDSv2 필수와 hop limit 1, SSM 접속 인스턴스는 IMDSv2 필수(hop limit은 지정하지 않음) | [`nodeclasses.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodeclasses.yaml.tpl), [`stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py) | |
 | 노드 가드 | pod veth(`eni+`)에서 노드로 들어오는 새 연결을 iptables chain `GPUSANDBOX-GUARD`가 DROP, 응답(ESTABLISHED, RELATED)만 허용, kubelet보다 먼저 systemd로 적용 | [`node-guard.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/eks/node-guard.sh) | |
 | Readiness | `169.254.169.254:80`, API server, `$(NODE_IP):10250`에 연결되지 않아야 Ready. 연결 거부(refused)도 도달한 것으로 판정. 차단돼 있으면 30초, 연결되면 5초마다 재확인 | [`server/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py) | |
 | 프로세스 | 서버는 torch를 import하지 않음. 평가가 끝나면 서버와 그 조상(tini PID 1)을 뺀 모든 프로세스를 SIGKILL, timeout이면 자식 session 전체를 kill | [`server/procs.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py), [`harness/evaluate.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/evaluate.py) | |
@@ -81,7 +80,7 @@ sequenceDiagram
     T->>G: Bearer 토큰 (trainer)
     G->>K: TokenReview (audiences gpu-sandbox-gateway)
     K-->>G: authenticated, username
-    G->>G: GATEWAY_ALLOWED_SUBJECTS 확인 (없으면 403)
+    G->>G: GATEWAY_ALLOWED_SUBJECTS 확인 (목록에 없으면 403, 목록이 비어 있으면 401)
     Note over G: 자기 projected token, aud gpu-sandbox
     G->>S: Bearer 토큰 (gateway)
     S->>S: JWKS로 RS256 서명, iss, aud, exp offline 검증
@@ -94,16 +93,17 @@ sequenceDiagram
 - **샌드박스는 offline으로 검증합니다.** ConfigMap `sandbox-auth-jwks`의 공개 키로 RS256 서명과 `exp`, `iat`, `iss`, `aud`, `sub`를 확인하고(leeway 30초), 파일이 바뀌면 다시 읽습니다. 샌드박스는 Kubernetes API를 호출하지 않으므로 pod에 토큰이 필요 없어요.
 - **gateway는 TokenReview를 씁니다.** API server가 직접 토큰을 확인하므로 offline 검증보다 엄격하고, 코드 주석에 따르면 삭제된 pod의 토큰도 거부합니다. gateway는 성공 결과를 토큰 해시를 키로 60초 동안 캐시합니다. 그래서 요청이 수천 건이어도 TokenReview 호출이 수천 건으로 늘지 않지만, 무효가 된 토큰이 최대 60초 동안 통과할 수 있어요.
 - **샌드박스에 보내는 토큰의 수명을 짧게 설정합니다.** offline 검증은 pod 삭제 여부를 확인할 수 없고 토큰은 `exp`까지 유효하므로, projected token의 `expirationSeconds`를 3600으로 설정합니다.
-- **설정이 없으면 거부합니다(fail closed).** 샌드박스는 audience, issuer, allowlist, JWKS 중 하나라도 없거나 읽을 수 없으면 보호된 경로에서 모두 401을 반환합니다. gateway도 audience나 allowlist가 비어 있으면 모든 요청을 거부합니다. `SANDBOX_AUTH_TEST_BYPASS=1`은 loopback 로컬 테스트 전용이고 기본값은 비활성입니다.
+- **설정이 없으면 거부합니다(fail closed).** 샌드박스는 audience, issuer, allowlist, JWKS 중 하나라도 없거나 읽을 수 없으면 보호된 경로에서 모두 401을 반환합니다. gateway도 audience나 allowlist가 비어 있으면 평가와 `/metrics` 요청에 401을 반환합니다. `/readyz`는 routing 표만 확인하므로, routing 표가 유효하면 이 상태에서도 gateway pod는 Ready로 보여요. `SANDBOX_AUTH_TEST_BYPASS=1`은 loopback 로컬 테스트 전용이고 기본값은 비활성입니다.
 - **노출을 줄입니다.** 서버와 gateway의 기본 bind는 `127.0.0.1`이고, Deployment가 pod 네트워크 안에서만 `0.0.0.0`으로 바꿉니다. Service는 ClusterIP 타입만 쓰고(샌드박스는 headless), 정적 매니페스트 테스트가 NodePort나 LoadBalancer가 없는지 확인해요. Ray dashboard 같은 웹 UI는 ClusterIP Service에 `kubectl port-forward`로 접속합니다(기본적으로 localhost에서만 열립니다).
 - **probe 경로는 상세 정보를 반환하지 않습니다.** kubelet probe는 토큰을 붙일 수 없으므로 `/healthz`와 `/readyz`는 인증 없이 호출할 수 있지만 상세 정보 없이 응답합니다. `/info`, `/metrics`, `/v1/evaluate`는 토큰이 필요해요.
-- **JWKS 회전을 자동으로 반영합니다.** `jwks-sync` CronJob이 매시 17분(`17 * * * *`, `concurrencyPolicy: Forbid`)에 `/openid/v1/jwks`를 읽어 ConfigMap을 patch합니다. 이 Job의 ServiceAccount에는 `sandbox-auth-jwks` 하나에 대한 get과 patch 권한만 있고, Job은 빈 키 집합을 게시하지 않아요. ConfigMap 변경 내용은 kubelet 동기화 주기가 지난 뒤에 pod에 마운트된 파일에 반영됩니다. 키가 바뀐 직후 늘어나는 401은 401 비율 알람으로 감지하세요.
+- **JWKS 회전을 자동으로 반영합니다.** `jwks-sync` CronJob이 매시 17분(`17 * * * *`, `concurrencyPolicy: Forbid`)에 `/openid/v1/jwks`를 읽어 ConfigMap을 patch합니다. 이 Job의 ServiceAccount에는 `sandbox-auth-jwks` 하나에 대한 get과 patch 권한만 있고, Job은 빈 키 집합을 게시하지 않아요. ConfigMap 변경 내용은 kubelet 동기화 주기가 지난 뒤에 pod에 마운트된 파일에 반영됩니다. 기본 지표에는 HTTP 상태 코드 label이 없고, 샌드박스가 돌려준 401은 gateway에서 다른 원인의 `sandbox_error`와 합산됩니다. 키가 바뀐 직후의 인증 실패는 `sandbox_error` 비율 상승으로 감지하고, 결과의 `error` 본문(`HTTP 401: ...`)으로 JWKS 문제인지 확인하세요. 401만 따로 감시하려면 상태 코드별 집계를 직접 추가해야 해요.
 
-production에서 샌드박스 호출자를 gateway와 검증 Job으로 줄이려면, 배포할 때 allowlist(`scripts/06_deploy_sandboxes.sh`의 기본값은 trainer, probe, gateway)를 덮어씁니다. 아래 명령은 allowlist에서 trainer를 제외하고 gVisor v1 풀을 다시 배포해요.
+production에서 샌드박스 호출자를 gateway와 검증 Job으로 줄이려면, 배포할 때 allowlist(`scripts/06_deploy_sandboxes.sh`의 기본값은 trainer, probe, gateway)를 덮어씁니다. 세 번째 인자(replica 수)를 생략하면 스크립트가 프로필의 기본값(gVisor는 `GVISOR_NODES`, 기본 2)을 다시 적용하므로, 운영 중에 늘린 풀이 줄어들 수 있습니다. 아래 명령은 현재 replica 수를 유지한 채 allowlist에서 trainer를 제외하고 gVisor v1 풀을 다시 배포해요.
 
 ```bash
+replicas="$(kubectl -n sandbox get deployment sandbox-gvisor-v1 -o jsonpath='{.spec.replicas}')"
 SANDBOX_ALLOWED_SUBJECTS="system:serviceaccount:sandbox-gateway:gateway,system:serviceaccount:rl-trainer:sandbox-probe" \
-  scripts/06_deploy_sandboxes.sh gvisor v1
+  scripts/06_deploy_sandboxes.sh gvisor v1 "$replicas"
 ```
 
 확인할 것: pod template의 env가 바뀌므로 pod가 하나씩 다시 생성되고(Kata라면 새 VM), rollout이 끝나면 READY가 다시 `1/1`이 됩니다. 실제로 적용된 값은 아래 명령으로 확인합니다.
@@ -124,7 +124,7 @@ kubectl -n sandbox get pod "$pod" \
 4. **GPU firmware 상태가 남는지는 확인하지 않았습니다.** NVIDIA는 VFIO reset이 모든 GPU 상태를 지운다고 보장하지 않으며, T4의 `reset_method=bus`는 제3자 보고입니다.
 5. **정적 정책은 보안 경계가 아닙니다.** 이 설계는 후보 코드가 pod 안에서 임의의 Python을 실행할 수 있다고 가정하고, 격리는 런타임이 담당합니다. 정적 정책은 reward 무결성을 지키는 장치예요([04 Reward 무결성](04_reward_integrity.md)).
 6. **같은 노드의 다른 샌드박스와 하드웨어를 공유합니다.** Kata VM들은 같은 `g4dn.metal`의 CPU, 메모리 대역폭, PCIe를 공유하므로 타이밍 간섭과 side channel 가능성이 있습니다. 이 저장소는 이 위험을 평가하지 않았어요.
-7. **upstream 검증 범위 밖의 조합을 씁니다.** NVIDIA의 Kata CI는 A100과 H100을 테스트하고 T4(`g4dn.metal`)는 테스트하지 않습니다. GPU Operator의 Kata 구성은 EKS에서 Ubuntu로만 검증되었고 AL2023은 목록에 없어요. gVisor 문서는 nvproxy를 NVIDIA open 드라이버 기준으로 설명하고 proprietary 드라이버는 언급하지 않습니다. gVisor 풀의 기본값인 g5(A10G)에서는 AMI가 proprietary 커널 모듈(GSP 꺼짐)을 로드하므로, 이 조합은 gVisor 문서가 아니라 이 저장소에서 검증한 것입니다. 드라이버, AMI, gVisor 버전을 바꾸면 smoke test와 `ops/verify.sh`를 다시 실행하세요. gVisor에서 T4(g4dn)는 드라이버 조건이 g5와 같지만 이 저장소에서 테스트하지 않았어요.
+7. **upstream 검증 범위 밖의 조합을 씁니다.** NVIDIA의 Kata CI는 A100과 H100을 테스트하고 T4(`g4dn.metal`)는 테스트하지 않습니다. GPU Operator의 Kata 구성은 EKS에서 Ubuntu로만 검증되었고 AL2023은 목록에 없어요. gVisor 문서는 nvproxy를 NVIDIA open 드라이버 기준으로 설명하고 proprietary 드라이버는 언급하지 않습니다. gVisor 풀의 기본값인 g5(A10G)에서는 AMI가 proprietary 커널 모듈(GSP 꺼짐)을 로드하므로, 이 조합은 gVisor 문서가 아니라 이 저장소에서 검증한 것입니다. 드라이버, AMI, gVisor 버전을 바꾸면 smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요. 샌드박스 풀이 노드의 GPU를 모두 쓰고 있으면 smoke pod가 `Pending`으로 남으니, 풀의 replica를 하나 줄여 GPU를 비운 뒤 실행합니다([02 gVisor](../handson/02_gvisor.md)). gVisor에서 T4(g4dn)는 드라이버 조건이 g5와 같지만 이 저장소에서 테스트하지 않았어요.
 
 ## Production 옵션
 
@@ -139,7 +139,7 @@ kubectl -n sandbox get pod "$pod" \
 
 ## 확인 방법
 
-아래 명령은 gVisor v1 풀 하나에서 격리, egress 차단, golden verdict, 다른 namespace의 접속 차단을 차례로 확인하고, 하나라도 실패하면 그 단계에서 중단합니다.
+아래 명령은 gVisor v1 풀 하나에서 격리, egress 차단, golden verdict, 다른 namespace의 접속 차단을 차례로 확인합니다. 1단계는 pod와 노드의 커널 버전을 출력만 하고 비교하지 않아요. 2단계부터는 하나라도 실패하면 그 단계에서 중단합니다.
 
 ```bash
 scripts/ops/verify.sh gvisor v1
@@ -168,7 +168,7 @@ PASS read_host_file               status=policy_violation  speedup=<값>
 
 출력에서 다음을 확인하세요.
 
-1. 샌드박스 안의 커널 버전이 노드 커널과 다릅니다(gVisor는 Sentry가 보고하는 값, Kata는 guest 커널). 같으면 pod가 runc로 실행되고 있는 것입니다.
+1. 샌드박스 안의 커널 버전이 노드 커널과 다릅니다(gVisor는 Sentry가 보고하는 값, Kata는 guest 커널). 스크립트는 두 값을 비교하지 않으니 출력을 직접 대조하세요. 값이 같으면 pod가 runc로 실행되고 있을 수 있으므로 pod의 `runtimeClassName`을 확인합니다.
 2. instance metadata, kubernetes api, node kubelet, internet(S3 endpoint)이 모두 `blocked (...)`입니다. `REACHABLE`이 하나라도 있으면 실패예요.
 3. probe Job의 golden 결과가 모두 `PASS`입니다.
 4. default namespace에서의 연결이 `blocked`이고, 마지막 줄이 `verified`입니다.
@@ -180,10 +180,11 @@ PASS read_host_file               status=policy_violation  speedup=<값>
 
 ## 적용 범위와 한계
 
-- **로컬 테스트로 확인한 것:** audience 기반 인증의 fail closed 동작(잘못된 audience, 만료, 허용 목록에 없는 subject 거부), egress 차단을 확인해야 Ready가 되는 readiness, 매니페스트 템플릿의 하드닝 값, 노드 user data(`infra/eks/userdata.py`)의 node guard 포함 여부를 확인했습니다(`pytest`, CPU, AWS 없음). CDK 스택 테스트(`cdk/tests`)는 synth한 템플릿에서 private endpoint, `0.0.0.0/0` inbound 없음, IMDSv2와 hop limit 1, 볼륨 암호화를 확인합니다.
-- **AWS에서 실행하지 않은 것:** "확인 방법"을 포함한 클러스터 단계 전부입니다. 실제 차단 여부는 직접 실행해 확인하세요.
+- **로컬 테스트로 확인한 것:** audience 기반 인증의 fail closed 동작(잘못된 audience, 만료, 허용 목록에 없는 subject 거부), egress 차단을 확인해야 Ready가 되는 readiness, 매니페스트 템플릿의 하드닝 값, 노드 user data(`infra/eks/userdata.py`)의 node guard 포함 여부를 확인했습니다(`pytest`, CPU, AWS 없음). CDK 스택 테스트(`cdk/tests`)는 synth한 템플릿에서 private endpoint, `0.0.0.0/0` inbound 없음, IMDSv2 필수(hop limit은 지정된 경우에만 1인지 검사), 볼륨 암호화를 확인합니다.
+- **AWS에서 실행한 것 (2026-11-18, 실습 계정 us-west-2):** "확인 방법"의 `ops/verify.sh`를 `gvisor` v1, `kata-qemu` v1, CPU 풀 세 개에서 실행해 통과했습니다. 이 검증은 핸즈온 NetworkPolicy에서 실행했어요.
+- **AWS에서 실행하지 않은 것:** gateway-only NetworkPolicy를 적용한 production 구성과 위의 allowlist 재배포입니다. 이 구성에서 검증 Job이 접근할 수 있는지와 실제 차단 여부는 직접 실행해 확인하세요.
 - **확인하지 않은 동작:** EKS의 서명 키 회전 일정, GuardDuty Runtime Monitoring에 gVisor와 Kata 안쪽 프로세스가 보이는 방식, GPU firmware 상태가 VM 사이에 남는지 여부.
-- **대응하지 않는 위험:** "다루지 않는 위험"의 일곱 항목입니다. 멀티 테넌트라면 "Production 옵션"을 함께 검토하세요.
+- **대응하지 않는 위험:** gVisor의 호스트 드라이버 공유, 같은 노드의 하드웨어 공유, GPU firmware 상태 잔존 등은 위 "다루지 않는 위험"에 있습니다. 멀티 테넌트라면 "Production 옵션"의 Kata와 테넌트별 NodePool을 검토하세요.
 
 ## ❓ 오해
 

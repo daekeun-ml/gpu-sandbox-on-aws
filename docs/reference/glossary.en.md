@@ -8,9 +8,8 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 
 ## Why
 
-- **One place to look.** The "Terms" box on every page links here.
-- **How this repository uses each term.** After the general meaning, each entry says where and how the concept is used in this asset.
-- **Confusing words are separated.** The ❓ misconception notes below tell overlapping terms apart.
+- **rollout means different things by context.** In RL it is the step where the policy generates completions; in Kubernetes it is moving a Deployment to a new version.
+- **warm also has two meanings.** The production warm placeholder requests no GPU, while an Agent Sandbox SandboxWarmPool built from a GPU profile holds GPUs even while idle.
 
 **Before you start:** nothing. Entries are in alphabetical order of the English term, and "Used in" at the end of each entry is the page that covers the term in detail.
 
@@ -45,7 +44,7 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 :   A short fingerprint computed from the contents of data. On every timed iteration the harness compares the checksum of the candidate's output with the reference, which catches output that is wrong only during measurement ("correct until the benchmark starts"). Used in: [04 Reward integrity](../production/04_reward_integrity.md)
 
 **Cloud Hypervisor (CLH)**
-:   A lightweight hypervisor that Kata can use. This repository uses it for the device-free Kata CPU tier (`kata-clh`). Kata upstream does not support GPU passthrough with CLH. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
+:   A lightweight hypervisor that Kata can use. This repository uses it for the device-free Kata CPU pool. The profile you pass to the deploy script for that pool is `kata-clh-cpu`. The v1 Deployment is named `sandbox-kata-clh-cpu-v1`, and the profile selects the RuntimeClass `kata-clh`. Passing `kata-clh` to the deploy script selects the experimental GPU profile instead. Kata upstream does not support GPU passthrough with CLH. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
 
 **Completion**
 :   In RL, the answer the model generates for one prompt. This repository's GRPO generates 8 completions per prompt (one group) and scores the code block inside a completion in the sandbox. Used in: [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md)
@@ -92,7 +91,7 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 :   Candidate code whose verdict is known in advance. This repository's golden set has six entries (two correct Triton kernels, a correct torch-only answer, a wrong answer, a benchmark cheat, a host file read) and is the reference point for checking that a sandbox works and that a new version matches the old one. Used in: [05 Sandbox versioning](../production/05_sandbox_updates.md)
 
 **GPU passthrough**
-:   Handing a whole physical GPU to a VM through VFIO, so that the driver inside the VM drives the GPU directly. The host must own the IOMMU and the physical GPU, so on AWS it takes a `g4dn.metal`. In Kata, only QEMU cold-plug is officially supported. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
+:   Handing a whole physical GPU to a VM through VFIO, so that the driver inside the VM drives the GPU directly. The host must own the IOMMU and the physical GPU, so on AWS this repository's x86 setup takes a `g4dn.metal`. In Kata, only QEMU cold-plug is officially supported. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
 
 **Group (GRPO group)**
 :   In GRPO, the set of completions generated from one prompt (8 in this repository). Advantages are computed relative to the group, so one group must be scored by one sandbox version. It is not the same as a node group or a HyperPod instance group. Used in: [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md)
@@ -170,7 +169,7 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 ## M
 
 **Multi-turn**
-:   A way of working where the model calls a tool or submits code, reads the result and responds again, several times over. It is distinct from single-turn grading, which grades one completion once. GRPO training in this repository uses single-turn grading, and multi-turn agents use the per-episode sandboxes of the Agent Sandbox extension. Used in: [06 Multi-turn agents and Agent Sandbox](../beginner/06_multi_turn_agent.md), [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md)
+:   A way of working where the model calls a tool or submits code, reads the result and responds again, several times over. It is distinct from single-turn grading, which grades each completion on its own with no second response to the result. GRPO training in this repository uses single-turn grading, and multi-turn agents use the per-episode sandboxes of the Agent Sandbox extension. Used in: [06 Multi-turn agents and Agent Sandbox](../beginner/06_multi_turn_agent.md), [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md)
 
 ## N
 
@@ -192,12 +191,12 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 :   A CloudFront feature that makes CloudFront send signed requests to an S3 origin. The bucket policy allows only the CloudFront service principal for one distribution (an `AWS:SourceArn` condition), so the bucket stays private and its content is served only through CloudFront. The CloudFront documentation recommends OAC instead of the older origin access identity (OAI). Used in: [09 Demo site (CloudFront)](../handson/09_demo_site.md)
 
 **On-policy**
-:   Training on data (completions) generated by the very policy being updated. This repository trains strictly on-policy: each generated batch is used for exactly one optimizer step (the TRL `steps_per_generation` default). Used in: [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md)
+:   Training on data (completions) generated by the very policy being updated. The TRL hands-on trains strictly on-policy: each generated batch is used for exactly one optimizer step (the TRL `steps_per_generation` default). The veRL setup splits a training batch (64 prompts) into PPO mini-batches (32 prompts) and updates several times. Used in: [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md)
 
 ## P
 
 **Parity check**
-:   A check that a new sandbox version gives the same verdicts as the old one on the golden submissions. It passes when the statuses match and the speedup ratios differ by no more than the tolerance (default 0.35), and only then does traffic move. Used in: [05 Sandbox versioning](../production/05_sandbox_updates.md)
+:   A check that a new sandbox version gives the same verdicts as the old one on the golden submissions. Both versions must meet each golden's expected status (and the expected `custom_kernel` where one is set), and the two statuses must match. When both are `ok` and report a speedup, the new speedup divided by the old one must also be within the tolerance (default 0.35) of 1. Only then does traffic move. Used in: [05 Sandbox versioning](../production/05_sandbox_updates.md)
 
 **PDB (PodDisruptionBudget)**
 :   A cap on how many pods may go down at once during voluntary disruptions such as drains. It applies to the eviction API only, so it does not stop the gateway's recycling, which deletes pods directly. Used in: [01 Capacity and nodes](../production/01_capacity_and_nodes.md)
@@ -225,7 +224,7 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 ## R
 
 **ResourceQuota**
-:   A cap on the total resources one namespace may request. This repository's `sandbox` namespace is capped at 16 `nvidia.com/gpu`, 8 `nvidia.com/pgpu` and 64 pods. Used in: [01 Capacity and nodes](../production/01_capacity_and_nodes.md)
+:   A cap on the total resources one namespace may request. With the production `k8s/production/pool-hardening.yaml` applied, requests in the `sandbox` namespace are capped at 16 `nvidia.com/gpu`, 8 `nvidia.com/pgpu` and 64 pods. The default hands-on install creates no quota. Used in: [01 Capacity and nodes](../production/01_capacity_and_nodes.md)
 
 **Reward hacking**
 :   A policy raising its score by exploiting gaps in the reward measurement instead of solving the task. Reported cases in the KernelBench line of work include fooling the timing with extra CUDA streams, caching results, being wrong only during the benchmark, and lazy tensors. Used in: [04 Reward integrity](../production/04_reward_integrity.md)
@@ -260,7 +259,7 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 :   The Agent Sandbox resource that keeps a set number of sandboxes from a SandboxTemplate started ahead of time. A claim gets a sandbox that is already prepared, which shortens the wait. Warm GPU sandboxes hold their GPU even while idle. Used in: [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md)
 
 **Speedup**
-:   The reference implementation's run time divided by the candidate kernel's run time. The speedup score, given only to correct custom kernels, is log2-scaled: 0 at 0.5x, 0.5 at 1x, 1.0 at 2x, capped at 1.5 (4x). Used in: [05 On-policy GRPO training](../handson/05_grpo_training.md)
+:   The reference implementation's run time divided by the candidate kernel's run time. By default only correct custom kernels get a speedup score; with `--allow-torch-only`, correct PyTorch-only answers are scored on the same scale. The score is log2-scaled: 0 at 0.5x, 0.5 at 1x, 1.0 at 2x, capped at 1.5 (4x). Used in: [05 On-policy GRPO training](../handson/05_grpo_training.md)
 
 **SSM Session Manager port forwarding**
 :   An AWS Systems Manager feature that connects a local port on your machine to an address inside the VPC through an instance with the SSM agent. The instance needs no inbound port and no public IP, and your machine needs the Session Manager plugin for the AWS CLI. This repository's `cdk/tunnel.sh` connects `127.0.0.1:8443` to the private API endpoint. Used in: [09 Provisioning with CDK](../production/09_cdk.md)
@@ -277,7 +276,7 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 :   A Kubernetes API that asks the API server whether a token is valid and whose it is. The gateway uses it to authenticate callers and caches successful results for 60 seconds. It reports validity only, not permission, so the gateway also checks an allowlist. Used in: [02 Security](../production/02_security.md)
 
 **Triton**
-:   A language and compiler for writing GPU kernels in Python. The tasks in this repository ask the policy to write Triton kernels, and the harness counts whether a kernel actually launched. Used in: [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md)
+:   A language and compiler for writing GPU kernels in Python. The tasks in this repository ask the policy to write Triton kernels, and the harness records how many times the Triton launch function was called up to the end of the correctness check. That is a call count, not a count of successful kernel runs. Used in: [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md)
 
 **Turn**
 :   One step of a multi-turn episode in which the model responds once. In this repository's kernel task it is one submission of code and the verdict that comes back, and every turn of one episode is graded in the same sandbox. Used in: [06 Multi-turn agents and Agent Sandbox](../beginner/06_multi_turn_agent.md)
@@ -301,13 +300,13 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 ## ❓ Misconceptions
 
 !!! question "❓ Misconception: rollout is a Kubernetes deployment term"
-    This guidebook uses it in two senses. In the RL context (GRPO, veRL), a rollout is the step where the policy generates completions. The rollout in `kubectl rollout status` or `scripts/ops/rollout.sh` is replacing a Deployment with a new version. Tell them apart by whether the surrounding text is about training or about deployment.
+    This guidebook uses it in two senses. In the RL context (GRPO, veRL), a rollout is the step where the policy generates completions. In the deployment context, each command does something different. `kubectl rollout status` waits until the given Deployment has finished rolling out, and `scripts/ops/rollout.sh` deploys the new version as a separate Deployment, verifies it, and then moves traffic by changing the routing table. Tell them apart by whether the surrounding text is about training or about deployment.
 
 !!! question "❓ Misconception: the warm placeholder also reserves a GPU"
-    The production warm placeholder requests CPU and memory only, never a GPU. It just holds the node and steps aside when a sandbox pod arrives. The Agent Sandbox SandboxWarmPool, in contrast, pre-starts sandbox pods that use GPUs, so it holds GPUs even while idle.
+    The production warm placeholder requests CPU and memory only, never a GPU. It just holds the node and steps aside when a sandbox pod arrives. The Agent Sandbox SandboxWarmPool, in contrast, pre-starts sandbox pods with the resources set in the profile. With a GPU profile it holds GPUs even while idle; with a CPU profile (for example `kata-clh-cpu`) it requests no GPU.
 
 !!! question "❓ Misconception: Kata only runs on `.metal` instances"
-    That is true only for GPU passthrough. Kata without devices runs without `.metal` on the `/dev/kvm` that EC2 nested virtualization provides. Handing a GPU to a VM requires the host to own the physical GPU and the IOMMU, which is why it takes a `g4dn.metal`.
+    That is true only for GPU passthrough. Kata without devices runs without `.metal` on the `/dev/kvm` that EC2 nested virtualization provides. Handing a GPU to a VM requires the host to own the physical GPU and the IOMMU, which is why this repository's x86 setup takes a `g4dn.metal`.
 
 ??? note "References"
     | Topic | Link |

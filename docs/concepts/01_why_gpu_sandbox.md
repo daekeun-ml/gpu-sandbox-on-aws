@@ -13,9 +13,9 @@
 
 ## Why
 
-- **reward 계산에 GPU가 필요한지 먼저 판단합니다.** GPU가 필요 없는 작업에 GPU 샌드박스를 쓰면 비용과 격리 부담만 늘어요.
-- **두 계층 패턴으로 GPU 시간을 줄입니다.** 형식 검사와 정책 검사는 CPU에서 처리합니다.
-- **과제와 reward를 코드로 고정합니다.** 과제 10개, 3요소 reward, 측정 치팅 방어가 저장소 코드에 구현돼 있어요.
+- **reward 계산에 GPU가 필요한지가 첫 기준입니다.** GPU가 필요 없는 작업에 GPU 샌드박스를 쓰면 비용과 격리 부담만 늘어요.
+- **GPU 시간은 정책을 통과한 코드에만 씁니다.** 코드 블록이 없거나 정책을 어긴 completion은 샌드박스를 부르지 않고 CPU에서 판정돼요.
+- **이 저장소의 과제는 10개이고 reward는 세 요소로 나뉩니다.** 측정을 속이는 시도는 AST 정책과 측정 harness가 함께 막아요.
 
 **사전 지식:** 필요 없습니다. 저장소가 만드는 것은 [홈](../index.md)에서, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에서 확인할 수 있어요.
 
@@ -41,7 +41,7 @@
 | ML 엔지니어 에이전트 | 학습이나 튜닝 스크립트를 실제로 실행하고 그 결과로 채점하는 과제 | 학습 실행이 GPU를 사용 |
 
 !!! note "GPU가 필요 없는 경우"
-    단위 테스트로 채점하는 코드 RL, SQL, 수학 정답 검증처럼 reward가 CPU에서 결정되면 CPU 샌드박스로 충분합니다. CPU 샌드박스 선택지는 [05 상황별 선택 가이드](05_decision_guide.md)에 정리돼 있습니다.
+    단위 테스트로 채점하는 코드 RL, SQL, 수학 정답 검증처럼 후보 코드 실행과 채점에 필요한 측정을 모두 CPU에서 할 수 있으면 CPU 샌드박스로 충분합니다. CPU 샌드박스 선택지는 [05 상황별 선택 가이드](05_decision_guide.md)에 정리돼 있습니다.
 
 ## 대부분의 샌드박스가 CPU 전용인 이유
 
@@ -49,7 +49,7 @@
 |---|---|
 | Firecracker에 GPU passthrough가 없음 | Firecracker는 virtio 장치 중심의 최소 장치 모델을 씁니다(FAQ 기준 에뮬레이션 장치 6개). 1.13.0에서 PCI 지원이 추가됐지만, 변경 이력에 VFIO GPU passthrough는 없습니다. Firecracker 기반 샌드박스 서비스(E2B 등)가 주로 CPU 위주인 배경 중 하나입니다. |
 | 관리형 격리도 출시 시점에는 CPU 전용 | AWS Nitro Sandboxes(EKS isolated pods, 2026-11-09 출시) 문서에는 "GPU and other device passthrough are not supported at launch"라고 명시돼 있습니다. |
-| CUDA 상태 오염 | 신뢰할 수 없는 코드 실행 여러 개가 한 GPU를 차례로 사용하면 남은 프로세스, Triton과 CUDA 컴파일 캐시, 드라이버 상태가 다음 평가에 영향을 줄 수 있습니다. 실행마다 프로세스 트리와 캐시를 새로 만들어야 하고, 장치를 리셋하려면 VM을 새로 시작해야 합니다. GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권고합니다. |
+| CUDA 상태 오염 | 신뢰할 수 없는 코드 실행 여러 개가 한 GPU를 차례로 사용하면 남은 프로세스, Triton과 CUDA 컴파일 캐시, 드라이버 상태가 다음 평가에 영향을 줄 수 있습니다. 실행마다 프로세스 트리와 캐시를 새로 만들어야 합니다. 장치 리셋은 Kata에서 기존 VM이 GPU를 반납할 때 VFIO가 하고, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 계속 씁니다. GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권고합니다. |
 | 비용과 밀도 | timing을 신뢰하려면 평가 하나가 GPU 하나를 독점해야 합니다. 이 에셋은 pod당 GPU 1개, 한 번에 평가 1개(처리 중이면 503)로 운영하므로 CPU 샌드박스처럼 한 노드에 샌드박스를 많이 배치할 수 없습니다. |
 | 드라이버 버전 의존성 | gVisor는 host 드라이버 버전이 nvproxy 지원 목록과 정확히 일치해야 하고, Kata는 guest VM 안에 드라이버를 따로 설치해야 합니다. 그만큼 관리할 버전 조합이 늘어납니다. |
 
@@ -57,18 +57,18 @@
 
 GPU 노드는 CPU 노드보다 시간당 요금이 높으므로(예: `g5.xlarge` 1.006 USD, `m6i.large` 0.096 USD, 온디맨드 요금), GPU 없이 판정할 수 있는 검사는 GPU 샌드박스로 보내기 전에 끝냅니다.
 
-![trainer 프로세스(CPU) 안에서 completion이 KernelRewards로 전달되고, KernelRewards가 코드 블록을 추출해 AST 정책 검사(check_source)를 합니다. 코드 블록이 없거나 정책을 위반하면 샌드박스를 호출하지 않고 no_code 또는 policy_violation verdict가 됩니다. 검사를 통과한 코드는 선택 사항인 CPU 계층(정적 검사, nvcc 컴파일, c8i의 Kata + CLH, 점선 테두리)을 거쳐 GPU 계층(정확성 + timing, gVisor 또는 Kata + QEMU)으로 가고, GPU 계층이 verdict를 냅니다.](../images/figures/concepts-01_why_gpu_sandbox--two-tier.svg)
+![trainer 프로세스(CPU) 안에서 completion이 KernelRewards로 전달되고, KernelRewards가 코드 블록을 추출해 AST 정책 검사(check_source)를 합니다. 코드 블록이 없거나 정책을 위반하면 샌드박스를 호출하지 않고 no_code 또는 policy_violation verdict가 됩니다. 검사를 통과한 코드는 GPU 계층(정확성 + timing, gVisor 또는 Kata + QEMU)으로 가고, GPU 계층이 verdict를 냅니다. 선택 사항인 CPU 계층(c8i의 Kata + CLH, 점선 테두리)은 따로 떨어져 있고, GPU 계층 앞 단계로 자동 연결되지 않습니다.](../images/figures/concepts-01_why_gpu_sandbox--two-tier.svg)
 
 *그림 요약: 코드가 없거나 정책을 위반한 completion은 GPU 샌드박스를 호출하기 전에 CPU에서 판정되고, GPU 샌드박스는 정확성과 timing만 측정합니다.*
 
 
 첫 단계는 trainer 프로세스 안의 `KernelRewards`입니다. `KernelRewards`는 코드 블록을 추출해 `check_source`로 AST 정책을 검사합니다. 정책 위반이면 샌드박스를 호출하지 않고, 샌드박스가 반환하는 것과 같은 `policy_violation` verdict를 기록해요. 샌드박스 harness도 같은 정책을 다시 검사합니다. 이 정책은 reward 무결성을 위한 검사이고, 노드를 보호하는 보안 경계는 gVisor나 Kata입니다.
 
-CPU 계층은 `kata-clh-cpu` 프로필과 Kata + Cloud Hypervisor 노드 그룹으로 구성됩니다. 이 노드 그룹은 nested virtualization(일반 EC2 VM 안에서 다시 VM을 실행하는 기능)을 켠 `c8i.2xlarge` 노드를 씁니다. 핸즈온에서는 `g4dn.metal` 비용이 발생하기 전에 이 계층에서 Kata를 적은 비용으로 연습합니다. Production에서는 정적 검사나 nvcc 컴파일처럼 GPU가 필요 없는 작업을 이 계층에서 실행합니다.
+CPU 계층은 `kata-clh-cpu` 프로필과 Kata + Cloud Hypervisor 노드 그룹으로 구성됩니다. 이 노드 그룹은 nested virtualization(일반 EC2 VM 안에서 다시 VM을 실행하는 기능)을 켠 `c8i.2xlarge` 노드를 씁니다. 핸즈온에서는 `g4dn.metal` 비용이 발생하기 전에 이 계층에서 Kata를 적은 비용으로 연습합니다. Production에서는 nvcc 컴파일처럼 GPU가 필요 없는 단계를 이 계층에 둘 수 있습니다. harness에는 컴파일만 하는 모드가 없으므로 그 단계는 직접 만들어야 해요.
 
 ## 이 에셋의 시나리오
 
-코드 모델(기본 `Qwen/Qwen2.5-Coder-1.5B-Instruct`, Apache-2.0)은 PyTorch 모듈을 Triton 커널을 사용하는 `ModelNew`로 다시 작성합니다. 샌드박스는 정확성과 속도를 측정해 reward를 계산합니다. 과제 형식은 KernelBench와 비슷합니다. 각 과제 모듈은 신뢰할 수 있는 reference `Model`, `get_init_inputs()`, seed별 입력을 만드는 `get_inputs(seed, device, size)`, 허용 오차 `ATOL`과 `RTOL`을 정의합니다.
+코드 모델(기본 `Qwen/Qwen2.5-Coder-1.5B-Instruct`, Apache-2.0)은 PyTorch 모듈을 Triton 커널을 사용하는 `ModelNew`로 다시 작성합니다. 샌드박스가 정확성과 속도를 측정해 결과를 보내면, trainer가 format, correctness, speedup 점수를 계산합니다. 과제 형식은 KernelBench와 비슷합니다. 각 과제 모듈은 신뢰할 수 있는 reference `Model`, `get_init_inputs()`, seed별 입력을 만드는 `get_inputs(seed, device, size)`, 허용 오차 `ATOL`과 `RTOL`을 정의합니다.
 
 ### 과제 10개 (`src/gpusandbox/tasks/`)
 
@@ -113,11 +113,11 @@ speedup을 reward로 쓰면 policy는 측정 방식의 허점을 이용하는 �
 | 추가 CUDA stream에서 연산을 실행해 timing을 속임 (CUDA-L1: 250건 중 82건, 32.8%) | host clock으로 `torch.cuda.synchronize()`를 감싸 모든 stream을 기다림. AST 정책이 stream과 graph API를 금지 |
 | 결과 캐싱 | timed iteration마다 다른 입력 |
 | 벤치마크 때만 틀리기, 메모리 재사용 no-op 커널 | 모든 timed 출력의 checksum을 reference와 비교 |
-| lazy evaluation | 출력 타입이 정확히 `torch.Tensor`여야 함 |
-| reference 복사, PyTorch나 cuBLAS 호출로 대체 | Triton 커널을 쓰지 않거나 한 번도 launch하지 않으면 correctness 0.3, speedup 0 |
-| monkeypatch, harness 내부 접근, 메모리 조작으로 정확성 검사 우회 | 후보는 별도 프로세스에서 실행되고, 정확성은 trusted parent가 매 요청 새 seed로 직접 비교. dunder 접근과 속성 쓰기 금지 |
+| lazy evaluation | 출력 텐서는 모두 정확히 `torch.Tensor` 타입이어야 함(subclass 불가). 리스트나 튜플로 반환하면 각 원소를 검사 |
+| reference 복사, PyTorch나 cuBLAS 호출로 대체 | 정답이어도 Triton 커널이 없거나 정확성 검사 중 launch 횟수가 0이면 correctness 0.3, speedup 0. 횟수를 셀 수 없으면 AST의 Triton 커널 정의로 판정 |
+| monkeypatch, harness 내부 접근, 메모리 조작으로 정확성 검사 우회 | 후보는 별도 프로세스에서 실행되고, 정확성은 trusted parent가 매 요청 새 seed로 직접 비교. AST 정책이 `__init__` 외의 밑줄 속성 접근과 `self` 밖의 속성 대입을 금지 |
 
-KernelBench의 기본 timing인 CUDA event(L2 flush 포함)는 추가 stream에서 실행된 작업을 측정에 포함하지 못할 수 있습니다(host_time 모드는 모든 stream을 포함해 측정합니다). KernelBench는 10배를 넘는 speedup을 의심 대상으로 표시하고(`excessive_speedup_threshold 10`), 이 에셋의 샌드박스 v2도 같은 10배 상한을 둡니다.
+KernelBench의 기본 timing인 CUDA event(L2 flush 포함)는 추가 stream에서 실행된 작업을 측정에 포함하지 못할 수 있습니다(host_time 모드는 모든 stream을 포함해 측정합니다). KernelBench는 10배를 넘는 speedup을 의심 대상으로 표시하고(`excessive_speedup_threshold 10`), 이 에셋의 샌드박스 v2는 10배를 넘는 측정값에 `implausible_speedup` 플래그를 달고 speedup을 1배로 채점합니다.
 
 ??? info "기존 샌드박스 프로젝트 대신 작은 서버를 쓴 이유"
     GPU timing을 측정하려면 샌드박스마다 독점 GPU 하나와 신뢰할 수 있는 측정 harness가 필요합니다. 그래서 이 두 기능만 제공하는 작은 서버(`src/gpusandbox/server/app.py`)를 씁니다. 기존 프로젝트로는 kubernetes-sigs/agent-sandbox(v1.0.11), OpenSandbox(release-1.2.1), GPU 실행을 직렬화하는 ByteDance SandboxFusion이 있습니다. 이 서버를 Agent Sandbox의 warm pool에서 실행하는 방법은 [06 Agent Sandbox로 확장](06_agent_sandbox.md)에서 설명해요.

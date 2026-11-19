@@ -4,18 +4,18 @@
 
 ## Pain point
 
-The hands-on trains a 1.5B model with LoRA on one A10G (24 GB), and vLLM generation, reward scoring and the update run one after another on that GPU, so steps get long. `Qwen/Qwen2.5-Coder-7B-Instruct` has about 7.6B parameters, so its bf16 weights alone are about 15 GB, which leaves little headroom when generation and training share one GPU (colocate mode). Moving to many GPUs also changes how rewards are called: veRL scores samples one at a time, so TRL's one routing snapshot per batch does not carry over.
+The hands-on trains a 1.5B model with LoRA on one A10G (24 GB). vLLM generates on that GPU, a separate sandbox GPU scores the candidate code, and the trainer then updates the LoRA adapter with the results. The three phases run one after another, so steps get long. `Qwen/Qwen2.5-Coder-7B-Instruct` has about 7.6B parameters, so its bf16 weights alone are about 15 GB, which leaves little headroom when generation and training share one GPU (colocate mode). Moving to many GPUs also changes how rewards are called: veRL scores samples one at a time, so it cannot score a whole batch with one version as TRL does.
 
-![a: on one trainer A10G (24 GB), vLLM generation, reward scoring in the sandbox and the update run in turn with one routing snapshot per batch, and the 7B bf16 weights alone take about 15 of the 24 GB. b: GPU workers (actor, vLLM rollout, reward worker) xN in RayCluster verl send each sample to the sandbox gateway with POST /v1/evaluate and a group_key, and the gateway pins a version per group_key, so one group is scored by one version of the sandbox pools (per runtime, per version)](../images/figures/production-06_scaling_with_verl.svg)
+![a: vLLM generation on one trainer A10G (24 GB), reward scoring on a separate sandbox GPU and the update on the trainer run in turn; each sandbox call takes one routing snapshot, so one batch is scored by one version, and the 7B bf16 weights alone take about 15 of the 24 GB. b: GPU workers (actor, vLLM rollout, reward worker) xN in RayCluster verl send each sample to the sandbox gateway with POST /v1/evaluate and a group_key, and the gateway pins a version per group_key, so one group is scored by one version of the sandbox pools (per runtime, per version)](../images/figures/production-06_scaling_with_verl.svg)
 
-*Takeaway: On one GPU the three phases run in turn, so steps are long, and with 7B weights loaded there is almost no headroom. On many GPUs samples are scored one at a time, so the reward function attaches a group_key and the gateway pins one version per group.*
+*Takeaway: With one trainer GPU, generation, sandbox scoring and the update run in turn, so steps are long, and with 7B weights loaded there is almost no headroom. On many GPUs samples are scored one at a time, so the reward function attaches a group_key and the gateway pins one version per group.*
 
 
 ## Why
 
 - **Scale out in the same EKS cluster.** Running Ray through KubeRay reuses the sandbox pools, the gateway, the NetworkPolicies and token authentication.
 - **Keep on-policy consistency with per-sample scoring.** When the reward function attaches a `group_key` to every request, the gateway sends all samples of one group to the same sandbox version.
-- **Keep long runs going.** With checkpoints on a shared PVC and `trainer.resume_mode=auto`, training restarts from the last checkpoint even after HyperPod replaces a node.
+- **Keep long runs going.** With checkpoints on a shared PVC and `trainer.resume_mode=auto`, resubmitting the job with the same `CKPT_DIR` after HyperPod replaces a node continues from the last checkpoint.
 
 **Before you start:** the TRL loop in [05 On-policy GRPO training](../handson/05_grpo_training.md) and the gateway API and group pins in [03 Gateway and pools](03_gateway_and_pools.md) help.
 
@@ -38,7 +38,7 @@ The hands-on trains a 1.5B model with LoRA on one A10G (24 GB), and vLLM generat
 | Image | `trainer/Dockerfile` (vllm 0.33.0, TRL 1.18.0) | `rl/verl/Dockerfile` (vllm 0.24.0, veRL 0.9.1) |
 | Data | Built in memory with `build_rows` | Written as parquet by `rl/verl/prepare_data.py` |
 | Reward call | Per batch, `evaluate_batch_sync` | Per sample, async `compute_score` → `evaluate_grouped` |
-| Version pinning | One snapshot per reward batch | Gateway pins per `group_key` (TTL 15 minutes) |
+| Version pinning | One version per reward batch | Gateway pins per `group_key` (TTL 15 minutes) |
 | `sandbox_error` | All three reward functions return `None`, sample excluded | Format score only, flagged with `sandbox_error: 1` |
 | Launch | Kubernetes Job or HyperPodPyTorchJob | KubeRay `RayCluster` + `ray job submit` |
 | Resume | `latest_checkpoint()` + `resume_from_checkpoint` | `trainer.resume_mode=auto` |
@@ -120,7 +120,7 @@ docker run --rm "${registry}/${ECR_REPO_PREFIX}/verl:${IMAGE_TAG}" python3 -c "i
 | `reward_model` | `{"style": "rule", "ground_truth": <task_id>}` | `ground_truth` is passed to `compute_score` |
 | `extra_info` | `{"index", "task_id", "level", "repeat"}` | `index` goes into `group_key` |
 
-`ground_truth` holds only the task name; the reference implementation lives in the sandbox image and never leaves it through the data files. Write the files to the shared PVC with a one-shot Job on the same image: fill in `<VERL_IMAGE_URI>` and `<SHARED_PVC>` in the example manifest below (not in the repository) and apply it with `kubectl apply -f <file>`.
+`ground_truth` holds the task ID, and `prompt` holds the PyTorch reference code the model is asked to rewrite. The sandbox computes the reference outputs and timings from the reference in its own image. Write the files to the shared PVC with a one-shot Job on the same image: fill in `<VERL_IMAGE_URI>` and `<SHARED_PVC>` in the example manifest below (not in the repository) and apply it with `kubectl apply -f <file>`.
 
 ```yaml
 apiVersion: batch/v1
@@ -148,7 +148,7 @@ spec:
 `compute_score(data_source, solution_str, ground_truth, extra_info, **kwargs)` in `rl/verl/reward_fn.py` returns one score with the same weights as the TRL path (format 0.1, correctness 1.0, speedup 0.5). veRL 0.9.x recommends async reward functions for sandboxed execution, and one reward worker runs many `compute_score` coroutines concurrently.
 
 1. If there is no code block, nothing is sent to the sandbox and the result is `score` 0.0 with `status: no_code`.
-2. If the static policy fails, nothing is sent either and only the format score 0.1 is given.
+2. If the static policy fails, nothing is sent either. The score is the format score 0.1 if the code parses and has a top-level `ModelNew` class, and 0 otherwise.
 3. It builds `group_key = f"{task_id}:{index}"` and sends the sample to the gateway's `POST /v1/evaluate`.
 4. It computes correctness and speedup from the verdict and returns them in a result dict with `sandbox_version`.
 
@@ -162,7 +162,7 @@ spec:
     It does not. An infrastructure failure still gets a low score (0.1) inside its group, which can inflate the advantages of the other samples in that group, so on the veRL path set the `sandbox_error` rate alarm tighter than for TRL ([07 Observability and operations](07_observability_and_operations.md)).
 
 ??? info "How group_key interacts with the pin TTL"
-    `index` is the row number in the dataset, so the same row comes back in the next epoch (with the defaults, 640 rows at 64 per step repeat every 10 steps). A gateway pin is released only after `GATEWAY_GROUP_PIN_TTL_S` (default 900 s), so if an epoch is shorter than the TTL the next epoch's group reuses the old pin, and if the pin expires while a group is being scored, the group can be split across versions. Tune the TTL so that "time to score one group < TTL < epoch length", or consider including a value that distinguishes steps or epochs in `group_key` (check what veRL passes in `kwargs` for your release).
+    `index` is the row number in the dataset, so the same row comes back in the next epoch (with the defaults, 640 rows at 64 per step repeat every 10 steps). A gateway pin is released only after `GATEWAY_GROUP_PIN_TTL_S` (default 900 s), so if an epoch is shorter than the TTL the next epoch's group reuses the old pin, and if the pin expires while a group is being scored, the group can be split across versions. Tune the TTL so that "time to score one group < TTL < epoch length", or consider including a value that distinguishes steps or epochs in `group_key` (check what veRL passes in `kwargs` for your release). `prepare_data.py` also numbers `val.parquet` from index 0, so validation groups use the same `task_id:index` as the first 10 training rows. The TTL cannot tell training and validation groups apart; to switch them separately or compare their versions, `group_key` also needs a value that distinguishes the data split.
 
 ## RayCluster
 
@@ -171,10 +171,12 @@ spec:
 | Head | `num-gpus: "0"`, `dashboard-host: "0.0.0.0"`, `gpusandbox/role: system`, 4 CPUs, 16 GiB | Runs only the driver and the dashboard. The dashboard sits behind a ClusterIP Service only |
 | Worker group `gpu` | `replicas = minReplicas = maxReplicas = VERL_NNODES` | Fixed size (no autoscaling) |
 | Worker label | `gpusandbox/client: "true"` | Marks a sandbox client |
-| `serviceAccountName` | `grpo-trainer`, `automountServiceAccountToken: false` | Subject on the gateway allowlist, no Kubernetes API token |
-| Projected token | Audience `gpu-sandbox-gateway`, 3600 s | Matches the gateway's TokenReview audience |
-| Env | `SANDBOX_GATEWAY=gateway.sandbox-gateway.svc.cluster.local:8080`, `SANDBOX_TOKEN_FILE`, `HF_HOME=/fsx/hf` | The reward function calls the gateway; the model cache is shared |
-| Volumes | Shared PVC on `/fsx`, `/dev/shm` as 64 GiB of memory | Data, checkpoints, model cache |
+| Worker `serviceAccountName` | `grpo-trainer`, `automountServiceAccountToken: false` | Subject on the gateway allowlist, no Kubernetes API token |
+| Worker projected token | Audience `gpu-sandbox-gateway`, 3600 s | Matches the gateway's TokenReview audience |
+| Worker env | `SANDBOX_GATEWAY=gateway.sandbox-gateway.svc.cluster.local:8080`, `SANDBOX_TOKEN_FILE`, `HF_HOME=/fsx/hf` | The reward function calls the gateway; the model cache is shared |
+| Volumes | Shared PVC on `/fsx` (head and workers), `/dev/shm` as 64 GiB of memory on workers | Data, checkpoints, model cache |
+
+The ServiceAccount, projected token and gateway env exist only on the GPU workers. The head template sets neither a ServiceAccount nor whether the API token is mounted automatically, so the head follows the namespace's `default` ServiceAccount.
 
 | Scenario | `VERL_NODE_SELECTOR` |
 |---|---|
@@ -248,7 +250,7 @@ Reward settings use the veRL 0.9.1 `reward.*` keys: `reward.custom_reward_functi
 
 - **GPU memory**: the script defaults are rollout `tensor_model_parallel_size=1` and `gpu_memory_utilization=0.5`, so the 7B weights (about 15 GB) plus the KV cache must fit in vLLM's half of the GPU memory. On an A10G or L4 (24 GB) that is 12 GB, which is not enough: raise tensor parallelism or use GPUs with more memory. Check the GPU count and memory of the trainer NodePool candidates (`g6e.12xlarge`, `g6e.48xlarge`, `p5.48xlarge`) in the EC2 instance type documentation and set `GPUS_PER_NODE` to match.
 - **Sandbox pods**: per step there are at most `N = TRAIN_BATCH_SIZE × N_RESP_PER_PROMPT` scoring requests (512 by default); samples without code or with policy violations are filtered locally. With `P` ready pods and one evaluation taking `t_eval`, the reward phase takes roughly `ceil(N / P) × t_eval`. Measure `t_eval` with `eval_p50_s` and `eval_p95_s` from `scripts/ops/bench.sh`.
-- **Timeouts**: the veRL client waits 300 s for the gateway's answer (`request_timeout_s` of `SandboxClient`), and the gateway waits 600 s for a free pod (`acquire_timeout_s` of `SandboxPool`). If all N requests arrive at once, any request that waits longer than 300 s becomes `sandbox_error`, so use `P ≥ N × t_eval(p95) / 300` as a lower bound. How many requests veRL sends at once depends on `reward.num_workers` and the release's async handling.
+- **Timeouts**: the veRL client waits 300 s for the gateway's answer (`request_timeout_s` of `SandboxClient`), and the gateway waits 600 s for a free pod (`acquire_timeout_s` of `SandboxPool`). If all N requests arrive at once, any request that gets no answer within 300 s becomes `sandbox_error`. The last request finishes in turn `ceil(N / P)`, so pick `P` such that `ceil(N / P) × t_eval(p95)` plus some network margin stays below 300 s, and check the actual timeout rate. For example, with N = 32 and `t_eval` = 28 s, `P` = 3 finishes the 11th turn at 308 s, so `P` must be at least 4. How many requests veRL sends at once depends on `reward.num_workers` and the release's async handling.
 - **Upper bounds**: the `sandbox-gvisor` NodePool and the ResourceQuota cap GPUs at 16, so with blue/green headroom one pool can have at most 8 under the default limits. For larger pools, raise both limits together.
 - **GPU type**: speedups are measured on the sandbox GPU, so choose the GPU you want the kernels to be fast on and keep every pod of a pool on the same GPU type (mixing means the speedups of one group are measured on different hardware). The `sandbox-gvisor` NodePool allows only `g5.xlarge` and `g5.2xlarge` (both A10G).
 
@@ -270,13 +272,13 @@ The dashboard is reached only through `kubectl port-forward` (binds 127.0.0.1 by
 ## How to verify
 
 - `ray job list` shows the job as `RUNNING`, and `ray job logs` keeps printing veRL step logs.
-- The gateway's `gateway_evaluations_total` grows per `version` label. Only one version should appear.
+- The gateway's `gateway_evaluations_total` grows per `version` label. During a switch, groups pinned earlier and new groups increment the old and new version counters, and because the counter is cumulative the old label stays. The value `compute_score` returns has no `group_key`, and samples decided locally (`no_code`, `policy_violation`) have an empty `sandbox_version`. Check consistency within a group in a record that lets you group samples by data row (`task_id`, `index`), comparing `sandbox_version` only across responses the sandbox actually scored. Validation data uses the same `task_id` and `index`, so group training and validation records separately.
 - `sandbox_error` in the reward extra info of the logs stays close to 0.
 - Every `save_freq` steps a checkpoint directory appears under `CKPT_DIR` (veRL's default name is `global_step_<N>`).
 
 ## Scope and limits
 
-- **Verified locally:** a local run of `prepare_data.py` with the defaults wrote 640 train rows and 10 validation rows, and `pytest` covers the static policy the reward function uses (`harness/policy.py`) and the gateway's group pins. `rl/verl/reward_fn.py` itself is not under test.
+- **Verified locally:** a local run of `prepare_data.py` with the defaults wrote 640 train rows and 10 validation rows, and `pytest` covers the static policy the reward function uses (`harness/policy.py`) and the gateway's group pins. `pytest` also calls `compute_score` in `rl/verl/reward_fn.py` with a fake gateway client and checks the returned values and keys for a passing answer, no code, a policy violation and an infrastructure error. Integration with a real veRL job is not verified.
 - **Not executed:** the author did not build the veRL image or run the RayCluster or a veRL job on AWS; verify them with "How to verify" above.
 - **Based on documentation:** the `reward.*` keys follow the veRL 0.9.1 default config; reward worker placement, concurrent request count and the `reward_extra_info` log format can change between releases, so re-verify them.
 - **Features not tried:** this repository has not used the authenticated dashboard link or the resilient training features of Ray on HyperPod.
@@ -284,7 +286,7 @@ The dashboard is reached only through `kubectl port-forward` (binds 127.0.0.1 by
 
 ## Cost and cleanup
 
-The 8-GPU trainer node is most of the cost (prices and arithmetic in [08 Cost](08_cost.md)). When training ends, release the GPUs by removing the workers with `kubectl -n rl-trainer delete raycluster verl`. The Karpenter trainer NodePool returns the empty node after 15 minutes (`consolidateAfter: 15m`), while HyperPod instance groups bill until you scale them down or delete the cluster (delete the hands-on cluster with `scripts/hyperpod/delete.sh`). Scale the sandbox pools down with `--finish` from [05 Sandbox versioning](05_sandbox_updates.md) or to zero replicas. Related pages: [05 On-policy GRPO training](../handson/05_grpo_training.md), [07 HyperPod scenario](../handson/07_hyperpod.md), [01 Capacity and nodes](01_capacity_and_nodes.md), [02 Security](02_security.md).
+The 8-GPU trainer node is most of the cost (prices and arithmetic in [08 Cost](08_cost.md)). When training ends, free the GPU allocations by removing the workers with `kubectl -n rl-trainer delete raycluster verl`. A node created by the Karpenter trainer NodePool becomes a reclaim candidate after 15 minutes empty (`consolidateAfter: 15m`) and bills until it actually terminates. The CDK-managed trainer node group of scenario A keeps its instance running after the pods are gone, so scale it down yourself (`aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name trainer --scaling-config minSize=0,maxSize=1,desiredSize=0`), while HyperPod instance groups bill until you scale them down or delete the cluster (delete the hands-on cluster with `scripts/hyperpod/delete.sh`). `--finish` from [05 Sandbox versioning](05_sandbox_updates.md) scales the old sandbox pool to zero. If the active pool is no longer used after training, scale it to zero replicas too. Related pages: [05 On-policy GRPO training](../handson/05_grpo_training.md), [07 HyperPod scenario](../handson/07_hyperpod.md), [01 Capacity and nodes](01_capacity_and_nodes.md), [02 Security](02_security.md).
 
 ??? note "References"
     | Topic | Link |

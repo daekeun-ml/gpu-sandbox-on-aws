@@ -1,12 +1,12 @@
 # 04 Reward integrity
 
-**TL;DR** Candidate code runs only in an untrusted child process while a trusted parent process owns the correctness check, the timing and the verdict, and a table maps each publicly reported reward hacking pattern to its control and states what is still open.
+**TL;DR** Candidate code runs only in an untrusted child process. The child records the candidate's timings and output checksums; the trusted parent process times the reference on the same inputs and owns the correctness check, the speedup and the verdict.
 
 ## Pain point
 
 When speedup is the reward, the policy can look for gaps in the measurement instead of faster kernels; in the CUDA-L1 report, an extra CUDA stream fooled the timing in 82 of 250 cases (32.8%). In the same Python process as the scoring code, the candidate can replace the timer, the reference operation or the comparison function. Outputs that are right during the correctness check but wrong during the benchmark, cached results, and lazy outputs that move the work outside the timed window are not caught by a single correctness check. Conversely, scoring a sandbox failure as a wrong answer suppresses the behavior that produced a correct answer.
 
-![a: candidate code (ModelNew) in the same Python process as the scoring code replaces the harness timer and the reference and comparison, and games the timed window with an extra stream, caching and lazy outputs, earning a high reward without a faster kernel. b: candidate code runs only in an untrusted child process; the static policy's ban on attribute writes protects the timer, the reference and comparison live in the parent only, and synchronize, new inputs and checksums protect the timed window](../images/figures/production-04_reward_integrity.svg)
+![a: candidate code (ModelNew) in the same Python process as the scoring code replaces the harness timer and the reference and comparison, and games the timed window with an extra stream, caching and lazy outputs, earning a high reward without a faster kernel. b: candidate code runs only in an untrusted child process; the static policy's ban on attribute writes protects the timer, the parent produces the reference outputs and compares (the child also imports the task module, but the parent makes this request's reference outputs only after the child ends), and synchronize, new inputs and checksums protect the timed window](../images/figures/production-04_reward_integrity.svg)
 
 *Takeaway: A candidate in the same process as the scoring code can earn reward by changing the measurement and the comparison instead of writing a faster kernel. Moving the candidate into a child process and fixing the measurement closes each path.*
 
@@ -35,13 +35,11 @@ When speedup is the reward, the policy can look for gaps in the measurement inst
 
 ## Two-process layout
 
-The sandbox server creates a new process tree for every evaluation request and splits the roles in two. The parent process owns the reference and the timing, so whatever the candidate code outputs, the parent grades it against its own reference.
+The sandbox server creates a new process tree for every evaluation request and splits the roles in two. The child times the candidate and reports its output checksums; the parent computes and times the reference and does every comparison. Whatever the candidate code outputs, the parent grades it against its own reference.
 
-![The sandbox server (uvicorn), which never imports torch, starts a new process per request. The trusted parent evaluate.py runs 1. the static policy (AST, check_source) and 2. draws fresh correctness and timing seeds, then hands the candidate code and seeds to the untrusted child runner.py with an env allowlist, a new session and a timeout. The child runs 3. the candidate ModelNew, saves outputs per seed and writes timings and checksums to runner.json. Outputs per seed and runner.json come back to the parent through a size limit and type checks, and the parent 4. compares them with reference outputs on the same seeds (read with weights_only=True), 5. times the reference and compares the timed output checksums, and 6. writes the verdict JSON after the child tree ends. The child never gets reference outputs or pod env such as tokens](../images/figures/production-04_reward_integrity--two-process.svg)
+![The sandbox server (uvicorn), which never imports torch, starts a new process per request. The trusted parent evaluate.py runs 1. the static policy (AST, check_source) and 2. draws fresh correctness and timing seeds, then hands the candidate code and seeds to the untrusted child runner.py with an env allowlist, a new session and a timeout. The child runs 3. the candidate ModelNew, saves outputs per seed and writes timings and checksums to runner.json. Outputs per seed and runner.json come back to the parent; runner.json goes through a 1 MiB size limit and type checks, and the parent 4. reads the outputs per seed with weights_only=True (no size check) and compares them with reference outputs on the same seeds, 5. times the reference and compares the timed output checksums, and 6. writes the verdict JSON last, after runner.py exits. The child never gets reference outputs or pod env such as tokens](../images/figures/production-04_reward_integrity--two-process.svg)
 
-*Takeaway: Candidate code reaches only the child process and its output files; the reference computation, the timing comparison and the verdict live in the parent process alone.*
-
-*Candidate code reaches only the child process and its output files; the reference computation, the timing comparison and the verdict live in the parent process alone.*
+*Takeaway: Candidate code runs in the child process, and the reference computation, the timing comparison and the verdict happen in the parent process alone. The two processes share one pod and one UID, so file access is not separated ([02 Security](02_security.md), "What is not covered" item 3).*
 
 | Step | Process | What it does | If it stops here (`status`) |
 |---|---|---|---|
@@ -61,8 +59,8 @@ An exception on the parent's reference path is an infrastructure problem, not th
 - **The child runs in isolated mode and in a new session.** It starts with `python -I` (a Python option that ignores the user's environment), and on timeout the whole session gets SIGKILL.
 - **The child receives an env allowlist only.** Pod env outside `PATH`, `LD_LIBRARY_PATH`, `CUDA_VISIBLE_DEVICES`, `NVIDIA_VISIBLE_DEVICES`, `NVIDIA_DRIVER_CAPABILITIES`, `LANG`, `LC_ALL` and `CC` (tokens, proxies and so on) is not passed on.
 - **Leftover processes are cleaned up.** After each evaluation the server sends SIGKILL to every process except itself and its ancestors (tini as PID 1) (`server/procs.py`).
-- **Files written by the child are not trusted.** `runner.json` goes through a 1 MiB size limit and type checks, and the timing samples must number exactly `iters` and all be finite positive values, or the result is `runtime_error` with the `invalid_runner_report` flag.
-- **The parent writes the verdict last.** It writes after the child tree has finished, so a file the child wrote in advance is overwritten.
+- **Files written by the child are not trusted.** `runner.json` goes through a 1 MiB size limit and type checks. The per-seed output tensor files are read with `weights_only=True`, without a size check, and then compared with the reference by shape, dtype and value. The timing samples must number exactly `iters` and all be finite positive values, or the result is `runtime_error` with the `invalid_runner_report` flag.
+- **The parent writes the verdict last.** Once the runner exits, the parent checks its results and writes the verdict at the very end, so a file the child wrote in advance is overwritten. The server cleans up any leftover processes after the evaluation.
 
 ## Measurement contract
 
@@ -73,13 +71,13 @@ The measurement contract is the set of rules for the clock, the inputs and the o
 | 1 | Host clock up to `torch.cuda.synchronize()` | `time.perf_counter()` wraps the `forward` call and a device-wide synchronize | Work on an extra CUDA stream escaping the time. CUDA events on the default stream can miss work on other streams, a gap KernelBench also documents |
 | 2 | A distinct input per timed iteration | Warmup and timed inputs are built one by one from `timing_seed + i` | Output caches keyed on the input (they never hit) |
 | 3 | Checksums of every timed output | Each output's float64 (sum, sum of absolute values) is recorded, and the parent compares it with the reference for the same input. Tolerance is `ATOL × element count + RTOL × reference absolute sum` | "Wrong once the benchmark starts", kernels that never fill the output, cached results for other inputs |
-| 4 | Output type is exactly `torch.Tensor` | Fails unless `type(t) is torch.Tensor`. The policy also rejects Tensor subclasses | Lazy tensors |
+| 4 | Output type is exactly `torch.Tensor` | A list or tuple output is checked element by element; it fails if any `type(t) is torch.Tensor` check fails. The policy also rejects Tensor subclasses | Lazy tensors |
 | 5 | Fresh seeds per request | `secrets.SystemRandom` draws new correctness seeds (3 in v1, 5 in v2) and a new timing seed | Memorizing outputs or reusing them across rollouts |
 | 6 | Per-request Triton and CUDA caches | `HOME`, `TMPDIR`, `TRITON_CACHE_DIR` and `CUDA_CACHE_PATH` are created fresh under the request directory | Poisoning the next evaluation through compile caches left by a previous one |
 | 7 | Outputs read with `weights_only=True` | `torch.load(..., weights_only=True)` | Arbitrary objects being unpickled when the parent reads files the candidate wrote |
 | 8 | (Optional) speedup cap | `HARNESS_MAX_SPEEDUP`: 0 (off) in v1, 10 in v2 (the same value as KernelBench's `excessive_speedup_threshold`). Above it, the `implausible_speedup` flag is added and the speedup becomes 1.0 | Unknown measurement exploits earning a large reward |
 
-The measurement order follows. Child and parent build inputs from the same `timing_seed`, so each iteration's candidate checksum pairs with the reference's.
+Child and parent build inputs from the same `timing_seed`, so each iteration's candidate checksum pairs with the reference's.
 
 1. Run once on each warmup input (`HARNESS_WARMUP`, default 3), then synchronize.
 2. For each timed input (`HARNESS_ITERS`, default 20), start the clock, call `forward`, and stop the clock after `torch.cuda.synchronize()` returns.
@@ -92,7 +90,7 @@ The correctness check looks, per seed, at the number of outputs, shape, dtype, N
     CUDA events time the GPU side precisely, but an event on the default stream may not wait for work on other streams (KernelBench offers a separate host_time mode that measures all streams). This harness uses a host clock with a device-wide synchronize so that work on every stream counts, and the launch overhead this adds is paid equally by the reference and the candidate.
 
 !!! question "❓ Misconception: exceeding the speedup cap makes the reward 0"
-    Above v2's cap (10x) the speedup only becomes 1.0; `status` stays `ok`, so the correctness score is kept, and the speedup component becomes 0.5, the value for equal speed. The cap withholds the speed bonus; it is not a penalty.
+    Above v2's cap (10x) the speedup only becomes 1.0; `status` stays `ok`, so the correctness score is kept. For a correct answer judged to use a custom kernel, the speedup component becomes 0.5, the value for equal speed, and adds 0.25 (weight 0.5 × 0.5) to the total; for a PyTorch-only correct answer the speedup component is 0 with or without the cap. The cap removes only the bonus above 1x.
 
 ## Static policy
 
@@ -128,18 +126,18 @@ The patterns are described at the level of the public reports, and the "What rem
 | Public report | Reported pattern | Response in this repository | What remains open |
 |---|---|---|---|
 | Sakana AI CUDA Engineer | A memory exploit in the evaluation code skipped the correctness check | The candidate runs only in the child process and the parent does the comparison. The current request's reference outputs are created after the child has finished. Fresh seeds per request. Candidate outputs are read with `weights_only=True` | Correctness is checked only on fixed per-task shapes with 3 random inputs (5 in v2) |
-| KernelBench v0.1 blog | Calling torch or cuBLAS instead of a kernel | Without a Triton kernel, or if it is never launched, `custom_kernel` is false: correctness 0.3, speedup 0 | Only whether a launch happened is checked. If one kernel launch happens, the submission counts as a custom kernel even when PyTorch does most of the work |
+| KernelBench v0.1 blog | Calling torch or cuBLAS instead of a kernel | Without a Triton kernel, or if it is never launched, `custom_kernel` is false: a correct answer gets correctness 0.3 and speedup 0 | Only whether a launch happened is checked. If one kernel launch happens, the submission counts as a custom kernel even when PyTorch does most of the work |
 | KernelBench v0.1 blog | Defining a kernel without calling it | Triton launch counter, `triton_kernel_never_launched` flag | The counter is best effort. If Triton internals change and it returns `None`, the decision uses the AST signal alone |
 | KernelBench v0.1 blog | No-op kernels that reuse memory | The child process holds no reference outputs. Fresh seeds, checksums of every timed output | Timed outputs are compared only by the (sum, absolute sum) checksum, not element by element |
 | KernelBench v0.1 blog | Stream timing mismatch | Host clock + `torch.cuda.synchronize()`. The policy rejects stream and graph APIs | The policy's API list is name based. For streams created through paths outside the list, the device-wide synchronize, not the policy, puts the work into the measured time |
 | Kevin-32B | Copying the reference, inheriting the reference class | `gpusandbox` is outside the import allowlist. Rewriting the same PyTorch code makes `custom_kernel` false | A correct PyTorch-only answer still earns correctness 0.3 (Kevin-32B gave PyTorch-only answers 0). On tasks where kernels are hard, an incentive to stay with PyTorch answers remains |
 | Kevin-32B | try/except fallback | Partial: a kernel that is never launched does not count as a custom kernel | Open (see the warning below) |
 | CUDA-L1 | An extra stream fooled the timing (82 of 250, 32.8%) | Same as the stream timing row above | Same as the stream timing row above |
-| CUDA-L1 | Lazy evaluation | The output type must be exactly `torch.Tensor`. Tensor subclasses are rejected | No remaining path found in this repository's code (not verified on a GPU) |
+| CUDA-L1 | Lazy evaluation | The output type must be exactly `torch.Tensor` (each element, for a list or tuple). Tensor subclasses are rejected | No remaining path found in this repository's code (not verified on a GPU) |
 | CUDA-L1 | Caching | A distinct input per timed iteration, fresh seeds and a fresh process per request | A cache keyed on something other than the input is caught by the checksums, with the checksum limits above |
 
 !!! warning "Open: how a try/except fallback is classified"
-    The policy does not reject `try` and `except`, and the launch counter increments before it calls the original `run`. A submission whose kernel launch fails with an exception and that then builds the result with PyTorch operations can therefore be classified as `custom_kernel` and earn correctness 1.0 plus a speedup score (inference from the code, not checked on a GPU). The output really is correct, so what goes wrong is not the correctness verdict but the "used a kernel" classification. Possible fixes are counting only successful launches, rejecting a `try` around kernel calls in the policy, or adding a rule-based linter and an LLM judge as TritonRL does; any of them changes the measurement contract, so ship it as a new sandbox version.
+    The policy does not reject `try` and `except`, and the launch counter increments before it calls the original `run`. A submission whose kernel launch fails with an exception and that then builds the result with PyTorch operations can therefore be classified as `custom_kernel` and earn correctness 1.0 plus a speedup score (inference from the code, not checked on a GPU). The output really is correct, so what goes wrong is not the correctness verdict but the "used a kernel" classification. Possible fixes are counting only successful launches, rejecting a `try` around kernel calls in the policy, or adding a rule-based linter or an LLM judge; any of them changes the measurement contract, so ship it as a new sandbox version.
 
 ## How verdicts become rewards
 
@@ -166,18 +164,18 @@ flowchart LR
 
 | Item | TRL (`KernelRewards`) | veRL (`rl/verl/reward_fn.py`) |
 |---|---|---|
-| Unit of work | One reward batch evaluated at once, the result shared by three reward functions (one sandbox round trip) | One sample at a time, async `compute_score` |
+| Unit of work | One reward batch evaluated at once, the result shared by three reward functions (usually one batch call; none when the batch is fully cached from one pool, up to three when a version switch forces rescoring) | One sample at a time, async `compute_score` |
 | Return value | One component value per function; TRL forms the weighted sum with `reward_weights` | `score` (weighted sum) plus `status`, `correctness`, `speedup_reward`, `sandbox_version`, `sandbox_error` |
 | Policy violations | Checked in the trainer beforehand; `policy_violation` without a sandbox round trip | Same (`check_source`) |
 | `sandbox_error` | All three components `None`. TRL treats a sample whose rewards are all `None` as unscorable, removes it from the group baseline and sets its advantage to 0 | No "skip" signal, so it returns the format score 0.1 and `sandbox_error: 1` |
 
-On veRL, a sample hit by an infrastructure error gets only 0.1, so it can be rated below the normally scored samples of the same group. The effect and the remedies are in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md). Verdict `flags` are not aggregated as metrics yet; to alert on reward hacking, see the extension in [07 Observability and operations](07_observability_and_operations.md).
+On veRL, a sample hit by an infrastructure error gets 0.1. That can be below the normally scored samples of the same group, and it is above `no_code` (0), which submitted no code. The effect and the remedies are in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md). Verdict `flags` are not aggregated as metrics yet; to alert on reward hacking, see the extension in [07 Observability and operations](07_observability_and_operations.md).
 
 ## When you find a new pattern
 
-1. **Add a reproducing submission to the golden set.** Adding it with its expected verdict to `src/gpusandbox/golden.py` makes `scripts/ops/verify.sh` and `parity` check that pattern every time.
+1. **Add a reproducing submission to the golden set.** Add it with its expected verdict to `src/gpusandbox/golden.py`. `scripts/ops/verify.sh` and `parity` run the golden set inside the `CONTROL_IMAGE_URI` image, so set a new `IMAGE_TAG`, rebuild with `scripts/03_build_push_images.sh` and update `CONTROL_IMAGE_URI`. Then check that the verification Job output has a line for the new case.
 2. **Add the control and a local test.** After changing the harness or the policy, add the same case to `tests/test_policy.py` or `tests/test_harness_cpu.py`.
-3. **Ship a new version.** The measurement contract changes, so bump `HARNESS_VERSION` and start a new sandbox version with a new image. The old version cannot catch the new golden, so `parity` failing is expected, and `scripts/ops/rollout.sh` does not switch when parity fails; verify the new pool with `scripts/ops/verify.sh`, switch with the routing update commands in [05 Sandbox versioning](05_sandbox_updates.md), and record it following "Harness changes that shift rewards on purpose".
+3. **Ship a new version.** The measurement contract changes, so bump `HARNESS_VERSION` and start a new sandbox version with a new image. `parity` fails if the old version does not return the new case's expected `status` or `custom_kernel`. Parity compares only the expected `status`, the expected `custom_kernel` where set, and the speedup gap between the two pools, so a change that only adds new `flags` passes parity and the flag needs its own check. `scripts/ops/rollout.sh` does not switch when parity fails; in that case verify the new pool with `scripts/ops/verify.sh`, switch with the routing update commands in [05 Sandbox versioning](05_sandbox_updates.md), and record it following "Harness changes that shift rewards on purpose".
 
 ## How to verify
 
@@ -209,7 +207,7 @@ python -m pytest tests/test_harness_cpu.py tests/test_policy.py -q
 
 ### On a cluster
 
-The author has not run this step on AWS, so verify it yourself. The command checks the pool's isolation, egress denial, golden verdicts through the authenticated API, and denial from another namespace, in that order.
+The command checks the pool's isolation, egress denial, golden verdicts through the authenticated API, and denial from another namespace, in that order. On 2026-11-18 it ran on EKS in us-west-2 against the gVisor v1 pool (A10G) and the Kata GPU v1 pool (T4), and all 6 golden entries showed `PASS`.
 
 ```bash
 scripts/ops/verify.sh gvisor v1
@@ -227,8 +225,8 @@ PASS read_host_file               status=policy_violation  speedup=None
 ```
 
 - `PASS` for `vector_add_triton` and `relu_bias_triton` means a Triton kernel compiled, ran and was classified as a custom kernel on that node.
-- `PASS` for `relu_bias_benchmark_cheat` means output that is wrong only in the timed phase was caught.
-- For the Kata GPU pool, run the same check with `scripts/ops/verify.sh kata-qemu v1`, which also tells you whether Triton works on T4.
+- `relu_bias_benchmark_cheat` returns wrong output from its fourth `forward` call on. With v1's 3 correctness seeds it passes the correctness check and becomes `wrong_answer` at the timed checksum comparison. With v2's 5 seeds it is already `wrong_answer` at the correctness check, so a `PASS` on a v2 pool does not show that the checksum check works. The probe compares only `status`.
+- For the Kata GPU pool, run the same check with `scripts/ops/verify.sh kata-qemu v1`.
 
 **If it fails:** see the "Sandbox pools and readiness" and "401 and 403 responses" tables in [Troubleshooting](../reference/troubleshooting.md).
 
@@ -237,11 +235,11 @@ PASS read_host_file               status=policy_violation  speedup=None
 - **The static policy is not a security boundary.** gVisor, Kata and the network controls protect the node ([02 Security](02_security.md)).
 - **Correctness is checked within a fixed range.** Only fixed per-task shapes with 3 random inputs (5 in v2) are checked, so correctness on other shapes or edge-case values is outside the verdict.
 - **Timed outputs are compared by checksum only.** Two values (sum, absolute sum) are a weaker fingerprint than an element-wise comparison.
-- **The assumption that timed inputs cannot be known in advance rests on the policy.** Timed inputs come from a fresh seed per request, but that a candidate cannot learn them in advance depends on the static policy and the process split. If it breaks, the backstop is v2's 10x cap; v1 has no cap.
+- **Timed inputs come from a fresh seed per request.** That a candidate cannot learn them in advance depends on the static policy and the process split. If it breaks, the backstop is v2's 10x cap; v1 has no cap.
 - **The L2 cache is not flushed.** KernelBench flushes L2 when it times with CUDA events, while this harness only changes the input per iteration; the effect was not measured.
 - **Very short kernels have low resolution.** The host clock includes launch overhead, so the shorter a kernel runs, the closer its speedup can appear to 1 (inference).
 - **A speedup means something only on the GPU it was measured on.** Treat A10G speedups (gVisor pool) and T4 speedups (Kata pool) as different reward functions.
-- **GPU paths are outside the local tests.** The Triton launch counter, submissions that use CUDA streams, and real speedups cannot be checked by CPU tests, and the author has not run them on AWS.
+- **GPU paths are outside the local tests.** The Triton launch counter, submissions that use CUDA streams, and real speedups cannot be checked by CPU tests. On the v1 pools on EKS on 2026-11-18, Triton kernels were classified as custom kernels on both A10G and T4, and `relu_bias_triton` measured a speedup of 1.7819 on A10G and 1.7882 on T4. Submissions that use extra CUDA streams were not run on a GPU.
 
 Related pages: [02 Security](02_security.md), [03 Gateway and pools](03_gateway_and_pools.md), [05 Sandbox versioning](05_sandbox_updates.md), [07 Observability and operations](07_observability_and_operations.md), [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md)
 

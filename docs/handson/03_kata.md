@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-Kata는 pod마다 가벼운 VM을 실행하므로 노드에 `/dev/kvm`이 있어야 합니다(QEMU와 Cloud Hypervisor가 KVM을 씀). `g5.xlarge` 같은 일반 GPU VM 인스턴스에는 `/dev/kvm`이 없습니다. GPU도 VM에 직접 할당하려면 IOMMU와, 호스트가 물리 GPU를 직접 제어하는 구성(vfio-pci)이 필요합니다. AWS에서 이 조건을 갖춘 x86 NVIDIA 인스턴스는 bare metal인 `g4dn.metal`(시간당 7.824 USD)뿐이에요. 그러면 kata-deploy, containerd drop-in, RuntimeClass처럼 GPU와 무관한 설정 실수도 이 노드에서 디버깅하게 됩니다. 또한 AL2023 커널은 IOMMU를 기본으로 활성화하지 않습니다. nodeadm은 부팅할 때마다 `/etc/containerd/config.toml`을 다시 작성하므로, kata-deploy가 추가한 runtime handler가 재부팅 뒤 사라질 수 있습니다.
+Kata는 pod마다 가벼운 VM을 실행하므로 노드에 `/dev/kvm`이 있어야 합니다(QEMU와 Cloud Hypervisor가 KVM을 씀). `g5.xlarge` 같은 일반 GPU VM 인스턴스에는 `/dev/kvm`이 없습니다. GPU도 VM에 직접 할당하려면 IOMMU를 켜고, 호스트가 NVIDIA 드라이버를 로드하지 않은 채 GPU를 `vfio-pci`에 바인딩해 VM에 넘겨야 합니다. AWS에서 이 조건을 갖춘 x86 NVIDIA 인스턴스는 bare metal인 `g4dn.metal`(시간당 7.824 USD)뿐이에요. 그러면 kata-deploy, containerd drop-in, RuntimeClass처럼 GPU와 무관한 설정 실수도 이 노드에서 디버깅하게 됩니다. 또한 AL2023 커널은 IOMMU를 기본으로 활성화하지 않습니다. nodeadm은 부팅할 때마다 `/etc/containerd/config.toml`을 다시 작성하므로, kata-deploy가 추가한 runtime handler가 재부팅 뒤 사라질 수 있습니다.
 
 ![a: kata-deploy와 containerd drop-in, RuntimeClass와 NetworkPolicy, node guard와 부팅 시간처럼 GPU와 무관한 설정과 GPU passthrough(VFIO, IOMMU)를 모두 g4dn.metal(시간당 7.824 USD)에서 확인합니다. g4dn.metal은 Kata VM에 GPU를 직접 할당할 수 있는 유일한 x86 NVIDIA 인스턴스입니다. b: GPU와 무관한 설정은 nested virtualization(/dev/kvm)을 지원하는 c8i.2xlarge(시간당 0.37484 USD)에서 먼저 확인하고, GPU passthrough만 IOMMU AMI로 시작한 g4dn.metal에서 확인합니다.](../images/figures/handson-03_kata.svg)
 
@@ -13,8 +13,8 @@ Kata는 pod마다 가벼운 VM을 실행하므로 노드에 `/dev/kvm`이 있어
 
 ## Why
 
-- **두 단계로 나눠 비용을 줄입니다.** GPU와 무관한 부분(kata-deploy, RuntimeClass, NetworkPolicy, node guard, 부팅 시간)은 `c8i.2xlarge`에서 먼저 확인하고, GPU passthrough만 `g4dn.metal`에서 확인합니다.
-- **커널 인자는 AMI에 포함합니다.** `g4dn.metal`이 warm reboot 뒤 다시 부팅되지 않았다는 제3자 보고가 있습니다. 그래서 user data에서 재부팅하는 대신, 비용이 적은 `m6i.large`에서 `intel_iommu=on iommu=pt`를 포함한 AMI를 빌드해요.
+- **두 단계로 나눠 비용을 줄입니다.** CPU 단계(`c8i.2xlarge`)에서는 kata-deploy와 RuntimeClass를 설치하고 세 런타임의 커널을 확인합니다. GPU 노드를 추가하기 전에 [04](04_sandbox_pools.md)의 CPU 풀을 배포하면, 네트워크 차단(NetworkPolicy, node guard)은 `scripts/ops/verify.sh`로, pod 생성부터 Ready까지 걸린 시간은 `scripts/ops/bench.sh`로 확인할 수 있어요.
+- **커널 인자는 AMI에 포함합니다.** 비용이 적은 `m6i.large` 빌더에서 `intel_iommu=on iommu=pt`를 AMI에 넣습니다. `g4dn.metal`은 첫 부팅부터 이 인자를 적용하므로 설정을 위해 재부팅할 필요가 없어요.
 - **업스트림이 지원하는 GPU 연결 방식이 기본값입니다.** 이 방식은 QEMU, cold-plug, Go shim(`kata-qemu-nvidia-gpu`) 조합입니다. Cloud Hypervisor GPU는 환경변수를 지정해야만 활성화되는 실험 기능(RuntimeClass label `gpusandbox/support: experimental`)이에요.
 
 **사전 지식:** [01 클러스터와 이미지](01_cluster_and_images.md)를 먼저 마쳐야 합니다. Kata가 GPU를 다루는 방식은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)의 "Kata + VFIO passthrough" 절에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있어요.
@@ -69,7 +69,7 @@ scripts/kata/cpu_nodes.sh    # kata-deploy, the gvisor-cpu RuntimeClass, smoke p
 
 스크립트는 먼저 `sandbox-kata-cpu` 노드 그룹이 있는지 확인합니다. 실습 계정에서는 약 14분 걸렸고, 대부분은 kata-deploy 설치 시간이었어요.
 
-**문제가 생기면:** `no sandbox-kata-cpu node group: set WITH_KATA_CPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`이 나오면 노드 그룹이 아직 없으니 위 명령으로 `02_create_cluster.sh`를 다시 실행하세요. 그 리전의 `c8i.2xlarge`가 nested virtualization을 지원하지 않으면 노드 그룹 생성이 실패하거나 smoke pod가 완료되지 않으니, `01_check_prereqs.sh`의 `SupportedFeatures` 출력과 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요.
+**문제가 생기면:** `no sandbox-kata-cpu node group: set WITH_KATA_CPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`은 노드 그룹 조회가 실패하면 원인과 관계없이 나옵니다. 위의 `aws eks describe-nodegroup` 명령을 직접 실행해 `ResourceNotFoundException`이면 `CLUSTER_NAME`과 `AWS_REGION`을 확인한 뒤 위 명령으로 `02_create_cluster.sh`를 다시 실행하고, `AccessDeniedException`이면 `eks:DescribeNodegroup` 권한을 확인하세요. 그 리전의 `c8i.2xlarge`가 nested virtualization을 지원하지 않으면 노드 그룹 생성이 실패하거나 smoke pod가 완료되지 않으니, `01_check_prereqs.sh`의 `SupportedFeatures` 출력과 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요.
 
 ### Kata CPU 노드의 launch template (CDK 스택)
 
@@ -84,11 +84,11 @@ scripts/kata/cpu_nodes.sh    # kata-deploy, the gvisor-cpu RuntimeClass, smoke p
 | `ImageId` | 지정하지 않음 | EKS가 EKS 최적화 AMI(`AL2023_x86_64_STANDARD`)를 선택하고 자체 bootstrap user data를 병합 |
 | 노드 그룹 | desired 1, min 0, max 2, label `gpusandbox/role=sandbox-kata`와 `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | Kata 샌드박스 전용. smoke pod와 CPU 풀은 `gpusandbox/kata-gpu=false`로 이 노드를 선택함 |
 
-관리형 노드 그룹이 launch template의 `NestedVirtualization`을 노드에 전달하는지는 EKS 문서에 나와 있지 않습니다. 실습 계정(2026-11-14)에서는 전달됐지만(노드에 `/dev/kvm` 있음) 동작이 바뀔 수 있으니, 처음 배포한 뒤 확인하세요.
+관리형 노드 그룹이 launch template의 `NestedVirtualization`을 노드에 전달하는지는 EKS 문서에 나와 있지 않습니다. 실습 계정(2026-11-14)에서는 전달됐지만(노드에 `/dev/kvm` 있음) 동작이 바뀔 수 있으니, 처음 배포한 뒤 확인하세요. 아래 명령은 현재 kubectl context(터널)의 Kata CPU 노드에서 인스턴스 ID를 읽으므로, 같은 리전에 이 저장소로 만든 다른 클러스터가 있어도 그 노드를 읽지 않습니다.
 
 ```bash
-aws ec2 describe-instances --region "$AWS_REGION" \
-  --filters "Name=tag:eks:nodegroup-name,Values=sandbox-kata-cpu" "Name=instance-state-name,Values=running" \
+provider_id="$(kubectl get nodes -l gpusandbox/kata-gpu=false -o jsonpath='{.items[0].spec.providerID}')"
+aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "${provider_id##*/}" \
   --query 'Reservations[].Instances[].CpuOptions'
 ```
 
@@ -158,18 +158,19 @@ pod "kata-qemu-smoke-34567" deleted
 !!! warning "비용: g4dn.metal은 시간당 7.824 USD입니다"
     us-east-1과 us-west-2 온디맨드 요금이고, 서울 리전은 9.624 USD입니다. `WITH_KATA_GPU=1`로 `02_create_cluster.sh`를 다시 실행하면 `cdk/deploy.sh`가 `This adds g4dn.metal (about 7.8 USD/hour) to the stack. Type 'metal' to continue:` 메시지로 확인을 요청하고, `metal`을 입력해야 `g4dn.metal` 노드 그룹이 스택에 추가됩니다. 노드를 쓰지 않을 때는 이 페이지 끝의 명령으로 바로 0으로 줄이세요.
 
-`kata/gpu_nodes.sh`는 두 번 실행하고, 그 사이에 `02_create_cluster.sh`를 다시 실행합니다.
+`kata/gpu_nodes.sh`는 두 번 실행하고, 그 사이에 `02_create_cluster.sh`를 다시 실행합니다. AMI는 `KATA_IOMMU_AMI_ID`가 비어 있을 때만 빌드돼요. `08_cleanup.sh`는 AMI를 지워도 `config.env`의 ID는 그대로 두므로, 이전 실습의 ID가 남아 있으면 `aws ec2 describe-images --region "$AWS_REGION" --image-ids <ID>`로 AMI가 있는지 확인하고, 없으면 값을 비운 뒤 실행하세요.
 
 ```bash
-scripts/kata/gpu_nodes.sh       # first run: bakes the IOMMU AMI, then stops
-# add KATA_IOMMU_AMI_ID="ami-..." and WITH_KATA_GPU="1" to scripts/config.env
+scripts/kata/gpu_nodes.sh       # KATA_IOMMU_AMI_ID empty: bakes the IOMMU AMI, then stops
+# in scripts/config.env: paste the printed line  export KATA_IOMMU_AMI_ID="ami-..."
+#                        and change  export WITH_KATA_GPU="0"  to  export WITH_KATA_GPU="1"
 scripts/02_create_cluster.sh    # same option as your first run; type 'metal' to add g4dn.metal
 scripts/kata/gpu_nodes.sh       # second run: GPU Operator, kata-deploy, pgpu check
 ```
 
-**확인할 것 (첫 실행):** 스크립트는 약 10분이라고 안내합니다(2026-11-18 실행에서는 빌더가 약 30초 뒤 멈췄고, AMI는 약 2분 뒤 available이 됨). 끝나면 `Add to scripts/config.env:` 아래에 `export KATA_IOMMU_AMI_ID="ami-..."` 줄이 출력되고, `[error] add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`로 끝납니다. 이 에러는 정상 동작입니다.
+**확인할 것 (첫 실행):** 스크립트는 약 10분이라고 안내합니다(2026-11-18 실행에서는 빌더가 약 30초 뒤 멈췄고, AMI는 약 2분 뒤 available이 됨). 끝나면 `Add to scripts/config.env:` 아래에 `export KATA_IOMMU_AMI_ID="ami-..."` 줄이 출력되고, `[error] add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`로 끝납니다. 이 에러는 정상 동작입니다. `export`가 붙은 줄을 그대로 붙여 넣으세요. `export` 없이 `KATA_IOMMU_AMI_ID=...`만 적으면 CDK의 Python 프로세스가 이 값을 환경변수로 받지 못합니다.
 
-**확인할 것 (`02_create_cluster.sh` 재실행):** `metal`을 입력하면 CDK가 `sandbox-kata-gpu` 노드 그룹과 그 launch template을 추가합니다. 이때부터 `g4dn.metal` 요금이 나갑니다. `kata/gpu_nodes.sh`의 두 번째 실행은 이 노드 그룹이 없으면 `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again ...`으로 멈춰요. Kata CPU 노드 추가(`kata/cpu_nodes.sh`)를 건너뛰어도 `kata/gpu_nodes.sh`가 kata-deploy를 설치합니다.
+**확인할 것 (`02_create_cluster.sh` 재실행):** `metal`을 입력하면 CDK가 `sandbox-kata-gpu` 노드 그룹과 그 launch template을 추가합니다. 이때부터 `g4dn.metal` 요금이 나갑니다. `kata/gpu_nodes.sh`의 두 번째 실행은 이 노드 그룹을 조회하지 못하면 `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again ...`으로 멈춰요. 조회 권한이 없어도 같은 메시지가 나오니, `aws eks describe-nodegroup ... --nodegroup-name sandbox-kata-gpu`를 직접 실행해 원인을 확인하세요. Kata CPU 노드 추가(`kata/cpu_nodes.sh`)를 건너뛰어도 `kata/gpu_nodes.sh`가 kata-deploy를 설치합니다.
 
 ### IOMMU를 켠 AMI 빌드 (build-iommu-ami.sh)
 
@@ -190,8 +191,8 @@ AL2023 커널은 `CONFIG_INTEL_IOMMU_DEFAULT_ON`이 꺼져 있어서, `intel_iom
 
 AL2023 커널은 VFIO type1 IOMMU backend도 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하는데, 2026-11-18의 `g4dn.metal` 노드에서는 아무것도 이 모듈을 로드하지 않았습니다. 이 모듈이 없으면 QEMU가 GPU를 연결하지 못해 Kata GPU pod가 시작되지 않습니다(아래 "pod가 `create container timeout`으로 멈출 때"). 그래서 2번 단계에서 `modules-load.d` 설정을 AMI에 넣습니다.
 
-!!! note "빌더 대기 방식 (2026-11-18 수정)"
-    이전 스크립트는 `aws ec2 wait instance-stopped`로 기다렸습니다. 이 waiter는 `pending` 상태를 terminal failure로 처리해서, 빌더가 아직 running이 되기 전에 `Waiter InstanceStopped failed ... "pending"`으로 바로 실패했어요. 이전 스크립트는 이렇게 중간에 멈추면 빌더를 terminate하지 않았습니다. 지금 스크립트는 위 3번처럼 상태를 직접 조회하고, EXIT trap으로 항상 빌더를 정리합니다. 이전 버전으로 실패한 적이 있다면 `<CLUSTER_NAME>-iommu-ami-builder` 이름의 인스턴스가 남아 있는지 확인하고 terminate하세요.
+!!! note "이전 버전 스크립트로 실패했다면"
+    이전 버전에서 `Waiter InstanceStopped failed ... "pending"`으로 멈췄다면 빌더가 남아 있을 수 있습니다. `<CLUSTER_NAME>-iommu-ami-builder` 이름의 인스턴스가 있는지 확인하고 terminate하세요.
 
 ### sandbox-kata-gpu 노드 그룹
 
@@ -241,7 +242,7 @@ flowchart TB
 | `vfioManager.enabled` | `true` | T4 8개를 vfio-pci에 바인딩 |
 | `kataSandboxDevicePlugin.enabled` | `true` | T4를 `nvidia.com/pgpu` 리소스로 등록 |
 
-trainer와 gVisor 노드에는 `nvidia.com/gpu.deploy.operands=false` label이 있어서 GPU Operator가 이 노드에 아무것도 배포하지 않습니다. NVIDIA 문서에 따르면 한 노드는 한 번에 한 가지 컨테이너 런타임 모드만 쓸 수 있으므로, 컨테이너 GPU 워크로드와 VM passthrough를 한 노드에서 함께 쓰지 않아요.
+trainer와 gVisor 노드에는 `nvidia.com/gpu.deploy.operands=false` label이 있어서 GPU Operator가 이 노드에 NVIDIA GPU operand를 배포하지 않습니다. 다만 NFD worker는 `gpusandbox/role` taint를 허용하도록 설정돼 있어 이 노드에서도 실행됩니다. NVIDIA 문서에 따르면 한 노드는 한 번에 한 가지 컨테이너 런타임 모드만 쓸 수 있으므로, 컨테이너 GPU 워크로드와 VM passthrough를 한 노드에서 함께 쓰지 않아요.
 
 ### kata-qemu-nvidia-gpu와 VM 크기
 
@@ -389,7 +390,7 @@ exit
 |---|---|---|
 | `02_create_cluster.sh` 재실행 (`WITH_KATA_CPU=1`) | 노드 그룹 생성 (측정하지 않음) | `c8i.2xlarge` x1 (0.37484 USD/시간) |
 | `kata/cpu_nodes.sh` | 약 14분 (실측, 대부분 kata-deploy). timeout은 kata-deploy 20분, smoke pod 각 10분 | 없음 |
-| `kata/gpu_nodes.sh` 첫 실행 | 스크립트 안내 약 10분. 2026-11-18 실측은 빌더 stop 약 30초, AMI available 약 2분 | 빌더 `m6i.large`(0.096 USD/시간, AMI가 available이 될 때까지), AMI 스냅샷(EBS 스냅샷 요금) |
+| `kata/gpu_nodes.sh` 첫 실행 | 스크립트 안내 약 10분. 2026-11-18 실측은 빌더 stop 약 30초, AMI available 약 2분 | 빌더 `m6i.large`(0.096 USD/시간, 빌더가 stopped가 될 때까지), 그 뒤 AMI를 만드는 동안 빌더의 EBS 볼륨, AMI 스냅샷(EBS 스냅샷 요금) |
 | `02_create_cluster.sh` 재실행 (`WITH_KATA_GPU=1`) | `g4dn.metal` 노드 합류 약 3분 (2026-11-18 실측) | `g4dn.metal` x1 (7.824 USD/시간) |
 | `kata/gpu_nodes.sh` 두 번째 실행 | 약 1분 (2026-11-18 실측). timeout은 GPU Operator 20분, kata-deploy 20분, pgpu 대기 최대 20분 | 없음 |
 | 3단계 | `check-clh-gpu.sh` 20분 | 없음 |
@@ -404,7 +405,9 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
   --nodegroup-name sandbox-kata-cpu --scaling-config minSize=0,maxSize=2,desiredSize=0
 ```
 
-**확인할 것:** 명령마다 `"type": "ConfigUpdate"`가 포함된 JSON이 출력됩니다. 몇 분 뒤 `kubectl get nodes -l gpusandbox/role=sandbox-kata`를 실행해 노드가 나오지 않으면 됩니다. 노드를 다시 쓸 때는 `desiredSize=1`로 같은 명령을 실행하세요. Kata GPU 노드를 더 이상 쓰지 않는다면 `WITH_KATA_GPU="0"`으로 `02_create_cluster.sh`를 다시 실행해 스택에서 제거해도 됩니다. [99 정리](99_cleanup.md)는 스택과 함께 Kata 노드 그룹과 launch template을 삭제하고, 확인 단어 `ami`를 입력하면 IOMMU AMI와 스냅샷도 삭제합니다.
+만든 노드 그룹에 해당하는 명령만 실행하세요. Kata GPU 노드는 `sandbox-kata-gpu`, Kata CPU 노드는 `sandbox-kata-cpu`입니다.
+
+**확인할 것:** 실행한 명령마다 `"type": "ConfigUpdate"`가 포함된 JSON이 출력됩니다. 몇 분 뒤 `kubectl get nodes -l gpusandbox/role=sandbox-kata`를 실행해 노드가 나오지 않으면 됩니다. 노드를 다시 쓸 때는 `desiredSize=1`로 같은 명령을 실행하세요. Kata GPU 노드를 더 이상 쓰지 않는다면 `WITH_KATA_GPU="0"`으로 `02_create_cluster.sh`를 다시 실행해 스택에서 제거해도 됩니다. [99 정리](99_cleanup.md)는 스택과 함께 Kata 노드 그룹과 launch template을 삭제하고, 확인 단어 `ami`를 입력하면 IOMMU AMI와 스냅샷도 삭제합니다.
 
 ## 다음 단계
 

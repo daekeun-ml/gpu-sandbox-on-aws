@@ -3,8 +3,8 @@
     "page": "docs/index.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "a: policy가 쓴 커널 코드가 runc 컨테이너에서 실행되어 host 커널과 GPU 드라이버를 그대로 공유합니다. 학습 중에 이미지나 harness를 바꾸면 한 GRPO group 안에 v1과 v2의 reward가 섞여 advantage가 잘못 계산됩니다. b: 코드와 host 커널 사이에 RuntimeClass로 선택한 gVisor 또는 Kata가 있습니다. 배치(또는 group) 단위로 한 버전만 채점하므로 reward가 일관되게 유지됩니다.",
-    "alt_en": "a: kernel code from the policy shares the host kernel and GPU driver in a runc container, and changing the image or harness during training mixes v1 and v2 rewards in one GRPO group, so the advantage goes wrong. b: gVisor or Kata, chosen by RuntimeClass, stands between the code and the host kernel, and one version scores each batch (or group), so rewards stay consistent",
+    "alt_ko": "a: 서로 다른 두 문제입니다. 위 줄에서는 policy가 쓴 커널 코드가 runc 컨테이너에서 실행되어 host 커널과 GPU 드라이버를 그대로 공유합니다. 아래 줄에서는 학습 중에 이미지나 harness를 바꾸면, 런타임과 관계없이 한 GRPO group 안에 v1과 v2의 reward가 섞여 advantage가 잘못 계산됩니다. b: 위 줄은 RuntimeClass로 선택한 gVisor 또는 Kata가 코드와 host 커널 사이에 들어갑니다. 아래 줄은 배치(또는 group) 단위로 한 버전만 채점하므로 reward가 일관되게 유지됩니다.",
+    "alt_en": "a: two separate problems. In the top row, kernel code from the policy shares the host kernel and GPU driver in a runc container. In the bottom row, changing the image or harness during training mixes v1 and v2 rewards in one GRPO group whatever the runtime, so the advantage goes wrong. b: in the top row, gVisor or Kata, chosen by RuntimeClass, stands between the code and the host kernel; in the bottom row, one version scores each batch (or group), so rewards stay consistent",
     "takeaway_ko": "일반 컨테이너에서는 모델이 쓴 코드가 host 커널과 드라이버를 공유하고, 학습 중 버전이 섞이면 같은 group 안의 reward를 서로 비교할 수 없게 됩니다. 격리 런타임을 RuntimeClass로 선택하고 배치(또는 group) 단위로 버전을 고정하면 reward가 일관되게 유지됩니다.",
     "takeaway_en": "In a plain container only the shared kernel and driver stand between the model's code and the host, and mixing versions during training breaks the comparison within a group. Choosing an isolation runtime by RuntimeClass and pinning the version per batch (or group) keeps rewards consistent."
   },
@@ -12,17 +12,17 @@
     "page": "docs/index.md",
     "section": "만드는 것",
     "replaces": "subgraph Trainer[\"학습 (EC2 GPU 노드 또는 HyperPod 노드)\"]",
-    "alt_ko": "왼쪽은 학습 노드(EC2 GPU 노드 또는 HyperPod 노드)이고, 그 안에서 policy 모델과 vLLM이 GRPO로 on-policy 학습을 합니다(g5.2xlarge 또는 ml.g5.2xlarge). 오른쪽은 EC2 노드의 GPU 샌드박스 풀입니다. gVisor + nvproxy(g5.xlarge, A10G), Kata + QEMU(g4dn.metal, T4), Kata + Cloud Hypervisor(CPU 계층, c8i, nested virt, GPU는 실험적)의 세 풀이 같은 이미지를 쓰고, 런타임은 RuntimeClass로 선택합니다. 커널 코드는 group 단위로 버전을 고정해 풀로 보내고, 풀은 정확성과 speedup을 돌려줍니다.",
-    "alt_en": "Left: the policy model + vLLM (GRPO, on-policy, g5.2xlarge or ml.g5.2xlarge) inside training on an EC2 GPU node or a HyperPod node. Right: GPU sandbox pools on EC2 nodes with gVisor + nvproxy (g5.xlarge, A10G), Kata + QEMU (g4dn.metal, T4) and Kata + Cloud Hypervisor (CPU tier on c8i with nested virt, GPU experimental), one image chosen by RuntimeClass. Kernel code goes to the pools with its version pinned per group, and correctness and speedup come back",
-    "takeaway_ko": "policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 세 런타임의 GPU 샌드박스 풀에 전달되고, 풀이 측정한 정확성과 speedup이 reward로 쓰입니다.",
-    "takeaway_en": "Kernel code from the policy model goes to GPU sandbox pools on three runtimes with its version pinned per group, and correctness and speedup come back as the reward."
+    "alt_ko": "왼쪽은 학습 노드(EC2 GPU 노드 또는 HyperPod 노드)이고, 그 안에서 policy 모델과 vLLM이 GRPO로 on-policy 학습을 합니다(g5.2xlarge 또는 ml.g5.2xlarge). 오른쪽은 EC2 노드의 샌드박스 풀입니다. gVisor + nvproxy(g5.xlarge, A10G), Kata + QEMU(g4dn.metal, T4), Kata + Cloud Hypervisor(CPU 계층, c8i, nested virt, GPU는 실험적)의 세 풀이 같은 이미지를 쓰고, 풀마다 프로필이 RuntimeClass와 노드를 정합니다. 커널 코드는 group 단위로 버전을 고정해 풀로 보내고, 풀은 정확성과 speedup을 돌려줍니다.",
+    "alt_en": "Left: the policy model + vLLM (GRPO, on-policy, g5.2xlarge or ml.g5.2xlarge) inside training on an EC2 GPU node or a HyperPod node. Right: sandbox pools on EC2 nodes with gVisor + nvproxy (g5.xlarge, A10G), Kata + QEMU (g4dn.metal, T4) and Kata + Cloud Hypervisor (CPU tier on c8i with nested virt, GPU experimental), one image, with a profile per pool setting the RuntimeClass and the nodes. Kernel code goes to the pools with its version pinned per group, and correctness and speedup come back",
+    "takeaway_ko": "policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 세 런타임의 샌드박스 풀에 전달되고, 풀이 측정한 정확성과 speedup이 reward로 쓰입니다.",
+    "takeaway_en": "Kernel code from the policy model goes to sandbox pools on three runtimes with its version pinned per group, and correctness and speedup come back as the reward."
   },
   "learning_paths": {
     "page": "docs/learning_paths.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "a: 처음 온 독자가 70개 가까운 페이지와 시나리오 A, B1, B2, C를 보고, 아직 GPU가 필요 없는데도 GPU 코스부터 시작합니다. 노드를 켜 둔 동안 시간당 몇 달러가 과금됩니다. b: 비용이 0원인 코스 1(읽기)과 코스 2(로컬 실행)를 먼저 합니다. AWS를 쓰는 코스 3~6은 무료 코스를 마친 뒤 쿼터와 비용을 먼저 확인하고 고릅니다.",
-    "alt_en": "a: a new reader facing close to 70 pages and scenarios A, B1, B2, C starts a GPU path without needing it, and pays a few dollars per hour while it runs. b: the free path 1 (reading) and path 2 (local run) come first, and the AWS paths 3 to 6 come after them, with quota and cost shown up front",
+    "alt_ko": "a: 처음 온 독자가 46개 페이지와 시나리오 A, B1, B2, C를 보고, 아직 GPU가 필요 없는데도 GPU 코스부터 시작합니다. 노드를 켜 둔 동안 시간당 몇 달러가 과금됩니다. b: 비용이 0원인 코스 1(읽기)과 코스 2(로컬 실행)를 먼저 합니다. AWS를 쓰는 코스 3~6은 무료 코스를 마친 뒤 쿼터와 비용을 먼저 확인하고 고릅니다.",
+    "alt_en": "a: a new reader facing 46 pages and scenarios A, B1, B2, C starts a GPU path without needing it, and pays a few dollars per hour while it runs. b: the free path 1 (reading) and path 2 (local run) come first, and the AWS paths 3 to 6 come after them, with quota and cost shown up front",
     "takeaway_ko": "어디서 시작할지 모르는 상태에서 GPU 코스부터 고르면 노드를 켜 둔 시간만큼 비용이 듭니다. 무료인 코스 1과 2를 먼저 하고, 유료 코스는 쿼터와 시간당 비용을 확인한 뒤 고릅니다.",
     "takeaway_en": "Picking a GPU path without knowing where to start adds cost for every hour the nodes stay up. Do the free paths 1 and 2 first, and choose a paid path after checking its quota and hourly cost."
   },
@@ -30,8 +30,8 @@
     "page": "docs/getting_started.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 94개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(빈 값이나 __SET_ME__가 있으면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.",
-    "alt_en": "a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 94 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (it stops on an empty or __SET_ME__ value), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing",
+    "alt_ko": "a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 105개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.",
+    "alt_en": "a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 105 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing",
     "takeaway_ko": "파이프라인을 확인하지 않고 GPU 노드부터 시작하면, 오류를 고치고 다시 실행하는 시간에도 노드 요금이 나갑니다. 로컬 CPU에서 테스트와 dry run으로 파이프라인을 먼저 확인하면 GPU 노드 요금은 노드를 시작한 뒤에만 발생합니다.",
     "takeaway_en": "Starting GPU nodes before checking the plumbing turns every fix and rerun into node charges. Checking the plumbing on a local CPU first, with the tests and the dry run, leaves node charges for the time after the GPU nodes start."
   },
@@ -39,17 +39,17 @@
     "page": "docs/beginner/index.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "a: gVisor, Kata, nvproxy, RuntimeClass, GRPO 같은 처음 보는 용어가 한꺼번에 나옵니다. 이유를 모른 채 명령만 따라 입력하면 상황이 조금만 바뀌어도 응용할 수 없습니다. b: 1~4편에서 그림과 예시로 개념을 설명하고, 용어는 처음 나올 때 한 줄로 풀이합니다. 5편에서 내 PC(무료)와 AWS(선택)로 직접 실습하면서 각 명령이 어떤 위험을 막는지 이해합니다.",
-    "alt_en": "a: many new words arrive at once (gVisor, Kata, nvproxy, RuntimeClass, GRPO), and typing commands without knowing why leaves you stuck when things change even a little. b: chapters 1 to 4 explain each term in one line with pictures, and chapter 5 runs it on your PC (free) and AWS (optional), so you see what each command blocks",
-    "takeaway_ko": "명령만 따라 하면 각 단계가 왜 필요한지 알기 어렵습니다. 1~4편에서 개념을 먼저 읽으면 5편의 각 명령이 어떤 위험을 막는지 이해할 수 있습니다.",
-    "takeaway_en": "Skipping the words and the reasons and copying commands first gets you through the screens but leaves nothing behind. With the reasons from chapters 1 to 4 first, you see what each command in chapter 5 protects against."
+    "alt_ko": "a: gVisor, Kata, nvproxy, RuntimeClass, GRPO 같은 처음 보는 용어가 한꺼번에 나옵니다. 이유를 모른 채 명령만 따라 입력하면 상황이 조금만 바뀌어도 응용할 수 없습니다. b: 1~4편에서 그림과 예시로 개념을 설명하고, 용어는 처음 나올 때 한 줄로 풀이합니다. 5편에서는 내 PC(무료)에서 시험용 답안의 채점 결과를 직접 확인하고, AWS(선택)에서는 런타임마다 보이는 커널을 비교합니다.",
+    "alt_en": "a: many new words arrive at once (gVisor, Kata, nvproxy, RuntimeClass, GRPO), and typing commands without knowing why leaves you stuck when things change even a little. b: chapters 1 to 4 explain each term in one line with pictures, and in chapter 5 you check the grading results of test answers on your PC (free) and, on AWS (optional), compare the kernel each runtime shows",
+    "takeaway_ko": "명령만 따라 하면 각 단계가 왜 필요한지 알기 어렵습니다. 1~4편에서 개념을 먼저 읽고, 5편에서는 시험용 답안의 채점 결과를 직접 확인합니다.",
+    "takeaway_en": "Skipping the words and the reasons and copying commands first gets you through the screens but leaves nothing behind. Read the ideas in chapters 1 to 4 first, then check the grading results of test answers yourself in chapter 5."
   },
   "beginner-01_why_sandbox--layers": {
     "page": "docs/beginner/01_why_sandbox.md",
-    "section": "한 겹이 아니라 여러 겹",
+    "section": "여러 층의 방어",
     "replaces": "CODE[\"모델이 쓴 코드\"] --> L1",
-    "alt_ko": "모델이 쓴 코드에서 서버의 파일, 자격 증명, 네트워크로 가는 화살표가 여섯 개 층을 차례로 통과합니다. 각 층은 1 pod 보안 설정(서버 파일 읽기), 2 격리 런타임 gVisor 또는 Kata(커널 공격), 3 네트워크 규칙 NetworkPolicy(데이터 빼돌리기, 다른 곳으로 퍼지기), 4 노드 설정 IMDSv2, hop limit 1, node guard(자격 증명 빼내기), 5 자격 증명 없음(다른 곳으로 퍼지기), 6 자원과 시간 한도(자원 독차지)입니다. 괄호 안은 각 층이 주로 막는 위험입니다.",
-    "alt_en": "An arrow from the code the model wrote to the server's files, credentials and network passes six layers in turn: 1 pod security settings (reading server files), 2 isolation runtime, gVisor or Kata (kernel attack), 3 network rules, NetworkPolicy (exfiltrating data, spreading), 4 node settings, IMDSv2, hop limit 1, node guard (stealing credentials), 5 no credentials (spreading elsewhere), 6 resource and time limits (hogging resources). The parentheses give the main risk each layer blocks",
+    "alt_ko": "여섯 개 층과 각 층이 막는 위험을 표로 나타낸 그림입니다. 행은 1 pod 보안 설정(root가 아닌 사용자, 권한 제거), 2 격리 런타임(gVisor 또는 Kata), 3 네트워크 규칙(NetworkPolicy, 나가는 연결은 기본 차단. pod가 자기 노드로 여는 새 연결은 4의 node guard가 막음), 4 노드 설정(IMDSv2 필수, hop limit 1, node guard), 5 자격 증명 없음(샌드박스 pod에 AWS 키와 자체 서비스 계정 토큰을 넣지 않음. 호출자가 보낸 토큰은 서버가 검증에 씀), 6 자원과 시간 한도(CPU, 메모리, 실행 시간)입니다. 점은 그 층이 막는 위험입니다. 서버 파일 읽기는 1과 2, 자격 증명 빼내기는 3과 4, 다른 곳으로 퍼지기는 3과 5, 커널 공격은 2, 자원 독차지는 6, 데이터 빼돌리기는 3이 막습니다. 한 위험을 여러 층이 함께 막기도 합니다.",
+    "alt_en": "A table of the six layers and the risks each one blocks. The rows are 1 pod security settings (non-root user, dropped privileges), 2 isolation runtime (gVisor or Kata), 3 network rules (NetworkPolicy, outbound denied by default; new connections a pod opens to its own node are blocked by the node guard in 4), 4 node settings (IMDSv2 required, hop limit 1, node guard), 5 no credentials (no AWS keys and no service account token of its own in the sandbox pod; the server uses the token the caller sends to verify the caller), 6 resource and time limits (CPU, memory, execution time). A dot marks a risk the layer blocks: reading server files by 1 and 2, stealing credentials by 3 and 4, spreading elsewhere by 3 and 5, kernel attack by 2, hogging resources by 6, exfiltrating data by 3. Some risks are blocked by several layers",
     "takeaway_ko": "코드가 서버의 파일, 자격 증명, 네트워크에 접근하려면 여섯 개 층을 모두 통과해야 하고, 각 층은 서로 다른 위험을 막습니다.",
     "takeaway_en": "To reach the server's files, credentials or network, code has to pass all six layers, and each layer handles a different risk."
   },
@@ -57,10 +57,10 @@
     "page": "docs/beginner/02_container_vs_sandbox.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "a: 컨테이너 A, B, C가 서버 커널 하나를 함께 씁니다. 커널 취약점 하나로 A, B, C가 모두 위험해집니다. b: 컨테이너마다 Sentry 또는 VM 커널이 컨테이너와 서버 커널 사이에 있습니다. 그래서 A, B, C 앞에 격리 계층이 하나 더 생깁니다.",
-    "alt_en": "a: containers A, B and C share one server kernel, so one kernel weakness puts A, B and C at risk. b: a Sentry or a VM kernel stands in front of the server kernel for each container, adding one more wall in front of A, B and C",
-    "takeaway_ko": "일반 컨테이너는 서버 커널 하나를 함께 쓰므로 커널 취약점 하나가 모든 컨테이너에 영향을 줍니다. 샌드박스 런타임은 pod마다 Sentry나 VM 커널을 두어 컨테이너와 서버 커널 사이에 격리 계층을 하나 더 만듭니다.",
-    "takeaway_en": "With one kernel, a kernel weakness spreads to every container. A sandbox runtime keeps a Sentry or a VM kernel for each pod and puts one more wall between the container and the server kernel."
+    "alt_ko": "a: 컨테이너 A, B, C가 서버 커널 하나를 함께 씁니다. 한 컨테이너에서 이용할 수 있는 커널 취약점이 있으면 A, B, C가 모두 위험해질 수 있습니다. b: 샌드박스 pod마다 Sentry 또는 VM 커널이 그 안의 컨테이너와 서버 커널 사이에 있습니다. 그래서 A, B, C 앞에 격리 계층이 하나 더 생깁니다.",
+    "alt_en": "a: containers A, B and C share one server kernel, so a kernel weakness that one container can exploit may put A, B and C at risk. b: in each sandbox pod, a Sentry or a VM kernel stands between the containers inside it and the server kernel, adding one more wall in front of A, B and C",
+    "takeaway_ko": "일반 컨테이너는 서버 커널 하나를 함께 쓰므로, 한 컨테이너에서 이용할 수 있는 커널 취약점이 다른 컨테이너까지 위협할 수 있습니다. 샌드박스 런타임은 pod마다 Sentry나 VM 커널을 두어 컨테이너와 서버 커널 사이에 격리 계층을 하나 더 만듭니다.",
+    "takeaway_en": "With one shared kernel, a kernel weakness that one container can exploit can threaten the other containers too. A sandbox runtime keeps a Sentry or a VM kernel for each pod and puts one more wall between the container and the server kernel."
   },
   "beginner-02_container_vs_sandbox--three-walls": {
     "page": "docs/beginner/02_container_vs_sandbox.md",
@@ -75,9 +75,9 @@
     "page": "docs/beginner/03_gpu_sandbox.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "a: GPU 커널 채점에는 실제 GPU가 필요합니다. Firecracker 기반 microVM에는 GPU를 연결할 장치가 없어 채점할 수 없고, 일반 컨테이너(runc)에서는 드라이버 버그가 서버 커널에 영향을 줍니다. b: gVisor + nvproxy(g5.xlarge)는 ioctl을 검사해 허용 목록에 있는 명령만 서버의 드라이버로 전달합니다. Kata + VFIO(g4dn.metal)는 GPU를 VM에 직접 할당하므로 드라이버 버그의 영향이 VM 안으로 한정됩니다.",
-    "alt_en": "a: grading a GPU kernel needs a real GPU; a Firecracker-based microVM has no device for a GPU, so it cannot grade, and in a regular container (runc) a driver bug reaches the server kernel. b: gVisor + nvproxy (g5.xlarge) checks ioctls and lets only allowlisted calls reach the server driver, and Kata + VFIO (g4dn.metal) hands the whole GPU to the VM, so driver bugs stay inside the VM",
-    "takeaway_ko": "GPU가 없는 microVM에서는 채점할 수 없고, 일반 컨테이너에서는 드라이버 버그가 서버 커널에 영향을 줍니다. gVisor + nvproxy는 허용 목록의 명령만 서버 드라이버로 전달하고, Kata + VFIO는 GPU와 드라이버를 VM 안에 격리합니다.",
+    "alt_ko": "a: GPU 커널 채점에는 실제 GPU가 필요합니다. Firecracker 기반 microVM에는 GPU를 연결할 장치가 없어 채점할 수 없고, 일반 컨테이너(runc)에서는 드라이버 버그가 서버 커널에 영향을 줍니다. b: gVisor + nvproxy(g5.xlarge)는 ioctl을 검사해 허용 목록에 있는 명령만 서버의 드라이버로 전달합니다. Kata + VFIO(g4dn.metal)는 GPU를 VM에 직접 할당해 드라이버를 VM 안에서 실행합니다. 하이퍼바이저와 GPU 장치 자체의 위험은 남습니다.",
+    "alt_en": "a: grading a GPU kernel needs a real GPU; a Firecracker-based microVM has no device for a GPU, so it cannot grade, and in a regular container (runc) a driver bug reaches the server kernel. b: gVisor + nvproxy (g5.xlarge) checks ioctls and lets only allowlisted calls reach the server driver, and Kata + VFIO (g4dn.metal) hands the whole GPU to the VM, so the driver runs inside the VM, while risks in the hypervisor and the GPU device itself remain",
+    "takeaway_ko": "GPU가 없는 microVM에서는 채점할 수 없고, 일반 컨테이너에서는 드라이버 버그가 서버 커널에 영향을 줍니다. gVisor + nvproxy는 허용 목록의 명령만 서버 드라이버로 전달하고, Kata + VFIO는 GPU와 드라이버를 VM 안에 둡니다.",
     "takeaway_en": "A microVM without a GPU cannot grade, and in a regular container a driver bug reaches the server kernel. gVisor + nvproxy passes only allowlisted calls to the server driver, and Kata + VFIO keeps the GPU and the driver inside the VM."
   },
   "beginner-03_gpu_sandbox--gpu-path": {
@@ -93,19 +93,19 @@
     "page": "docs/beginner/04_rl_and_sandbox.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "a: 채점 코드의 허점을 이용해 점수만 올린 답과, 한 group 안에 v1과 v2 채점 기준이 섞인 경우 모두 잘못된 점수가 나옵니다. 모델은 이 점수로 잘못 학습합니다. b: harness가 프로세스 분리와 입력 교체로 속임수를 막고, 한 배치는 한 버전으로 채점합니다(버전 교체는 배치와 배치 사이). 같은 기준으로 매긴 올바른 점수가 나오고, 모델은 이 점수로 학습합니다.",
-    "alt_en": "a: an answer that raises the score through a gap in grading, and v1 and v2 standards mixed in one group, both give a wrong score, so the model learns the wrong thing. b: the harness blocks cheating with separate processes and new inputs, and one version grades each batch (switching between batches), so the score is right under one standard and the model improves from it",
-    "takeaway_ko": "채점을 속인 답이나 섞인 채점 기준은 잘못된 점수를 만들고, 모델은 그 점수로 잘못 학습합니다. harness가 속임수를 막고 한 배치를 한 버전으로 채점하면 모델은 올바른 점수로 학습합니다.",
-    "takeaway_en": "Whether from a fooled grader or mixed standards, a wrong score becomes wrong learning. With the harness blocking cheating and one version per batch, the model learns from the right score."
+    "alt_ko": "a: 채점 코드의 허점을 이용해 점수만 올린 답과, 한 group 안에 v1과 v2 채점 기준이 섞인 경우 모두 잘못된 점수가 나옵니다. 모델은 이 점수로 잘못 학습합니다. b: harness가 프로세스 분리와 입력 교체로 알려진 속임수를 막고, 한 배치는 한 버전으로 채점합니다(채점 중에 버전이 바뀌어도 한 배치 안에서는 섞지 않음). 같은 기준으로 매긴 일관된 점수가 나오고, 모델은 이 점수로 학습합니다.",
+    "alt_en": "a: an answer that raises the score through a gap in grading, and v1 and v2 standards mixed in one group, both give a wrong score, so the model learns the wrong thing. b: the harness blocks known cheats with separate processes and new inputs, and one version grades each batch (a switch during grading never mixes versions within a batch), so the score is consistent under one standard and the model improves from it",
+    "takeaway_ko": "채점을 속인 답이나 섞인 채점 기준은 잘못된 점수를 만들고, 모델은 그 점수로 잘못 학습합니다. harness가 알려진 속임수를 막고 한 배치를 한 버전으로 채점하면 모델은 같은 기준의 점수로 학습합니다.",
+    "takeaway_en": "Whether from a fooled grader or mixed standards, a wrong score becomes wrong learning. With the harness blocking known cheats and one version per batch, the model learns from scores under one standard."
   },
   "beginner-04_rl_and_sandbox--rl-loop": {
     "page": "docs/beginner/04_rl_and_sandbox.md",
     "section": "학습 루프에서 샌드박스의 자리",
     "replaces": "M[\"모델<br/>(GPU에서 학습)\"]",
-    "alt_ko": "문제(PyTorch 연산을 더 빠른 GPU 커널로 다시 쓰기)가 GPU에서 학습하는 모델에 입력됩니다. 1 모델이 문제를 보고 코드를 작성해 샌드박스로 보냅니다. 샌드박스는 코드 실행, 채점, 속도 측정에 GPU를 씁니다. 2 샌드박스가 코드를 실행해 결과가 맞는지와 얼마나 빠른지 확인하고 점수(reward: 정확성, speedup)를 매깁니다. 3 점수가 높은 답을 더 자주 쓰도록 모델을 조정합니다. 가운데 표시는 이 루프가 수천 번 반복된다는 뜻입니다.",
-    "alt_en": "A problem (rewrite a PyTorch op as a faster GPU kernel) goes into the model, which is trained on GPU. 1 The model reads the problem and writes code for the sandbox (exam room and grader, with a GPU to measure speed), 2 the sandbox runs it to check whether it is correct and how fast and gives a score (reward: correctness, speedup), 3 the model is adjusted to write more high-scoring answers. The mark in the middle shows that the loop repeats thousands of times",
-    "takeaway_ko": "모델이 코드를 작성하고, 샌드박스가 그 코드를 실행해 점수를 매기고, 그 점수에 따라 모델을 조정하는 과정이 수천 번 반복됩니다.",
-    "takeaway_en": "The model writes code, the sandbox runs it and gives a score, and the model gets better from the score. This loop repeats thousands of times."
+    "alt_ko": "문제(PyTorch 연산을 더 빠른 GPU 커널로 다시 쓰기)가 GPU에서 학습하는 모델에 입력됩니다. 1 모델이 문제를 보고 코드를 작성해 샌드박스로 보냅니다. 샌드박스는 코드 실행, 채점, 속도 측정에 GPU를 씁니다. 2 샌드박스가 코드를 실행해 정확성과 speedup을 측정하고, trainer가 이 결과로 점수(reward)를 계산합니다. 3 점수가 높은 답을 더 자주 쓰도록 모델을 조정합니다. 가운데 표시는 이 루프가 학습 step마다 반복된다는 뜻입니다(기본 60 step).",
+    "alt_en": "A problem (rewrite a PyTorch op as a faster GPU kernel) goes into the model, which is trained on GPU. 1 The model reads the problem and writes code for the sandbox (exam room and grader, with a GPU to measure speed), 2 the sandbox runs it and measures correctness and speedup, and the trainer computes the score (reward) from them, 3 the model is adjusted to write more high-scoring answers. The mark in the middle shows that the loop repeats every training step (60 steps by default)",
+    "takeaway_ko": "모델이 코드를 작성하면 샌드박스가 그 코드를 실행해 채점하고, trainer가 그 결과로 모델을 조정합니다. 이 과정이 학습 단계(step)마다 반복돼요.",
+    "takeaway_en": "The model writes code, the sandbox runs and grades it, and the trainer adjusts the model from the result. This repeats at every training step."
   },
   "beginner-05_hands_on": {
     "page": "docs/beginner/05_hands_on.md",

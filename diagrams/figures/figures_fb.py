@@ -60,7 +60,7 @@ T = {
         "tt.comp": "completion",
         "tt.kr": ["KernelRewards", "코드 블록 추출, AST 정책", "(check_source)"],
         "tt.rej": ["no_code 또는", "policy_violation", "샌드박스 호출 없음"],
-        "tt.cpu": ["CPU 계층 (선택)", "정적 검사, nvcc 컴파일", "Kata + CLH on c8i"],
+        "tt.cpu": ["CPU 계층 (선택)", "GPU 앞 단계로 자동 연결 안 됨", "Kata + CLH on c8i"],
         "tt.gpu": ["GPU 계층", "정확성 + timing", "gVisor 또는 Kata + QEMU"],
         "tt.verdict": "verdict",
         "tt.no": "코드 블록 없음 또는 정책 위반", "tt.yes": "통과",
@@ -120,13 +120,13 @@ T = {
                      ["5. --finish", "v1을 0으로 축소", "롤백용으로 보존"]],
         "vs.fail": ["v1 유지", "v2에는 트래픽 없음"],
         "vs.fail_l": "실패", "vs.pass_l": "통과",
-        "vs.trainer": "trainer: reward batch마다 routing snapshot 한 번",
+        "vs.trainer": "trainer: 샌드박스 호출마다 routing snapshot, batch마다 한 버전",
         "vs.sync": "약 1분 안에 반영",
-        "vs.inflight": "진행 중인 batch는 v1에서 마무리",
+        "vs.inflight": "첫 전환: v1에 보낸 batch는 v1에서 마무리",
         "vs.event": "sandbox_version_switch 기록",
         "vs.time": "시간 (학습은 계속 진행)",
         # 04 pain
-        "p4.a": "샌드박스도 HyperPod 노드에 두면: gVisor와 Kata 모두 실행 불가",
+        "p4.a": "샌드박스도 기본 AMI의 HyperPod 노드에 두면: gVisor와 Kata 모두 실행 불가",
         "p4.b": "B1: trainer만 HyperPod에, 샌드박스는 같은 클러스터의 EC2 노드에",
         "p4.eks": "EKS 클러스터", "p4.hp": "HyperPod 인스턴스 그룹", "p4.ec2": "EC2 노드 그룹",
         "p4.trainer": ["trainer", "ml.g5.2xlarge"],
@@ -156,15 +156,15 @@ T = {
         "dt.E2": ["EC2에 없는 VM 경계 + 최신 GPU 조합", "gVisor + 보완 통제로 위험을 수용하거나", "요구 사항을 다시 검토"],
         "dt.yes": "예", "dt.no": "아니오",
         # 06 pain
-        "p6.a": "reward 풀: turn마다 다른 pod와 GPU, 유지되지 않는 상태",
+        "p6.a": "reward 풀: turn마다 다른 pod와 GPU",
         "p6.b": "Agent Sandbox: 에피소드 하나가 끝까지 쓰는 샌드박스 하나",
         "p6.ep": ["에피소드 하나"],
         "p6.t1": ["turn 1 제출"], "p6.t2": ["turn 2 수정 제출"],
-        "p6.pa": ["pod A, GPU 1", "요청이 끝나면 상태 삭제"],
-        "p6.pb": ["pod B, GPU 2", "요청이 끝나면 상태 삭제"],
+        "p6.pa": ["pod A, GPU 1", "요청 후 작업 디렉터리, 프로세스 정리"],
+        "p6.pb": ["pod B, GPU 2", "요청 후 작업 디렉터리, 프로세스 정리"],
         "p6.fresh": "에피소드마다 새로 생성하면",
         "p6.kata": ["Kata GPU VM", "첫 Ready까지 몇 분"],
-        "p6.claimed": ["claim한 샌드박스 하나", "같은 GPU, 작업 공간 유지", "격리는 RuntimeClass (gVisor, Kata)"],
+        "p6.claimed": ["claim한 샌드박스 하나", "같은 pod와 GPU", "파일은 제출마다 삭제", "격리는 RuntimeClass (gVisor, Kata)"],
         "p6.claim": "SandboxClaim 생성",
         "p6.pool": ["SandboxWarmPool", "미리 기동, egress 차단 확인 뒤 Ready"],
         "p6.hand": "대기 중인 Sandbox 전달",
@@ -187,7 +187,7 @@ T = {
         "tt.comp": "completion",
         "tt.kr": ["KernelRewards", "code block extraction,", "AST policy (check_source)"],
         "tt.rej": ["no_code or", "policy_violation", "no sandbox call"],
-        "tt.cpu": ["CPU tier (optional)", "static checks, nvcc compile", "Kata + CLH on c8i"],
+        "tt.cpu": ["CPU tier (optional)", "not wired in front of the GPU", "Kata + CLH on c8i"],
         "tt.gpu": ["GPU tier", "correctness + timing", "gVisor or Kata + QEMU"],
         "tt.verdict": "verdict",
         "tt.no": "no code block, or a policy violation", "tt.yes": "passes",
@@ -243,12 +243,12 @@ T = {
                      ["5. --finish", "scale v1 to 0", "kept for rollback"]],
         "vs.fail": ["keep v1", "v2 gets no traffic"],
         "vs.fail_l": "fail", "vs.pass_l": "pass",
-        "vs.trainer": "trainer: one routing snapshot per reward batch",
+        "vs.trainer": "trainer: a routing snapshot per sandbox call, one version per batch",
         "vs.sync": "reaches pods within about a minute",
-        "vs.inflight": "the batch in progress finishes on v1",
+        "vs.inflight": "first switch: a batch sent to v1 ends on v1",
         "vs.event": "logs sandbox_version_switch",
         "vs.time": "time (training does not stop)",
-        "p4.a": "Sandboxes on HyperPod nodes too: gVisor and Kata are both blocked",
+        "p4.a": "Sandboxes on default-AMI HyperPod nodes too: gVisor and Kata are both blocked",
         "p4.b": "B1: only the trainer on HyperPod, sandboxes on EC2 nodes of the same cluster",
         "p4.eks": "EKS cluster", "p4.hp": "HyperPod instance group", "p4.ec2": "EC2 node groups",
         "p4.trainer": ["trainer", "ml.g5.2xlarge"],
@@ -276,15 +276,15 @@ T = {
         "dt.E2": ["EC2 has no VM boundary +", "current GPU combination", "accept the risk with gVisor +",
                   "compensating controls, or", "revisit the requirements"],
         "dt.yes": "yes", "dt.no": "no",
-        "p6.a": "Reward pools: each turn on another pod and GPU, no state kept",
+        "p6.a": "Reward pools: each turn on another pod and GPU",
         "p6.b": "Agent Sandbox: one episode keeps one sandbox to the end",
         "p6.ep": ["one episode"],
         "p6.t1": ["turn 1 submission"], "p6.t2": ["turn 2 revised submission"],
-        "p6.pa": ["pod A, GPU 1", "state removed after the request"],
-        "p6.pb": ["pod B, GPU 2", "state removed after the request"],
+        "p6.pa": ["pod A, GPU 1", "work dir, processes cleared per request"],
+        "p6.pb": ["pod B, GPU 2", "work dir, processes cleared per request"],
         "p6.fresh": "fresh start per episode",
         "p6.kata": ["Kata GPU VM", "minutes to first Ready"],
-        "p6.claimed": ["one claimed sandbox", "same GPU, workspace kept", "isolation from the RuntimeClass"],
+        "p6.claimed": ["one claimed sandbox", "same pod and GPU", "files removed per submission", "isolation from the RuntimeClass"],
         "p6.claim": "create a SandboxClaim",
         "p6.pool": ["SandboxWarmPool", "started ahead, Ready after egress check"],
         "p6.hand": "hands over a waiting Sandbox",
@@ -330,11 +330,13 @@ def concepts_01(lang: str) -> Figure:
 
 
 def concepts_01_two_tier(lang: str) -> Figure:
-    """docs/concepts/01_why_gpu_sandbox "두 계층 패턴": trainer pre-check, optional CPU tier, GPU tier, verdict."""
+    """docs/concepts/01_why_gpu_sandbox "두 계층 패턴": trainer pre-check, then the GPU tier and its verdict. The
+    optional CPU tier stands apart: no pipeline forwards work from it to the GPU tier (적용 범위와 한계)."""
     t = T[lang]
     fig = Figure(760, 252)
-    # Columns: completion | KernelRewards and CPU tier | GPU tier | reject and verdict
-    ax, aw, bx, bw, gx, gw, dx, dw = 28, 104, 166, 196, 396, 180, 606, 128
+    # Top row: completion | KernelRewards | reject. Bottom row: CPU tier (apart) | GPU tier | verdict
+    ax, aw, bx, bw, dx, dw = 28, 104, 166, 196, 606, 128
+    cx, cw, gx, gw = 28, 200, 250, 196
     fig.container(16, 16, 730, 112, t["tt.trainer"], icon="cpu")
     r1 = 82
     mbox(fig, ax, r1 - 20, aw, 40, [t["tt.comp"]], gid="n:completion")
@@ -343,13 +345,12 @@ def concepts_01_two_tier(lang: str) -> Figure:
     fig.arrow([(ax + aw, r1), (bx - 2, r1)])
     fig.arrow([(bx + bw, r1), (dx - 2, r1)], label=t["tt.no"], label_at=((bx + bw + dx) / 2, r1 - 8))
     r2 = 206
-    mbox(fig, bx, r2 - 32, bw, 64, t["tt.cpu"], fill=ACCENT_FILL, stroke=ACCENT, dash="5 4",
-         gid="n:cpu-tier")
+    mbox(fig, cx, r2 - 32, cw, 64, t["tt.cpu"], dash="5 4", gid="n:cpu-tier")
     mbox(fig, gx, r2 - 32, gw, 64, t["tt.gpu"], fill=ACCENT_FILL, stroke=ACCENT, gid="n:gpu-tier")
     mbox(fig, dx, r2 - 20, dw, 40, [t["tt.verdict"]], icon="check-circle", gid="n:verdict")
-    fig.arrow([(bx + bw / 2, r1 + 30), (bx + bw / 2, r2 - 34)])
-    side_label(fig, bx + bw / 2, (r1 + 30 + r2 - 34) / 2 + 4, t["tt.yes"])
-    fig.arrow([(bx + bw, r2), (gx - 2, r2)])
+    px = 300
+    fig.arrow([(px, r1 + 30), (px, r2 - 34)])
+    side_label(fig, px, (r1 + 30 + r2 - 34) / 2 + 4, t["tt.yes"])
     fig.arrow([(gx + gw, r2), (dx - 2, r2)])
     fig.arrow([(dx + dw / 2, r1 + 30), (dx + dw / 2, r2 - 22)])
     return fig

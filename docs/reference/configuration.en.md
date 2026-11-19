@@ -4,13 +4,13 @@
 
 ## Pain point
 
-The code defaults (`127.0.0.1` bind, egress self-test off, auth unconfigured) are for local tests, and in the cluster the manifests set different values. A value passes from `config.env` through a script, `render.py` and the manifest `env` to the process, so if you miss one stage the cause is hard to find. Some names, such as `SANDBOX_RUNTIME` and `SANDBOX_VERSION`, have a different meaning and default on the server and on the client. Parsing rules are subtle too: `SANDBOX_AUTH_TEST_BYPASS` turns on only when it is exactly `1`, while `HARNESS_ALLOW_CUDA_CPP` accepts `1`, `true` and `yes`.
+The code defaults (`127.0.0.1` bind, egress self-test off, auth unconfigured) are for local tests, and in the cluster the manifests set different values. A value passes from `config.env` through a script, `render.py` and the manifest `env` or command-line arguments to the process, so if you miss one stage the cause is hard to find. Some names, such as `SANDBOX_RUNTIME` and `SANDBOX_VERSION`, have a different meaning and default on the server and on the client. Parsing rules are subtle too: `SANDBOX_AUTH_TEST_BYPASS` turns on only when it is exactly `1`, while `HARNESS_ALLOW_CUDA_CPP` accepts `1`, `true` and `yes`.
 
 ## Why
 
-- **Defaults are copied from the code** (`Settings.from_env`, `AuthConfig.from_env`, the argparse definitions, the gateway's `create_app`). If the docs and the code disagree, the code wins.
-- **Code defaults and manifest values share one table.** You can see which value runs in the cluster.
-- **Each value names the file to edit when you change it (config.env, profile, version file, Job template).**
+- **If the docs and the code disagree, the code wins.** The defaults come from `Settings.from_env`, `AuthConfig.from_env`, the argparse definitions and the gateway's `create_app`.
+- **The cluster uses the manifest values.** A value that no manifest sets falls back to the code default in the cluster too. For example, no manifest sets `HARNESS_WARMUP`, so the server uses the default `3`.
+- **Each value is changed in a different file.** Pool CPU and memory live in the runtime profile, the number of correctness seeds in the version file, and the model to train in `scripts/config.env`.
 
 **Before you start:** "How values and templates come together" in the [Repository map](repository_map.md) shows where the tables on this page are used. To follow the local commands, finish the installation in [Getting started](../getting_started.md).
 
@@ -32,27 +32,27 @@ flowchart LR
     PR["k8s/sandbox/profiles/RUNTIME.env"] --> SH
     VE["k8s/sandbox/versions/VERSION.env"] --> SH
     SH -->|"environment, KEY=VALUE"| RD["scripts/render.py"]
-    RD --> MF["Deployment and Job env"]
+    RD --> MF["Deployment and Job env, args"]
     MF --> SV["sandbox server"]
     MF --> TR["trainer"]
     MF --> GW["gateway"]
 ```
 
-*Figure: in the cluster every value a process reads comes through the manifest's `env`, so when a value looks wrong, check the pod's env first.*
+*Figure: in the cluster a process reads its values through the manifest's `env` or its command arguments (`args`). The trainer gets its model and step count as arguments, so when a value looks wrong, check both the pod's env and its arguments.*
 
-The scripts run in a shell that has sourced `scripts/config.env`, so every value you `export` there is available to the templates' `${VAR}`. To change a value for one run only, prefix the command, for example `ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh`.
+The scripts run in a shell that has sourced `scripts/config.env`, so every value you `export` there is available to the templates' `${VAR}`. A variable that config.env does not set can be changed for one run by prefixing the command, for example `ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh`. If config.env `export`s the variable, the script reads that file later and overwrites the prefixed value, so change it in the file.
 
 ## 1. scripts/config.env
 
-Create it with `cp scripts/config.env.example scripts/config.env` and edit it. If a value is empty or still contains `__SET_ME__`, any script that needs it stops with `set <NAME> in scripts/config.env`.
+Create it only when it does not exist, with `test -f scripts/config.env || cp scripts/config.env.example scripts/config.env`, and edit it. Copying over an existing file loses the values you filled in. If a value a script requires is empty or contains `__SET_ME__`, that script stops with `set <NAME> in scripts/config.env`. Variables with a defined behaviour when empty, such as `ADMIN_PRINCIPAL_ARN` and `EKS_PUBLIC_ACCESS_CIDR`, are described in the table below.
 
 | Variable | Example file value | Meaning | Used by |
 |---|---|---|---|
-| `AWS_REGION` | `us-west-2` | Region of every AWS call | all |
+| `AWS_REGION` | `us-west-2` | AWS Region for the cluster, image and HyperPod steps. The demo site (`demo/deploy.sh`) deploys to `us-east-1` regardless of this value | all |
 | `CLUSTER_NAME` | `gpu-sandbox` | EKS cluster name. Also used in the CDK stack name `<CLUSTER_NAME>-cdk` and the kubectl context `<CLUSTER_NAME>-tunnel` | all |
 | `K8S_VERSION` | `1.36` | EKS Kubernetes version, inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes (the HyperPod prerequisites page still says up to 1.35) | `cdk/`, `build-iommu-ami.sh` |
 | `SCENARIO` | `A` | Node groups the CDK stack creates. `A` (system, trainer, gVisor), `B1` (system, gVisor), `B2` (system only), `C` (system, Kata CPU). The options of `02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) override it | `02_create_cluster.sh`, `cdk/` |
-| `CHANGE_SCENARIO` | `0` | `1` allows deploying a scenario other than the one recorded in the stack (the `Scenario` output). Without it `cdk/deploy.sh` stops | `cdk/deploy.sh` |
+| `CHANGE_SCENARIO` | not set (script default `0`) | `1` allows deploying a scenario other than the one recorded in the stack (the `Scenario` output). Not needed for a first deployment or a redeployment of the same scenario; when the scenario differs and this is not `1`, `cdk/deploy.sh` stops | `cdk/deploy.sh` |
 | `ADMIN_PRINCIPAL_ARN` | derived from the current session by `cdk/deploy.sh` when empty | IAM role or user ARNs that get the cluster admin access entry, comma-separated (not STS session ARNs). Set it yourself if the role has a path | `cdk/` |
 | `EKS_PUBLIC_ACCESS_CIDR` | none (commented out, private only) | Only to turn on the public endpoint; a single IPv4 /32. Other ranges are rejected at configuration time | `cdk/` |
 | `WITH_KATA_CPU` | `0` | `1` adds the `sandbox-kata-cpu` (c8i) node group to any scenario (the same as `cdk/deploy.sh <scenario> --with-kata-cpu`). Scenario C always has it. Set it before adding Kata CPU nodes (`kata/cpu_nodes.sh`) and run `02_create_cluster.sh` again | `02_create_cluster.sh`, `cdk/` |
@@ -96,7 +96,7 @@ Create it with `cp scripts/config.env.example scripts/config.env` and edit it. I
 | `ENABLE_EXPERIMENTAL_CLH_GPU` | `0` | `1` adds the experimental `kata-clh-nvidia-gpu` RuntimeClass | `kata/gpu_nodes.sh` |
 | `ACTIVE_RUNTIME`, `ACTIVE_VERSION` | `gvisor`, `v1` | Active values of the first routing table | `05_setup_namespaces_auth.sh` |
 | `SANDBOX_ALLOWED_SUBJECTS` | `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway` (comma-joined) | ServiceAccounts allowed to call the sandbox API. `extensions/agent_sandbox.sh pool` uses a different default (`grpo-trainer`, `sandbox-probe`, `sandbox-episode`) | `06_deploy_sandboxes.sh`, `extensions/agent_sandbox.sh pool` |
-| `KATA_QEMU_REPLICAS`, `KATA_CLH_REPLICAS`, `KATA_CPU_REPLICAS` | `4`, `2`, `2` | Default pool replicas. The third argument of `06_deploy_sandboxes.sh` overrides them. Scenario C uses `KATA_CPU_REPLICAS=1` (four pools on one c8i) | `profiles/*.env` |
+| `KATA_QEMU_REPLICAS`, `KATA_CLH_REPLICAS`, `KATA_CPU_REPLICAS` | `4`, `2`, `2` | Default pool replicas. The third argument of `06_deploy_sandboxes.sh` overrides them. For scenario C, add `export KATA_CPU_REPLICAS="1"` to `scripts/config.env` (four pools on one c8i) | `profiles/*.env` |
 | `RUN_ID` | current time (`%Y%m%d-%H%M%S`) | Job name `grpo-<RUN_ID>` | `07_run_grpo.sh`, `hyperpod/run_grpo.sh` |
 | `MODEL_ID` | `Qwen/Qwen2.5-Coder-1.5B-Instruct` | Model to train | `07_run_grpo.sh`, `hyperpod/run_grpo.sh` |
 
@@ -110,7 +110,7 @@ Some values are computed by the scripts. `06_deploy_sandboxes.sh` reads `OIDC_IS
     | `RAY_VERSION`, `VERL_IMAGE_URI`, `SHARED_PVC`, `VERL_NNODES`, `VERL_GPUS_PER_NODE`, `VERL_NODE_SELECTOR`, `VERL_CPU`, `VERL_MEMORY` | `k8s/production/raycluster-verl.yaml.tpl` | RayCluster layout |
     | `RAY_ADDRESS` (`http://127.0.0.1:8265`), `MODEL_PATH` (`Qwen/Qwen2.5-Coder-7B-Instruct`), `DATA_DIR` (`/fsx/verl/data/kernels`), `CKPT_DIR` (`/fsx/verl/ckpts/kernels-grpo`), `NNODES` (`1`), `GPUS_PER_NODE` (`8`), `TRAIN_BATCH_SIZE` (`64`), `N_RESP_PER_PROMPT` (`8`), `TOTAL_STEPS` (`200`) | `rl/verl/run_grpo_kernels.sh` | veRL job submission (defaults in parentheses) |
     | `HYPERPOD_CONTAINERD_CONFIG` (the running containerd's `--config`, else `/etc/containerd/config.toml`) | `infra/hyperpod/lifecycle/on_create_sandbox.sh` | containerd config file on the B2 sandbox nodes. Lifecycle scripts get no environment variables, so edit the script before uploading to change it |
-    | `HYPERPOD_BASE_AMI_ID` (looked up in the public SSM parameters) | `infra/hyperpod/ami/build-b2-ami.sh` | base AMI of the B2 builder. Set it when the parameter is not found |
+    | `HYPERPOD_BASE_AMI_ID` (when empty, EC2 `describe-images` picks the newest available AMI owned by `amazon` and named `HyperPod EKS <K8S_VERSION> x86_64 AMI Amazon Linux 2023 *`) | `infra/hyperpod/ami/build-b2-ami.sh` | base AMI of the B2 builder. Set it when the search finds none |
     | `GVISOR_HYPERPOD_REPLICAS` (`1`) | `k8s/sandbox/profiles/gvisor-hyperpod.env` | replicas per version of the B2 pool |
 
 ## 2. Sandbox server
@@ -139,7 +139,7 @@ Values read by `gpusandbox-server` (`gpusandbox.server.app:main`). Manifest valu
 | `NODE_IP` | not read by the server | downward API `status.hostIP` | Used by `$(NODE_IP)` in the egress targets below and by the denial check of the sandbox verification (`ops/verify.sh`) |
 | `SANDBOX_EGRESS_PROBE_TARGETS` | empty (self-test off) | `169.254.169.254:80,apiserver,$(NODE_IP):10250` | Comma-separated `host:port`. All must be unreachable for Ready. `apiserver` becomes `KUBERNETES_SERVICE_HOST:KUBERNETES_SERVICE_PORT` (port default 443) |
 
-Under the readiness rule in the code, `/readyz` returns 200 only when the GPU probe succeeded, egress is verified blocked, the pod is not draining, and no fatal error occurred. The GPU probe runs `torch.ones(1, device='cuda').add_(1)` and `torch.cuda.synchronize()` in a fresh process and must finish within 120 seconds. The egress check tries each target with a 2-second timeout and counts both a completed connection and connection refused as "reachable". It re-checks every 30 seconds while blocked and every 5 seconds while something is open.
+Under the readiness rule in the code, `/readyz` returns 200 only when the GPU probe succeeded, egress is verified blocked, the pod is not draining, and no fatal error occurred. The GPU probe runs in a fresh process and must finish within 120 seconds. A CUDA pool (`SANDBOX_DEVICE=cuda`) passes only if `torch.ones(1, device='cuda').add_(1)` and `torch.cuda.synchronize()` succeed on the GPU; a CPU pool passes without a GPU. When `SANDBOX_EGRESS_PROBE_TARGETS` is empty, the egress check is skipped and egress counts as blocked. The egress check tries each target with a 2-second timeout and counts both a completed connection and connection refused as "reachable". It re-checks every 30 seconds while blocked and every 5 seconds while something is open.
 
 | Route | Auth | Response |
 |---|---|---|
@@ -160,6 +160,9 @@ Request body limits: `task_id` 1 to 64 characters, `code` 1 to 32,768 characters
 | `sandbox_reaped_processes_total` | counter | Stray processes killed after evaluations |
 
 The command below starts the server in the foreground from your installed virtual environment, with CPU values and the auth bypass. The default bind is `127.0.0.1`, so only the same machine can reach it, and the server creates the `SANDBOX_WORK_ROOT` directory at startup.
+
+!!! warning "Do not send evaluation requests on a Linux host"
+    After every evaluation the server sends SIGKILL to every process visible in `/proc` except itself and its ancestors. If you send an evaluation request to a server started directly on a Linux host, it also kills your editor and other servers running as the same user. A virtual environment and a loopback bind do not isolate processes. The `/readyz` check below is safe. To send evaluation requests, run the server in a container with its own PID namespace. The default bind is `127.0.0.1`, so to send requests from the host, start it in a container that shares the host network (for example `docker run --network host`; see the warning in [Getting started](../getting_started.md)). macOS has no `/proc`, so this does not happen there.
 
 ```bash
 # Local smoke test only: loopback bind, CPU shapes, authentication bypassed
@@ -251,7 +254,7 @@ The candidate child process receives only `PATH`, `LD_LIBRARY_PATH`, `CUDA_VISIB
 
 | Verdict `status` | Meaning | TRL correctness reward |
 |---|---|---|
-| `ok` | Correct | 1.0 (`custom_kernel` is true: Triton used and its launch count is not zero), 0.3 (correct without Triton and no `--allow-torch-only`) |
+| `ok` | Correct | 1.0 (`custom_kernel` is true: the static check found a `@triton.jit` function, and the Triton launch count up to the correctness check is not zero or could not be counted), 0.3 (correct without Triton and no `--allow-torch-only`) |
 | `wrong_answer` | Output mismatch, including a checksum mismatch on the timed iterations | 0.2 |
 | `runtime_error` | Error while running, Triton compile error, exit without a status file | 0.05 |
 | `compile_error` | The candidate module failed to load | 0.0 |
@@ -265,7 +268,7 @@ The candidate child process receives only `PATH`, `LD_LIBRARY_PATH`, `CUDA_VISIB
 | `implausible_speedup` | Above `HARNESS_MAX_SPEEDUP`. The speedup is recorded as 1.0 |
 | `timed_output_mismatch` | Correct on the correctness inputs, wrong on the timed inputs |
 | `invalid_runner_report` | The timing report written by the child is malformed |
-| `triton_kernel_never_launched` | Triton was imported but no kernel was ever launched |
+| `triton_kernel_never_launched` | A `@triton.jit` function exists, but the Triton launch function was never called up to the end of the correctness check |
 
 ## 5. Client
 
@@ -284,12 +287,14 @@ Precedence is `SANDBOX_GATEWAY`, then `SANDBOX_ROUTING_FILE`, then `SANDBOX_ADDR
 
 There are three address forms. `host:port` is treated as headless Service DNS, re-resolved every 10 seconds, and the last result is kept if a lookup fails. A comma-separated list or a value with the `static:` prefix is used as is (local tests).
 
+The table below describes the pool client that calls sandbox pods; the trainer in direct mode and the gateway both use it. In gateway mode the trainer sends a batch as a single `POST /v1/evaluate_batch` with no retry. That request times out after 1,200 seconds (four times 300), and on failure every item in the batch becomes `sandbox_error`.
+
 | Behaviour | Value in the code |
 |---|---|
 | Concurrent requests per pod | 1 |
-| Request timeout | 300 seconds (four times that for gateway batch requests) |
+| Timeout of one sandbox pod request | 300 seconds |
 | Maximum wait for a free pod | 600 seconds, then `no free sandbox in <address>` |
-| Attempts | 4 |
+| Maximum attempts for one sandbox pod request | 4 |
 | Cooldown of a failed pod | 5 seconds |
 | 503 | Cooldown, then retry on another pod |
 | Other 4xx (401, 403, 422 and so on) | No retry, `sandbox_error` with `HTTP <code>: <start of body>` |
@@ -321,7 +326,7 @@ With an empty audience or allowlist, every protected route returns 401. Successf
 | `GET /v1/routing` | required | Current `{runtime, version, revision}` |
 | `GET /metrics` | required | `gateway_evaluations_total{runtime,version,status}`, `gateway_evaluation_seconds`, `gateway_recycled_pods_total` |
 | `GET /healthz` | none | 200 |
-| `GET /readyz` | none | 503 if the routing table cannot be read |
+| `GET /readyz` | none | 503 when no usable routing table exists (the first read failed, or the active runtime and version have no pool address). If a later re-read fails but a last good table exists, 200 |
 
 Pins live in memory only, and expired entries are purged when there are more than 100,000. That is why the manifest runs a single replica.
 
@@ -414,7 +419,7 @@ A new version (for example `v3`) needs two changes. Export the four values in `k
 | `active.version` | Version. Even when the runtime is overridden, this version is used |
 | `pools.<runtime>.<version>` | Address of that pool (`host:port`, headless Service DNS). Locally a comma-separated list or a `static:` value also works |
 
-`k8s/base/routing.json.tpl` is the source. `05_setup_namespaces_auth.sh` uploads it to `rl-trainer`, and the version switch script (`ops/rollout.sh`) to `rl-trainer` and (if it exists) `sandbox-gateway`, as the ConfigMap `sandbox-routing` (key `routing.json`). The template contains `v1` and `v2` for the three GPU runtimes and `v1` for the two CPU runtimes.
+`k8s/base/routing.json.tpl` is the source. `05_setup_namespaces_auth.sh` uploads it to `rl-trainer`, and the version switch script (`ops/rollout.sh`) to `rl-trainer` and (if it exists) `sandbox-gateway`, as the ConfigMap `sandbox-routing` (key `routing.json`). The template holds `v1` and `v2` addresses for all four GPU runtimes (`gvisor`, `kata-qemu`, `kata-clh`, `gvisor-hyperpod`) and all three CPU runtimes (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`). An address in the table receives requests only after that version's pool is deployed.
 
 On the reader side, `revision` goes up by one whenever the content changes (compared as JSON with normalized key order), and the file is re-read at most every 2 seconds. If a read or JSON parse fails, the last good table stays in use; if the very first read fails, a `RoutingError` is raised (the trainer cannot start, the gateway does not become Ready). Mount the ConfigMap as a directory. A `subPath` mount never receives ConfigMap updates.
 

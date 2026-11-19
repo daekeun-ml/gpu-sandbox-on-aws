@@ -8,9 +8,8 @@
 
 ## Why
 
-- **용어를 한 페이지에 모았습니다.** 각 페이지의 "용어" 상자에 이 페이지의 링크가 있습니다.
-- **이 저장소에서의 쓰임을 함께 적었습니다.** 일반적인 뜻 뒤에 이 에셋에서 그 개념이 어디에 어떻게 쓰이는지 덧붙였어요.
-- **헷갈리는 단어는 따로 정리했습니다.** 아래 ❓ 오해 노트에서 뜻이 겹치는 단어를 구분합니다.
+- **rollout은 문맥에 따라 뜻이 다릅니다.** RL에서는 policy가 completion을 생성하는 단계이고, Kubernetes에서는 Deployment를 새 버전으로 바꾸는 일이에요.
+- **warm도 두 가지입니다.** Production의 warm placeholder는 GPU를 요청하지 않고, Agent Sandbox의 SandboxWarmPool은 GPU 프로필로 만들면 대기 중에도 GPU를 점유합니다.
 
 **사전 지식:** 없습니다. 항목은 영어 용어의 알파벳순이고, 항목 끝의 "쓰는 곳"이 그 용어를 자세히 다루는 페이지예요.
 
@@ -45,7 +44,7 @@
 :   데이터 내용으로 계산한 짧은 값으로, 두 데이터의 내용이 같은지 비교하는 데 씁니다. harness는 타이밍 반복마다 후보 출력의 checksum을 레퍼런스와 비교해서, 측정 구간에서만 틀리는 출력("벤치마크 때만 틀리기")을 검출합니다. 쓰는 곳: [04 Reward 무결성](../production/04_reward_integrity.md)
 
 **Cloud Hypervisor (CLH)**
-:   Kata가 쓸 수 있는 가벼운 하이퍼바이저입니다. 이 저장소는 장치가 없는 Kata CPU 계층(`kata-clh`)에 씁니다. Kata upstream은 CLH의 GPU passthrough를 지원하지 않습니다. 쓰는 곳: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
+:   Kata가 쓸 수 있는 가벼운 하이퍼바이저입니다. 이 저장소는 장치가 없는 Kata CPU 풀에 씁니다. 이 풀을 만들 때 배포 스크립트에 넘기는 프로필은 `kata-clh-cpu`입니다. v1 Deployment 이름은 `sandbox-kata-clh-cpu-v1`이고, 프로필이 지정하는 RuntimeClass는 `kata-clh`예요. 배포 스크립트에 `kata-clh`를 주면 실험용 GPU 프로필이 선택됩니다. Kata upstream은 CLH의 GPU passthrough를 지원하지 않습니다. 쓰는 곳: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
 
 **Completion**
 :   RL에서 모델이 prompt 하나를 받아 생성한 답입니다. 이 저장소의 GRPO는 prompt마다 completion 8개(group 하나)를 생성하고, completion 안의 코드 블록을 샌드박스에서 채점합니다. 쓰는 곳: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
@@ -92,7 +91,7 @@
 :   verdict를 미리 아는 후보 코드입니다. 이 저장소의 golden 세트는 6개(Triton 정답 2개, torch 전용 정답, 오답, 벤치마크 치팅, 호스트 파일 읽기)입니다. 샌드박스가 정상인지, 새 버전이 구버전과 같은 verdict를 내는지 확인하는 기준으로 씁니다. 쓰는 곳: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md)
 
 **GPU passthrough**
-:   물리 GPU를 VFIO로 VM에 직접 할당해, VM 안의 드라이버가 GPU를 직접 다루게 하는 방식입니다. 호스트가 IOMMU와 물리 GPU를 직접 쓸 수 있어야 해서 AWS에서는 `g4dn.metal`이 필요합니다. Kata에서는 QEMU의 cold-plug 방식만 공식 지원됩니다. 쓰는 곳: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
+:   물리 GPU를 VFIO로 VM에 직접 할당해, VM 안의 드라이버가 GPU를 직접 다루게 하는 방식입니다. 호스트가 IOMMU와 물리 GPU를 직접 쓸 수 있어야 해서 이 저장소의 x86 구성은 AWS에서 `g4dn.metal`이 필요합니다. Kata에서는 QEMU의 cold-plug 방식만 공식 지원됩니다. 쓰는 곳: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
 
 **Group (GRPO group)**
 :   GRPO에서 prompt 하나로 생성한 completion 묶음입니다(이 저장소는 8개). advantage를 group 안에서 상대적으로 계산하므로, 한 group은 하나의 샌드박스 버전으로 채점해야 합니다. 노드 그룹이나 HyperPod 인스턴스 그룹과는 다른 뜻입니다. 쓰는 곳: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
@@ -170,7 +169,7 @@
 ## M
 
 **Multi-turn**
-:   모델이 도구를 호출하거나 코드를 제출하고, 결과를 읽은 뒤 다시 응답하는 과정을 여러 번 반복하는 방식입니다. completion 하나를 한 번 채점하는 single-turn 채점과 구분합니다. 이 저장소의 GRPO 학습은 single-turn 채점을 쓰고, multi-turn 에이전트는 Agent Sandbox 확장의 에피소드 단위 샌드박스를 씁니다. 쓰는 곳: [06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md), [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
+:   모델이 도구를 호출하거나 코드를 제출하고, 결과를 읽은 뒤 다시 응답하는 과정을 여러 번 반복하는 방식입니다. completion마다 따로 채점하고 그 결과로 다시 응답하지 않는 single-turn 채점과 구분합니다. 이 저장소의 GRPO 학습은 single-turn 채점을 쓰고, multi-turn 에이전트는 Agent Sandbox 확장의 에피소드 단위 샌드박스를 씁니다. 쓰는 곳: [06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md), [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 ## N
 
@@ -192,12 +191,12 @@
 :   CloudFront가 S3 origin에 서명된 요청을 보내게 하는 기능입니다. bucket policy가 CloudFront 서비스 principal과 특정 배포(`AWS:SourceArn` 조건)만 허용하므로, bucket을 비공개로 둔 채 CloudFront를 통해서만 내용을 제공할 수 있습니다. CloudFront 문서는 예전 방식(OAI) 대신 OAC를 권장합니다. 쓰는 곳: [09 데모 사이트 (CloudFront)](../handson/09_demo_site.md)
 
 **On-policy**
-:   학습 데이터(completion)를 지금 업데이트하는 바로 그 policy가 생성하는 학습 방식입니다. 이 저장소는 생성한 batch 하나로 optimizer step을 한 번만 실행해서(TRL `steps_per_generation` 기본값) strictly on-policy로 학습합니다. 쓰는 곳: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
+:   학습 데이터(completion)를 지금 업데이트하는 바로 그 policy가 생성하는 학습 방식입니다. TRL 핸즈온은 생성한 batch 하나로 optimizer step을 한 번만 실행해서(TRL `steps_per_generation` 기본값) strictly on-policy로 학습합니다. veRL 구성은 학습 batch(prompt 64개)를 PPO mini-batch(prompt 32개)로 나눠 여러 번 업데이트해요. 쓰는 곳: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
 
 ## P
 
 **Parity check**
-:   새 샌드박스 버전이 구버전과 같은 verdict를 내는지 golden 제출물로 비교하는 검사입니다. status가 같고 speedup 비율 차이가 허용 범위(기본 0.35) 안이면 통과합니다. 통과한 경우에만 트래픽이 새 버전으로 전환됩니다. 쓰는 곳: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md)
+:   새 샌드박스 버전이 구버전과 같은 verdict를 내는지 golden 제출물로 비교하는 검사입니다. 두 버전의 결과가 모두 golden의 기대 status(지정된 경우 기대 `custom_kernel`도)를 만족하고 status가 서로 같아야 합니다. 양쪽이 `ok`이고 speedup 값이 있으면 신버전 speedup을 구버전 speedup으로 나눈 비율도 1에서 허용 범위(기본 0.35) 이내여야 해요. 통과한 경우에만 트래픽이 새 버전으로 전환됩니다. 쓰는 곳: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md)
 
 **PDB (PodDisruptionBudget)**
 :   drain 같은 자발적 중단 때 동시에 종료될 수 있는 pod 수의 상한입니다. PDB는 eviction API에만 적용되므로, gateway가 recycling으로 pod를 직접 지우는 것은 제한하지 않습니다. 쓰는 곳: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
@@ -225,7 +224,7 @@
 ## R
 
 **ResourceQuota**
-:   namespace 하나가 요청할 수 있는 자원의 총량 상한입니다. 이 저장소의 `sandbox` namespace는 `nvidia.com/gpu` 16, `nvidia.com/pgpu` 8, pod 64로 제한되어 있습니다. 쓰는 곳: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
+:   namespace 하나가 요청할 수 있는 자원의 총량 상한입니다. Production용 `k8s/production/pool-hardening.yaml`을 적용하면 `sandbox` namespace의 요청 합계가 `nvidia.com/gpu` 16, `nvidia.com/pgpu` 8, pod 64로 제한됩니다. 핸즈온 기본 설치에는 이 quota가 없어요. 쓰는 곳: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
 
 **Reward hacking**
 :   policy가 과제를 실제로 풀지 않고 reward 측정의 허점을 이용해 점수만 올리는 현상입니다. KernelBench 계열에서는 추가 CUDA stream으로 타이밍 속이기, 결과 캐싱, 벤치마크 때만 틀리기, lazy tensor 같은 사례가 보고됐습니다. 쓰는 곳: [04 Reward 무결성](../production/04_reward_integrity.md)
@@ -260,7 +259,7 @@
 :   SandboxTemplate으로 샌드박스를 정해진 수만큼 미리 실행해 두는 Agent Sandbox 리소스입니다. claim이 생성되면 이미 준비된 샌드박스를 할당하므로 시작 대기 시간이 줄어듭니다. warm GPU 샌드박스는 요청이 없는 동안에도 GPU를 점유합니다. 쓰는 곳: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 **Speedup**
-:   레퍼런스 구현의 실행 시간을 후보 커널의 실행 시간으로 나눈 값입니다. 정답인 custom kernel에만 주는 speedup 점수는 log2 척도라 0.5배는 0, 1배는 0.5, 2배는 1.0이고 1.5(4배)가 상한입니다. 쓰는 곳: [05 On-policy GRPO 학습](../handson/05_grpo_training.md)
+:   레퍼런스 구현의 실행 시간을 후보 커널의 실행 시간으로 나눈 값입니다. 기본 설정에서는 정답인 custom kernel에만 speedup 점수를 주고, `--allow-torch-only`를 켜면 PyTorch만 쓴 정답도 같은 척도로 채점합니다. 점수는 log2 척도라 0.5배는 0, 1배는 0.5, 2배는 1.0이고 1.5(4배)가 상한입니다. 쓰는 곳: [05 On-policy GRPO 학습](../handson/05_grpo_training.md)
 
 **SSM Session Manager 포트 포워딩**
 :   SSM agent가 있는 인스턴스를 거쳐 내 PC의 로컬 포트를 VPC 안의 주소로 연결하는 AWS Systems Manager 기능입니다. 인스턴스에 inbound 포트나 공인 IP가 없어도 되고, 로컬에는 AWS CLI용 Session Manager plugin이 필요합니다. 이 저장소의 `cdk/tunnel.sh`는 `127.0.0.1:8443`을 private API endpoint로 연결합니다. 쓰는 곳: [09 CDK로 프로비저닝](../production/09_cdk.md)
@@ -277,7 +276,7 @@
 :   토큰이 유효한지, 누구의 토큰인지 Kubernetes API server에서 확인하는 API입니다. gateway가 호출자 인증에 쓰고 성공 결과는 60초 캐시합니다. TokenReview는 유효성만 알려 주고 권한은 알려 주지 않으므로, gateway는 allowlist를 함께 확인합니다. 쓰는 곳: [02 보안](../production/02_security.md)
 
 **Triton**
-:   Python으로 GPU 커널을 작성하는 언어이자 컴파일러입니다. 이 저장소의 과제는 policy가 Triton 커널을 작성하도록 요구하고, harness는 그 커널이 실제로 실행된 횟수를 셉니다. 쓰는 곳: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
+:   Python으로 GPU 커널을 작성하는 언어이자 컴파일러입니다. 이 저장소의 과제는 policy가 Triton 커널을 작성하도록 요구하고, harness는 정확성 검사가 끝날 때까지 Triton 실행 함수가 몇 번 호출됐는지 기록합니다. 호출 횟수이므로 커널이 성공한 횟수와는 다릅니다. 쓰는 곳: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
 
 **Turn**
 :   multi-turn 에피소드에서 모델이 한 번 응답하는 단계입니다. 이 저장소의 커널 과제에서는 코드를 한 번 제출하고 verdict를 받는 한 차례이고, 한 에피소드의 모든 turn은 같은 샌드박스에서 채점합니다. 쓰는 곳: [06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md)
@@ -301,13 +300,13 @@
 ## ❓ 오해
 
 !!! question "❓ 오해: rollout은 Kubernetes 배포 용어다"
-    이 가이드북에서는 두 뜻으로 씁니다. RL 문맥(GRPO, veRL)의 rollout은 policy가 completion을 생성하는 단계입니다. `kubectl rollout status`나 `scripts/ops/rollout.sh`의 rollout은 Deployment를 새 버전으로 바꾸는 일이에요. 주변 문장이 학습을 설명하는지 배포를 설명하는지로 구분하세요.
+    이 가이드북에서는 두 뜻으로 씁니다. RL 문맥(GRPO, veRL)의 rollout은 policy가 completion을 생성하는 단계입니다. 배포 문맥의 rollout은 명령마다 하는 일이 달라요. `kubectl rollout status`는 지정한 Deployment의 배포가 끝날 때까지 기다리고, `scripts/ops/rollout.sh`는 새 버전의 풀을 별도 Deployment로 배포해 검증한 뒤 routing 표를 바꿔 트래픽을 옮겨요. 주변 문장이 학습을 설명하는지 배포를 설명하는지로 구분하세요.
 
 !!! question "❓ 오해: warm placeholder도 GPU를 미리 점유한다"
-    Production의 warm placeholder는 CPU와 메모리만 요청하고 GPU는 요청하지 않습니다. 노드를 점유하기만 하고, 샌드박스 pod를 배치해야 하면 제거돼요. 반대로 Agent Sandbox의 SandboxWarmPool은 GPU를 쓰는 샌드박스 pod를 미리 실행하므로, 요청이 없는 동안에도 GPU를 점유합니다.
+    Production의 warm placeholder는 CPU와 메모리만 요청하고 GPU는 요청하지 않습니다. 노드를 점유하기만 하고, 샌드박스 pod를 배치해야 하면 제거돼요. 반대로 Agent Sandbox의 SandboxWarmPool은 프로필에 지정한 자원으로 샌드박스 pod를 미리 실행합니다. GPU 프로필이면 요청이 없는 동안에도 GPU를 점유하고, CPU 프로필(예: `kata-clh-cpu`)이면 GPU를 요청하지 않아요.
 
 !!! question "❓ 오해: Kata는 `.metal` 인스턴스에서만 실행된다"
-    GPU passthrough를 할 때만 그렇습니다. 장치를 할당하지 않는 Kata는 EC2 nested virtualization이 제공하는 `/dev/kvm`을 사용해 `.metal` 없이 실행돼요. GPU를 VM에 할당하려면 호스트가 물리 GPU와 IOMMU를 직접 쓸 수 있어야 해서 `g4dn.metal`이 필요합니다.
+    GPU passthrough를 할 때만 그렇습니다. 장치를 할당하지 않는 Kata는 EC2 nested virtualization이 제공하는 `/dev/kvm`을 사용해 `.metal` 없이 실행돼요. GPU를 VM에 할당하려면 호스트가 물리 GPU와 IOMMU를 직접 쓸 수 있어야 해서 이 저장소의 x86 구성에서는 `g4dn.metal`이 필요합니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

@@ -8,9 +8,9 @@ gVisor releases, nvproxy driver lists, the drivers shipped in AMIs, prices and q
 
 ## Why
 
-- **Every fact gets a source.** Each table row pairs one source with the facts it supports.
-- **Evidence levels are separated.** You can tell local tests, official documentation, third-party reports, blog measurements and inference apart.
-- **There is a list to re-check.** Values likely to have changed before you deploy, and how to check them, are collected in a checklist.
+- **The warm pool's roughly 55 ms is a measurement from an AWS blog.** The pool latencies this repository measured are in the 2026-11-18 run record ([08 Runtime benchmark](../handson/08_benchmark.md)).
+- **Evidence levels are local tests, official documentation, third-party reports, blog measurements, inference and AWS run records.**
+- **Re-check prices and quotas in the account and Region you deploy to.** The checklist below lists the values most likely to have changed and how to check them.
 
 **Before you start:** read "Validation status" on [Home](../index.md) and [Misconceptions](faq.md) first.
 
@@ -32,8 +32,8 @@ gVisor releases, nvproxy driver lists, the drivers shipped in AMIs, prices and q
 | Blog measurement | A value someone else measured in a different environment | About 55 ms for a warm pool claim in part 2 of the AWS Korea tech blog series, about 3 s cold start in the AWS China blog |
 | Inference | A judgment derived from the evidence, unverified | The effect of NodeConfig `imports` on keeping kata-deploy drop-ins |
 | Executed on AWS by the author | Actually run in a practice account, with the output checked | The CDK deploy and deletion of scenario C, the SSM tunnel, the smoke pods of the three runtimes when adding Kata CPU nodes (`kata/cpu_nodes.sh`) (2026-11-14) |
-| Run in the practice account (2026-11-18) | Run in the us-west-2 practice account, with the output checked (the demo site in us-east-1) | In scenario A: `02_create_cluster.sh` (created system-only, then updated with `CHANGE_SCENARIO=1`), `03_build_push_images.sh` (all three images), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1` (1 replica) with `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5` on `g5.2xlarge`, `08_cleanup.sh --images`. On the same day, in another cluster layout (created system-only, then Kata CPU, Kata GPU and gVisor node groups added with `CHANGE_SCENARIO=1`): Kata GPU on `g4dn.metal` (`kata/gpu_nodes.sh`, `kata-qemu` with 4 replicas, `ops/verify.sh kata-qemu v1`), `ops/bench.sh 32` (2 GPU pools and 3 CPU pools, two passes), the demo site (`record` in the recorder pod, `demo/deploy.sh` and an external check) |
-| Not executed on AWS by the author | Designed, with templates written, but not run | `ops/rollout.sh` in scenario A during training, the 60-step default training run, HyperPod B1 and B2 on `ml.g5` (including creating HyperPod), the experimental CLH GPU (attempted; the VM did not start) |
+| Run in the practice account (2026-11-18) | Run in the us-west-2 practice account, with the output checked (the demo site in us-east-1) | In scenario A: `02_create_cluster.sh` (created system-only, then updated with `CHANGE_SCENARIO=1`), `03_build_push_images.sh` (all three images), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1` (1 replica) with `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5` on `g5.2xlarge`, `08_cleanup.sh --images`. On the same day, in another cluster layout (created system-only, then Kata CPU, Kata GPU and gVisor node groups added with `CHANGE_SCENARIO=1`): Kata GPU on `g4dn.metal` (`kata/gpu_nodes.sh`, `kata-qemu` with 4 replicas, `ops/verify.sh kata-qemu v1`), `ops/bench.sh 32` (2 GPU pools and 3 CPU pools, two passes), the demo site (`record` in the recorder pod, `demo/deploy.sh` and an external check). The experimental CLH GPU (`kata-clh`) pool was also tried, but its VM did not start (`create container timeout`), so it was not measured |
+| Not executed on AWS by the author | Designed, with templates written, but not run | `ops/rollout.sh` in scenario A during training, the 60-step default training run, HyperPod B1 and B2 on `ml.g5` (including creating HyperPod) |
 
 ## What this repository verified
 
@@ -42,23 +42,23 @@ The first command below runs the whole local test suite without AWS or a GPU, an
 ```bash
 # Full local test suite on CPU (no AWS, no GPU)
 python -m pytest -q
-# CDK stack tests: offline synth with cdk-nag (after pip install -r cdk/requirements.txt)
+# CDK stack tests: offline synth with cdk-nag (after uv pip install -r cdk/requirements.txt)
 (cd cdk && python -m pytest -q tests)
 ```
 
-**What to look for:** it ends with `passed` and no failures. While this page was written (2026-11-13), the whole suite passed on macOS (CPU only). The number of tests changes as the repository changes, so it is not fixed here (the current count is in section 3 of [Getting started](../getting_started.md)). **If it fails:** [Troubleshooting](troubleshooting.md)
+**What to look for:** it ends with `passed` and no failures. While this page was written (2026-11-13), the whole suite passed on macOS (CPU only). The number of tests changes as the repository changes, so it is not fixed here. To count the tests in your checkout, run `python -m pytest --collect-only -q` from the repository root (the CDK stack tests are separate). **If it fails:** [Troubleshooting](troubleshooting.md)
 
 | Test file | Locally verified by these tests |
 |---|---|
 | `tests/test_policy.py` | What the AST policy allows (the Triton example, an autotuned kernel, an `input` parameter, type hints) and rejects (denied imports and builtins, a monkeypatch through an alias, dunder and private access, streams and graphs, Tensor subclasses) |
 | `tests/test_harness_cpu.py` | The real two-process harness on CPU: correct, wrong, crash, syntax error, timeout, benchmark cheat, monkeypatch, consistency of the task references |
-| `tests/test_routing_and_rewards.py` | Routing table reload and revision, `RoutingError` for a missing pool, code extraction, the speedup score, rewards per verdict with infrastructure errors excluded, policy violations skipping the sandbox round trip |
+| `tests/test_routing_and_rewards.py` | Routing table reload and revision, `RoutingError` for a missing pool, code extraction, the speedup score, rewards per verdict with infrastructure errors excluded, results cached from another pool scored again on this batch's pool after a version switch, policy violations skipping the sandbox round trip |
 | `tests/test_server_and_client.py` | Fail-closed authentication that checks audience and subject, the client across two loopback servers, 503 from a busy pod, Ready only after egress denial is verified, probe and parity on CPU pools, gateway group pins across a routing switch |
 | `tests/test_manifests.py` | Sandbox manifests for each profile and version, static manifests, node user data (`infra/eks/userdata.py`), Karpenter templates, Agent Sandbox template rendering |
 | `tests/test_agent_sandbox.py` | With a fake API: the SandboxClaim body, waiting for Ready and preferring `serviceFQDN`, claiming and releasing, releasing when the claim never becomes Ready |
 | `tests/test_multiturn.py` | With a fake API and loopback CPU sandbox servers: one claim per episode, stopping when solved, deleting the claim on errors, the events and the episode reward, and the veRL tool logic without veRL installed |
 | `tests/test_demo.py` | The demo CloudFormation template (private bucket, CloudFront access with an `AWS:SourceArn` condition, non-TLS requests denied, HTTPS redirect and security headers), a static site with no external resources or HTML injection, the recording schema and reward consistency |
-| `cdk/tests/test_stack.py` | The synthesized CDK template: private endpoint (public only as a /32 opt-in), no `0.0.0.0/0` inbound rule, IMDSv2 with hop limit 1 and volume encryption in every launch template, the node groups per scenario, nested virtualization on c8i, the IOMMU AMI on the Kata GPU node group, cdk-nag passing for each scenario |
+| `cdk/tests/test_stack.py` | The synthesized CDK template: private endpoint (public only as a /32 opt-in), no `0.0.0.0/0` inbound rule, IMDSv2 required in every launch template of scenario A synthesized with Kata CPU added (hop limit 1 and EBS encryption are checked only where the template sets them), the node groups per scenario, nested virtualization on c8i, the IOMMU AMI and user data on the Kata GPU node group (IMDSv2 is not checked for that configuration), cdk-nag passing for each scenario |
 
 A TRL 1.18.0 GRPO dry run (SmolLM2-135M, CPU, no vLLM) completed 2 steps, and the shell scripts pass shellcheck (author's record, 2026-11). On AWS the author ran the CDK deploy of scenario C, the tunnel, adding Kata CPU nodes (`kata/cpu_nodes.sh`) and the deletion in a practice account (2026-11-14). The gVisor path of scenario A was run in the practice account on 2026-11-18 (us-west-2, `g5.xlarge` and `g5.2xlarge`, 5 training steps). Kata GPU, the runtime benchmark and the demo site ran on the same day, with the results in [03 Kata sandboxes](../handson/03_kata.md), [08 Runtime benchmark](../handson/08_benchmark.md) and [09 Demo site](../handson/09_demo_site.md); the table above lists the scripts. Verify the rest yourself with the checks on each hands-on page.
 
@@ -66,7 +66,7 @@ A TRL 1.18.0 GRPO dry run (SmolLM2-135M, CPU, no vLLM) completed 2 steps, and th
 
 The values below are as of 2026-11. Check them one by one before deploying or sharing.
 
-- [ ] **Pinned versions:** gVisor `GVISOR_RELEASE=20261109.0`, Kata `KATA_VERSION=4.3.1`, GPU Operator `v26.7.2`, NVIDIA device plugin `0.20.1`, Karpenter v1.15.2 (LTS v1.14.3), AWS CDK CLI 2.1148.1 or later with `aws-cdk-lib` 2.276.0, cdk-nag 3.0.2, Agent Sandbox v1.0.11, TRL 1.18.0, vLLM 0.33.0, veRL 0.9.1, KubeRay v1.7.2. Check each project's release page for new versions and changes.
+- [ ] **Pinned versions:** gVisor `GVISOR_RELEASE=20261109.0`, Kata `KATA_VERSION=4.3.1`, GPU Operator `v26.7.2`, NVIDIA device plugin `0.20.1`, Karpenter v1.15.2 (LTS v1.14.3), AWS CDK CLI 2.1148.1 or later with `aws-cdk-lib` 2.276.0, cdk-nag 3.0.2, Agent Sandbox v1.0.11, TRL 1.18.0 (vLLM 0.33.0 in the trainer image), veRL 0.9.1 (vLLM 0.24.0 in the veRL image), KubeRay v1.7.2. Check each project's release page for new versions and changes.
 - [ ] **Node drivers and the nvproxy list:** the default driver of the EKS AL2023 NVIDIA AMI v20261107 is 580.178.04 (the proprietary module with GSP off on g5, the open module on g6); the HyperPod EKS AMIs 1.34 to 1.36 (2026-10-16) ship 595.91.07 and 1.33 ships 580.178.04. Check that `B2_NVIDIA_DRIVER_VERSION` of the B2 custom AMI and the node drivers are on the supported list of the pinned gVisor release.
 - [ ] **Prices:** EC2 On-Demand and SageMaker AI (HyperPod `ml.*`) pricing. The values in this guide (such as 0.37484 USD/hour for `c8i.2xlarge`) are as of 2026-11.
 - [ ] **Quotas:** Running On-Demand G and VT instances (vCPU based, can be 0 for new accounts), Running On-Demand Standard instances, and HyperPod's `ml.<type> for cluster usage`.
@@ -81,8 +81,8 @@ The values below are as of 2026-11. Check them one by one before deploying or sh
 The following commands check whether the node driver is on the supported list of the pinned gVisor release. Run them after `chroot /host` in a debug shell on the node (`kubectl debug node`, see "Checking on the node" in [Troubleshooting](troubleshooting.md)).
 
 ```bash
-cat /proc/driver/nvidia/version                                        # loaded driver version
-/usr/local/bin/runsc nvproxy list-supported-drivers | grep -wF <driver-version>
+driver="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)"; echo "$driver"   # loaded driver version
+/usr/local/bin/runsc nvproxy list-supported-drivers | grep -wF "$driver"
 ```
 
 **What to look for:** if the second command prints one line with that driver version, it is on the supported list. If it prints nothing, gVisor GPU sandboxes on that node will not become Ready. For HyperPod nodes, `scripts/hyperpod/check_gvisor.sh` runs the same check.
@@ -148,14 +148,13 @@ scripts/01_check_prereqs.sh
 | [kata-containers/kata-containers](https://github.com/kata-containers/kata-containers) | 4.3.1 (2026-10-21), runtime-rs as the default (since 4.0.0), the Go runtime deprecated but supported, the Helm chart `oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy` with `deploymentMode` defaulting to `job`, RuntimeClass `overhead.podFixed` |
 | [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/main/FAQ.md), [CHANGELOG](https://github.com/firecracker-microvm/firecracker/blob/main/CHANGELOG.md) | Minimal device model, PCI support added in 1.13.0, no VFIO GPU passthrough in the changelog |
 | [Modal Sandboxes](https://modal.com/docs/guide/sandbox) | "GPU Sandboxes are only supported with `runtime="gvisor"`" |
-| Northflank (URL not recorded) | Public material saying it uses Kata with GPUs and falls back to gVisor where nested virtualization is unavailable. Check the original yourself |
 | [NVIDIA GPU Operator with Kata](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/deploy-kata-containers.html), [NVIDIA/gpu-operator](https://github.com/NVIDIA/gpu-operator) | v26.7.2 sandbox mode values, `nvidia.com/pgpu`, "A node can only run one container runtime at a time", EKS validated with Ubuntu (AL2023 not listed) |
 | [NVIDIA/k8s-device-plugin](https://github.com/NVIDIA/k8s-device-plugin), [NVIDIA/nvidia-container-toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) | `deviceListStrategy: cdi-cri`, the container toolkit still required on the host |
 | [awslabs/amazon-eks-ami v20261107](https://github.com/awslabs/amazon-eks-ami/releases/tag/v20261107) | AL2023 NVIDIA AMI: driver 580.178.04 by default (595.91.07 for g7 only), toolkit 1.20.1, containerd 2.3.7, no device plugin, CDI for kubelet 1.32 or later, user data runs between nodeadm-config and nodeadm-run |
 | [aws/aws-network-policy-agent](https://github.com/aws/aws-network-policy-agent) | The node IP is allowed in both the ingress and the egress maps ("ensures kubelet liveness/readiness probes are never blocked") |
 | [Karpenter docs](https://karpenter.sh/docs/), [aws/karpenter-provider-aws](https://github.com/aws/karpenter-provider-aws) | v1.15.2 (LTS v1.14.3), `karpenter.sh/v1`, `karpenter.k8s.aws/v1`, IMDS hop limit 1 by default, user MIME parts merged, EC2NodeClass `spec.cpuOptions.nestedVirtualization` |
 | [eksctl docs: Cluster Access](https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html) | "EKS does allow creating a configuration that allows only private access to be enabled, but eksctl doesn't support it during cluster creation": eksctl cannot create a cluster with only a private endpoint, so this asset creates the infrastructure with CDK |
-| [aws/aws-cdk](https://github.com/aws/aws-cdk), [cdklabs/cdk-nag](https://github.com/cdklabs/cdk-nag) | `aws-cdk-lib` 2.276.0 and cdk-nag 3.0.2 are pinned. `aws-cdk-lib` 2.277.0 needs CLI 2.1148.2 or later, which was not on npm on 2026-11-14 (per the comment in the repository's `cdk/requirements.txt`) |
+| [aws/aws-cdk](https://github.com/aws/aws-cdk), [cdklabs/cdk-nag](https://github.com/cdklabs/cdk-nag) | `aws-cdk-lib` 2.276.0 and cdk-nag 3.0.2 are pinned. 2.276.0 works with CDK CLI 2.1148.1; moving to `aws-cdk-lib` 2.277.0 needs CLI 2.1148.2 or later (per the comment in the repository's `cdk/requirements.txt`) |
 | [aws/sagemaker-hyperpod-cli](https://github.com/aws/sagemaker-hyperpod-cli) | The HyperPod dependency Helm chart (`helm_chart/HyperPodHelmChart`): health monitoring agent, deep health check RBAC, job-auto-restart, MPI operator, device plugin, Kueue |
 | [awslabs/awsome-distributed-ai veRL example](https://github.com/awslabs/awsome-distributed-ai/tree/main/examples/training/verl/hyperpod-eks/rlvr) | veRL RLVR example on HyperPod EKS, pinned to veRL v0.6.1 (old keys), moved from the old aws-samples/awsome-distributed-training |
 | [TRL docs](https://huggingface.co/docs/trl), [huggingface/trl](https://github.com/huggingface/trl), [PyPI trl 1.18.0](https://pypi.org/project/trl/1.18.0/) | TRL 1.18.0 (2026-11-13), supports vLLM 0.23 through 0.33.x, GRPOConfig defaults (`num_generations` 8, `beta` 0.0, `loss_type` "dapo", `scale_rewards` "group"), `None` handling in reward functions, async reward functions |
@@ -179,8 +178,14 @@ scripts/01_check_prereqs.sh
 | [Sakana AI CUDA Engineer](https://sakana.ai/ai-cuda-engineer/) | A memory exploit that skipped the correctness check |
 | [Kevin-32B (Cognition)](https://cognition.com/blog/kevin-32b) | Copying the reference, try/except fallback, inheriting the reference class, reward 0 for PyTorch-only answers |
 | [CUDA-L1 (arXiv 2507.14111)](https://arxiv.org/abs/2507.14111) | An extra stream fooled the timing in 82 of 250 cases (32.8%), lazy evaluation, caching |
-| TritonRL (URL not recorded) | An approach that combines a rule-based linter with an LLM judge. Check the original yourself |
-| KernelBench-Verified (URL not recorded) | Work mentioned alongside reward hacking countermeasures. Check the original yourself |
 | [INTELLECT-3 (arXiv 2512.16144)](https://arxiv.org/abs/2512.16144) | `kubectl exec` through the API at about 2.5 s per command, a gateway + headless Service + sidecar design, environments versioned independently of the trainer |
+
+### Original source not confirmed
+
+The primary source URLs of the items below were not confirmed. Find and check the original before citing them.
+
+- **Northflank**: public material saying it uses Kata for GPUs and falls back to gVisor where nested virtualization is unavailable
+- **TritonRL**: an approach that combines a rule-based linter with an LLM judge
+- **KernelBench-Verified**: work mentioned alongside reward hacking countermeasures
 
 Related pages: [Misconceptions](faq.md), [Troubleshooting](troubleshooting.md), [04 Reward integrity](../production/04_reward_integrity.md), [04 Platforms and instances](../concepts/04_platforms_and_instances.md)

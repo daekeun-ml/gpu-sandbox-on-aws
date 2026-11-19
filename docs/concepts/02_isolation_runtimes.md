@@ -1,6 +1,6 @@
 # 격리 런타임 비교
 
-**TL;DR** GPU 샌드박스 런타임은 syscall과 GPU ioctl을 처리하는 계층과 NVIDIA 드라이버의 위치로 구분됩니다. AWS에서 Kata + GPU는 `g4dn.metal`에서만 실행되고, gVisor + GPU는 일반 G/P 계열 VM에서 실행됩니다.
+**TL;DR** GPU 샌드박스 런타임은 syscall과 GPU ioctl을 처리하는 계층과 NVIDIA 드라이버의 위치로 구분됩니다. AWS에서 Kata + GPU는 이 저장소의 x86 구성 기준으로 `g4dn.metal`에서만 실행되고, gVisor + GPU는 일반 G/P 계열 VM에서 실행됩니다.
 
 ## 기존 Pain Point
 
@@ -13,9 +13,8 @@ gVisor와 Kata는 GPU 연결 방식이 다릅니다. gVisor는 허용된 ioctl�
 
 ## Why
 
-- **구조를 표로 비교합니다.** 런타임마다 syscall 처리 위치, 드라이버 위치, GPU 접근 경로, `/dev/kvm` 필요 여부를 비교해요.
-- **AWS에서 실행 가능한 조합을 확인된 사실 기준으로 정리합니다.** 인스턴스별 GPU와 실행 가능한 런타임을 표로 정리했어요.
-- **오버헤드는 출처가 있는 공개 수치만 인용합니다.** Kata의 RuntimeClass 설정값과 upstream CI 수치입니다.
+- **런타임마다 syscall 처리 위치, 드라이버 위치, GPU 접근 경로, `/dev/kvm` 필요 여부가 다릅니다.** 이 차이가 AWS에서 쓸 수 있는 인스턴스를 정해요.
+- **boot 시간은 upstream CI 값입니다.** AWS에서 측정한 pod 생성부터 Ready까지의 시간과 평가 지연은 [08 런타임 벤치마크](../handson/08_benchmark.md)에 있습니다.
 
 **사전 지식:** Kubernetes pod와 컨테이너를 알면 충분합니다. [01 GPU 샌드박스가 필요한 경우](01_why_gpu_sandbox.md)를 먼저 읽으면 좋습니다. 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에서 확인할 수 있어요.
 
@@ -68,7 +67,7 @@ runc에서는 컨테이너가 host 커널을 공유합니다. gVisor에서는 �
 - **containerd 등록:** containerd 2.x(AMI는 2.3.7) config v3의 `[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]`에 `runtime_type = 'io.containerd.runsc.v1'`과 `TypeUrl`, `ConfigPath` option을 설정합니다. 이 블록을 NodeConfig `spec.containerd.config`에 넣으면 nodeadm이 부팅할 때마다 containerd 설정에 병합해요. RuntimeClass의 `handler`는 `runtimes.<name>` 키(`runsc`)와 같아야 합니다.
 
 !!! warning "gVisor 노드의 드라이버 조건"
-    EKS AL2023 NVIDIA AMI는 `g4dn`, `g5`, `g5g`에서 GSP를 끈 proprietary 커널 모듈을, `g6`에서는 open 모듈을 로드합니다(`g5`와 `g6` 모두 드라이버 580.178.04). gVisor 문서는 NVIDIA open 드라이버를 기준으로 nvproxy를 설명하고 proprietary 드라이버는 언급하지 않아요. 다만 580.178.04는 runsc `release-20261109.0`의 지원 목록에 있고, 실습 계정에서 2026-11-18에 `g5.xlarge`(A10G)로 smoke test(`cuda ok: NVIDIA A10G 2048.0`)와 `ops/verify.sh gvisor v1`이 통과했습니다. 이 에셋의 기본값은 `g5.xlarge`입니다. 이 조합은 gVisor가 문서화한 것이 아니라 이 저장소가 검증한 것이므로, 드라이버, AMI, gVisor 버전을 바꾸면 smoke test와 `ops/verify.sh`를 다시 실행하세요.
+    EKS AL2023 NVIDIA AMI는 `g4dn`, `g5`, `g5g`에서 GSP를 끈 proprietary 커널 모듈을, `g6`에서는 open 모듈을 로드합니다(`g5`와 `g6` 모두 드라이버 580.178.04). gVisor 문서는 NVIDIA open 드라이버를 기준으로 nvproxy를 설명하고 proprietary 드라이버는 언급하지 않아요. 다만 580.178.04는 runsc `release-20261109.0`의 지원 목록에 있고, 실습 계정에서 2026-11-18에 `g5.xlarge`(A10G)로 smoke test(`cuda ok: NVIDIA A10G 2048.0`)와 `scripts/ops/verify.sh gvisor v1`이 통과했습니다. 이 에셋의 기본값은 `g5.xlarge`입니다. 이 조합은 gVisor가 문서화한 것이 아니라 이 저장소가 검증한 것이므로, 드라이버, AMI, gVisor 버전을 바꾸면 다시 확인하세요. smoke test는 GPU 하나를 요청하는 pod를 따로 만들므로 gVisor 노드에 빈 GPU가 있을 때 실행하고, 이미 배포한 풀은 `scripts/ops/verify.sh gvisor v1`로 확인합니다.
 
     `g6.xlarge`(L4)는 지원하는 대안이고, open 모듈이라 gVisor 문서가 다루는 조합이에요. T4(`g4dn`)는 드라이버 조건이 `g5`와 같지만 이 에셋에서 테스트하지 않아 미검증입니다. 자세한 내용은 [04 플랫폼과 인스턴스 선택](04_platforms_and_instances.md)에 있습니다.
 
@@ -81,7 +80,7 @@ runc에서는 컨테이너가 host 커널을 공유합니다. gVisor에서는 �
 - **GPU Operator v26.7.2:** `sandboxWorkloads.enabled=true`, `sandboxWorkloads.mode=kata`, `ccManager.defaultMode=off`(T4에서 `on`이면 cc-manager가 종료됨), 노드 라벨 `nvidia.com/gpu.workload.config=vm-passthrough`, 리소스 이름 `nvidia.com/pgpu`를 씁니다. 공식 문서에 "A node can only run one container runtime at a time"이라고 명시돼 있으므로 한 노드에서 컨테이너 GPU 작업과 VM passthrough를 함께 실행하지 않습니다.
 
 ??? info "제3자 보고 (참고용)"
-    Ubuntu 24.04를 쓰는 `g4dn.metal`에 `intel_iommu=on iommu=pt`를 지정하자 T4 8개가 모두 vfio-pci에 bind되고 IOMMU group도 passthrough 조건에 맞았다는 보고가 있습니다. warm reboot 후 인스턴스가 다시 부팅되지 않았다는 보고도 있습니다. 그래서 이 에셋은 user data에서 재부팅하지 않고, 커널 인자를 포함한 AMI를 미리 빌드합니다.
+    Ubuntu 24.04를 쓰는 `g4dn.metal`에 `intel_iommu=on iommu=pt`를 지정하자 T4 8개가 모두 vfio-pci에 bind되고 IOMMU group도 passthrough 조건에 맞았다는 보고가 있습니다. warm reboot 후 인스턴스가 다시 부팅되지 않았다는 보고도 있어요.
 
 ## Kata의 hypervisor: QEMU와 Cloud Hypervisor
 
@@ -89,7 +88,7 @@ runc에서는 컨테이너가 host 커널을 공유합니다. gVisor에서는 �
 |---|---|---|
 | CPU 샌드박스 | 지원 (`kata-qemu`) | 지원 (`kata-clh`) |
 | GPU passthrough | upstream 지원 (`kata-qemu-nvidia-gpu`) | upstream 미지원. 이 에셋은 실험용 `kata-clh-nvidia-gpu`만 제공 |
-| RuntimeClass `overhead.podFixed` (Kata 4.3.1) | 320Mi, 250m. GPU class는 10240Mi, 1 CPU | 130Mi, 250m |
+| RuntimeClass `overhead.podFixed` (Kata 4.3.1) | 320Mi, 250m. GPU class는 10240Mi, 1 CPU | 130Mi, 250m. 실험용 `kata-clh-nvidia-gpu`는 10240Mi, 1 CPU |
 | boot to workload (Kata metrics CI, 3.28.0) | 0.71 s | 0.39 s |
 
 `overhead.podFixed`는 RuntimeClass에 지정된 설정값이며 측정값이 아닙니다. 스케줄러는 이 값을 VM 자체가 사용하는 메모리와 CPU로 보고 pod 요청량에 합산합니다.
@@ -97,7 +96,7 @@ runc에서는 컨테이너가 host 커널을 공유합니다. gVisor에서는 �
 upstream `docs/hypervisors.md`는 Cloud Hypervisor의 GPU 지원을 not supported로 표시하고, maintainer도 2025-08에 "You should use the QEMU GPU runtime class. I haven't done any work on CLH to enable proper GPU support."라고 답했어요. Go `kata-clh` shim에는 3.29.0부터 VFIO cold-plug 코드가 있지만, upstream 테스트가 없고 배포 설정에서는 비활성화돼 있습니다. runtime-rs의 CLH 설정에는 VFIO 키가 없습니다. 그래서 Kata에서 upstream이 GPU를 지원하는 hypervisor는 QEMU뿐입니다. 이 에셋은 CLH + GPU를 `infra/kata/experimental-clh-gpu/`에서 평가용(CI 없음)으로만 제공합니다. CLH는 CPU 샌드박스에서는 지원되며, CPU 계층(`kata-clh-cpu` 프로필)이 이 조합을 사용해요.
 
 !!! warning "오버헤드 수치를 읽는 법"
-    위 boot 시간은 Kata metrics CI(3.28.0)가 서로 다른 머신에서 넓은 허용 오차로 측정한 값이며 AWS 측정값이 아닙니다. AWS China 블로그의 "CLH 약 130 MB, QEMU 약 160 MB"는 Kata 3.31.0의 `podFixed` 기본값과 같아서 측정값이 아닐 가능성이 높습니다(추론). 같은 글에 실린 측정값은 cold start 약 3 s, 미리 시작해 둔 pool에서 가져올 때 약 230 ms예요. 이 저장소는 측정값을 제공하지 않으므로 [08 런타임 벤치마크](../handson/08_benchmark.md)로 직접 측정하세요.
+    위 boot 시간은 Kata metrics CI(3.28.0)가 서로 다른 머신에서 넓은 허용 오차로 측정한 값이며 AWS 측정값이 아닙니다. AWS China 블로그의 "CLH 약 130 MB, QEMU 약 160 MB"는 Kata 3.31.0의 `podFixed` 기본값과 같아서 측정값이 아닐 가능성이 높습니다(추론). 같은 글에 실린 측정값은 cold start 약 3 s, 미리 시작해 둔 pool에서 가져올 때 약 230 ms예요. AWS 실습 계정에서 측정한 값은 [08 런타임 벤치마크](../handson/08_benchmark.md)에 있습니다. 그 표의 cold start는 pod 생성부터 Ready까지의 시간이라 위 표의 boot to workload와 측정 구간이 다르고, `g4dn.metal`에서 GPU 프로필 `kata-qemu`(RuntimeClass `kata-qemu-nvidia-gpu`)로 띄운 pod 4개는 중앙값 30.5초였어요.
 
 `kata-qemu-nvidia-gpu`의 VM 크기는 `default_memory` 8192 MiB에 컨테이너 limit을 더한 값입니다. VFIO type1은 guest RAM 전체를 pin하므로 메모리를 overcommit할 수 없어요. 이 에셋의 프로필은 T4 pod마다 8 CPU, 16 GiB를 할당합니다. 8 x (16 + 10) GiB = 208 GiB이므로 `g4dn.metal`의 384 GiB 안에 들어갑니다.
 
@@ -119,7 +118,7 @@ GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권�
 | EC2 `.metal` (`g4dn.metal`) | 가능 (VFIO passthrough) | 가능 | 가능 (이 에셋에서는 쓰지 않음) |
 | EC2 nested virtualization (C8i, M8i, R8i 등) | 불가: 해당 계열에 GPU 없음 | 가능, `.metal` 불필요 | 해당 없음 |
 | EC2 GPU VM (`g5.xlarge` 등) | 불가: `/dev/kvm` 없음 | 불가 | 가능 (systrap 플랫폼) |
-| HyperPod 노드 (`ml.g5` 등) | 불가 | 불가로 판단 (미검증) | 현재 불가 (드라이버 595.91.07) |
+| HyperPod 노드 (`ml.g5` 등) | 불가 | 불가로 판단 (미검증) | 기본 AMI는 불가 (드라이버 595.91.07). B2는 580.178.04를 넣은 custom AMI로 구성 (AWS 미검증) |
 
 표의 근거는 세 가지입니다.
 

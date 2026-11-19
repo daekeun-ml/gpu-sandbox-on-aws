@@ -13,8 +13,7 @@ An EKS cluster created with defaults leaves settings that are risky for sandboxe
 
 ## Why
 
-- **The infrastructure is one CDK stack, and a rerun changes only what differs.** The stack uses only the EKS CloudFormation resources and applies no Kubernetes manifests, so it never overlaps with, or tangles the order of, the device plugin, RuntimeClasses and kata-deploy that the scripts from `04_install_gpu_stack.sh` onward install.
-- **The API endpoint is private only, reached through a tunnel.**
+- **The infrastructure is one CDK stack, and a rerun changes only what differs.** The stack creates the VPC, the EKS cluster and node groups, the access instance and the KMS key. It defines EKS with CloudFormation (L1) resources only and applies no Kubernetes manifests, so it never overlaps with, or tangles the order of, the device plugin, RuntimeClasses and kata-deploy that the scripts from `04_install_gpu_stack.sh` onward install.
 - **Node preparation is part of the boot.** The per-runtime preparation lives in the launch template's user data, so a replaced node comes up in the same state.
 
 **Before you start:** read the step table in [00 Overview](00_overview.md) and the local Python environment in [Getting started](../getting_started.md) first. The full list of the CDK stack's security defaults is in [Production 09 CDK](../production/09_cdk.md), and unfamiliar terms in the "Terms" box below and the [Glossary](../reference/glossary.md).
@@ -39,24 +38,24 @@ An EKS cluster created with defaults leaves settings that are risky for sandboxe
 
 ## Preparation 1: `scripts/config.env`
 
-Create the settings file.
+If you already made the file in [Getting started](../getting_started.md), keep it; copy the example only when it does not exist.
 
 ```bash
-cp scripts/config.env.example scripts/config.env
+test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 ```
 
-**What to look for:** the file `scripts/config.env` exists. With the defaults, `02_create_cluster.sh` creates scenario A.
+**What to look for:** `scripts/config.env` exists and `AWS_REGION`, `CLUSTER_NAME` and `SCENARIO` have the values you want. With the example values, `02_create_cluster.sh` creates scenario A.
 
 Every script reads this file through `scripts/lib.sh`; if a required value is empty or contains `__SET_ME__`, `require_vars` prints `set <VAR> in scripts/config.env` and stops. `cdk/deploy.sh` reads it too, so scripts and CDK agree on instance types and pinned versions.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AWS_REGION` | `us-west-2` | the Region where every resource is created |
-| `CLUSTER_NAME` | `gpu-sandbox` | the EKS cluster name, also used in the CDK stack name (`<CLUSTER_NAME>-cdk`), the kubectl context (`<CLUSTER_NAME>-tunnel`) and AMI names |
+| `AWS_REGION` | `us-west-2` | the Region for the cluster, the ECR images and HyperPod. The 09 demo site (`demo/deploy.sh`) always deploys to `us-east-1`, whatever this value is |
+| `CLUSTER_NAME` | `gpu-sandbox` | the EKS cluster name, also used in the CDK stack name (`<CLUSTER_NAME>-cdk`), the kubectl context (`<CLUSTER_NAME>-tunnel`) and the AMI builder instance names; not used in AMI names |
 | `K8S_VERSION` | `1.36` | inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes (the HyperPod prerequisites page still says up to 1.35) |
 | `SCENARIO` | `A` | what `02_create_cluster.sh` builds (A, B1, B2, C). An option to `02_create_cluster.sh` (`--hyperpod` and so on) wins over it |
 | `WITH_KATA_CPU`, `WITH_KATA_GPU` | `0`, `0` | `1` adds the Kata CPU node (`c8i.2xlarge`) and the Kata GPU node (`g4dn.metal`, needs `KATA_IOMMU_AMI_ID`) to any scenario ([03 Kata sandboxes](03_kata.md)) |
-| `ADMIN_PRINCIPAL_ARN` | empty | IAM role or user ARNs (comma-separated) that get the cluster admin access entry. Empty: `cdk/deploy.sh` uses the role of your current session |
+| `ADMIN_PRINCIPAL_ARN` | empty | IAM role or user ARNs (comma-separated) that get the cluster admin access entry. Empty: `cdk/deploy.sh` uses your IAM user ARN, or for a role session the role ARN it derives from the session. For a role with a path, set the full ARN yourself |
 | `EKS_PUBLIC_ACCESS_CIDR` | none (commented out) | only if you accept a public endpoint: your workstation's single IPv4 address as `/32`. Other ranges are rejected when the settings are read |
 | `ECR_REPO_PREFIX`, `IMAGE_TAG` | `gpu-sandbox`, `v1` | ECR repository prefix and image tag |
 | `GVISOR_RELEASE` | `20261109.0` | the release installed on the gVisor nodes |
@@ -91,7 +90,7 @@ If your role has a path (for example one created by IAM Identity Center), put th
 
     ```bash
     source .venv/bin/activate
-    uv pip install -r cdk/requirements.txt    # or: pip install -r cdk/requirements.txt
+    uv pip install -r cdk/requirements.txt
     ```
 
     **What to look for:** `aws-cdk-lib`, `constructs` and `cdk-nag` install without errors.
@@ -112,13 +111,13 @@ If your role has a path (for example one created by IAM Identity Center), put th
 
 ## Preflight: `01_check_prereqs.sh`
 
-This read-only check prints the following, in order.
+This check is read-only. Check 1 prints nothing when it passes; a missing tool or variable prints `missing tool: <name>` or `set <VAR> in scripts/config.env` and stops the script. After it passes, items 2 onward are printed in order.
 
 ```bash
 scripts/01_check_prereqs.sh
 ```
 
-1. local tools (`aws`, `cdk`, `node`, `kubectl`, `helm`, `docker`, `python3`, `jq`, `session-manager-plugin`) and required variables (`AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`)
+1. local tools (`aws`, `cdk`, `node`, `kubectl`, `helm`, `docker`, `python3`, `jq`, `session-manager-plugin`) and required variables (`AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`) are checked
 2. the current AWS identity (`aws sts get-caller-identity`)
 3. cdk, node, kubectl, helm and docker versions
 4. the `Running On-Demand G and VT instances` quota (vCPUs)
@@ -126,7 +125,14 @@ scripts/01_check_prereqs.sh
 6. the `SupportedFeatures` of `KATA_CPU_INSTANCE_TYPE` (`c8i.2xlarge`), for the Kata CPU node
 7. the AZs that offer the trainer, gVisor and Kata GPU instance types (`NOT OFFERED` if none)
 
-**What to look for:** the G and VT quota is at least 16 for the minimal path (at least 112 for the full path), and the Standard quota is at least 6 for the minimal path (system nodes 4 plus the access instance 2; 14 for scenario C, up to 16 for the full path). Item 6 contains `nested-virtualization`, and item 7 has no `NOT OFFERED`. The last log line is `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.`
+**What to look for:** the last log line is `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.` Then check these conditions for the nodes you will create.
+
+| Output | Passes when |
+|---|---|
+| 4, G and VT quota | for scenario A, at least 16 for the minimal path (24 during a version switch) and at least 112 for the full path (120 during a version switch). Scenario C has no GPU nodes and does not need it, unless you add Kata GPU (`g4dn.metal`), which needs at least 96 |
+| 5, Standard quota | at least 6 for the minimal path (system nodes 4, access instance 2), 14 for scenario C, up to 16 for the full path |
+| 6, `SupportedFeatures` | contains `nested-virtualization` if you use the Kata CPU node |
+| 7, AZ list | each GPU type you use is listed in at least one of the AZs of the stack's two private subnets (the first two in the Region AZ list CDK looks up). Types you do not use may show `NOT OFFERED` (for example `g4dn.metal` with gVisor only) |
 
 Request increases for low quotas in the Service Quotas console (the vCPU math is in the prerequisites section of [00 Overview](00_overview.md)).
 
@@ -153,7 +159,7 @@ scripts/02_create_cluster.sh --cpu-only      # scenario C: the c8i node only, no
 
 **What to look for:**
 
-1. If `ADMIN_PRINCIPAL_ARN` is empty, a warning `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` appears at the start. If your role has a path, answer `n` to the item 4 question, put the ARN from the `aws iam get-role` command in the warning into `ADMIN_PRINCIPAL_ARN`, and run it again.
+1. If `ADMIN_PRINCIPAL_ARN` is empty and you run as a role session (STS assumed-role), a warning `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` appears at the start. As an IAM user, it uses your user ARN without a warning. If your role has a path, answer `n` to the item 4 question, put the ARN from the `aws iam get-role` command in the warning into `ADMIN_PRINCIPAL_ARN`, and run it again.
 2. In the list of IAM and security group changes, check that no inbound rule is open to `0.0.0.0/0`, then press `y`. The only inbound rule the stack creates is 443 from the access instance to the control plane.
 3. At the end, `Outputs` lists `ClusterName`, `ClusterEndpoint`, `AccessInstanceId` and `EndpointPublicAccess = false`, followed by this guidance:
 
@@ -341,7 +347,7 @@ New connections from the VPC CNI pod veth interfaces (prefix `eni`) to the node 
 
 ### Manifest rendering (render.py)
 
-The scripts from `04_install_gpu_stack.sh` onward fill the templates under `k8s/` (`*.tpl`) with `scripts/render.py` and apply them. It substitutes `${VAR}` from environment variables and `KEY=VALUE` arguments and, unlike envsubst, fails on a missing variable, so a typo never yields a manifest with an empty image name or namespace. For the `$$` (literal `$`) and `@@include path@@` syntax, see the [Repository map](../reference/repository_map.md).
+The scripts from `04_install_gpu_stack.sh` onward fill the templates under `k8s/` (`*.tpl`) with `scripts/render.py` and apply them. It substitutes `${VAR}` from environment variables and `KEY=VALUE` arguments and, unlike envsubst, stops when a variable name the template references is in neither the environment nor the arguments, so a typo in a variable name never yields a manifest with an empty image name or namespace. A variable defined as an empty string (for example `ACTIVE_RUNTIME=`) is inserted as is. For the `$$` (literal `$`) and `@@include path@@` syntax, see the [Repository map](../reference/repository_map.md).
 
 You can see the rendered result locally, without contacting AWS.
 
@@ -358,7 +364,7 @@ python3 scripts/render.py k8s/base/routing.json.tpl ACTIVE_RUNTIME=gvisor ACTIVE
   "pools": {
 ```
 
-**If it fails:** `render: <template>: missing variable 'X'` means that variable is not in config.env, your shell or the arguments; see the "config and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:** `render: <template>: missing variable 'X'` means the renderer did not receive `X` as an environment variable or a `KEY=VALUE` argument. A value in `config.env` or your shell does not reach it unless it is exported, so check that it is written as `export X=...` or pass `X=...` to the `render.py` command. If that does not help, see the "config and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ## Build and push the images: `03_build_push_images.sh`
 
@@ -455,7 +461,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 ## Next step
 
-Keep the tunnel running and continue with `04_install_gpu_stack.sh` in [02 gVisor GPU sandboxes](02_gvisor.md).
+Keep the tunnel running and continue on the page for your scenario. A runs `04_install_gpu_stack.sh` in [02 gVisor GPU sandboxes](02_gvisor.md); B1 and B2 continue in [07 HyperPod scenario](07_hyperpod.md). If you created the cluster here with `--hyperpod` (`--hyperpod-b2` for B2) and added the three `export` lines of the images pushed with `HYPERPOD=1` to `config.env`, start B1 at step 3 of "B1 steps" and B2 at `scripts/04_install_gpu_stack.sh` in step 1 of the [B2 procedure](07_hyperpod.md#b2). Rebuilding the images with the same `IMAGE_TAG` can be rejected on push because the tags are IMMUTABLE. C continues with `kata/cpu_nodes.sh` in [10 CPU-only path on c8i](10_cpu_only.md).
 
 ??? note "References"
     | Topic | Link |

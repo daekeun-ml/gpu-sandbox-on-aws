@@ -14,7 +14,7 @@ Scenario A needs GPU nodes, and many accounts have a `Running On-Demand G and VT
 ## Why
 
 - **All three runtimes on the same node.** The three pools share one node with the same CPU, memory and kernel, so differences in boot time and evaluation latency are easier to attribute to the runtime.
-- **The sandbox side is the same code as the GPU path.** Image, `/v1/evaluate` API, authentication, NetworkPolicy and verification script (`scripts/ops/verify.sh`) stay; only `device=cpu` and the RuntimeClass change.
+- **The sandbox side is the same code as the GPU path.** Image, `/v1/evaluate` API, authentication, NetworkPolicy and verification script (`scripts/ops/verify.sh`) stay. The CPU pools use a CPU RuntimeClass, `device=cpu` and a small input size (`SANDBOX_SIZE=smoke`). For example, the `relu_bias` input shrinks from 4096×4096 to 64×128.
 - **A reward loop instead of training.** The reward loop simulation (`scripts/ops/simulate.sh`) scores the golden submissions batch by batch with the trainer's own reward functions (`KernelRewards`), which is enough to watch a version swap during training (`scripts/ops/rollout.sh`).
 
 **Before you start:** read the architecture in [00 Overview](00_overview.md) and run the local smoke test in [Getting started](../getting_started.md). Runtime differences are in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and why version pinning matters is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
@@ -26,18 +26,18 @@ Scenario A needs GPU nodes, and many accounts have a `Running On-Demand G and VT
     - **Launch template**: a bundle of EC2 launch settings. Here it turns on nested virtualization, restricts IMDS and carries the node boot script (user data); the CDK stack creates it.
     - **SSM tunnel (`cdk/tunnel.sh`)**: the connection that links `127.0.0.1:8443` on your PC to the API through SSM Session Manager, so that kubectl and helm reach a cluster with only a private API endpoint.
     - **Golden submission**: a test answer whose verdict is known in advance. There is one correct answer, one wrong answer, one benchmark cheat and one policy violation.
-    - **Reward batch**: the group of completions the trainer sends for scoring at once. The routing table is read once per batch, which pins the version.
+    - **Reward batch**: the group of completions the trainer sends for scoring at once. The trainer reads the routing table on every sandbox call and scores one batch with one version.
 
     More terms are in the [Glossary](../reference/glossary.md).
 
 !!! warning "Verification status"
-    On 2026-11-14 cluster creation (`02_create_cluster.sh`, CDK deploy and delete, twice) and the Kata CPU node add (`kata/cpu_nodes.sh`) ran in a practice account (us-west-2); the node layout and duration in step 2 and the smoke pod output in step 4 are from those runs. In scenario C the image build (`03_build_push_images.sh`), namespace and auth setup (`05_setup_namespaces_auth.sh`), pool deploy (`06_deploy_sandboxes.sh`), pool verification (`ops/verify.sh`), reward loop simulation (`ops/simulate.sh`), version swap (`ops/rollout.sh`) and benchmark (`ops/bench.sh`) were not run on AWS (the image build, namespace and auth setup, and the gVisor GPU pool deploy and verification ran in scenario A in the practice account on 2026-11-18), so their "What to look for" output is the shape the scripts print; verify them yourself. Only the sample output of the reward loop simulation (`ops/simulate.sh`) is a real run, done locally (CPU, two loopback servers) and also covered by a test (`test_simulate_reports_a_version_switch_between_batches`).
+    On 2026-11-14 cluster creation (`02_create_cluster.sh`, CDK deploy and delete, twice) and the Kata CPU node add (`kata/cpu_nodes.sh`) ran in a practice account (us-west-2); the node layout and duration in step 2 and the smoke pod output in step 4 are from those runs. On 2026-11-17 the reward loop simulation (`ops/simulate.sh`) scored 30 batches on the `kata-clh-cpu` pool of an EKS c8i node in the same region, and the switch to v2 showed up at batch 8. The version swap run during it (`ops/rollout.sh kata-clh-cpu v1 v2`) passed its v2 verification and parity check. That record is in the demo site data (`demo/site/data/extras.json`). The benchmark (`ops/bench.sh`) of the three CPU pools was measured on 2026-11-18 ([08](08_benchmark.md)). The sample output in step 7 is a separate local run (CPU, two loopback servers), shortened, and is also covered by a test (`test_simulate_reports_a_version_switch_between_batches`).
 
 ## Architecture
 
 [![Scenario C: CPU pools of three runtimes on one c8i.2xlarge, no GPU](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
-*Takeaway: In AWS resources there is no GPU node, and one c8i.2xlarge serves as the sandbox node group. The diagram below shows the same layout by pods.*
+*Takeaway: In AWS resources there is no GPU node, and one c8i.2xlarge serves as the sandbox node group.*
 
 ```mermaid
 flowchart LR
@@ -61,10 +61,10 @@ flowchart LR
 |---|---|---|
 | GRPO trainer (`g5.2xlarge`, vLLM generation, gradients) | none; the `simulate` Job puts golden submissions where completions would be | different (no training) |
 | Reward functions `KernelRewards` | same code, `require_triton=False` | same |
-| Version pinning with one routing snapshot per batch | same code | same |
+| One version per batch (routing snapshot) | same code | same |
 | Sandbox image, API, authentication, NetworkPolicy | the same | same |
 | Sandbox runtimes | `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu` | only the RuntimeClass differs |
-| Harness measurement | CPU timing (`device=cpu`), no Triton | different (no GPU timing) |
+| Harness measurement | CPU timing (`device=cpu`), small inputs (`SANDBOX_SIZE=smoke`), no Triton | different (no GPU timing) |
 
 ## Preparation
 
@@ -93,7 +93,7 @@ scripts/01_check_prereqs.sh
 
 **What to look for:** the Standard quota is 14 or more, and the feature list of `c8i.2xlarge` contains `nested-virtualization`. Ignore the G and VT quota and the AZ list of the GPU types.
 
-**If it fails:** if nested virtualization is missing, the Region does not support it; switch to `us-east-1` or `us-west-2`, or see the "Kata" section of [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:** this command queries only the configured instance type (`KATA_CPU_INSTANCE_TYPE`, default `c8i.2xlarge`). If `nested-virtualization` is missing, that type does not support it in the current Region; switch to `us-east-1` or `us-west-2`, or see the "Kata" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ## Step 2: A cluster without GPUs, with the c8i node (`02_create_cluster.sh`)
 
@@ -143,7 +143,7 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 
 The sandbox image is based on the PyTorch CUDA runtime and is used unchanged on CPU. If your workstation is arm64, build on an x86_64 host.
 
-**Skip `04_install_gpu_stack.sh`.** It installs the NVIDIA device plugin and gVisor on the GPU nodes; on this path the c8i node created by `02_create_cluster.sh` already installed gVisor through its user data at boot.
+**Skip `04_install_gpu_stack.sh`.** It installs the NVIDIA device plugin, registers the GPU `gvisor` RuntimeClass and runs a GPU check. gVisor itself is installed by user data at boot on the EC2 `sandbox-gvisor` nodes and the c8i sandbox node, so the c8i node created by `02_create_cluster.sh` already has it.
 
 ## Step 4: Three runtimes on the c8i node (`kata/cpu_nodes.sh`)
 
@@ -174,7 +174,7 @@ kata-qemu: kernel seen inside: 6.18.56 #1 SMP Fri Oct 16 18:41:32 UTC 2026
 
 All three kernels must differ from the host kernel on the last line (a plain runc container would show the host kernel). Under gVisor the user-space kernel Sentry, which answers system calls, reports a version of its own choosing; under Kata you see the guest kernel inside the VM.
 
-**If it fails:** on `no sandbox-kata-cpu node group: ...`, check that you ran cluster creation (`02_create_cluster.sh`) with `--cpu-only`; on `kata runtime classes missing` or a smoke pod that does not finish, see the "Kata" section of [Troubleshooting](../reference/troubleshooting.md). If only the `gvisor-cpu` smoke pod fails, check the gVisor install step in the node's user data log (`/var/log/cloud-init-output.log`).
+**If it fails:** on `no sandbox-kata-cpu node group: ...`, check that you ran cluster creation (`02_create_cluster.sh`) with `--cpu-only`. The same message appears without the `eks:DescribeNodegroup` permission or with a different `CLUSTER_NAME` or `AWS_REGION`, so run `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-cpu` yourself and read the error; on `kata runtime classes missing` or a smoke pod that does not finish, see the "Kata" section of [Troubleshooting](../reference/troubleshooting.md). If only the `gvisor-cpu` smoke pod fails, check the gVisor install step in the node's user data log (`/var/log/cloud-init-output.log`).
 
 ## Step 5: Namespaces and the routing table (`05_setup_namespaces_auth.sh`)
 
@@ -203,21 +203,21 @@ done
 
 ## Step 7: A reward loop without a model, and a version swap (`ops/simulate.sh`, `ops/rollout.sh`)
 
-Use two terminals. The reward loop in the first scores 30 batches, one every 20 seconds (about 10 minutes).
+Keep the terminal with the SSM tunnel from step 2 open, and use two more work terminals. The reward loop in the first work terminal scores 30 batches one after another and waits 20 seconds between batches. On the c8i node on 2026-11-17 it took about 16 minutes.
 
 ```bash
-# terminal 1
+# work terminal 1
 scripts/ops/simulate.sh 30 20
 ```
 
-A few batches in, swap `kata-clh-cpu` from v1 to v2 in the second terminal. `ops/rollout.sh` starts the v2 pool next to v1 (1), verifies it (2), checks with parity that it gives the same verdicts as v1 (3) and switches the routing table to v2 (4).
+A few batches in, swap `kata-clh-cpu` from v1 to v2 in the second work terminal. `ops/rollout.sh` starts the v2 pool next to v1 (1), verifies it (2), checks with parity that it gives the same verdicts as v1 (3) and switches the routing table to v2 (4).
 
 ```bash
-# terminal 2
+# work terminal 2
 scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
-**What to look for:** events like these in the first terminal (the local real run from the verification status, shortened). On a cluster the ConfigMap takes up to about a minute to reach the pod (kubelet sync), so the switch can appear a few batches after `ops/rollout.sh` finishes.
+**What to look for:** events like these in the first work terminal (the local run from the verification status, shortened). On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes. If no switch event appears after a minute, check `version` in the simulator's `reward_batch` lines.
 
 ```text
 {"event": "simulate", "steps": 4, "device": "cpu", "note": "golden submissions stand in for model completions; this is not training"}
@@ -227,12 +227,12 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
 - **`sandbox_version_switch` appears once, at a batch boundary.** Batches up to 2 ran on v1, batches from 3 on v2.
-- **`served_versions` holds a single version.** The verdicts of one batch did not mix v1 and v2, which on-policy training needs to compute one batch's advantages against one standard.
-- **`status` and `pass_rate` are the same before and after.** On the golden set v2 gives the same verdicts as v1, as the parity step of `ops/rollout.sh` checked beforehand.
+- **`served_versions` holds a single version.** The verdicts of one batch did not mix v1 and v2 (in training, a batch whose needed results are all cached from the same pool calls no sandbox and prints no `reward_batch` line; if the cache mixes pools, the batch is scored again on one pool and logs that line), which on-policy training needs to compute one batch's advantages against one standard.
+- **`status` and `pass_rate` are the same before and after.** Both batches have 1 `ok` and 2 `wrong_answer`. These are counts per status, so whether each golden got the same verdict on both versions is shown by the per-submission `PASS` lines in the parity output of `ops/rollout.sh`.
 
 `n` is 3, not 4, because the trainer-side AST check rejects the policy-violating answer (reading a host file) before it reaches a sandbox. `mean_speedup` moves from batch to batch with CPU timing noise (between 0.66 and 1.65 in the local run), so do not compare runtimes with it.
 
-Once v2 is active, scale v1 to zero. The Deployment stays, so you can roll back at once.
+Once v2 is active, scale v1 to zero. The v1 Deployment stays, but with 0 replicas it cannot take requests. To go back, `scripts/ops/rollout.sh kata-clh-cpu v2 v1` brings the v1 pods back, runs the verification and parity, and then switches the routing. To compare the three runtimes in step 8, run this command after the benchmark.
 
 ```bash
 scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
@@ -242,7 +242,7 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 
 ## Step 8 (optional): Compare the three runtimes (`ops/bench.sh`)
 
-Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool.
+Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool. `ops/bench.sh` skips pools with no v1 pod. If `--finish` in step 7 scaled `kata-clh-cpu` v1 to zero, that pool is missing from the results, so run it while all three v1 pools are Ready.
 
 ```bash
 scripts/ops/bench.sh 16

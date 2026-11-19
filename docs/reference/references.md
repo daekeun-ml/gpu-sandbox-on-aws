@@ -1,8 +1,8 @@
 # 참고 자료 모음
 
-**TL;DR** 각 페이지 끝의 접힌 "참고 자료" 상자에는 핵심 링크만 남겼고, 페이지별 전체 링크는 이 페이지에 모았습니다.
+**TL;DR** 페이지별 전체 참고 링크가 왼쪽 메뉴 순서로 있습니다. 각 페이지 끝의 접힌 "참고 자료" 상자에는 핵심 링크만 있어요.
 
-페이지 순서는 왼쪽 메뉴와 같습니다. 각 절의 첫 줄은 그 링크를 쓰는 페이지로 연결됩니다. 어떤 사실을 어느 출처가 뒷받침하는지는 [검증된 사실과 출처](sources.md)에 정리되어 있습니다.
+어떤 사실을 어느 출처가 뒷받침하는지는 [검증된 사실과 출처](sources.md)에 정리되어 있습니다.
 
 ## 01 AI가 만든 코드를 격리하는 이유 { #ref-beginner-01-why-sandbox }
 
@@ -425,7 +425,7 @@
 - [src/gpusandbox/client/routing.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/client/routing.py), [src/gpusandbox/rewards.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/rewards.py)
 - [src/gpusandbox/tools.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/tools.py), [src/gpusandbox/golden.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/golden.py)
 
-운영 환경에서 veRL처럼 completion을 하나씩 채점하는 trainer는 batch snapshot을 쓸 수 없어서, gateway가 `group_key` 단위로 버전을 고정합니다([Production 05 샌드박스 버전 관리](../production/05_sandbox_updates.md)).
+운영 환경에서 veRL처럼 completion을 하나씩 채점하는 trainer는 batch 단위로 버전을 맞출 수 없어서, gateway가 `group_key` 단위로 버전을 고정합니다([Production 05 샌드박스 버전 관리](../production/05_sandbox_updates.md)).
 
 ## 07 HyperPod 시나리오 { #ref-handson-07-hyperpod }
 
@@ -457,7 +457,8 @@
 
 - [scripts/hyperpod/create.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/create.sh), [run_grpo.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/run_grpo.sh), [check_gvisor.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/check_gvisor.sh), [delete.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/delete.sh)
 - [infra/hyperpod/cluster.json.tpl](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/cluster.json.tpl), [execution-role-eks-policy.json](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/execution-role-eks-policy.json)
-- [infra/hyperpod/lifecycle/on_create.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/on_create.sh), [install_gvisor_hyperpod.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/install_gvisor_hyperpod.sh)
+- [infra/hyperpod/lifecycle/on_create.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/on_create.sh), [on_create_sandbox.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/on_create_sandbox.sh), [register_runsc.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/lifecycle/register_runsc.sh) (B2 노드 시작 시 `runsc` 등록)
+- [infra/hyperpod/ami/build-b2-ami.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/ami/build-b2-ami.sh), [customize-b2.sh](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/ami/customize-b2.sh) (B2 이미지의 드라이버 교체와 gVisor 설치)
 - [k8s/trainer/hyperpod-job-grpo.yaml.tpl](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/trainer/hyperpod-job-grpo.yaml.tpl)
 - [scripts/config.env.example](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example)
 

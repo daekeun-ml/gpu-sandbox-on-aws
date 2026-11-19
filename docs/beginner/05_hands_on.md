@@ -13,9 +13,8 @@
 
 ## Why
 
-- **비용이 들지 않는 내 PC 실습부터 합니다.** 채점 흐름을 먼저 직접 확인하고, AWS 실습은 원할 때만 합니다.
-- **단계마다 "지금 일어나는 일"을 적었습니다.** 1~4편에서 배운 개념이 어느 명령에 해당하는지 설명해요.
-- **AWS 단계에는 실제 실행 화면을 넣었습니다.** 2026-11-14에 실습 계정에서 이 순서대로 배포, 확인, 삭제했습니다.
+- **내 PC 실습은 무료입니다.** 1부에서 정답, 오답, 속이기 답안이 어떻게 채점되는지 확인해요.
+- **AWS 실습은 선택이고 과금됩니다.** 2부는 `c8i.2xlarge` 한 대에서 세 런타임의 커널을 비교한 뒤 스택을 지웁니다.
 
 **사전 지식:** [01편](01_why_sandbox.md)부터 [04편](04_rl_and_sandbox.md)까지 먼저 읽으면 좋습니다. 준비물은 각 부의 시작 부분에 있습니다.
 
@@ -52,7 +51,7 @@ uv pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-**확인할 것:** 마지막 줄이 `94 passed`로 끝나면 됩니다. 아래 화면은 테스트가 74개이던 시점에 찍은 것입니다.
+**확인할 것:** 마지막 요약 줄에 `failed`나 `error` 없이 `passed`만 나오면 됩니다(2026-11-19 기준 테스트 105개). 아래 화면은 테스트가 74개이던 시점에 찍은 것입니다.
 
 ![로컬 터미널: python -m pytest -q 결과, 74 passed](../images/learning/local-pytest.png)
 
@@ -60,11 +59,11 @@ python -m pytest -q
 
 **지금 일어나는 일:** 01편과 04편에서 설명한 기능(위험한 코드를 실행 전에 막는 검사, 채점기와 제출 코드를 나눈 구조, 토큰이 없으면 거절하는 인증, 배치 경계의 버전 교체)이 동작하는지 확인합니다.
 
-**문제가 생기면:** `ModuleNotFoundError`가 나오면 `source .venv/bin/activate`를 다시 실행하고 1번을 반복하세요. Linux 호스트에서 다음 3번처럼 서버를 직접 띄우면 같은 사용자의 다른 프로세스가 종료될 수 있으니, 3번은 macOS에서 실행하거나 서버마다 별도 컨테이너(별도 PID namespace)에서 실행하세요(이유는 [시작하기](../getting_started.md) 3장 참고).
+**문제가 생기면:** `ModuleNotFoundError`가 나오면 복제한 저장소 폴더(`gpu-sandbox-on-aws`)에서 `source .venv/bin/activate`를 실행했는지 확인하세요. 그래도 나오면 1번의 `uv pip install` 두 줄만 다시 실행합니다. Linux 호스트에서 다음 3번처럼 서버를 직접 띄우면 같은 사용자의 다른 프로세스가 종료될 수 있습니다(이유는 [시작하기](../getting_started.md) 3장 참고). Linux에서는 3~4번을 건너뛰세요. 2번 테스트 중 `test_golden_probe_and_parity_on_cpu_pools`가 로컬 서버 두 개를 띄워 4번과 같은 시험용 답안 네 개를 채점하고 결과를 확인합니다. macOS에서는 3~4번에서 같은 채점을 직접 실행해 보세요.
 
 ### 3. 샌드박스 서버 두 개 띄우기 (macOS)
 
-터미널 두 개에서 각각 실행합니다. 두 서버는 포트와 작업 디렉터리(`SANDBOX_WORK_ROOT`)만 달라요.
+터미널 두 개를 열고, 각각 저장소 폴더로 이동한 뒤 실행합니다. 두 서버는 포트와 작업 디렉터리(`SANDBOX_WORK_ROOT`)만 달라요.
 
 ```bash
 # Terminal 1
@@ -90,7 +89,7 @@ gpusandbox-server
 
 ### 4. 시험용 답안 채점하기
 
-세 번째 터미널에서 시험용 답안(golden) 네 개를 두 서버에 보냅니다.
+세 번째 터미널에서 저장소 폴더로 이동한 뒤, 시험용 답안(golden) 네 개를 두 서버에 보냅니다.
 
 ```bash
 source .venv/bin/activate
@@ -121,7 +120,7 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 **준비물:** 실습용 AWS 계정(운영 계정은 피하세요), AWS CLI와 자격 증명, Node.js 22 또는 24, AWS CDK CLI(`npm install -g aws-cdk`), Session Manager plugin for the AWS CLI, `kubectl`, `helm`. 계정의 `Running On-Demand Standard` vCPU 쿼터가 14 이상이어야 합니다. 리전은 `us-west-2` 기준입니다.
 
-**비용:** 컴퓨트 시간당 약 0.57 USD(`m6i.large` 2대 + `c8i.2xlarge` 1대) + EKS 0.10 USD + NAT gateway 요금(온디맨드 요금). 1~2시간 실습하면 몇 달러가 들 것으로 봅니다(추정).
+**비용:** 클러스터 노드 세 대(`m6i.large` 2대 + `c8i.2xlarge` 1대)가 시간당 약 0.57 USD이고, EKS 0.10 USD와 NAT gateway 요금이 더해집니다(온디맨드 요금). 접속용 인스턴스(`t4g.nano`), KMS 키, 로그, EBS 볼륨에도 요금이 조금 붙어요. 1~2시간 실습하면 몇 달러가 들 것으로 봅니다(추정).
 
 !!! warning "끝나면 꼭 지우세요"
     클러스터는 사용하지 않는 동안에도 지울 때까지 과금됩니다. 마지막 단계(지우기)를 건너뛰지 마세요.
@@ -139,12 +138,15 @@ flowchart LR
 
 ### 5. 설정 파일 만들기
 
+1부에서 만든 가상 환경을 활성화한 터미널(저장소 폴더)에서 실행합니다.
+
 ```bash
-cp scripts/config.env.example scripts/config.env
-pip install -r cdk/requirements.txt
+test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
+uv pip install -r cdk/requirements.txt
+source scripts/config.env
 ```
 
-`scripts/config.env`의 `AWS_REGION`, `CLUSTER_NAME`은 기본값(`us-west-2`, `gpu-sandbox`)을 그대로 써도 됩니다.
+첫 줄은 설정 파일이 없을 때만 예시 파일을 복사하므로, 이미 만든 파일은 그대로 남습니다. `scripts/config.env`의 `AWS_REGION`, `CLUSTER_NAME`은 기본값(`us-west-2`, `gpu-sandbox`)을 그대로 써도 됩니다. 마지막 줄은 이 값을 현재 터미널에 불러와 6단계와 문제 해결 명령의 `$AWS_REGION`, `$CLUSTER_NAME`에 씁니다. 파일을 고쳤거나 새 터미널을 열었다면 `source scripts/config.env`를 다시 실행하세요.
 
 **지금 일어나는 일:** 모든 스크립트와 CDK 앱이 이 파일 하나에서 설정을 읽습니다. 이 파일에는 계정 정보가 들어갈 수 있어서 `.gitignore`로 git 커밋에서 제외되어 있어요.
 
@@ -153,7 +155,7 @@ pip install -r cdk/requirements.txt
 처음 한 번만 CDK bootstrap을 실행하고, 클러스터를 배포합니다.
 
 ```bash
-cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/us-west-2"
+cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
 cdk/deploy.sh C
 ```
 
@@ -165,7 +167,7 @@ cdk/deploy.sh C
 
 *실습 계정의 배포 화면입니다(2026-11-14, us-west-2, 계정과 리소스 식별자는 가림).*
 
-**지금 일어나는 일:** CDK가 private 네트워크(VPC), EKS 클러스터, 노드 두 종류(system 2대, `c8i.2xlarge` 1대), 접속용 인스턴스를 한 번에 만들고, 01편에서 설명한 방어 설정을 기본으로 적용해요. EKS API는 인터넷에서 접속할 수 없고, 노드에는 IMDSv2 필수와 hop limit 1이, 디스크에는 암호화가 적용됩니다. `c8i.2xlarge`에는 nested virtualization이 켜지고 gVisor가 설치됩니다.
+**지금 일어나는 일:** CDK가 private 네트워크(VPC), EKS 클러스터, 노드 두 종류(system 2대, `c8i.2xlarge` 1대), 접속용 인스턴스를 한 번에 만들고, 01편의 방어 중 노드와 클러스터 쪽 설정을 적용해요. EKS API는 인터넷에서 접속할 수 없고, 노드에는 IMDSv2 필수와 hop limit 1이, 디스크에는 암호화가 적용됩니다. `c8i.2xlarge`에는 nested virtualization이 켜지고 gVisor와 node guard가 설치됩니다. VPC CNI의 네트워크 정책 기능도 켜지지만, `sandbox` 네임스페이스의 차단 규칙은 샌드박스 풀을 배포할 때 따로 설치합니다([10편](../handson/10_cpu_only.md) 5단계). 그래서 이 편의 시험용 pod(`default` 네임스페이스)에는 그 규칙이 적용되지 않아요.
 
 **문제가 생기면:** [Production 09 CDK](../production/09_cdk.md)의 "문제가 생기면"을 보세요.
 
@@ -235,7 +237,10 @@ kubectl logs runc-smoke
 kubectl delete pod runc-smoke
 ```
 
-**문제가 생기면:** Kata pod만 실패하면 노드에 `/dev/kvm`이 없는 경우이니, [Production 09 CDK](../production/09_cdk.md) 2단계의 `describe-instances` 명령으로 `NestedVirtualization`이 `enabled`인지 확인하세요. gVisor pod만 실패하면 노드 부팅 때 gVisor 설치가 실패한 경우이니 [문제 해결](../reference/troubleshooting.md)의 "gVisor" 항목을 보세요.
+**문제가 생기면:** 스크립트는 pod가 제시간에 끝났는지만 확인하고 실패 원인은 판별하지 않습니다. 스크립트는 경고를 출력한 뒤 로그를 읽고 그 pod를 지우므로, 경고에 나온 pod 이름을 기록하세요. pod가 남아 있으면 `kubectl describe pod <이름>`을, 이미 지워졌다면 `kubectl get events -n default --field-selector involvedObject.name=<이름>`을 확인합니다. Kata pod에서 KVM 관련 오류가 보이면 [Production 09 CDK](../production/09_cdk.md) 2단계의 `describe-instances` 명령으로 `NestedVirtualization`이 `enabled`인지 확인합니다. gVisor pod에서 런타임 오류가 보이면 [문제 해결](../reference/troubleshooting.md)의 "gVisor" 항목을 보고 노드의 gVisor 설치 상태를 확인하세요.
+
+!!! tip "같은 클러스터로 10편을 이어서 하려면"
+    [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)는 이 클러스터와 같은 구성에서 샌드박스 풀을 띄우고, 모델 없이 시험용 답안을 채점하며 버전 교체를 확인합니다. 이어서 하려면 9단계를 건너뛰고 10편의 "준비"와 1단계를 확인한 뒤 3단계부터 진행하세요. 2단계(클러스터 생성)와 4단계(런타임 설치)는 이 편의 6단계와 8단계에서 했어요. 클러스터는 10편의 정리 절차로 지웁니다.
 
 ### 9. 지우기
 
@@ -257,7 +262,7 @@ cdk/destroy.sh
 
 ## 다음 단계
 
-- 같은 클러스터에서 샌드박스 풀을 띄우고 학습 중 버전 교체까지 해 보려면 [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)로 가세요.
+- 샌드박스 풀을 띄우고 모델 없이 시험용 답안으로 버전 교체를 확인하려면 [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)로 가세요. 클러스터를 이미 지웠다면 10편 처음부터 시작합니다.
 - multi-turn 에이전트에서 샌드박스를 어떻게 쓰는지는 [06 multi-turn 에이전트와 Agent Sandbox](06_multi_turn_agent.md)에서 이어서 읽으세요.
 - 다른 코스는 [학습 코스 고르기](../learning_paths.md)에서 고릅니다.
 

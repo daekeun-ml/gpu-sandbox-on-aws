@@ -8,7 +8,7 @@
 
 ![Two panels. a: deleting the CDK stack (cdk destroy) removes only the cluster, node groups, VPC and NAT gateway, while AMIs and snapshots, ECR images, the HyperPod S3 bucket and IAM role, the demo site stack and the CDK bootstrap stack (CDKToolkit) remain. b: 08_cleanup.sh deletes the CDK stack after you type the cluster name and the AMIs, snapshots and, with --images, ECR images after you type ami and images; hyperpod/delete.sh deletes the S3 bucket and IAM role after you type the HyperPod name and bucket; demo/teardown.sh deletes the demo site stack after you type the stack name; CDKToolkit is deleted by hand only for an account you retire.](../images/figures/handson-99_cleanup.svg)
 
-*Takeaway: The CDK stack deletes only what it created, so images, buckets, roles and other stacks outside it stay behind, and this page gives each of them its own delete command while keeping CDKToolkit for the next deployment.*
+*Takeaway: The CDK stack deletes only what it created, so images, buckets, roles and other stacks outside it stay behind, and the AMIs, ECR images, HyperPod resources and demo stack outside it are deleted by their own scripts, while CDKToolkit stays for the next deployment.*
 
 
 ## Why
@@ -35,7 +35,7 @@
     More detail is in the [Glossary](../reference/glossary.md).
 
 !!! warning "Validation status and safety"
-    The scenario C CDK stack was deployed and deleted in a practice account on 2026-11-14, but the AMI and ECR steps of `08_cleanup.sh`, `hyperpod/delete.sh` and `demo/teardown.sh` passed shellcheck only and have not been run end to end on AWS. In a shared or production account, confirm by name, tags and creation time that a resource belongs to this hands-on before deleting it (ideally, run from an account or role dedicated to this hands-on). The check commands below only read.
+    The scenario C CDK stack was deployed and deleted in a practice account on 2026-11-14. On 2026-11-18, `08_cleanup.sh --images` ran on a scenario A cluster (us-west-2); the record does not say whether its AMI step ran. `hyperpod/delete.sh` and `demo/teardown.sh` passed shellcheck only and have not been run end to end on AWS. In a shared or production account, confirm by name, tags and creation time that a resource belongs to this hands-on before deleting it (ideally, run from an account or role dedicated to this hands-on). The check commands below only read.
 
 ## Order
 
@@ -53,7 +53,7 @@ flowchart TD
 
 Deleting the CDK stack (`cdk destroy`) removes the node groups, the cluster and the NAT gateway in turn, so it takes a while, and HyperPod deletion polls every 30 seconds until the cluster is gone (neither duration was measured). The demo stack includes a CloudFront distribution, which can also take a while to delete. After cleanup GPU node charges stop, but ECR images and AMI snapshots you keep incur storage charges, and the secrets KMS key is deleted after a 7-day waiting period.
 
-Load variables such as `$AWS_REGION` and `$CLUSTER_NAME` with `source scripts/config.env` first. Things inside the cluster (Agent Sandbox objects, HyperPodPyTorchJobs, sandbox pools) are deleted with kubectl, so keep `cdk/tunnel.sh` running in a second terminal until cleanup is done.
+Load variables such as `$AWS_REGION` and `$CLUSTER_NAME` with `source scripts/config.env` first. Things inside the cluster (Agent Sandbox objects, HyperPodPyTorchJobs, sandbox pools) are deleted with kubectl, so keep `cdk/tunnel.sh` running in a second terminal until cleanup is done. kubectl deletes in the cluster of the current context, so before you start, check that `kubectl config current-context` is `<CLUSTER_NAME>-tunnel` of the cluster you are cleaning up.
 
 ## 0. Agent Sandbox extension (only if you used it)
 
@@ -67,7 +67,7 @@ This command deletes all remaining claims, warm pools and templates, in that ord
 kubectl -n sandbox delete sandboxclaims,sandboxwarmpools,sandboxtemplates --all
 ```
 
-**What to look for:** one `... deleted` line per deleted object. A few minutes later, when this command prints `No resources found in sandbox namespace.`, all sandbox pods are gone.
+**What to look for:** one `... deleted` line per deleted object. A few minutes later, when this command prints `No resources found in sandbox namespace.`, all pods managed by the Agent Sandbox extension are gone. Sandbox pools created as Deployments are deleted in step 2.
 
 ```bash
 kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox
@@ -82,18 +82,18 @@ If you never installed the extension, the first command fails with an error such
 Delete the demo stack and every file in its bucket (table below). The CloudFront distribution goes too, and the demo URL stops working.
 
 ```bash
-AWS_REGION=us-west-2 demo/teardown.sh
+demo/teardown.sh
 # if you deployed with another stack name
-AWS_REGION=us-west-2 DEMO_STACK_NAME=<stack-name> demo/teardown.sh
+DEMO_STACK_NAME=<stack-name> demo/teardown.sh
 ```
 
-Set `AWS_REGION` to the Region where you created the demo. The script does not read `scripts/config.env`, but after `source scripts/config.env` in your shell it uses that `AWS_REGION`, so set it on the command line if the demo lives in another Region.
+The script does not read `scripts/config.env` and, like `demo/deploy.sh`, fixes the Region to `us-east-1`. It ignores `AWS_REGION` in your shell.
 
 | Prompt | Word to type | What it deletes |
 |---|---|---|
-| `Delete demo stack <stack> and all files in its bucket? Type '<stack>':` | The stack name (default `gpu-sandbox-demo`) | Every object in the bucket (`aws s3 rm --recursive`), then the whole stack (bucket, CloudFront distribution, Origin Access Control, response headers policy, bucket policy). Waits for `stack-delete-complete` |
+| `Delete demo stack <stack> and all files in its bucket? Type '<stack>':` | The stack name (default `gpu-sandbox-demo`) | Every object in the site bucket (`aws s3 rm --recursive`), then the whole stack (site bucket, CloudFront distribution, Origin Access Control, response headers policy, bucket policy). Waits for `stack-delete-complete`. The access log bucket has `DeletionPolicy: Retain` and stays |
 
-**What to look for:** the last line is `deleted gpu-sandbox-demo` (or the stack name you gave). If you type a different word, it prints `aborted` and deletes nothing.
+**What to look for:** `deleted gpu-sandbox-demo` (or the stack name you gave), followed by `kept the access log bucket <log bucket>; when you no longer need the logs: aws s3 rb s3://<log bucket> --force`. The site bucket is deleted and the log bucket stays. Log objects expire after 90 days; delete the bucket with the printed command when you no longer need the logs. If you type a different word, it prints `aborted` and deletes nothing.
 
 **If it fails:** if the stack ends in `DELETE_FAILED`, the resources that failed remain (per the CloudFormation documentation); check the cause in the console and delete again. The demo setup is described in section "6. Cleanup" of [09 Demo site (CloudFront)](09_demo_site.md).
 
@@ -120,26 +120,28 @@ The HyperPod dependency Helm release and the training operator add-on live insid
 
 ## 2. EKS cluster (CDK stack) and the rest
 
-With the tunnel up, this command deletes the sandbox pools and training Jobs first, so that GPUs and VFIO devices are released before the nodes go down, then the CDK stack (cluster, node groups, launch templates, VPC, NAT gateway, access instance, log groups), and then asks whether to delete the AMIs.
+If the current kubectl context can read the `sandbox` namespace, this command deletes the sandbox pools and training Jobs first, so that GPUs and VFIO devices are released before the nodes go down, then the CDK stack (cluster, node groups, launch templates, VPC, NAT gateway, access instance, log groups), and then asks whether to delete the AMIs.
+
+Run only one of the two commands. To keep the ECR images, run the first line; to delete them too, run the second line from the start. Running both in turn makes the second call start again from the cluster and AMI steps.
 
 ```bash
-scripts/08_cleanup.sh            # pools, Jobs, the CDK stack, AMIs (asks)
-scripts/08_cleanup.sh --images   # also the ECR repositories
+scripts/08_cleanup.sh            # pools, Jobs, the CDK stack, AMIs (asks); keeps ECR
+scripts/08_cleanup.sh --images   # the same, plus the ECR repositories
 ```
 
 | Order | Prompt | Word to type | What it deletes |
 |---|---|---|---|
-| 1 | `This deletes EKS cluster ${CLUSTER_NAME} in ${AWS_REGION} and its node groups.` | The cluster name (default `gpu-sandbox`), asked only this once | Runs `cdk/destroy.sh --yes`. If the `sandbox` namespace is visible through the tunnel, it first deletes all Jobs in `rl-trainer` and all Deployments and Services in `sandbox`; then `cdk destroy ${CLUSTER_NAME}-cdk --force` deletes the whole stack. After that, the log groups `/aws/lambda/${CLUSTER_NAME}-cdk-...` created outside the stack are deleted without a prompt if they exist |
+| 1 | `This deletes EKS cluster ${CLUSTER_NAME} in ${AWS_REGION} and its node groups.` | The cluster name (default `gpu-sandbox`), asked only this once | Runs `cdk/destroy.sh --yes`. If the current kubectl context can read the `sandbox` namespace, it first deletes all Jobs in `rl-trainer` and all Deployments and Services in `sandbox` of that context. The script does not check that the context belongs to the cluster you typed (see the `kubectl config current-context` check above). Then `cdk destroy ${CLUSTER_NAME}-cdk --force`, selected by `CLUSTER_NAME` and `AWS_REGION`, deletes the whole stack. After that, the log groups `/aws/lambda/${CLUSTER_NAME}-cdk-...` created outside the stack are deleted without a prompt if they exist |
 | 2 | `Deregister AMI ${KATA_IOMMU_AMI_ID} and delete its snapshot?` | `ami` | Only if `KATA_IOMMU_AMI_ID` is set in `config.env`: deregisters the AMI and deletes the snapshot of its first block device |
 | 3 | `Deregister the B2 HyperPod AMI ${HYPERPOD_B2_AMI_ID} and delete its snapshot?` | `ami` | Only if `HYPERPOD_B2_AMI_ID` is set in `config.env`: deregisters the B2 custom AMI and deletes its snapshot. Delete the HyperPod cluster first |
-| 4 | `Delete the ECR repositories ${ECR_REPO_PREFIX}/{sandbox,trainer,control} and all images?` | `images` | Only with `--images`: deletes the three repositories with `--force` |
+| 4 | `Delete the ECR repositories ${ECR_REPO_PREFIX}/{sandbox,trainer,control} and all images?` | `images` | Only with `--images`: deletes the three repository names one by one with `--force`. A repository that does not exist prints an error and is skipped |
 | End | None | | Lists pending, running, stopping and stopped instances tagged `project=gpu-sandbox-on-aws` |
 
-**What to look for:** with the tunnel up you see `deleting sandbox pools and training jobs first`; without it, the warning `cluster API not reachable (is cdk/tunnel.sh running?); the stack deletion removes the nodes anyway`. Then come the `cdk destroy` progress output, `deleting leftover log group /aws/lambda/<CLUSTER_NAME>-cdk-...` (if any) and a first instance table. If `cdk/destroy.sh` ends with `ECR repositories are kept. To delete them:` and a delete command, ignore it when you ran with `--images`; a later step deletes them. The table under the final `remaining instances tagged project=gpu-sandbox-on-aws (should be none):` must be empty. With `--images`, a line such as `deleted gpu-sandbox/sandbox` appears three times.
+**What to look for:** if the current kubectl context can read the `sandbox` namespace you see `deleting sandbox pools and training jobs first`; if that lookup fails, the warning `cluster API not reachable (is cdk/tunnel.sh running?); the stack deletion removes the nodes anyway`. Then come the `cdk destroy` progress output, `deleting leftover log group /aws/lambda/<CLUSTER_NAME>-cdk-...` (if any) and a first instance table. If `cdk/destroy.sh` ends with `ECR repositories are kept. To delete them:` and a delete command, ignore it when you ran with `--images`; a later step deletes them. The table under the final `remaining instances tagged project=gpu-sandbox-on-aws (should be none):` must be empty. `--images` deletes all three repositories with the prefix, `sandbox`, `trainer` and `control`, whether or not this lab created them. If you share `ECR_REPO_PREFIX` with another lab, check what uses the three repositories first. A line such as `deleted gpu-sandbox/sandbox` appears once for each repository deleted successfully (for example, two lines, sandbox and control, if there is no trainer repository).
 
 The bootstrap stack `CDKToolkit` stays, because the next deployment reuses it (if you will not use the account again, empty its S3 bucket and then delete the `CDKToolkit` stack).
 
-If you type a different word at a prompt, the script ends with `aborted` right there and the later steps (including the final instance list) do not run. So to keep the AMI on purpose, do not decline at the prompt; before running, remove `KATA_IOMMU_AMI_ID` from `config.env` and set `WITH_KATA_GPU` to `"0"`. With `WITH_KATA_GPU=1` and an empty AMI ID, the synth before `cdk destroy` stops with `set KATA_IOMMU_AMI_ID in scripts/config.env ...` (per the code).
+If you type a different word at a prompt, the script ends with `aborted` right there and the later steps (including the final instance list) do not run. So to keep the AMI on purpose, do not decline at the prompt; write the ID down, then before running remove `KATA_IOMMU_AMI_ID` (for the B2 AMI, `HYPERPOD_B2_AMI_ID`) from `config.env`. If you loaded `config.env` into your shell, also run `unset KATA_IOMMU_AMI_ID` (or `unset HYPERPOD_B2_AMI_ID`). The script then skips that AMI step. You do not need to change `WITH_KATA_GPU`: `cdk/destroy.sh` sets both Kata switches to 0 before synth.
 
 **If it fails:** if `cdk destroy` fails or takes very long, find the failed resource in the events of the `<CLUSTER_NAME>-cdk` stack in the CloudFormation console, and see the "Cleanup and cost" section of [Troubleshooting](../reference/troubleshooting.md) (including a remaining HyperPod cluster that holds on to the VPC).
 
@@ -167,8 +169,8 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 - Skip node groups you did not create (a command for a missing one just ends with an error). Scenario B has no `trainer` node group, and scenario C has only `sandbox-kata-cpu`.
 - Do not scale down during training. The trainer Job has `backoffLimit: 0`, so it fails when its node disappears, and its results live in an emptyDir, so training has to start over.
-- If you used the Agent Sandbox extension, scale the warm pool to zero first (for example `scripts/extensions/agent_sandbox.sh pool gvisor 0`).
-- To resume, run the same commands with `desiredSize` set to 1 for `trainer`, `sandbox-kata-gpu` and `sandbox-kata-cpu`, and to `$GVISOR_NODES` (default 2) for `sandbox-gvisor`. New nodes rerun the gVisor installation and the node guard at boot, kata-deploy (a DaemonSet) lands on new Kata nodes too, and the sandbox Deployments keep their replica counts, so their pods are scheduled again once the nodes are back.
+- If you used the Agent Sandbox extension, scale the warm pool to zero first (for example `kubectl -n sandbox patch sandboxwarmpool kernel-eval-gvisor --type merge -p '{"spec":{"replicas":0}}'`). `agent_sandbox.sh pool <runtime> 0` also re-applies the template, which goes back to the v1 settings unless `VERSION_FILE` is set.
+- To resume, run the same commands with `desiredSize` set to 1 for `trainer`, `sandbox-kata-gpu` and `sandbox-kata-cpu`, and to `$GVISOR_NODES` (default 2) for `sandbox-gvisor`. New nodes rerun their node group's boot setup: `sandbox-gvisor` and `sandbox-kata-cpu` get gVisor and the node guard again, `sandbox-kata-gpu` gets the node guard, kata-deploy (a DaemonSet) installs the Kata runtime on new Kata nodes, and `trainer` nodes have no extra boot setup. The sandbox Deployments keep their replica counts, so their pods are scheduled again once the nodes are back.
 - These commands change only the node count, without CloudFormation, so set the values back before you rerun cluster creation (`02_create_cluster.sh`). What happens if you redeploy without setting them back was not checked.
 
 **If it fails:** if nodes do not scale down or back up, see the "Checking on the AWS side (node groups, instances)" section of [Troubleshooting](../reference/troubleshooting.md).
@@ -212,13 +214,14 @@ aws sagemaker list-clusters --region "$AWS_REGION" \
 
 ### What to check outside the scripts
 
-The "expected" result means the resource is gone.
+Check each resource against the expected state in the table. Most should be gone, but right after the stack deletion the KMS key is in its 7-day pending-deletion state, and `CDKToolkit` stays for the next deployment.
 
 | Resource | Created by | Cleaned up automatically | Check command (read-only) |
 |---|---|---|---|
-| ECR repositories `${ECR_REPO_PREFIX}/sandbox`, `trainer`, `control` | `scripts/03_build_push_images.sh` | Only with `--images` | `aws ecr describe-repositories --region "$AWS_REGION" --query "repositories[?starts_with(repositoryName, '${ECR_REPO_PREFIX}/')].repositoryName" --output text` (empty output is expected) |
+| ECR repositories `${ECR_REPO_PREFIX}/sandbox`, `trainer`, `control` | `scripts/03_build_push_images.sh` | Only with `--images` | `aws ecr describe-repositories --region "$AWS_REGION" --query "repositories[?starts_with(repositoryName, '${ECR_REPO_PREFIX}/')].repositoryName" --output text` (after `--images`, `sandbox`, `trainer` and `control` are gone from the list; other repositories with the same prefix, such as `verl` for veRL, remain) |
 | IOMMU AMI | `infra/kata/build-iommu-ami.sh` (first run of `scripts/kata/gpu_nodes.sh`) | Only if `KATA_IOMMU_AMI_ID` is set | `aws ec2 describe-images --region "$AWS_REGION" --owners self --filters "Name=tag:project,Values=gpu-sandbox-on-aws" --query 'Images[].[ImageId,Name]' --output table` |
 | B2 HyperPod AMI | `infra/hyperpod/ami/build-b2-ami.sh` (`scripts/hyperpod/build_b2_ami.sh`) | Only if `HYPERPOD_B2_AMI_ID` is set | The same command as for the IOMMU AMI (same `project` tag). If a build failed, the stopped builder instance shows up in the final instance list |
+| B2 builder security group `${CLUSTER_NAME}-b2-ami-builder-<timestamp>` | `infra/hyperpod/ami/build-b2-ami.sh` | The script deletes it after terminating the builder when the build succeeds. `08_cleanup.sh` does not delete it | `aws ec2 describe-security-groups --region "$AWS_REGION" --filters "Name=tag:project,Values=gpu-sandbox-on-aws" "Name=group-name,Values=${CLUSTER_NAME}-b2-ami-builder-*" --query 'SecurityGroups[].[GroupId,GroupName]' --output table` (empty is expected. If one is left, terminate the builder, then delete it with `aws ec2 delete-security-group --region "$AWS_REGION" --group-id <sg-id>`. It sits in the cluster VPC, so clean it up before deleting the CDK stack) |
 | The AMI's snapshot | Created with the AMI | Together with the AMI step above | `aws ec2 describe-snapshots --region "$AWS_REGION" --owner-ids self --filters "Name=description,Values=*<ami-id>*" --query 'Snapshots[].[SnapshotId,Description]' --output table` |
 | CDK stack `${CLUSTER_NAME}-cdk` (VPC, NAT gateway, cluster, node groups, launch templates, access instance) | `scripts/02_create_cluster.sh` (`cdk/deploy.sh`) | Yes (`cdk/destroy.sh`); it remains if deletion fails | `aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "${CLUSTER_NAME}-cdk"` (an error saying the stack does not exist is expected) |
 | Secrets KMS key | CDK stack | Yes (after the 7-day waiting period) | In the KMS console under customer managed keys, the key with the description `EKS secrets encryption for <CLUSTER_NAME>` is in the `Pending deletion` state |
@@ -226,7 +229,7 @@ The "expected" result means the resource is gone.
 | S3 bucket `${HYPERPOD_LCS_BUCKET}` | `scripts/hyperpod/create.sh` | The `bucket` prompt of `hyperpod/delete.sh` | `aws s3api head-bucket --bucket "$HYPERPOD_LCS_BUCKET"` (404 is expected) |
 | IAM role `${HYPERPOD_CLUSTER_NAME}-execution` | `scripts/hyperpod/create.sh` | `hyperpod/delete.sh` | `aws iam get-role --role-name "${HYPERPOD_CLUSTER_NAME}-execution"` (NoSuchEntity is expected) |
 | IAM role for the training operator | If you created it yourself as described in 07 | No | Check in the IAM console under the name you used |
-| Demo stack `gpu-sandbox-demo` (including the bucket and CloudFront distribution) | `demo/deploy.sh` | `demo/teardown.sh` | `aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name gpu-sandbox-demo` (an error saying the stack does not exist is expected; use your stack name if you changed it) |
+| Demo stack `gpu-sandbox-demo` (including the bucket and CloudFront distribution) | `demo/deploy.sh` | `demo/teardown.sh` | `aws cloudformation describe-stacks --region us-east-1 --stack-name "${DEMO_STACK_NAME:-gpu-sandbox-demo}"` (an error saying the stack does not exist is expected; the demo lives in `us-east-1` whatever the cluster Region; the retained access log bucket stays separately) |
 | CloudWatch log groups | The EKS control plane logs (`/aws/eks/<CLUSTER_NAME>/cluster`) and the VPC flow log come from the CDK stack, `/aws/lambda/<CLUSTER_NAME>-cdk-...` from the stack's custom resource Lambda, plus HyperPod cluster logs | The stack's log groups go with the stack, and `cdk/destroy.sh` deletes the Lambda log groups. HyperPod logs: no | `aws logs describe-log-groups --region "$AWS_REGION" --log-group-name-prefix /aws/sagemaker/ --query 'logGroups[].logGroupName' --output text` and `--log-group-name-prefix "/aws/eks/${CLUSTER_NAME}"`, `--log-group-name-prefix "/aws/lambda/${CLUSTER_NAME}-cdk-"` |
 
 If the CDK stack is left in `DELETE_FAILED`, its NAT gateway and Elastic IP may remain and keep billing; check the cause in the CloudFormation console and run `cdk/destroy.sh` again.
@@ -259,10 +262,10 @@ Local leftovers (`bench-*.jsonl`, the cluster entry and the `<CLUSTER_NAME>-tunn
     ```
 
 3. `${HYPERPOD_CLUSTER_NAME}` is not in the `aws sagemaker list-clusters` list (scenario B).
-4. If you built the demo, `demo/teardown.sh` ended with `deleted <stack>`, and the demo stack query returns an error saying the stack does not exist.
-5. The check commands in the table above return results that mean "gone" (empty list, NotFound, 404). The only exceptions are resources you kept on purpose.
+4. If you built the demo, `demo/teardown.sh` printed `deleted <stack>` and the note about the kept log bucket, and the demo stack query in `us-east-1` returns an error saying the stack does not exist.
+5. Each resource matches the expected state in the table above. Right after deletion the KMS key is `Pending deletion` and `CDKToolkit` remains, both as expected. With `--images`, the three repositories drop out of the ECR list; other repositories with the same prefix remain.
 
-If anything remains, see the "Cleanup and cost" section of [Troubleshooting](../reference/troubleshooting.md).
+If a resource you chose to delete does not match the expected state in the table, see the "Cleanup and cost" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ??? note "References"
     | Topic | Link |
