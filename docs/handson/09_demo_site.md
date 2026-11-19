@@ -90,7 +90,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 - 3절에 공격 카드 여덟 개와 터미널 탭 네 개(verify.sh gvisor, verify.sh kata-qemu, gVisor GPU 동작 확인, rollout.sh v1 → v2)가 있습니다.
 - 4절 아래 차트의 요약이 "배치 30개가 하나도 빠지지 않고 채점됐습니다. step 8에서 kata-clh-cpu/v1에서 kata-clh-cpu/v2로 바뀌었고"로 시작합니다.
 - 5절 막대 여섯 개 중 `kata-clh`는 "측정 못 함: VM이 시작되지 않음"으로 나옵니다.
-- 브라우저 언어가 한국어면 한국어로, 아니면 영어로 열립니다(`?lang=ko`나 `?lang=en`으로 고를 수 있음). 오른쪽 위 `EN`/`KO` 버튼으로 언어를 바꿉니다. 터미널에는 파일마다 200 응답 로그가 출력돼요.
+- 기본 언어는 한국어입니다. 주소에 `?lang=en`을 붙이거나 오른쪽 위 `EN` 버튼을 누르면 영어로 바뀌고, 고른 언어는 주소에 남아 새로고침해도 유지됩니다. 터미널에는 파일마다 200 응답 로그가 출력돼요.
 
 이 항목은 2026-11-18에 Linux의 Chromium(Playwright)으로 확인했습니다. 3절부터 5절까지는 저장소의 `extras.json`(2026-11-18 EKS 실행)에서 나오고, 각 차트 옆에 그 출처가 표시됩니다.
 
@@ -295,6 +295,18 @@ python3 demo/record_tour.py --site /tmp/demo-stage --out demo/site/media
 ```
 
 **확인할 것:** 언어마다 `[tour] demo/site/media/tour-ko.mp4 (<크기> KiB)` 줄이 나옵니다. 2026-11-18 데이터로는 언어마다 약 2분 길이였어요. 자막에는 그날 기록의 수치(예: Triton 커널의 speedup 약 1.78배)가 들어 있으니, 다른 기록으로 녹화할 때는 `record_tour.py`의 `CAPTIONS`도 고치세요.
+
+### 2.8 패턴 페이지 그림 검사하기 (선택)
+
+`architecture.html`의 그림(`arch.js`의 좌표)을 고쳤다면 `demo/check_arch_layout.py`로 겹침을 확인하세요. 네 패턴을 한국어와 영어로 열고, 흐름의 모든 단계에서 다음을 확인합니다. 화살표가 아이콘 가장자리에서 시작하고 끝나는지, 선이나 화살촉이 글자, 아이콘, 다른 선과 겹치지 않는지, 라벨과 배지가 상자 테두리에 닿지 않는지 봅니다. 페이지는 검사하는 동안만 `127.0.0.1`에서 제공돼요.
+
+```bash
+# Playwright is needed on the workstation only, as for record_tour.py
+python3 demo/check_arch_layout.py                    # lists the problems and exits 1 if there are any
+python3 demo/check_arch_layout.py --shots /tmp/arch  # also saves one PNG per pattern and language
+```
+
+**확인할 것:** 마지막 줄이 `ok`입니다. 글자 크기는 글꼴에 따라 조금씩 달라지며, 2026-11-19에 Linux의 Chromium으로 확인했습니다.
 
 ## 3. 샘플 기록 다시 만들기 (로컬, AWS 없음)
 

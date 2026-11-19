@@ -82,7 +82,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 
 Open http://127.0.0.1:8080 in a browser. Opening the file directly (`file://`) can make the browser block `fetch`, so the recording would not load.
 
-The page opens in Korean when the browser language is Korean and in English otherwise; `?lang=ko` or `?lang=en` picks one. The `EN` button at the top right switches to English and becomes `KO`, which switches back; the choice is not saved.
+The page opens in Korean; `?lang=en` opens it in English. The `EN` button at the top right switches to English and becomes `KO`, which switches back. The choice stays in the address, so a reload keeps it.
 
 **What to look for:**
 
@@ -297,6 +297,18 @@ python3 demo/record_tour.py --site /tmp/demo-stage --out demo/site/media
 ```
 
 **What to look for:** a `[tour] demo/site/media/tour-ko.mp4 (<size> KiB)` line per language. With the 2026-11-18 data each video was about 2 minutes long. The captions contain numbers from that day's recording (for example, the Triton kernel's speedup of about 1.78x), so edit `CAPTIONS` in `record_tour.py` when you record another one.
+
+### 2.8 Check the patterns page drawings (optional)
+
+After changing the drawings of `architecture.html` (the coordinates in `arch.js`), check them with `demo/check_arch_layout.py`. It opens the four patterns in Korean and in English and, in every step of every flow, checks that each arrow starts and ends on the edge of an icon, that no line or arrowhead overlaps a text, an icon or another line, and that no label or badge touches a box border. The page is served on `127.0.0.1` only while it checks.
+
+```bash
+# Playwright is needed on the workstation only, as for record_tour.py
+python3 demo/check_arch_layout.py                    # lists the problems and exits 1 if there are any
+python3 demo/check_arch_layout.py --shots /tmp/arch  # also saves one PNG per pattern and language
+```
+
+**What to look for:** the last line is `ok`. Text sizes vary a little with the fonts; this was checked on 2026-11-19 with Chromium on Linux.
 
 ## 3. Regenerate the sample recording (local, no AWS)
 

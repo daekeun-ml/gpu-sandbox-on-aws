@@ -27,6 +27,7 @@ jobs:
         run: |
           uv run --no-sync cfn-lint demo/infra/site.yaml
           node --check demo/site/app.js
+          node --check demo/site/arch.js
 
   cdk:
     runs-on: ubuntu-latest

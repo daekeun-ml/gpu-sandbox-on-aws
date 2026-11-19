@@ -7,6 +7,10 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const ICON = 72;
 const COLORS = { req: "#ff9900", res: "#1a7f37", ctl: "#2f6fde" };
+// Arrowheads have one size (14 units long and wide) whatever the line width. The drawn line stops
+// TRIM units before the tip, inside the arrowhead, so its square end never shows past the point.
+const HEAD = 14;
+const TRIM = 6;
 
 const UI = {
   ko: {
@@ -39,45 +43,74 @@ const UI = {
 
 const L = (ko, en) => ({ ko, en });
 const N = (id, icon, x, y, label, sub) => ({ id, icon, x, y, label, sub });
-const E = (id, pts, opts = {}) => ({ id, pts, ...opts });
+// An edge runs from the edge of one icon to the edge of another. `label` is drawn at (lx, ly), the
+// baseline of its last line ("\n" splits lines); `top: true` makes ly the baseline of the first line.
+const E = (id, from, to, pts, opts = {}) => ({ id, from, to, pts, ...opts });
+
+// ---------- layout (viewBox units) ----------
+// Rows and columns are shared by the four patterns, so the common part stays put when the pattern
+// changes. Arrows end on the top, left or right edge of an icon, never under its name, and every
+// label sits where no line or box border runs. Node names take the space below each icon down to
+// y + 92, which is also where a step's status badge appears.
+const W = 1540;
+const R = ICON / 2;
+const YT = 170, YM = 400, YB = 640;                 // top, main and bottom rows
+const X_OP = 70, X_SSM = 271, X_ACC = 430, X_ECR = 370, X_EKS = 667, X_TR = 927, X_SB = 1197, X_SB2 = 1387;
+const X_HF = 1459;
+const C1 = 787, C2 = 1064;                          // corridors: EKS | trainer and trainer | sandboxes
+const BUS = 46;                                     // the image pull line, above every box
+const X_PULL = 1301;                                // where it comes down, right of the sandbox nodes
+const X_FORK = 1292;                                // pattern C: between the two sandbox columns
 
 // ---------- shared parts ----------
 const COMMON_NODES = [
-  N("operator", "client", 70, 360, L("운영자", "Operator"), L("작업 PC", "workstation")),
-  N("ssm", "ssm", 260, 360, L("SSM 터널", "SSM tunnel"), L("Session Manager", "Session Manager")),
-  N("access", "ec2", 430, 360, L("접속용 서버", "Access instance"), L("t4g.nano", "t4g.nano")),
-  N("eks", "eks", 610, 360, L("EKS API", "EKS API"), L("private 전용", "private only")),
-  N("ecr", "ecr", 610, 150, L("ECR", "ECR"), L("이미지 저장소", "image registry")),
-  { id: "routing", icon: "doc", x: 800, y: 150, label: L("라우팅 표", "Routing table") },
+  N("operator", "client", X_OP, YM, L("운영자", "Operator"), L("작업 PC", "workstation")),
+  N("ssm", "ssm", X_SSM, YM, L("SSM 터널", "SSM tunnel"), L("Session Manager", "Session Manager")),
+  N("access", "ec2", X_ACC, YM, L("접속용 서버", "Access instance"), L("t4g.nano", "t4g.nano")),
+  N("eks", "eks", X_EKS, YM, L("EKS API", "EKS API"), L("private 전용", "private only")),
+  N("ecr", "ecr", X_ECR, YT, L("ECR", "ECR"), L("이미지 저장소", "image registry")),
+  { id: "routing", icon: "doc", x: X_EKS, y: YT, label: L("라우팅 표", "Routing table") },
 ];
 const EGRESS_NODES = [
-  N("nat", "nat", 1010, 600, L("NAT 게이트웨이", "NAT gateway"), L("유일한 출구", "the only way out")),
-  N("hf", "internet", 1210, 600, L("Hugging Face", "Hugging Face"), L("모델 저장소", "model hub")),
+  N("nat", "nat", X_SB, YB, L("NAT 게이트웨이", "NAT gateway"), L("유일한 출구", "the only way out")),
+  N("hf", "internet", X_HF, YB, L("Hugging Face", "Hugging Face"), L("모델 저장소", "model hub")),
 ];
-const COMMON_EDGES = (sbxX) => [
-  E("e_tunnel", [[106, 360], [224, 360]], { label: L("터널", "tunnel"), lx: 165, ly: 348 }),
-  E("e_fwd", [[296, 360], [394, 360]], { label: L("포트 전달", "forward"), lx: 345, ly: 348 }),
-  E("e_api", [[466, 360], [574, 360]], { label: L("HTTPS 443", "HTTPS 443"), lx: 520, ly: 348 }),
-  E("e_push", [[70, 324], [70, 150], [574, 150]], { dashed: true, label: L("이미지 올리기", "image push"), lx: 330, ly: 138 }),
-  E("e_job", [[646, 360], [764, 360]], { dashed: true, label: L("Job 배포", "deploy Job"), lx: 705, ly: 386 }),
-  E("e_route", [[800, 190], [800, 324]], { dashed: true, label: L("현재 버전", "active version"), lx: 812, ly: 262, anchor: "start" }),
-  E("e_cfg", [[646, 346], [702, 346], [702, 150], [740, 150]], { dashed: true }),
-  E("e_pull", [[610, 114], [610, 40], [sbxX, 40], [sbxX, 62]], { dashed: true, label: L("이미지 받기", "image pull"), lx: (610 + sbxX) / 2, ly: 30 }),
+const PULL_TO_V1 = [[X_ECR + 26, YT - R], [X_ECR + 26, BUS], [X_PULL, BUS], [X_PULL, YM - 20], [X_SB + R, YM - 20]];
+const COMMON_EDGES = (pull = { to: "v1", pts: PULL_TO_V1 }) => [
+  E("e_tunnel", "operator", "ssm", [[X_OP + R, YM], [X_SSM - R, YM]], { label: L("터널", "tunnel"), lx: 147, ly: YM - 12 }),
+  E("e_fwd", "ssm", "access", [[X_SSM + R, YM], [X_ACC - R, YM]], { label: L("포트 전달", "forward"), lx: 344, ly: YM - 12 }),
+  E("e_api", "access", "eks", [[X_ACC + R, YM], [X_EKS - R, YM]], { label: L("HTTPS\n443", "HTTPS\n443"), lx: 555, ly: YM - 12 }),
+  E("e_push", "operator", "ecr", [[X_OP, YM - R], [X_OP, YT], [X_ECR - R, YT]],
+    { dashed: true, label: L("이미지 올리기", "image push"), lx: 231, ly: YT - 12 }),
+  E("e_job", "eks", "trainer", [[X_EKS + R, YM], [X_TR - R, YM]], { dashed: true, label: L("Job 배포", "deploy\nJob"), lx: C1, ly: YM - 12 }),
+  E("e_cfg", "eks", "routing", [[X_EKS, YM - R], [X_EKS, YT + 40]], { dashed: true }),
+  E("e_route", "routing", "trainer", [[X_EKS + 60, YT + 20], [X_TR - 18, YT + 20], [X_TR - 18, YM - R]],
+    { dashed: true, label: L("현재 버전", "active\nversion"), lx: C1, ly: YT + 8 }),
+  E("e_pull", "ecr", pull.to, pull.pts, { dashed: true, label: L("이미지 받기", "image pull"), lx: 850, ly: BUS - 12 }),
+  E("e_req1", "trainer", "v1", [[X_TR + R, YM], [X_SB - R, YM]], { label: L("채점 요청", "score"), lx: C2, ly: YM - 12 }),
+  E("e_req2", "trainer", "v2", [[X_TR + 18, YM - R], [X_TR + 18, YT], [X_SB - R, YT]], { dashed: true, needs: ["v2"] }),
 ];
 const EGRESS_EDGES = [
-  E("e_model", [[800, 452], [800, 600], [974, 600]], { label: L("모델 받기", "model pull"), lx: 812, ly: 530, anchor: "start" }),
-  E("e_hf", [[1046, 600], [1174, 600]], { label: L("HTTPS", "HTTPS"), lx: 1110, ly: 588 }),
+  E("e_model", "trainer", "nat", [[X_TR + R, YM + 16], [C2, YM + 16], [C2, YB], [X_SB - R, YB]],
+    { label: L("모델 받기", "model pull"), lx: C2 - 8, ly: 560, anchor: "end" }),
+  E("e_hf", "nat", "hf", [[X_SB + R, YB], [X_HF - R, YB]], { label: L("HTTPS", "HTTPS"), lx: 1326, ly: YB - 12 }),
 ];
-const GPU_POOL_EDGES = [
-  E("e_req1", [[836, 360], [974, 360]], { label: L("채점 요청", "score"), lx: 905, ly: 386 }),
-  E("e_req2", [[836, 346], [893, 346], [893, 150], [974, 150]], { dashed: true, needs: ["v2"] }),
+// HyperPod patterns: lifecycle scripts uploaded to S3 and read when a node boots.
+const S3_NODE = N("s3", "s3", C1, YB, L("S3 시작 스크립트", "S3 lifecycle scripts"), L("비공개 버킷", "private bucket"));
+const S3_EDGES = [
+  E("e_s3up", "operator", "s3", [[X_OP + R, YM + 18], [136, YM + 18], [136, YB], [C1 - R, YB]],
+    { dashed: true, label: L("스크립트 올리기", "upload scripts"), lx: 460, ly: YB - 12 }),
+  E("e_boot", "s3", "trainer", [[C1, YB - R], [C1, YM + 20], [X_TR - R, YM + 20]],
+    { dashed: true, label: L("부팅 스크립트", "boot scripts"), lx: C1 + 8, ly: 560, anchor: "start" }),
 ];
-const CORE_GROUPS = [
-  { x: 188, y: 274, w: 324, h: 178, title: L("운영자 접속", "Operator access") },
-  { x: 530, y: 274, w: 160, h: 178, title: L("EKS 클러스터", "EKS cluster") },
-  { x: 530, y: 62, w: 160, h: 180, title: L("공용 서비스", "Shared") },
-];
-const BLOCKED_RIGHT = { line: [[1046, 360], [1140, 360]], x: 1140, y: 336, text: L("외부 연결 차단", "egress blocked") };
+const G_SHARED = { x: 290, y: 66, w: 160, h: 204, title: L("공용 서비스", "Shared") };
+const G_ACCESS = { x: 196, y: 296, w: 326, h: 204, title: L("운영자 접속", "Operator access") };
+const G_EKS = { x: 587, y: 66, w: 160, h: 434, title: L("EKS 클러스터", "EKS cluster") };
+const G_EGRESS = { x: 1101, y: 536, w: 180, h: 204, title: L("외부 출구", "Egress") };
+const trainerGroup = (title, sub) => ({ x: 827, y: 66, w: 200, h: 434, title, sub });
+const sandboxGroup = (title, sub) => ({ x: 1101, y: 66, w: 180, h: 434, title, sub });
+const BLOCKED_RIGHT = { line: [[X_SB + R, YM + 20], [1321, YM + 20]], x: 1321, y: YM + 52, top: true,
+  text: L("외부 연결\n차단", "egress\nblocked") };
 
 // ---------- flows (texts are per pattern; the motion is shared) ----------
 const S = (ko, en, opts = {}) => ({ text: L(ko, en), ...opts });
@@ -137,16 +170,16 @@ const PATTERNS = [
       when: L("모든 구성 요소를 직접 관리하고 싶을 때", "You want to manage every part yourself"),
       status: L("2026-11-18 실행 (GRPO 5 step까지)", "Run on 2026-11-18 (up to 5 GRPO steps)"),
     },
-    cloudW: 960,
+    cloud: { x: 180, w: 1191 }, height: 770,
     nodes: [...COMMON_NODES, ...EGRESS_NODES,
-      N("trainer", "container", 800, 360, L("GRPO 학습기", "GRPO trainer"), L("Qwen2.5-Coder 1.5B", "Qwen2.5-Coder 1.5B")),
-      N("v1", "container", 1010, 360, L("gVisor 풀 v1", "gVisor pool v1"), L("runsc + nvproxy", "runsc + nvproxy")),
-      N("v2", "container", 1010, 150, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version"))],
-    edges: [...COMMON_EDGES(1010), ...EGRESS_EDGES, ...GPU_POOL_EDGES],
-    groups: [...CORE_GROUPS,
-      { x: 715, y: 62, w: 170, h: 390, title: L("학습 노드", "Trainer node"), sub: L("EC2 g5.2xlarge", "EC2 g5.2xlarge") },
-      { x: 925, y: 62, w: 170, h: 390, title: L("샌드박스 노드", "Sandbox nodes"), sub: L("EC2 g5.xlarge x2", "EC2 g5.xlarge x2") },
-      { x: 925, y: 514, w: 170, h: 178, title: L("외부 출구", "Egress") }],
+      N("trainer", "container", X_TR, YM, L("GRPO 학습기", "GRPO trainer"), L("Qwen2.5-Coder 1.5B", "Qwen2.5-Coder 1.5B")),
+      N("v1", "container", X_SB, YM, L("gVisor 풀 v1", "gVisor pool v1"), L("runsc + nvproxy", "runsc + nvproxy")),
+      N("v2", "container", X_SB, YT, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version"))],
+    edges: [...COMMON_EDGES(), ...EGRESS_EDGES],
+    groups: [G_SHARED, G_ACCESS, G_EKS,
+      trainerGroup(L("학습 노드", "Trainer node"), L("EC2 g5.2xlarge", "EC2 g5.2xlarge")),
+      sandboxGroup(L("샌드박스 노드", "Sandbox nodes"), L("EC2 g5.xlarge x2", "EC2 g5.xlarge x2")),
+      G_EGRESS],
     blocked: BLOCKED_RIGHT,
     flows: [
       {
@@ -180,20 +213,16 @@ const PATTERNS = [
       when: L("긴 학습에서 노드 자동 교체와 Job 재시작이 필요할 때", "Long training runs need automatic node replacement and Job restarts"),
       status: L("AWS에서 아직 실행하지 않음", "Not run on AWS yet"),
     },
-    cloudW: 960,
-    nodes: [...COMMON_NODES, ...EGRESS_NODES,
-      N("trainer", "sagemaker", 800, 360, L("HyperPod 학습기", "HyperPod trainer"), L("HyperPodPyTorchJob", "HyperPodPyTorchJob")),
-      N("v1", "container", 1010, 360, L("gVisor 풀 v1", "gVisor pool v1"), L("runsc + nvproxy", "runsc + nvproxy")),
-      N("v2", "container", 1010, 150, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version")),
-      N("s3", "s3", 430, 600, L("S3 시작 스크립트", "S3 lifecycle scripts"), L("비공개 버킷", "private bucket"))],
-    edges: [...COMMON_EDGES(1010), ...EGRESS_EDGES, ...GPU_POOL_EDGES,
-      E("e_s3up", [[70, 452], [70, 600], [394, 600]], { dashed: true, label: L("스크립트 올리기", "upload scripts"), lx: 232, ly: 588 }),
-      E("e_boot", [[466, 600], [700, 600], [700, 476], [770, 476], [770, 456]], { dashed: true, label: L("부팅 스크립트", "boot scripts"), lx: 583, ly: 588 })],
-    groups: [...CORE_GROUPS,
-      { x: 715, y: 62, w: 170, h: 390, title: L("HyperPod 학습", "HyperPod trainer"), sub: L("ml.g5.2xlarge", "ml.g5.2xlarge") },
-      { x: 925, y: 62, w: 170, h: 390, title: L("샌드박스 노드", "Sandbox nodes"), sub: L("EC2 g5.xlarge x2", "EC2 g5.xlarge x2") },
-      { x: 925, y: 514, w: 170, h: 178, title: L("외부 출구", "Egress") },
-      { x: 350, y: 514, w: 160, h: 178, title: L("HyperPod 설정", "HyperPod setup") }],
+    cloud: { x: 180, w: 1191 }, height: 770,
+    nodes: [...COMMON_NODES, ...EGRESS_NODES, S3_NODE,
+      N("trainer", "sagemaker", X_TR, YM, L("HyperPod 학습기", "HyperPod trainer"), L("HyperPodPyTorchJob", "HyperPodPyTorchJob")),
+      N("v1", "container", X_SB, YM, L("gVisor 풀 v1", "gVisor pool v1"), L("runsc + nvproxy", "runsc + nvproxy")),
+      N("v2", "container", X_SB, YT, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version"))],
+    edges: [...COMMON_EDGES(), ...EGRESS_EDGES, ...S3_EDGES],
+    groups: [G_SHARED, G_ACCESS, G_EKS,
+      trainerGroup(L("HyperPod 학습", "HyperPod trainer"), L("ml.g5.2xlarge", "ml.g5.2xlarge")),
+      sandboxGroup(L("샌드박스 노드", "Sandbox nodes"), L("EC2 g5.xlarge x2", "EC2 g5.xlarge x2")),
+      G_EGRESS],
     blocked: BLOCKED_RIGHT,
     flows: [
       {
@@ -231,28 +260,24 @@ const PATTERNS = [
       status: L("실험 경로, AWS에서 아직 실행하지 않음. 모델 다운로드(NAT)는 A와 같아서 그림에서 뺐습니다.",
         "Experimental, not run on AWS yet. The model download (NAT) is the same as in A and left out."),
     },
-    cloudW: 960,
-    nodes: [...COMMON_NODES,
-      N("trainer", "sagemaker", 800, 360, L("HyperPod 학습기", "HyperPod trainer"), L("HyperPodPyTorchJob", "HyperPodPyTorchJob")),
-      N("v1", "container", 1010, 360, L("gVisor 풀 v1", "gVisor pool v1"), L("HyperPod 노드", "HyperPod node")),
-      N("v2", "container", 1010, 150, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version")),
-      N("s3", "s3", 260, 600, L("S3 시작 스크립트", "S3 lifecycle scripts"), L("비공개 버킷", "private bucket")),
-      N("amib", "ec2", 610, 600, L("AMI 빌더", "AMI builder"), L("m6i.large", "m6i.large")),
-      N("ami", "ami", 800, 600, L("custom AMI", "Custom AMI"), L("드라이버 580.178.04", "driver 580.178.04"))],
-    edges: [...COMMON_EDGES(1010), ...GPU_POOL_EDGES,
-      E("e_s3up", [[62, 452], [62, 600], [224, 600]], { dashed: true, label: L("스크립트", "scripts"), lx: 108, ly: 588 }),
-      E("e_amib", [[80, 452], [80, 700], [610, 700], [610, 636]], { label: L("AMI 굽기 시작", "start the bake"), lx: 435, ly: 690 }),
-      E("e_drv", [[646, 600], [764, 600]], { label: L("드라이버 교체", "swap driver"), lx: 705, ly: 588 }),
-      E("e_amiboot", [[836, 600], [1010, 600], [1010, 452]], { dashed: true, label: L("이 AMI로 부팅", "boot from it"), lx: 998, ly: 530, anchor: "end" }),
-      E("e_boot", [[260, 564], [260, 490], [770, 490], [770, 456]], { dashed: true, label: L("부팅 스크립트", "boot scripts"), lx: 500, ly: 478 }),
-      E("e_boot2", [[770, 490], [940, 490], [940, 380], [974, 380]], { dashed: true })],
-    groups: [...CORE_GROUPS.slice(0, 1),
-      { x: 530, y: 274, w: 160, h: 178, title: L("EKS 클러스터", "EKS cluster"), sub: L("system 노드만", "system nodes only") },
-      CORE_GROUPS[2],
-      { x: 715, y: 62, w: 170, h: 390, title: L("HyperPod 학습", "HyperPod trainer"), sub: L("ml.g5.2xlarge", "ml.g5.2xlarge") },
-      { x: 925, y: 62, w: 170, h: 390, title: L("HyperPod 샌드박스", "HyperPod sandbox"), sub: L("ml.g5.xlarge x2", "ml.g5.xlarge x2") },
-      { x: 180, y: 514, w: 160, h: 178, title: L("HyperPod 설정", "HyperPod setup") },
-      { x: 530, y: 514, w: 360, h: 178, title: L("AMI 굽기 (한 번)", "AMI bake (once)") }],
+    cloud: { x: 180, w: 1320 }, height: 790,
+    nodes: [...COMMON_NODES, S3_NODE,
+      N("trainer", "sagemaker", X_TR, YM, L("HyperPod 학습기", "HyperPod trainer"), L("HyperPodPyTorchJob", "HyperPodPyTorchJob")),
+      N("v1", "container", X_SB, YM, L("gVisor 풀 v1", "gVisor pool v1"), L("HyperPod 노드", "HyperPod node")),
+      N("v2", "container", X_SB, YT, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version")),
+      N("amib", "ec2", X_SB, YB, L("AMI 빌더", "AMI builder"), L("m6i.large", "m6i.large")),
+      N("ami", "ami", X_SB2, YB, L("custom AMI", "Custom AMI"), L("드라이버 580.178.04", "driver 580.178.04"))],
+    edges: [...COMMON_EDGES(), ...S3_EDGES,
+      E("e_boot2", "s3", "v1", [[C1 + R, YB - 18], [C2, YB - 18], [C2, YM + 20], [X_SB - R, YM + 20]], { dashed: true }),
+      E("e_amib", "operator", "amib", [[X_OP - R, YM], [12, YM], [12, 760], [1110, 760], [1110, YB + 18], [X_SB - R, YB + 18]],
+        { label: L("AMI 굽기 시작", "start the bake"), lx: 450, ly: 748 }),
+      E("e_drv", "amib", "ami", [[X_SB + R, YB], [X_SB2 - R, YB]], { label: L("드라이버 교체", "swap driver"), lx: 1286, ly: YB - 12 }),
+      E("e_amiboot", "ami", "v1", [[X_SB2, YB - R], [X_SB2, YM], [X_SB + R, YM]],
+        { dashed: true, label: L("이 AMI로 부팅", "boot from it"), lx: X_SB2 + 8, ly: 476, anchor: "start" })],
+    groups: [G_SHARED, G_ACCESS, { ...G_EKS, sub: L("system 노드만", "system nodes only") },
+      trainerGroup(L("HyperPod 학습", "HyperPod trainer"), L("ml.g5.2xlarge", "ml.g5.2xlarge")),
+      sandboxGroup(L("HyperPod 샌드박스", "HyperPod sandbox"), L("ml.g5.xlarge x2", "ml.g5.xlarge x2")),
+      { x: 1124, y: 536, w: 338, h: 204, title: L("AMI 굽기 (한 번)", "AMI bake (once)") }],
     blocked: BLOCKED_RIGHT,
     flows: [
       {
@@ -288,22 +313,23 @@ const PATTERNS = [
         "You want to learn runtime comparison and version switching first, without GPU quota (about 0.57 USD per compute hour)"),
       status: L("AWS에서 실행", "Run on AWS"),
     },
-    cloudW: 1110, height: 640,
+    cloud: { x: 180, w: 1317 }, height: 650,
     nodes: [...COMMON_NODES,
-      N("trainer", "container", 800, 360, L("모의 학습 Job", "Simulate Job"), L("모델 없음", "no model")),
-      N("v1", "container", 990, 360, L("kata-clh-cpu v1", "kata-clh-cpu v1"), L("Kata + CLH", "Kata + CLH")),
-      N("v2", "container", 990, 150, L("kata-clh-cpu v2", "kata-clh-cpu v2"), L("다음 버전", "next version")),
-      N("gv", "container", 1170, 150, L("gvisor-cpu", "gvisor-cpu"), L("gVisor", "gVisor")),
-      N("kq", "container", 1170, 360, L("kata-qemu-cpu", "kata-qemu-cpu"), L("Kata + QEMU", "Kata + QEMU"))],
-    edges: [...COMMON_EDGES(1080),
-      E("e_req1", [[836, 360], [954, 360]], { label: L("채점 요청", "score"), lx: 895, ly: 386 }),
-      E("e_req2", [[836, 346], [900, 346], [900, 150], [954, 150]], { dashed: true, needs: ["v2"] }),
-      E("e_probe_kq", [[800, 452], [800, 500], [1170, 500], [1170, 452]], { dashed: true, label: L("검증, 성능 측정", "verify, benchmark"), lx: 985, ly: 490 }),
-      E("e_probe_gv", [[1080, 500], [1080, 150], [1134, 150]], { dashed: true })],
-    groups: [...CORE_GROUPS,
-      { x: 715, y: 62, w: 170, h: 390, title: L("system 노드", "System node"), sub: L("m6i.large", "m6i.large") },
-      { x: 915, y: 62, w: 335, h: 390, title: L("c8i.2xlarge 노드", "c8i.2xlarge node"), sub: L("CPU 샌드박스 4개, nested virt", "four CPU sandboxes, nested virt") }],
-    blocked: { x: 1080, y: 580, text: L("✕ 샌드박스에서 밖으로 나가는 연결은 모두 차단", "✕ every outbound connection from a sandbox is blocked") },
+      N("trainer", "container", X_TR, YM, L("모의 학습 Job", "Simulate Job"), L("모델 없음", "no model")),
+      N("v1", "container", X_SB, YM, L("kata-clh-cpu v1", "kata-clh-cpu v1"), L("Kata + CLH", "Kata + CLH")),
+      N("v2", "container", X_SB, YT, L("kata-clh-cpu v2", "kata-clh-cpu v2"), L("다음 버전", "next version")),
+      N("gv", "container", X_SB2, YT, L("gvisor-cpu", "gvisor-cpu"), L("gVisor", "gVisor")),
+      N("kq", "container", X_SB2, YM, L("kata-qemu-cpu", "kata-qemu-cpu"), L("Kata + QEMU", "Kata + QEMU"))],
+    edges: [...COMMON_EDGES({ to: "gv", pts: [[X_ECR + 26, YT - R], [X_ECR + 26, BUS], [X_SB2, BUS], [X_SB2, YT - R]] }),
+      // verify.sh and bench.sh: one line that splits between the two sandbox columns.
+      E("e_probe_kq", "trainer", "kq", [[X_TR + R, YM + 16], [C2, YM + 16], [C2, 530], [X_FORK, 530], [X_FORK, YM + 16], [X_SB2 - R, YM + 16]],
+        { dashed: true, label: L("검증, 성능 측정", "verify, benchmark"), lx: 1180, ly: 552, top: true }),
+      E("e_probe_gv", "trainer", "gv", [[X_TR + R, YM + 16], [C2, YM + 16], [C2, 530], [X_FORK, 530], [X_FORK, YT + 16], [X_SB2 - R, YT + 16]],
+        { dashed: true, fork: "e_probe_kq" })],
+    groups: [G_SHARED, G_ACCESS, G_EKS,
+      trainerGroup(L("system 노드", "System node"), L("m6i.large", "m6i.large")),
+      { x: 1101, y: 66, w: 376, h: 434, title: L("c8i.2xlarge 노드", "c8i.2xlarge node"), sub: L("CPU 샌드박스 4개, nested virt", "four CPU sandboxes, nested virt") }],
+    blocked: { x: 1260, y: 600, text: L("✕ 샌드박스에서 밖으로 나가는 연결은 모두 차단", "✕ every outbound connection from a sandbox is blocked") },
     flows: [
       {
         id: "setup", title: L("준비와 배포", "Setup and deploy"), init: { hide: ["v2"], routing: "v1" },
@@ -376,12 +402,39 @@ function sv(tag, attrs = {}, ...children) {
   return node;
 }
 
+// A text element whose "\n"-separated lines are tspans 18 units apart. By default (x, y) is the
+// baseline of the last line, so a label above a line grows upward; with top it is the first line.
+function lines(attrs, text, top = false) {
+  const parts = text.split("\n");
+  const node = sv("text", attrs);
+  parts.forEach((part, i) => node.append(sv("tspan", { x: attrs.x, dy: i ? 18 : top ? 0 : -18 * (parts.length - 1) }, part)));
+  return node;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function pathD(pts) {
   return pts.map(([x, y], i) => `${i ? "L" : "M"}${x},${y}`).join(" ");
+}
+
+// The same polyline with its last point moved `by` units back along the last segment.
+function trimEnd(pts, by) {
+  const out = pts.map((pt) => [...pt]);
+  const [ax, ay] = out[out.length - 2], end = out[out.length - 1];
+  const len = Math.hypot(end[0] - ax, end[1] - ay);
+  end[0] -= ((end[0] - ax) / len) * by;
+  end[1] -= ((end[1] - ay) / len) * by;
+  return out;
+}
+
+// Dashes of about 8 on, 6 off, stretched a little so the line starts and ends with a dash: the
+// arrowhead then always sits on a dash instead of floating after a gap.
+function dashesFor(len) {
+  const n = Math.max(1, Math.round((len - 8) / 14));
+  const period = len / (n + 8 / 14);
+  return `${((period * 8) / 14).toFixed(2)} ${((period * 6) / 14).toFixed(2)}`;
 }
 
 function pathLength(pts) {
@@ -408,20 +461,23 @@ function renderDiagram() {
   const svgEl = document.getElementById("ap-svg");
   const title = svgEl.querySelector("title");
   title.textContent = `${p.key}. ${tr(p.name)}`;
-  const width = 150 + p.cloudW + (p.nodes.some((n) => n.id === "hf") ? 170 : 30);
-  const height = p.height || 720;
-  svgEl.setAttribute("viewBox", `0 0 ${Math.max(width, 1280)} ${height}`);
-  const defs = sv("defs", {},
-    sv("marker", { id: "ap-arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" },
-      sv("path", { d: "M0,0 L10,5 L0,10 z", class: "ap-arrowhead" })),
-    sv("marker", { id: "ap-arrow-red", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto" },
-      sv("path", { d: "M0,0 L10,5 L0,10 z", class: "ap-arrowhead-red" })));
-  const layers = { groups: sv("g", {}), edges: sv("g", {}), nodes: sv("g", {}), labels: sv("g", {}), dots: sv("g", { id: "ap-dots" }) };
+  const height = p.height;
+  svgEl.setAttribute("viewBox", `0 0 ${W} ${height}`);
+  // The arrowhead tip lands on the edge of the target icon: the line ends TRIM units short of it.
+  const marker = (id, cls) => sv("marker", { id, viewBox: "0 0 10 10", refX: 10 - (TRIM * 10) / HEAD, refY: 5,
+    markerUnits: "userSpaceOnUse", markerWidth: HEAD, markerHeight: HEAD, orient: "auto-start-reverse" },
+  sv("path", { d: "M0,0 L10,5 L0,10 z", class: cls }));
+  // A second, darker arrowhead for the line that is moving (style.css switches marker-end).
+  const defs = sv("defs", {}, marker("ap-arrow", "ap-arrowhead"), marker("ap-arrow-active", "ap-arrowhead active"));
+  // Halos sit under the lines, so a highlighted node never covers the arrowheads that reach it.
+  const layers = { groups: sv("g", {}), halos: sv("g", {}), edges: sv("g", {}), nodes: sv("g", {}), labels: sv("g", {}),
+    dots: sv("g", { id: "ap-dots" }) };
 
+  const c = p.cloud;
   layers.groups.append(
-    sv("rect", { class: "ap-cloud", x: 150, y: 6, width: p.cloudW, height: height - 20 }),
-    sv("image", { href: "icons/aws-cloud.svg", x: 150, y: 6, width: 34, height: 34 }),
-    sv("text", { class: "ap-cloud-title", x: 192, y: 30 }, "AWS Cloud"));
+    sv("rect", { class: "ap-cloud", x: c.x, y: 6, width: c.w, height: height - 20 }),
+    sv("image", { href: "icons/aws-cloud.svg", x: c.x, y: 6, width: 34, height: 34 }),
+    sv("text", { class: "ap-cloud-title", x: c.x + 42, y: 30 }, "AWS Cloud"));
   for (const g of p.groups) {
     layers.groups.append(sv("rect", { class: "ap-group", x: g.x, y: g.y, width: g.w, height: g.h }));
     layers.groups.append(sv("text", { class: "ap-group-title", x: g.x + 12, y: g.y + 24 }, tr(g.title)));
@@ -430,23 +486,26 @@ function renderDiagram() {
 
   for (const e of p.edges) {
     const g = sv("g", { class: "ap-edge", "data-id": e.id, "data-needs": (e.needs || []).join(" ") });
-    g.append(sv("path", { d: pathD(e.pts), class: e.dashed ? "ap-line dashed" : "ap-line", "marker-end": "url(#ap-arrow)" }));
+    const pts = trimEnd(e.pts, TRIM);
+    const line = sv("path", { d: pathD(pts), class: e.dashed ? "ap-line dashed" : "ap-line", "marker-end": "url(#ap-arrow)" });
+    if (e.dashed) line.style.strokeDasharray = dashesFor(pathLength(pts));
+    g.append(line);
     if (e.label) {
-      layers.labels.append(sv("text", { class: "ap-edge-label", x: e.lx, y: e.ly, "text-anchor": e.anchor || "middle",
-        "data-edge": e.id }, tr(e.label)));
+      layers.labels.append(lines({ class: "ap-edge-label", x: e.lx, y: e.ly, "text-anchor": e.anchor || "middle",
+        "data-edge": e.id }, tr(e.label), e.top));
     }
     layers.edges.append(g);
   }
 
   if (p.blocked) {
     const b = sv("g", { id: "ap-blocked", class: "ap-blocked" });
-    if (b && p.blocked.line) {
+    if (p.blocked.line) {
       const [[x1, y1], [x2, y2]] = p.blocked.line;
       b.append(sv("line", { class: "ap-blocked-line", x1, y1, x2: x2 - 12, y2 }));
       b.append(sv("line", { class: "ap-blocked-x", x1: x2 - 10, y1: y2 - 10, x2: x2 + 10, y2: y2 + 10 }));
       b.append(sv("line", { class: "ap-blocked-x", x1: x2 - 10, y1: y2 + 10, x2: x2 + 10, y2: y2 - 10 }));
     }
-    b.append(sv("text", { class: "ap-blocked-text", x: p.blocked.x, y: p.blocked.y, "text-anchor": "middle" }, tr(p.blocked.text)));
+    b.append(lines({ class: "ap-blocked-text", x: p.blocked.x, y: p.blocked.y, "text-anchor": "middle" }, tr(p.blocked.text), p.blocked.top));
     layers.labels.append(b);
   }
 
@@ -457,14 +516,14 @@ function renderDiagram() {
       g.append(sv("text", { class: "ap-doc-title", x: n.x, y: n.y - 12, "text-anchor": "middle" }, tr(n.label)));
       g.append(sv("text", { class: "ap-doc-version", id: "ap-routing-version", x: n.x, y: n.y + 26, "text-anchor": "middle" }, "v1"));
     } else {
-      g.append(sv("rect", { class: "ap-halo", x: n.x - ICON / 2 - 8, y: n.y - ICON / 2 - 8, width: ICON + 16, height: ICON + 16, rx: 12 }));
-      g.append(sv("image", { href: `icons/${n.icon}.svg`, x: n.x - ICON / 2, y: n.y - ICON / 2, width: ICON, height: ICON }));
-      g.append(sv("text", { class: "ap-label", x: n.x, y: n.y + ICON / 2 + 26, "text-anchor": "middle" }, tr(n.label)));
-      if (n.sub) g.append(sv("text", { class: "ap-sub", x: n.x, y: n.y + ICON / 2 + 46, "text-anchor": "middle" }, tr(n.sub)));
+      layers.halos.append(sv("rect", { class: "ap-halo", "data-id": n.id, x: n.x - R - 8, y: n.y - R - 8, width: ICON + 16, height: ICON + 16, rx: 12 }));
+      g.append(sv("image", { href: `icons/${n.icon}.svg`, x: n.x - R, y: n.y - R, width: ICON, height: ICON }));
+      g.append(sv("text", { class: "ap-label", x: n.x, y: n.y + R + 26, "text-anchor": "middle" }, tr(n.label)));
+      if (n.sub) g.append(sv("text", { class: "ap-sub", x: n.x, y: n.y + R + 46, "text-anchor": "middle" }, tr(n.sub)));
     }
     layers.nodes.append(g);
   }
-  svgEl.replaceChildren(title, defs, layers.groups, layers.edges, layers.labels, layers.nodes, layers.dots);
+  svgEl.replaceChildren(title, defs, layers.groups, layers.halos, layers.edges, layers.labels, layers.nodes, layers.dots);
 }
 
 // ---------- state and animation ----------
@@ -489,7 +548,7 @@ function applyStep(index) {
   const { hidden, dimmed, routing } = stateFor(flow, index);
   const lit = new Set(step.light || []);
   const moving = new Set((step.moves || []).map((m) => m.e));
-  for (const g of document.querySelectorAll(".ap-node")) {
+  for (const g of document.querySelectorAll(".ap-node, .ap-halo")) {
     const id = g.dataset.id;
     g.classList.toggle("hidden", hidden.has(id));
     g.classList.toggle("dim", dimmed.has(id) && !lit.has(id));
@@ -517,18 +576,22 @@ function applyStep(index) {
   }
 }
 
+// The status badge takes the place of the node's second line (under its name), the one spot that
+// no line ever crosses.
 function drawBadge(badge) {
   document.getElementById("ap-badge")?.remove();
+  for (const g of document.querySelectorAll(".ap-node.badged")) g.classList.remove("badged");
   if (!badge) return;
   const n = ui.pattern.nodes.find((x) => x.id === badge.node);
-  if (!n) return;
-  const text = tr(badge.text);
-  const w = Math.max(90, text.length * 15 + 24);
-  const y = n.y - ICON / 2 - 46;
-  const g = sv("g", { id: "ap-badge", class: "ap-badge" },
-    sv("rect", { x: n.x - w / 2, y, width: w, height: 32, rx: 16 }),
-    sv("text", { x: n.x, y: y + 22, "text-anchor": "middle" }, text));
-  document.getElementById("ap-svg").append(g);
+  const host = document.querySelector(`.ap-node[data-id="${badge.node}"]`);
+  if (!n || !host) return;
+  host.classList.add("badged");
+  const y = n.y + R + 35;
+  const text = sv("text", { x: n.x, y: y + 17, "text-anchor": "middle" }, tr(badge.text));
+  const g = sv("g", { id: "ap-badge", class: "ap-badge" }, text);
+  host.append(g);
+  const w = text.getComputedTextLength() + 26;
+  g.prepend(sv("rect", { x: n.x - w / 2, y, width: w, height: 24, rx: 12 }));
 }
 
 function animateMove(move, token) {
@@ -627,6 +690,7 @@ function selectFlow(flow) {
 
 function selectPattern(p, flowId) {
   ui.pattern = p;
+  syncAddress();
   for (const b of document.querySelectorAll("#ap-patterns .ap-pattern")) b.setAttribute("aria-selected", String(b.dataset.id === p.id));
   const f = p.facts;
   document.getElementById("ap-summary").replaceChildren(
@@ -646,7 +710,8 @@ function renderPage() {
   document.documentElement.lang = lang;
   for (const node of document.querySelectorAll("[data-i18n]")) node.textContent = t(node.dataset.i18n);
   document.getElementById("lang").textContent = lang === "ko" ? "EN" : "KO";
-  for (const id of ["home-link", "back-link"]) document.getElementById(id).setAttribute("href", `index.html?lang=${lang}`);
+  for (const id of ["home-link", "back-link"]) document.getElementById(id).setAttribute("href", lang === "en" ? "index.html?lang=en" : "index.html");
+  document.getElementById("self-link").setAttribute("href", lang === "en" ? "architecture.html?lang=en" : "architecture.html");
   document.getElementById("ap-patterns").replaceChildren(...PATTERNS.map((p) => {
     const b = el("button", { type: "button", class: "ap-pattern", role: "tab", "data-id": p.id },
       el("span", { class: "key" }, p.key), el("span", { class: "name" }, tr(p.name)));
@@ -663,11 +728,20 @@ function renderPage() {
   selectPattern(ui.pattern, ui.flow?.id);
 }
 
+// Korean is the default; ?lang=en (or the EN button) switches to English. The language and the
+// pattern on screen are kept in the address, so a reload or a shared link opens the same view.
+function syncAddress() {
+  const url = new URL(window.location.href);
+  if (lang === "ko") url.searchParams.delete("lang");
+  else url.searchParams.set("lang", lang);
+  if (ui.pattern === PATTERNS[0]) url.searchParams.delete("pattern");
+  else url.searchParams.set("pattern", ui.pattern.id);
+  if (url.href !== window.location.href) window.history.replaceState(null, "", url);
+}
+
 function main() {
   const params = new URLSearchParams(window.location.search);
-  const wanted = params.get("lang");
-  if (wanted === "ko" || wanted === "en") lang = wanted;
-  else if (navigator.language && !navigator.language.startsWith("ko")) lang = "en";
+  if (params.get("lang") === "en") lang = "en";
   const p = PATTERNS.find((x) => x.id === params.get("pattern"));
   if (p) ui.pattern = p;
   document.getElementById("lang").addEventListener("click", () => {

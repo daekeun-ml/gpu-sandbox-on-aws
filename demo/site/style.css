@@ -271,6 +271,8 @@ footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px
 
 /* Architecture patterns page (architecture.html) */
 .ap-page { font-size: 16px; }
+/* Wider than the main page so the diagram (1540 units wide) shows at about its drawn size. */
+.ap-page .wrap { max-width: 1600px; }
 .ap-hero { padding: 30px 0 24px; }
 .ap-hero h1 { font-size: 30px; }
 .ap-main { padding-top: 22px; }
@@ -307,19 +309,19 @@ footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px
 .ap-line { fill: none; stroke: #4b5563; stroke-width: 2.2; }
 .ap-line.dashed { stroke-dasharray: 8 6; }
 .ap-arrowhead { fill: #4b5563; }
-.ap-arrowhead-red { fill: #cf222e; }
-.ap-edge.active .ap-line { stroke: #232f3e; stroke-width: 3.6; }
+.ap-arrowhead.active { fill: #232f3e; }
+.ap-edge.active .ap-line { stroke: #232f3e; stroke-width: 3.6; marker-end: url(#ap-arrow-active); }
 .ap-edge-label { font-size: 15px; fill: #232f3e; paint-order: stroke; stroke: #ffffff; stroke-width: 5px; stroke-linejoin: round; }
 .ap-edge-label.active { font-weight: 700; }
 .ap-node text { fill: #16191f; }
 .ap-label { font-size: 20px; font-weight: 700; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
 .ap-sub { font-size: 15px; fill: #5f6b7a !important; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
 .ap-halo { fill: transparent; stroke: transparent; stroke-width: 3; }
-.ap-node.lit .ap-halo { fill: #fff3e0; stroke: #ff9900; }
+.ap-halo.lit { fill: #fff3e0; stroke: #ff9900; }
 .ap-node.lit .ap-doc { stroke: #ff9900; stroke-width: 3; fill: #fff3e0; }
-.ap-node, .ap-edge, .ap-edge-label { transition: opacity .35s; }
-.ap-node.hidden, .ap-edge.hidden, .ap-edge-label.hidden { opacity: 0; }
-.ap-node.dim { opacity: .35; }
+.ap-node, .ap-halo, .ap-edge, .ap-edge-label { transition: opacity .35s; }
+.ap-node.hidden, .ap-halo.hidden, .ap-edge.hidden, .ap-edge-label.hidden { opacity: 0; }
+.ap-node.dim, .ap-halo.dim { opacity: .35; }
 .ap-doc { fill: #f5f7fa; stroke: #4b5b70; stroke-width: 2; }
 .ap-doc-title { font-size: 15px; font-weight: 700; }
 .ap-doc-version { font-size: 28px; font-weight: 800; fill: #b35c00 !important; }
@@ -327,10 +329,11 @@ footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px
 .ap-blocked-line { stroke: #cf222e; stroke-width: 2.5; stroke-dasharray: 6 5; }
 .ap-blocked-x { stroke: #cf222e; stroke-width: 4; stroke-linecap: round; }
 .ap-blocked-text { font-size: 15px; font-weight: 700; fill: #cf222e; paint-order: stroke; stroke: #ffffff; stroke-width: 5px; }
-.ap-blocked.flash .ap-blocked-x, .ap-blocked.flash .ap-blocked-line { animation: ap-flash .6s ease-in-out 3; }
-.ap-blocked.flash .ap-blocked-text { font-size: 17px; }
+/* The flash changes only the opacity: a larger font would push the text into a box border. */
+.ap-blocked.flash .ap-blocked-x, .ap-blocked.flash .ap-blocked-line, .ap-blocked.flash .ap-blocked-text { animation: ap-flash .6s ease-in-out 3; }
 @keyframes ap-flash { 50% { opacity: .15; } }
-@media (prefers-reduced-motion: reduce) { .ap-blocked.flash .ap-blocked-x, .ap-blocked.flash .ap-blocked-line { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .ap-blocked.flash .ap-blocked-x, .ap-blocked.flash .ap-blocked-line, .ap-blocked.flash .ap-blocked-text { animation: none; } }
+.ap-node.badged .ap-sub { visibility: hidden; }
 .ap-badge rect { fill: #232f3e; }
 .ap-badge text { fill: #ffffff; font-size: 15px; font-weight: 700; }
 .ap-steps { list-style: none; padding: 0; margin: 14px 0 8px; display: grid; gap: 6px; }

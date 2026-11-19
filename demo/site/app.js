@@ -421,7 +421,7 @@ function renderStatic() {
   document.getElementById("lang").textContent = lang === "ko" ? "EN" : "KO";
   document.getElementById("source").textContent = `${recording.source} (${recording.recorded_at})`;
   for (const id of ["nav-patterns", "patterns-link", "hero-patterns", "patterns-banner"]) {
-    document.getElementById(id).setAttribute("href", `architecture.html?lang=${lang}`);
+    document.getElementById(id).setAttribute("href", lang === "en" ? "architecture.html?lang=en" : "architecture.html");
   }
   const video = document.getElementById("tour");
   if (video.paused) {
@@ -1248,11 +1248,15 @@ async function main() {
   } catch {
     extras = null;
   }
-  const wanted = new URLSearchParams(window.location.search).get("lang");
-  if (wanted === "ko" || wanted === "en") lang = wanted;
-  else if (navigator.language && !navigator.language.startsWith("ko")) lang = "en";
+  // Korean is the default; ?lang=en (or the EN button) switches to English. The choice is kept in
+  // the address so a reload or a shared link opens in the same language.
+  if (new URLSearchParams(window.location.search).get("lang") === "en") lang = "en";
   document.getElementById("lang").addEventListener("click", () => {
     lang = lang === "ko" ? "en" : "ko";
+    const url = new URL(window.location.href);
+    if (lang === "ko") url.searchParams.delete("lang");
+    else url.searchParams.set("lang", lang);
+    window.history.replaceState(null, "", url);
     renderAll();
   });
   document.getElementById("flow-play").addEventListener("click", playFlow);
