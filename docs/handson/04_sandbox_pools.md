@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-모델이 생성한 코드는 샌드박스 서버와 같은 pod에서 실행됩니다. 그래서 일반 서비스에서는 기본으로 쓰는 설정(토큰 마운트, 기본 네트워크 허용)이 그대로 공격 경로가 됩니다. API key나 Kubernetes token을 pod에 두면 후보 코드가 읽을 수 있습니다. VPC CNI의 standard 모드에서는 새 pod가 정책이 적용되기 전까지 default-allow 상태로 시작합니다. 또한 VPC CNI는 kubelet probe가 차단되지 않도록 pod와 그 pod가 실행 중인 노드 IP 사이의 트래픽을 항상 허용해요. 한 GPU에서 평가 두 개가 동시에 실행되면 실행 시간 측정이 서로 간섭해 speedup reward가 부정확해집니다. Kata GPU VM은 VFIO가 메모리를 pin하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready 상태가 될 때까지 몇 분이 걸립니다.
+모델이 생성한 코드는 샌드박스 서버와 같은 pod에서 실행됩니다. 그래서 일반 서비스에서는 기본으로 쓰는 설정(토큰 마운트, 기본 네트워크 허용)이 그대로 공격 경로가 됩니다. API key나 Kubernetes token을 pod에 두면 후보 코드가 읽을 수 있습니다. VPC CNI의 standard 모드에서는 새 pod가 정책이 적용되기 전까지 default-allow 상태로 시작합니다. 또한 VPC CNI는 kubelet probe가 차단되지 않도록 pod와 그 pod가 실행 중인 노드 IP 사이의 트래픽을 항상 허용합니다. 한 GPU에서 평가 두 개가 동시에 실행되면 실행 시간 측정이 서로 간섭해 speedup reward가 부정확해집니다. Kata GPU VM은 VFIO가 메모리를 pin하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready 상태가 될 때까지 몇 분이 걸립니다.
 
 ![a: 서버와 같은 샌드박스 pod에서 실행되는 후보 코드가 pod에 둔 token과 API key를 읽습니다. 정책이 적용되기 전 default-allow 상태에서는 IMDS와 API server에 접속할 수 있고, 항상 허용되는 노드 IP를 통해 노드 kubelet(포트 10250)에도 접속할 수 있습니다. b: pod에는 비밀이 아닌 JWKS 공개 키만 있어 읽어 갈 비밀이 없습니다. IMDS와 API server 접근은 default-deny NetworkPolicy가, 노드 kubelet 접근은 node guard가 차단합니다. readiness는 이 차단이 동작하는지 확인한 뒤에만 pod를 Ready로 만듭니다.](../images/figures/handson-04_sandbox_pools.svg)
 
@@ -13,11 +13,11 @@
 
 ## Why
 
-- **비밀 대신 audience가 지정된 토큰을 씁니다.** 샌드박스는 projected ServiceAccount token(audience `gpu-sandbox`)을 클러스터 issuer의 공개 키(JWKS)로 오프라인 검증하고, 설정이 하나라도 빠지면 인증이 필요한 요청(`/v1/evaluate`, `/info`, `/metrics`)을 모두 거부해요(fail closed). kubelet probe용 `/healthz`, `/readyz`는 토큰 없이 응답하고 샌드박스 정보를 돌려주지 않습니다.
+- **비밀 대신 audience가 지정된 토큰을 씁니다.** 샌드박스는 projected ServiceAccount token(audience `gpu-sandbox`)을 클러스터 issuer의 공개 키(JWKS)로 오프라인 검증하고, 설정이 하나라도 빠지면 인증이 필요한 요청(`/v1/evaluate`, `/info`, `/metrics`)을 모두 거부합니다(fail closed). kubelet probe용 `/healthz`, `/readyz`는 토큰 없이 응답하고 샌드박스 정보를 돌려주지 않습니다.
 - **차단을 확인한 pod의 주소만 공개됩니다.** readiness probe는 IMDS, API server, 노드 kubelet으로 가는 연결이 실제로 차단됐는지 확인한 뒤에만 통과합니다. headless Service는 Ready 상태인 pod의 IP만 DNS에 등록합니다.
-- **(runtime, version)마다 Deployment가 하나입니다.** 새 버전은 기존 Deployment와 별도로 새 Deployment를 배포하고(blue/green), routing ConfigMap으로 전환해요.
+- **(runtime, version)마다 Deployment가 하나입니다.** 새 버전은 기존 Deployment와 별도로 새 Deployment를 배포하고(blue/green), routing ConfigMap으로 전환합니다.
 
-**사전 지식:** [02 gVisor GPU 샌드박스](02_gvisor.md)(또는 Kata 풀이라면 [03 Kata 샌드박스](03_kata.md))를 먼저 마쳐야 합니다. 샌드박스 버전과 routing의 개념은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있어요.
+**사전 지식:** [02 gVisor GPU 샌드박스](02_gvisor.md)(또는 Kata 풀이라면 [03 Kata 샌드박스](03_kata.md))를 먼저 마쳐야 합니다. 샌드박스 버전과 routing의 개념은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **Pod Security (restricted, baseline)**: 네임스페이스 단위로 pod의 보안 설정 수준을 강제하는 Kubernetes 기능과, 가장 엄격한 수준(restricted) 및 기본 수준(baseline)입니다.
@@ -33,7 +33,7 @@
     - **golden**: 기대 verdict가 미리 정해진 테스트용 제출물입니다.
 
 !!! warning "이 페이지의 AWS 단계"
-    실습 계정에서 2026-11-18에 `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1개), 풀 검증(`scripts/ops/verify.sh gvisor v1`)을 실행했습니다(us-west-2, `g5.xlarge`). 풀 검증은 golden verdict 6개 PASS, egress 대상 4개 차단, `default` 네임스페이스 차단으로 통과했어요. 같은 날 다른 클러스터에서 `kata-qemu` GPU 풀과 Kata CPU 풀도 배포하고 풀 검증을 통과했습니다. 실험용 `kata-clh` GPU 풀은 VM이 시작되지 않았어요(아래 "적용 범위와 한계"). 클러스터에서의 동작은 아래 "확인할 것"과 비교해 검증하세요.
+    이 페이지의 `gvisor`, `kata-qemu`, CPU 풀 배포와 풀 검증(`scripts/ops/verify.sh`)은 실습 계정에서 실행해 통과했고, 실험용 `kata-clh` GPU 풀은 VM이 시작되지 않았습니다(아래 "적용 범위와 한계"). 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다. 클러스터에서의 동작은 아래 "확인할 것"과 비교해 검증하세요.
 
 ## 네임스페이스, 정책, 인증: `05_setup_namespaces_auth.sh`
 
@@ -73,7 +73,7 @@ configmap/sandbox-routing created
 
 ### routing ConfigMap
 
-아래는 `k8s/base/routing.json.tpl`의 내용입니다. 스크립트가 `${ACTIVE_RUNTIME}`과 `${ACTIVE_VERSION}`을 채워 렌더링한 결과가 `sandbox-routing` ConfigMap의 `routing.json`이 되고, 기본값으로 렌더링하면 `active`는 `gvisor/v1`입니다. 일곱 프로필 모두 v1과 v2 주소가 있어요.
+아래는 `k8s/base/routing.json.tpl`의 내용입니다. 스크립트가 `${ACTIVE_RUNTIME}`과 `${ACTIVE_VERSION}`을 채워 렌더링한 결과가 `sandbox-routing` ConfigMap의 `routing.json`이 되고, 기본값으로 렌더링하면 `active`는 `gvisor/v1`입니다. 일곱 프로필 모두 v1과 v2 주소가 있습니다.
 
 ```json
 {
@@ -111,7 +111,7 @@ configmap/sandbox-routing created
 }
 ```
 
-`ACTIVE_RUNTIME`(기본 `gvisor`)과 `ACTIVE_VERSION`(기본 `v1`)은 config.env에 없는 변수라 명령줄로 전달합니다. trainer는 이 ConfigMap을 디렉터리로 마운트합니다(subPath로 마운트하면 ConfigMap 변경이 반영되지 않음). 그리고 샌드박스에 채점을 보낼 때마다 routing 표의 snapshot을 만들고, 한 reward batch를 한 버전으로만 채점합니다. batch의 결과가 모두 한 풀의 캐시에 있으면 샌드박스를 부르지 않고 그 결과를 씁니다. 학습 중 버전 교체는 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)에서 다뤄요.
+`ACTIVE_RUNTIME`(기본 `gvisor`)과 `ACTIVE_VERSION`(기본 `v1`)은 config.env에 없는 변수라 명령줄로 전달합니다. trainer는 이 ConfigMap을 디렉터리로 마운트합니다(subPath로 마운트하면 ConfigMap 변경이 반영되지 않음). 그리고 샌드박스에 채점을 보낼 때마다 routing 표의 snapshot을 만들고, 한 reward batch를 한 버전으로만 채점합니다. batch의 결과가 모두 한 풀의 캐시에 있으면 샌드박스를 부르지 않고 그 결과를 씁니다. 학습 중 버전 교체는 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)에서 다룹니다.
 
 ## 샌드박스 인증 동작
 
@@ -129,7 +129,7 @@ sequenceDiagram
 
 *그림 요약: 샌드박스는 공개 키 파일과 allowlist만으로 토큰을 판정하므로, pod 안에는 훔쳐 갈 비밀이 없습니다.*
 
-kubelet이 `serviceAccountToken` projected volume(audience `${SANDBOX_AUDIENCE}`, `expirationSeconds: 3600`)의 토큰 파일을 만료 전에 교체하므로, 호출자 pod는 요청마다 토큰 파일을 다시 읽습니다. 샌드박스는 `/etc/gpusandbox/auth/jwks.json`의 공개 키로 RS256 서명과 audience, issuer(`aws eks describe-cluster`의 OIDC issuer), 필수 claim(`exp`, `iat`, `iss`, `aud`, `sub`)을 검사합니다(시계 오차 30초 허용). JWKS 파일이 바뀌면 파일을 다시 읽어요.
+kubelet이 `serviceAccountToken` projected volume(audience `${SANDBOX_AUDIENCE}`, `expirationSeconds: 3600`)의 토큰 파일을 만료 전에 교체하므로, 호출자 pod는 요청마다 토큰 파일을 다시 읽습니다. 샌드박스는 `/etc/gpusandbox/auth/jwks.json`의 공개 키로 RS256 서명과 audience, issuer(`aws eks describe-cluster`의 OIDC issuer), 필수 claim(`exp`, `iat`, `iss`, `aud`, `sub`)을 검사합니다(시계 오차 30초 허용). JWKS 파일이 바뀌면 파일을 다시 읽습니다.
 
 | 상황 | 응답 |
 |---|---|
@@ -140,7 +140,7 @@ kubelet이 `serviceAccountToken` projected volume(audience `${SANDBOX_AUDIENCE}`
 | 서명, audience, issuer, 만료가 맞지 않음 | 401 `invalid token: ...` |
 | 토큰은 유효하지만 subject가 allowlist에 없음 | 403 `subject '...' is not allowed` |
 
-401에는 `WWW-Authenticate: Bearer` 헤더가 붙습니다. kubelet probe는 토큰을 보낼 수 없으므로 `/healthz`와 `/readyz`는 인증 없이 호출할 수 있고, 대신 샌드박스 정보를 반환하지 않아요. 기본 allowlist는 `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(production gateway)이고, 풀을 배포할 때(`06_deploy_sandboxes.sh`) `SANDBOX_ALLOWED_SUBJECTS`로 바꿀 수 있습니다.
+401에는 `WWW-Authenticate: Bearer` 헤더가 붙습니다. kubelet probe는 토큰을 보낼 수 없으므로 `/healthz`와 `/readyz`는 인증 없이 호출할 수 있고, 대신 샌드박스 정보를 반환하지 않습니다. 기본 allowlist는 `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(production gateway)이고, 풀을 배포할 때(`06_deploy_sandboxes.sh`) `SANDBOX_ALLOWED_SUBJECTS`로 바꿀 수 있습니다.
 
 !!! note "서명 키 교체"
     API server가 서명 키를 교체하면 `scripts/ops/sync_jwks.sh`를 다시 실행하세요. production에서는 같은 작업을 CronJob(`python -m gpusandbox.tools sync-jwks`)으로 실행합니다([Production 02 보안](../production/02_security.md)). 로컬 smoke test용 `SANDBOX_AUTH_TEST_BYPASS=1`은 loopback에만 바인딩한 로컬 테스트에서만 쓰세요. 서버가 접속 주소를 검사하지는 않으며, 배포 매니페스트에는 이 변수가 없어 인증 검증을 그대로 씁니다.
@@ -219,14 +219,14 @@ flowchart TD
 
 *그림 요약: pod가 GPU probe(GPU 풀은 CUDA 연산까지, CPU 풀은 CUDA 없이)를 통과하고 나가는 경로가 모두 막힌 것을 스스로 확인해야 Ready가 되고, 그때부터 trainer가 그 pod의 주소를 받습니다.*
 
-`/readyz`는 GPU probe 통과, egress 차단 확인, draining 아님, 치명적 오류 없음의 네 조건을 모두 만족할 때만 200을 반환합니다. GPU probe는 서버가 시작될 때 한 번만 실행합니다. 처음 Ready가 되기 전에 실패하면 startupProbe 한도(최대 10분)가 지난 뒤 kubelet이 컨테이너를 다시 시작하고, 그때 다시 실행돼요. egress 점검은 대상마다 TCP 연결을 시도합니다. 연결되거나 거부(refused)되면 패킷이 대상에 도달한 것이므로 열림으로 판정하고, timeout이나 경로 없음일 때만 차단으로 판정합니다. 차단된 상태면 30초마다, 열린 상태면 5초마다 다시 확인하고, 열린 동안에는 `egress is open, refusing work: ...`를 로그에 남겨요. `apiserver` 대상 주소는 `KUBERNETES_SERVICE_HOST`와 `KUBERNETES_SERVICE_PORT` 값으로 정해집니다. kubelet은 `enableServiceLinks: false`여도 이 두 환경변수를 pod에 설정합니다.
+`/readyz`는 GPU probe 통과, egress 차단 확인, draining 아님, 치명적 오류 없음의 네 조건을 모두 만족할 때만 200을 반환합니다. GPU probe는 서버가 시작될 때 한 번만 실행합니다. 처음 Ready가 되기 전에 실패하면 startupProbe 한도(최대 10분)가 지난 뒤 kubelet이 컨테이너를 다시 시작하고, 그때 다시 실행됩니다. egress 점검은 대상마다 TCP 연결을 시도합니다. 연결되거나 거부(refused)되면 패킷이 대상에 도달한 것이므로 열림으로 판정하고, timeout이나 경로 없음일 때만 차단으로 판정합니다. 차단된 상태면 30초마다, 열린 상태면 5초마다 다시 확인하고, 열린 동안에는 `egress is open, refusing work: ...`를 로그에 남깁니다. `apiserver` 대상 주소는 `KUBERNETES_SERVICE_HOST`와 `KUBERNETES_SERVICE_PORT` 값으로 정해집니다. kubelet은 `enableServiceLinks: false`여도 이 두 환경변수를 pod에 설정합니다.
 
 이렇게 확인하는 이유는 VPC CNI의 두 가지 동작 때문입니다.
 
-1. **노드 IP는 항상 허용됩니다.** network policy agent는 kubelet의 liveness와 readiness probe를 위해 pod와 그 pod가 실행 중인 노드 IP 사이의 트래픽을 ingress와 egress 모두 허용합니다. 그래서 default-deny NetworkPolicy가 있어도 샌드박스 pod는 노드 IP의 kubelet(10250)이나 hostNetwork 서비스에 접속할 수 있습니다. 이 저장소는 샌드박스 노드에 node guard(pod에서 들어오는 새 연결을 iptables로 차단, [01](01_cluster_and_images.md))를 설치합니다. readiness가 `NODE_IP:10250` 차단을 확인하므로, node guard가 없는 노드의 pod는 Ready 상태가 되지 않아요.
+1. **노드 IP는 항상 허용됩니다.** network policy agent는 kubelet의 liveness와 readiness probe를 위해 pod와 그 pod가 실행 중인 노드 IP 사이의 트래픽을 ingress와 egress 모두 허용합니다. 그래서 default-deny NetworkPolicy가 있어도 샌드박스 pod는 노드 IP의 kubelet(10250)이나 hostNetwork 서비스에 접속할 수 있습니다. 이 저장소는 샌드박스 노드에 node guard(pod에서 들어오는 새 연결을 iptables로 차단, [01](01_cluster_and_images.md))를 설치합니다. readiness가 `NODE_IP:10250` 차단을 확인하므로, node guard가 없는 노드의 pod는 Ready 상태가 되지 않습니다.
 2. **정책은 비동기로 적용됩니다.** standard 모드의 새 pod는 정책이 적용되기 전까지 default-allow 상태입니다. 그 사이에 후보 코드가 실행되지 않도록, pod는 IMDS와 API server로 가는 연결이 실제로 차단된 뒤에만 Ready 상태가 됩니다. strict 모드(`NETWORK_POLICY_ENFORCING_MODE`)는 정책이 생기기 전까지 CoreDNS를 포함한 모든 pod의 트래픽을 차단합니다. 그래서 이 저장소는 strict 모드 대신 standard 모드와 readiness 확인을 함께 씁니다.
 
-pod는 v2처럼 `SANDBOX_MAX_EVALS`에 도달했을 때와, reference 실행 경로에서 CUDA 오류(`gpu_fault`)가 났을 때 draining 상태가 됩니다. `gpu_fault`는 치명적 오류로 기록되므로 `/healthz`가 500을 반환하고, kubelet이 컨테이너를 다시 시작해요. production에서는 gateway가 draining pod를 삭제하고, Deployment가 새 pod(Kata에서는 새 VM)를 만듭니다. gateway가 없는 핸즈온에서 평가 횟수 한도로 draining된 pod는 Ready가 아닌 상태로 남으므로, `kubectl -n sandbox delete pod <pod>`로 직접 교체하세요. `gpu_fault`가 난 pod는 liveness probe 실패로 컨테이너가 다시 시작되고 GPU probe도 다시 실행됩니다. `kubectl -n sandbox get pods`의 `RESTARTS` 수가 늘었는지, 재시작 뒤 다시 Ready가 되는지 확인하세요.
+pod는 v2처럼 `SANDBOX_MAX_EVALS`에 도달했을 때와, reference 실행 경로에서 CUDA 오류(`gpu_fault`)가 났을 때 draining 상태가 됩니다. `gpu_fault`는 치명적 오류로 기록되므로 `/healthz`가 500을 반환하고, kubelet이 컨테이너를 다시 시작합니다. production에서는 gateway가 draining pod를 삭제하고, Deployment가 새 pod(Kata에서는 새 VM)를 만듭니다. gateway가 없는 핸즈온에서 평가 횟수 한도로 draining된 pod는 Ready가 아닌 상태로 남으므로, `kubectl -n sandbox delete pod <pod>`로 직접 교체하세요. `gpu_fault`가 난 pod는 liveness probe 실패로 컨테이너가 다시 시작되고 GPU probe도 다시 실행됩니다. `kubectl -n sandbox get pods`의 `RESTARTS` 수가 늘었는지, 재시작 뒤 다시 Ready가 되는지 확인하세요.
 
 ## 네 가지 검증: `ops/verify.sh`
 
@@ -238,7 +238,7 @@ scripts/ops/verify.sh kata-clh-cpu
 scripts/ops/verify.sh kata-qemu v1
 ```
 
-스크립트는 풀의 첫 pod를 선택해 다음을 차례로 확인합니다. 2번부터 4번은 실패하면 멈추지만, 1번은 두 커널 문자열을 출력만 하고 비교하지 않아요. 두 값이 같아도 계속 진행하므로 1번은 직접 확인하세요.
+스크립트는 풀의 첫 pod를 선택해 다음을 차례로 확인합니다. 2번부터 4번은 실패하면 멈추지만, 1번은 두 커널 문자열을 출력만 하고 비교하지 않습니다. 두 값이 같아도 계속 진행하므로 1번은 직접 확인하세요.
 
 | 검사 | 방법 | 통과 조건 |
 |---|---|---|
@@ -289,8 +289,8 @@ PASS read_host_file               status=policy_violation  speedup=None
 ## 적용 범위와 한계
 
 - **로컬 테스트로 확인한 것:** 인증의 fail-closed 동작(잘못된 audience, 만료, 허용되지 않은 subject), egress 차단을 확인한 뒤에만 Ready가 되는 readiness, 두 CPU 서버를 대상으로 한 golden probe와 parity, 모든 프로필과 버전의 매니페스트 렌더링입니다.
-- **실습 계정에서 확인한 것 (2026-11-18, us-west-2):** `gvisor` 풀(v1, replica 1개, `g5.xlarge`)에서 풀 검증(`scripts/ops/verify.sh`)이 통과했습니다. 노드 kubelet을 포함한 egress 대상 4개가 차단됐고, NetworkPolicy가 `default` 네임스페이스의 연결을 막았어요.
-- **실습 계정에서 확인한 것 (2026-11-18, 다른 클러스터):** `kata-qemu` GPU 풀(`g4dn.metal`, pod 4개, `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`)과 CPU 풀 세 개에서 풀 검증이 통과했습니다. 이미지가 캐시된 상태에서 `kata-qemu` pod 네 개가 생성부터 Ready까지 각각 30초, 30초, 31초, 36초 걸렸어요([03](03_kata.md), [08](08_benchmark.md)).
+- **실습 계정에서 확인한 것 (시나리오 A 클러스터):** `gvisor` 풀(v1, replica 1개, `g5.xlarge`)에서 풀 검증(`scripts/ops/verify.sh`)이 통과했습니다. 노드 kubelet을 포함한 egress 대상 4개가 차단됐고, NetworkPolicy가 `default` 네임스페이스의 연결을 막았습니다.
+- **실습 계정에서 확인한 것 (Kata 클러스터):** `kata-qemu` GPU 풀(`g4dn.metal`, pod 4개, `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`)과 CPU 풀 세 개에서 풀 검증이 통과했습니다. 이미지가 캐시된 상태에서 `kata-qemu` pod 네 개가 생성부터 Ready까지 각각 30초, 30초, 31초, 36초 걸렸습니다([03](03_kata.md), [08](08_benchmark.md)).
 - **AWS에서 확인하지 않은 것:** 실험용 `kata-clh` GPU 풀입니다(VM이 시작되지 않음, [03](03_kata.md)).
 
 ## 소요 시간과 비용

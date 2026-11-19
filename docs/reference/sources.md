@@ -4,13 +4,13 @@
 
 ## 기존 Pain Point
 
-gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, 가격, quota는 몇 주 단위로 바뀝니다. 같은 사실을 여러 페이지가 인용하면 어느 문서가 근거인지 찾기 어려워요. 블로그의 측정값이나 upstream CI 수치를 이 저장소의 측정으로 오해하기도 쉽습니다.
+gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, 가격, quota는 몇 주 단위로 바뀝니다. 같은 사실을 여러 페이지가 인용하면 어느 문서가 근거인지 찾기 어렵습니다. 블로그의 측정값이나 upstream CI 수치를 이 저장소의 측정으로 오해하기도 쉽습니다.
 
 ## Why
 
-- **warm pool의 약 55 ms는 AWS 블로그의 측정값입니다.** 이 저장소가 측정한 풀 지연은 2026-11-18 실행 기록([08 런타임 벤치마크](../handson/08_benchmark.md))에 있어요.
+- **warm pool의 약 55 ms는 AWS 블로그의 측정값입니다.** 이 저장소가 측정한 풀 지연은 2026-11-18 실행 기록([08 런타임 벤치마크](../handson/08_benchmark.md))에 있습니다.
 - **근거 수준은 로컬 테스트, 공식 문서, 제3자 보고, 블로그 측정값, 추론, AWS 실행 기록으로 나뉩니다.**
-- **가격과 quota는 배포할 계정과 리전에서 다시 확인하세요.** 바뀌었을 가능성이 큰 값과 확인 방법은 아래 체크리스트에 있어요.
+- **가격과 quota는 배포할 계정과 리전에서 다시 확인하세요.** 바뀌었을 가능성이 큰 값과 확인 방법은 아래 체크리스트에 있습니다.
 
 **사전 지식:** [홈](../index.md)의 "검증 상태"와 [자주 하는 오해](faq.md)를 먼저 보면 좋습니다.
 
@@ -31,9 +31,8 @@ gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, �
 | 제3자 보고 | 블로그, 이슈, 공개 사례 | `g4dn.metal` warm reboot 문제, T4의 `reset_method=bus` |
 | 블로그의 측정값 | 다른 사람이 다른 환경에서 측정한 값 | AWS 기술 블로그 2부의 warm pool claim 약 55 ms, AWS China 블로그의 cold start 약 3 s |
 | 추론 | 근거에서 이끌어 낸 판단, 미검증 | NodeConfig `imports`가 kata-deploy drop-in을 유지하는 효과 |
-| AWS에서 저자가 실행 | 실습 계정에서 실제로 실행하고 출력을 확인 | 시나리오 C의 CDK 배포와 삭제, SSM 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`)의 세 런타임 smoke pod(2026-11-14) |
-| 실습 계정에서 실행 (2026-11-18) | us-west-2 실습 계정에서 실행하고 출력을 확인(데모 사이트는 us-east-1) | 시나리오 A의 `02_create_cluster.sh`(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 갱신), `03_build_push_images.sh`(이미지 3개), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1)과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images`. 같은 날 다른 클러스터 구성(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가)에서: `g4dn.metal`의 Kata GPU(`kata/gpu_nodes.sh`, `kata-qemu` replica 4, `ops/verify.sh kata-qemu v1`), `ops/bench.sh 32`(GPU 풀 2개와 CPU 풀 3개, 2회 측정), 데모 사이트(recorder pod의 `record`, `demo/deploy.sh`와 외부 점검). 실험용 CLH GPU(`kata-clh`) 풀도 시도했지만 VM이 시작되지 않아(`create container timeout`) 측정하지 못했습니다 |
-| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 학습 중의 시나리오 A `ops/rollout.sh`, 기본값 60 step 학습, `ml.g5`의 HyperPod B1과 B2(HyperPod 생성 포함) |
+| AWS에서 저자가 실행 | 실습 계정에서 실제로 실행하고 출력을 확인 | 시나리오 A의 gVisor 경로, Kata GPU(`g4dn.metal`), 시나리오 C의 CPU 런타임 세 개, 런타임 벤치마크, 데모 사이트. 날짜별 기록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
+| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 학습 중의 시나리오 A `ops/rollout.sh`, 기본값 60 step 학습, `ml.g5`의 HyperPod B1과 B2(HyperPod 생성 포함). 전체 목록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
 
 ## 이 저장소에서 확인한 것
 
@@ -46,7 +45,7 @@ python -m pytest -q
 (cd cdk && python -m pytest -q tests)
 ```
 
-**확인할 것:** 실패 없이 `passed`로 끝납니다. 이 페이지를 쓰는 동안(2026-11-13) macOS(CPU 전용)에서 전체 테스트가 통과했어요. 테스트 수는 저장소가 바뀌면 달라지므로 여기에 적지 않습니다. 현재 체크아웃의 테스트 수는 저장소 루트에서 `python -m pytest --collect-only -q`로 확인하세요(CDK 스택 테스트는 따로). **문제가 생기면:** [문제 해결](troubleshooting.md)
+**확인할 것:** 실패 없이 `passed`로 끝납니다. 이 페이지를 쓰는 동안(2026-11-13) macOS(CPU 전용)에서 전체 테스트가 통과했습니다. 테스트 수는 저장소가 바뀌면 달라지므로 여기에 적지 않습니다. 현재 체크아웃의 테스트 수는 저장소 루트에서 `python -m pytest --collect-only -q`로 확인하세요(CDK 스택 테스트는 따로). **문제가 생기면:** [문제 해결](troubleshooting.md)
 
 | 테스트 파일 | 로컬 테스트로 확인한 것 |
 |---|---|
@@ -60,7 +59,35 @@ python -m pytest -q
 | `tests/test_demo.py` | 데모 CloudFormation 템플릿(private bucket, `AWS:SourceArn` 조건이 붙은 CloudFront 허용, TLS가 아닌 요청 거부, HTTPS 리디렉션과 보안 헤더), 외부 리소스와 HTML 주입이 없는 정적 사이트, 녹화 스키마와 reward 일관성 |
 | `cdk/tests/test_stack.py` | synth한 CDK 템플릿: private endpoint(public은 /32 opt-in만), `0.0.0.0/0` inbound 없음, 시나리오 A에 Kata CPU를 추가해 synth한 모든 launch template의 IMDSv2 필수(hop limit과 EBS 볼륨은 템플릿에 명시된 경우에만 hop limit 1과 암호화를 확인), 시나리오별 노드 그룹, c8i의 nested virtualization, Kata GPU 노드 그룹의 IOMMU AMI와 user data(이 구성의 IMDSv2는 검사하지 않음), 시나리오마다 cdk-nag 통과 |
 
-TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 셸 스크립트는 shellcheck 검사를 통과했습니다(저자 기록, 2026-11). AWS 단계 중에서는 시나리오 C의 CDK 배포, 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 삭제를 실습 계정에서 실행했습니다(2026-11-14). 시나리오 A의 gVisor 경로는 실습 계정에서 2026-11-18에 실행했어요(us-west-2, `g5.xlarge`와 `g5.2xlarge`, 학습은 5 step). 같은 날 Kata GPU, 런타임 벤치마크, 데모 사이트도 실행했고, 결과는 [03 Kata 샌드박스](../handson/03_kata.md), [08 런타임 벤치마크](../handson/08_benchmark.md), [09 데모 사이트](../handson/09_demo_site.md)에 있습니다. 실행한 스크립트는 위 표에 있습니다. 나머지는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
+TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 셸 스크립트는 shellcheck 검사를 통과했습니다(저자 기록, 2026-11).
+
+### AWS 실행 기록
+
+모두 저자의 실습 계정에서 실행했습니다.
+
+| 날짜 | 리전 | 대상 | 실행한 것 | 결과 |
+|---|---|---|---|---|
+| 2026-11-14 | us-west-2 | 시나리오 C(EKS 1.36) | `02_create_cluster.sh --cpu-only`(CDK 배포, 약 20분), `cdk/tunnel.sh`, `kata/cpu_nodes.sh`(약 14분, 대부분 kata-deploy 설치), 스택 삭제. 배포와 삭제를 두 번 함. [05 직접 해 보기](../beginner/05_hands_on.md)의 2부도 이 순서로 실행함(같은 노드의 runc 비교 컨테이너 포함) | 성공. 클러스터와 노드 상태, private endpoint, c8i 노드의 nested virtualization과 `/dev/kvm`, gVisor와 node guard, `127.0.0.1`에서만 열리는 터널, `gvisor-cpu` RuntimeClass, 세 런타임의 smoke pod, 삭제 뒤 남은 리소스를 확인 |
+| 2026-11-17 | us-west-2 | 시나리오 C(c8i) | `ops/rollout.sh kata-clh-cpu v1 v2`, 함께 실행한 모델 없는 reward 루프 `ops/simulate.sh`(30배치, 약 16분) | 성공. 배포, 검증, parity, 전환 네 단계가 통과했고 8번째 배치에서 `sandbox_version_switch`가 기록됨. `rollout.sh --finish`는 실행하지 않음. 출력은 `demo/site/data/extras.json`에 있음 |
+| 2026-11-18 | us-west-2 | 시나리오 A(gVisor) | `02_create_cluster.sh`: GPU 노드 그룹을 포함한 첫 생성이 `InsufficientInstanceCapacity`로 롤백되어, system 노드만 있는 `--hyperpod-b2`로 만든 뒤 `CHANGE_SCENARIO=1`로 B1(gVisor 노드 그룹 추가)과 A(trainer 추가)로 차례로 업데이트. 이어서 `03_build_push_images.sh`(이미지 세 개), `04_install_gpu_stack.sh`(`g5.xlarge`), `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1개), `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images` | 성공. smoke pod `cuda ok: NVIDIA A10G 2048.0`, 드라이버 580.178.04(proprietary, GSP 꺼짐). 풀 검증은 golden verdict 6개 PASS, egress 대상 4개 차단, `default` 네임스페이스 차단. GRPO Job은 Complete(약 12분, `train_runtime` 약 401초). `08_cleanup.sh`의 AMI 삭제 단계가 돌았는지는 기록에 없음 |
+| 2026-11-18 | us-west-2 | Kata GPU와 Kata CPU(다른 클러스터, EKS 1.36) | system 노드만 있는 구성으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가. `kata/gpu_nodes.sh`(IOMMU AMI 빌드, GPU Operator), `kata/cpu_nodes.sh`, `06_deploy_sandboxes.sh kata-qemu`(replica 4개), `kata-qemu`와 CPU 풀 세 개의 `ops/verify.sh` | 성공. `pgpu=8`, `kata-qemu` pod 4개 Ready(T4), 풀 검증 통과. 실행 중에 `vfio_iommu_type1` 모듈 문제와 AMI 빌더 문제를 찾아 스크립트를 고침([03 Kata 샌드박스](../handson/03_kata.md)) |
+| 2026-11-18 | us-west-2 | 실험용 Kata CLH GPU(`kata-clh`) | `ENABLE_EXPERIMENTAL_CLH_GPU=1`로 실험용 풀 배포 | 실패. artifact 경로를 채운 뒤에도 VM이 시작되지 않음(`create container timeout`). 벤치마크에서 빠짐 |
+| 2026-11-18 | us-west-2 | 런타임 벤치마크 | 위 Kata 클러스터에서 다섯 풀(`gvisor`, `kata-qemu`, CPU 풀 세 개)에 `ops/bench.sh 32`를 배포 직후와 풀 재시작 뒤 두 번. 이 클러스터의 gVisor 노드는 `g5.2xlarge` 한 대 | 성공. 다섯 풀 모두 32개 중 32개 `ok`. 결과 표는 [08 런타임 벤치마크](../handson/08_benchmark.md) |
+| 2026-11-18 | us-east-1(클러스터는 us-west-2) | 데모 사이트 | recorder pod에서 `record`(gVisor A10G 풀, Kata QEMU T4 풀), 클러스터 로그로 `extras.json` 생성, `demo/deploy.sh`, 배포 뒤 외부 점검 | 성공. 보안 헤더, 허용 메서드, 버킷 설정, 로그 전송을 확인. 기본 인증서에서 TLS 1.0과 1.1 handshake가 받아들여짐([09 데모 사이트](../handson/09_demo_site.md)의 보안 설계) |
+
+2026-11-14에는 ap-south-1 콘솔에서 Service Quotas 화면과 EC2 AMI Catalog의 HyperPod AMI 검색 결과도 캡처했습니다. 조회만 했고 스크립트는 실행하지 않았습니다.
+
+**AWS에서 실행하지 않은 것:**
+
+- `01_check_prereqs.sh`
+- 학습 중의 시나리오 A `ops/rollout.sh`와 `ops/rollout.sh --finish`(어느 시나리오에서도 실행하지 않음)
+- 기본값 60 step 학습
+- HyperPod 단계(`hyperpod/create.sh`부터)와 `ml.g5`의 B1, B2. B1과 B2 CDK 스택은 2026-11-18 시나리오 A 클러스터를 만들 때 중간 단계로만 배포함
+- `hyperpod/delete.sh`, `demo/teardown.sh`(shellcheck만 통과)
+- [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)의 절차(로컬 테스트만 통과)
+- 운영 가이드가 핸즈온에 더하는 구성: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity
+
+나머지는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
 
 ## 배포 전 재확인 체크리스트
 
@@ -85,7 +112,7 @@ driver="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
 /usr/local/bin/runsc nvproxy list-supported-drivers | grep -wF "$driver"
 ```
 
-**확인할 것:** 두 번째 명령이 그 드라이버 버전을 한 줄 출력하면 지원 목록에 있습니다. 아무것도 나오지 않으면 그 노드에서 gVisor GPU 샌드박스가 Ready가 되지 않아요. HyperPod 노드는 `scripts/hyperpod/check_gvisor.sh`가 같은 확인을 해 줍니다.
+**확인할 것:** 두 번째 명령이 그 드라이버 버전을 한 줄 출력하면 지원 목록에 있습니다. 아무것도 나오지 않으면 그 노드에서 gVisor GPU 샌드박스가 Ready가 되지 않습니다. HyperPod 노드는 `scripts/hyperpod/check_gvisor.sh`가 같은 확인을 해 줍니다.
 
 아래 명령은 quota와 nested virtualization 지원을 한 번에 출력합니다(읽기 전용).
 

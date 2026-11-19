@@ -13,13 +13,13 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
 
 ## Why
 
-- **Kata의 실행 조건은 CPU 샌드박스와 GPU 샌드박스가 다릅니다.** CPU 샌드박스에는 `/dev/kvm`만 있으면 되고, GPU를 VM에 직접 할당하려면 호스트가 IOMMU도 직접 써야 해요.
+- **Kata의 실행 조건은 CPU 샌드박스와 GPU 샌드박스가 다릅니다.** CPU 샌드박스에는 `/dev/kvm`만 있으면 되고, GPU를 VM에 직접 할당하려면 호스트가 IOMMU도 직접 써야 합니다.
 
 **사전 지식:** [홈](../index.md)에서 시나리오 A, B1, B2와 검증 상태를, [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 GRPO group과 advantage를 먼저 보면 읽기 쉽습니다.
 
 ??? note "용어"
     - **RuntimeClass**: pod가 어떤 컨테이너 런타임(runc, gVisor, Kata)으로 실행될지 정하는 Kubernetes 객체입니다.
-    - **nested virtualization**: 가상 머신 안에서 다시 가상 머신을 실행하는 기능입니다. EC2에서는 일부 계열이 `/dev/kvm`을 제공해요.
+    - **nested virtualization**: 가상 머신 안에서 다시 가상 머신을 실행하는 기능입니다. EC2에서는 일부 계열이 `/dev/kvm`을 제공합니다.
     - **bare metal (`.metal`)**: 하이퍼바이저 없이 물리 서버 전체를 쓰는 EC2 인스턴스입니다.
     - **GPU passthrough, VFIO, IOMMU**: 물리 GPU를 VM에 직접 할당하는 방식(GPU passthrough)과 이를 위한 Linux 커널 기능(VFIO), 장치의 메모리 접근을 VM 안으로 제한하는 하드웨어(IOMMU)입니다.
     - **nvproxy, ioctl**: ioctl은 프로그램이 드라이버에 명령을 보내는 시스템 호출이고, nvproxy는 GPU 드라이버로 보내는 ioctl 중 허용된 것만 전달하는 gVisor의 계층입니다.
@@ -35,9 +35,9 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
 ## 런타임과 인스턴스
 
 !!! question "❓ 오해: Kata를 쓰려면 `.metal` 인스턴스가 필요하다"
-    **실제:** `.metal`이 필요한 경우는 Kata VM에 GPU를 직접 할당할 때(GPU passthrough)뿐입니다. CPU 샌드박스는 EC2 nested virtualization을 켠 C8i, M8i, R8i 같은 일반 VM 인스턴스에서 실행돼요(2026-02-16 출시).
+    **실제:** `.metal`이 필요한 경우는 Kata VM에 GPU를 직접 할당할 때(GPU passthrough)뿐입니다. CPU 샌드박스는 EC2 nested virtualization을 켠 C8i, M8i, R8i 같은 일반 VM 인스턴스에서 실행됩니다(2026-02-16 출시).
 
-    Kata는 `/dev/kvm`만 있으면 VM을 실행할 수 있지만, GPU passthrough에는 호스트가 물리 GPU와 IOMMU를 직접 쓸 수 있어야 합니다. nested virtualization을 지원하는 G나 P 계열은 없습니다. x86 NVIDIA GPU가 달린 bare metal은 `g4dn.metal`뿐이라, Kata에서 GPU를 쓰려면 여전히 `.metal`이 필요해요.
+    Kata는 `/dev/kvm`만 있으면 VM을 실행할 수 있지만, GPU passthrough에는 호스트가 물리 GPU와 IOMMU를 직접 쓸 수 있어야 합니다. nested virtualization을 지원하는 G나 P 계열은 없습니다. x86 NVIDIA GPU가 달린 bare metal은 `g4dn.metal`뿐이라, Kata에서 GPU를 쓰려면 여전히 `.metal`이 필요합니다.
 
     아래 명령은 현재 리전에서 nested virtualization을 지원하는 인스턴스 타입을 나열합니다.
 
@@ -53,20 +53,20 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
 !!! question "❓ 오해: gVisor의 GPU 격리는 VM 격리와 같은 수준이다"
     **실제:** gVisor는 호스트의 NVIDIA 드라이버를 그대로 공유하므로 GPU 격리가 VM보다 약합니다.
 
-    nvproxy는 드라이버 버전별 ioctl allowlist로 드라이버에 전달되는 호출을 제한합니다. 그래도 gVisor 문서는 드라이버 내부 취약점을 완화하는 데는 "much less effective"하고, DMA buffer 같은 내용은 검증하지 않는다고 적어요. GKE Sandbox 문서도 sandbox pod에서 GPU time-sharing을 쓰지 말라고 권합니다. 드라이버까지 분리해야 한다면 guest VM 안에서 별도의 드라이버를 쓰는 Kata + VFIO를 선택하세요. 자세히: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), [02 보안](../production/02_security.md)
+    nvproxy는 드라이버 버전별 ioctl allowlist로 드라이버에 전달되는 호출을 제한합니다. 그래도 gVisor 문서는 드라이버 내부 취약점을 완화하는 데는 "much less effective"하고, DMA buffer 같은 내용은 검증하지 않는다고 적습니다. GKE Sandbox 문서도 sandbox pod에서 GPU time-sharing을 쓰지 말라고 권합니다. 드라이버까지 분리해야 한다면 guest VM 안에서 별도의 드라이버를 쓰는 Kata + VFIO를 선택하세요. 자세히: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), [02 보안](../production/02_security.md)
 
 !!! question "❓ 오해: Firecracker로도 GPU를 VM에 직접 할당할 수 있다"
     **실제:** Firecracker는 GPU passthrough를 제공하지 않습니다.
 
-    Firecracker는 virtio 장치 중심의 최소 장치 모델을 씁니다. 1.13.0에서 PCI 지원이 추가됐지만 변경 이력에 VFIO GPU passthrough는 없어요. E2B 같은 Firecracker 기반 샌드박스가 CPU 위주인 것도 이 때문입니다. 이 에셋은 GPU 샌드박스에 gVisor(nvproxy)나 Kata + QEMU(VFIO)를 씁니다. 자세히: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
+    Firecracker는 virtio 장치 중심의 최소 장치 모델을 씁니다. 1.13.0에서 PCI 지원이 추가됐지만 변경 이력에 VFIO GPU passthrough는 없습니다. E2B 같은 Firecracker 기반 샌드박스가 CPU 위주인 것도 이 때문입니다. 이 에셋은 GPU 샌드박스에 gVisor(nvproxy)나 Kata + QEMU(VFIO)를 씁니다. 자세히: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
 
 !!! question "❓ 오해: Kata + Cloud Hypervisor도 QEMU처럼 GPU를 VM에 직접 할당할 수 있다"
     **실제:** upstream은 Cloud Hypervisor의 GPU passthrough를 지원하지 않습니다. 지원되는 Kata GPU 경로는 QEMU(`kata-qemu-nvidia-gpu`)입니다.
 
-    Kata `docs/hypervisors.md`는 Cloud Hypervisor의 GPU 지원을 not supported로 표시하고, maintainer도 2025-08에 QEMU GPU runtime class를 쓰라고 답했어요(issue #11687). 이 에셋의 `kata-clh-nvidia-gpu`는 평가용 실험 구성이고, Kata + Cloud Hypervisor는 CPU 샌드박스(`kata-clh-cpu`)로 씁니다. 자세히: [03 Kata 샌드박스](../handson/03_kata.md)
+    Kata `docs/hypervisors.md`는 Cloud Hypervisor의 GPU 지원을 not supported로 표시하고, maintainer도 2025-08에 QEMU GPU runtime class를 쓰라고 답했습니다(issue #11687). 이 에셋의 `kata-clh-nvidia-gpu`는 평가용 실험 구성이고, Kata + Cloud Hypervisor는 CPU 샌드박스(`kata-clh-cpu`)로 씁니다. 자세히: [03 Kata 샌드박스](../handson/03_kata.md)
 
 !!! question "❓ 오해: Kata GPU 풀(T4)에서도 Triton 커널은 당연히 동작한다"
-    **실제:** T4(`g4dn.metal`)에서 Triton 커널이 동작하는지는 여러분의 노드에서 golden 커널로 확인해야 합니다. 이 가이드는 Triton의 공식 지원 GPU 범위를 단정하지 않아요.
+    **실제:** T4(`g4dn.metal`)에서 Triton 커널이 동작하는지는 여러분의 노드에서 golden 커널로 확인해야 합니다. 이 가이드는 Triton의 공식 지원 GPU 범위를 단정하지 않습니다.
 
     T4와 Kata 조합은 NVIDIA Kata CI의 검증 범위(A100, H100)에도 포함되지 않습니다. 아래 명령은 Kata GPU 풀에 golden 세트를 보내 verdict를 확인합니다.
 
@@ -81,7 +81,7 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
 !!! question "❓ 오해: HyperPod 기본 AMI 노드에 이 샌드박스를 바로 올릴 수 있다"
     **실제:** 기본 AMI(Kubernetes 1.36)로는 HyperPod 노드에 gVisor GPU 샌드박스도, Kata GPU 샌드박스도 올릴 수 없습니다. 기본 시나리오 B1은 학습만 HyperPod에서 하고 샌드박스는 같은 EKS 클러스터의 EC2 노드에 둡니다. B2는 지원 목록에 있는 드라이버를 넣은 custom AMI로 HyperPod 노드에서 gVisor 샌드박스를 실행하도록 구성했지만, AWS에서는 아직 실행하지 않았습니다.
 
-    기본 AMI에서 gVisor GPU 샌드박스를 쓸 수 없는 이유는 HyperPod EKS AMI(1.34~1.36)의 NVIDIA 드라이버 595.91.07이 gVisor release-20261109.0의 nvproxy 지원 목록에 없기 때문이에요(목록에 없는 unknown 버전은 플래그와 관계없이 실패). B2는 HyperPod 공개 base AMI의 드라이버를 580.178.04로 바꾸고 고정한 gVisor를 설치한 custom AMI를 빌드해 이 조건을 맞춥니다. 노드가 시작할 때 lifecycle 스크립트가 `runsc`를 containerd에 등록해요([07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)). Kata GPU 샌드박스는 Kubernetes 버전이나 AMI와 관계없이 HyperPod 노드에서 실행할 수 없습니다. `ml.*.metal`이 없고, CreateCluster에 nested virtualization CPU 옵션이 없으며, G와 P 계열은 nested virtualization을 지원하지 않기 때문이에요. GPU 없는 Kata도 같은 `/dev/kvm` 조건 때문에 어렵다고 보지만 검증하지 않았고(추론), 이 저장소에는 HyperPod용 Kata 구성이 없습니다. 아래 명령은 HyperPod 노드마다 debug pod를 띄워 드라이버와 gVisor 지원 여부를 출력합니다. 끝나면 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제하므로, 다른 사람이 `kubectl debug node`로 노드를 점검하는 중이면 그 작업이 끝난 뒤 실행하세요.
+    기본 AMI에서 gVisor GPU 샌드박스를 쓸 수 없는 이유는 HyperPod EKS AMI(1.34~1.36)의 NVIDIA 드라이버 595.91.07이 gVisor release-20261109.0의 nvproxy 지원 목록에 없기 때문입니다(목록에 없는 unknown 버전은 플래그와 관계없이 실패). B2는 HyperPod 공개 base AMI의 드라이버를 580.178.04로 바꾸고 고정한 gVisor를 설치한 custom AMI를 빌드해 이 조건을 맞춥니다. 노드가 시작할 때 lifecycle 스크립트가 `runsc`를 containerd에 등록합니다([07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)). Kata GPU 샌드박스는 Kubernetes 버전이나 AMI와 관계없이 HyperPod 노드에서 실행할 수 없습니다. `ml.*.metal`이 없고, CreateCluster에 nested virtualization CPU 옵션이 없으며, G와 P 계열은 nested virtualization을 지원하지 않기 때문입니다. GPU 없는 Kata도 같은 `/dev/kvm` 조건 때문에 어렵다고 보지만 검증하지 않았고(추론), 이 저장소에는 HyperPod용 Kata 구성이 없습니다. 아래 명령은 HyperPod 노드마다 debug pod를 띄워 드라이버와 gVisor 지원 여부를 출력합니다. 끝나면 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제하므로, 다른 사람이 `kubectl debug node`로 노드를 점검하는 중이면 그 작업이 끝난 뒤 실행하세요.
 
     ```bash
     scripts/hyperpod/check_gvisor.sh
@@ -90,21 +90,21 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
     **확인할 것:** 기본 AMI 노드에서는 `NOT supported by gVisor ...: keep sandboxes on EC2 (mode B1)`, B2 custom AMI 노드에서는 `driver 580.178.04: SUPPORTED ...`가 출력됩니다. 새 AMI나 gVisor 릴리스가 나오면 다시 실행하세요. **문제가 생기면:** [문제 해결](troubleshooting.md)의 HyperPod 표를 보세요. 자세히: [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md), [07 HyperPod 시나리오](../handson/07_hyperpod.md)
 
 !!! question "❓ 오해: EKS Auto Mode 노드에 gVisor나 Kata를 설치하면 된다"
-    **실제:** EKS 문서는 "You can't directly access or install software on instances managed by EKS Auto Mode"라고 적습니다. Auto Mode 노드에는 runsc나 kata-deploy의 런타임을 등록할 수 없어요.
+    **실제:** EKS 문서는 "You can't directly access or install software on instances managed by EKS Auto Mode"라고 적습니다. Auto Mode 노드에는 runsc나 kata-deploy의 런타임을 등록할 수 없습니다.
 
     그래서 이 에셋은 핸즈온에서 managed node group을, Production에서 Karpenter NodePool을 씁니다. AWS 기술 블로그 1부도 EKS Auto Mode에서는 runsc를 등록할 수 없다고 설명합니다. 자세히: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
 
 !!! question "❓ 오해: 관리형 code interpreter나 샌드박스 서비스로 GPU 샌드박스를 쓸 수 있다"
     **실제:** 이 가이드가 확인한 AWS 관리형 샌드박스는 CPU 샌드박스의 대안으로만 쓸 수 있습니다.
 
-    Amazon Bedrock AgentCore Code Interpreter 문서는 실행 환경을 containerized environment로 설명하고 GPU를 언급하지 않아요. AWS Nitro Sandboxes와 EKS isolated pods(2026-11-09 출시, `runtimeClassName` `isolated-sandbox` 또는 `confidential-sandbox`, Kubernetes 1.36 이상)의 문서에는 "GPU and other device passthrough are not supported at launch"라고 적혀 있습니다. reward를 GPU에서 측정해야 한다면 이 에셋처럼 gVisor나 Kata를 직접 운영하세요. 자세히: [05 상황별 선택 가이드](../concepts/05_decision_guide.md)
+    Amazon Bedrock AgentCore Code Interpreter 문서는 실행 환경을 containerized environment로 설명하고 GPU를 언급하지 않습니다. AWS Nitro Sandboxes와 EKS isolated pods(2026-11-09 출시, `runtimeClassName` `isolated-sandbox` 또는 `confidential-sandbox`, Kubernetes 1.36 이상)의 문서에는 "GPU and other device passthrough are not supported at launch"라고 적혀 있습니다. reward를 GPU에서 측정해야 한다면 이 에셋처럼 gVisor나 Kata를 직접 운영하세요. 자세히: [05 상황별 선택 가이드](../concepts/05_decision_guide.md)
 
 ## 네트워크와 인증
 
 !!! question "❓ 오해: NetworkPolicy를 default deny로 두면 pod가 노드 IP에도 연결할 수 없다"
     **실제:** VPC CNI network policy agent는 kubelet probe가 차단되지 않도록 pod와 자기 노드 IP 사이의 통신을 정책과 관계없이 허용합니다(aws-network-policy-agent 소스 기준).
 
-    그래서 이 에셋은 샌드박스 노드에 iptables node guard(`GPUSANDBOX-GUARD`)를 둡니다. 또 readiness 검사에서 IMDS, API 서버, `$(NODE_IP):10250`에 연결할 수 없음을 확인한 뒤에만 pod가 Ready가 돼요. 아래 명령은 풀의 pod에서 이 대상들이 실제로 차단되는지 확인합니다.
+    그래서 이 에셋은 샌드박스 노드에 iptables node guard(`GPUSANDBOX-GUARD`)를 둡니다. 또 readiness 검사에서 IMDS, API 서버, `$(NODE_IP):10250`에 연결할 수 없음을 확인한 뒤에만 pod가 Ready가 됩니다. 아래 명령은 풀의 pod에서 이 대상들이 실제로 차단되는지 확인합니다.
 
     ```bash
     scripts/ops/verify.sh gvisor v1
@@ -115,38 +115,38 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
 !!! question "❓ 오해: 정적 정책(AST 검사)이 샌드박스의 보안 경계다"
     **실제:** 정적 정책은 reward 무결성을 위한 검사이고, 노드를 보호하는 보안 경계는 gVisor나 Kata, 그리고 네트워크 통제입니다.
 
-    이 에셋은 후보 코드가 pod 안에서 임의의 Python을 실행할 수 있다고 가정해요. 정적 정책은 timer 교체나 harness 내부 접근처럼 측정을 조작하는 간단한 방법만 차단합니다. 자세히: [04 Reward 무결성](../production/04_reward_integrity.md), [02 보안](../production/02_security.md)
+    이 에셋은 후보 코드가 pod 안에서 임의의 Python을 실행할 수 있다고 가정합니다. 정적 정책은 timer 교체나 harness 내부 접근처럼 측정을 조작하는 간단한 방법만 차단합니다. 자세히: [04 Reward 무결성](../production/04_reward_integrity.md), [02 보안](../production/02_security.md)
 
 !!! question "❓ 오해: TokenReview를 통과한 토큰이면 호출을 허용해도 된다"
     **실제:** TokenReview는 토큰이 유효한지만 증명하고, 그 subject에게 호출 권한이 있는지는 알려 주지 않습니다.
 
-    AWS 기술 블로그 2부는 Agent Sandbox의 sandbox-router를 분석하며 이 점과 기본 인가가 allow-all이라는 점을 함께 지적했어요. 이 에셋의 gateway는 TokenReview 다음에 `GATEWAY_ALLOWED_SUBJECTS` allowlist를 따로 확인합니다. 샌드박스 pod는 audience(`gpu-sandbox`)와 `SANDBOX_ALLOWED_SUBJECTS`를 함께 검사하고, 일치하지 않으면 요청을 거부합니다. 자세히: [03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md), [02 보안](../production/02_security.md)
+    AWS 기술 블로그 2부는 Agent Sandbox의 sandbox-router를 분석하며 이 점과 기본 인가가 allow-all이라는 점을 함께 지적했습니다. 이 에셋의 gateway는 TokenReview 다음에 `GATEWAY_ALLOWED_SUBJECTS` allowlist를 따로 확인합니다. 샌드박스 pod는 audience(`gpu-sandbox`)와 `SANDBOX_ALLOWED_SUBJECTS`를 함께 검사하고, 일치하지 않으면 요청을 거부합니다. 자세히: [03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md), [02 보안](../production/02_security.md)
 
 ## 학습과 reward
 
 !!! question "❓ 오해: 샌드박스 Deployment를 rolling update로 바꾸면 학습 중에도 안전하다"
-    **실제:** rolling update 동안에는 구버전과 신버전 pod가 함께 응답해서, 같은 GRPO group의 completion이 서로 다른 채점 규칙으로 점수를 받을 수 있습니다. 그러면 group 기준 advantage가 잘못 계산돼요.
+    **실제:** rolling update 동안에는 구버전과 신버전 pod가 함께 응답해서, 같은 GRPO group의 completion이 서로 다른 채점 규칙으로 점수를 받을 수 있습니다. 그러면 group 기준 advantage가 잘못 계산됩니다.
 
-    이 에셋은 (runtime, version)마다 blue/green 풀을 따로 배포합니다. 격리 검증과 golden parity를 통과하면 스크립트가 routing 표를 갱신하고, trainer는 샌드박스를 부를 때마다 routing 표를 읽으므로, 변경이 반영된 뒤 샌드박스에 보내는 요청부터 새 버전 풀이 응답해요. 한 batch의 점수는 항상 한 버전에서 나옵니다. 채점 도중 풀이 바뀌면 다른 풀에서 받은 결과를 새 풀에서 다시 채점하고, 결과가 모두 한 풀의 캐시에 있는 batch는 샌드박스를 부르지 않고 그 풀의 결과를 써요. TRL 기본 설정에서는 batch 경계가 step 경계와 같습니다. 아래 명령이 그 절차(배포, 검증, parity, 전환)를 차례로 실행해요. 기본 시나리오 A에서는 v1이 `sandbox-gvisor` 노드 두 대의 GPU를 이미 쓰고 있으므로, 먼저 이 노드 그룹을 4대로 늘리고 노드가 `Ready`인지 확인합니다. 늘리지 않으면 v2 pod가 GPU를 받지 못해 1단계가 최대 30분 기다린 뒤 실패해요(노드 수를 늘리는 명령은 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)의 준비 절에 있습니다).
+    이 에셋은 (runtime, version)마다 blue/green 풀을 따로 배포합니다. 격리 검증과 golden parity를 통과하면 스크립트가 routing 표를 갱신하고, trainer는 샌드박스를 부를 때마다 routing 표를 읽으므로, 변경이 반영된 뒤 샌드박스에 보내는 요청부터 새 버전 풀이 응답합니다. 한 batch의 점수는 항상 한 버전에서 나옵니다. 채점 도중 풀이 바뀌면 다른 풀에서 받은 결과를 새 풀에서 다시 채점하고, 결과가 모두 한 풀의 캐시에 있는 batch는 샌드박스를 부르지 않고 그 풀의 결과를 씁니다. TRL 기본 설정에서는 batch 경계가 step 경계와 같습니다. 아래 명령이 그 절차(배포, 검증, parity, 전환)를 차례로 실행합니다. 기본 시나리오 A에서는 v1이 `sandbox-gvisor` 노드 두 대의 GPU를 이미 쓰고 있으므로, 먼저 이 노드 그룹을 4대로 늘리고 노드가 `Ready`인지 확인합니다. 늘리지 않으면 v2 pod가 GPU를 받지 못해 1단계가 최대 30분 기다린 뒤 실패합니다(노드 수를 늘리는 명령은 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)의 준비 절에 있습니다).
 
     ```bash
     scripts/ops/rollout.sh gvisor v1 v2
     ```
 
-    **확인할 것:** golden 항목별 `PASS` 줄과 `{"event": "parity", ..., "passed": true}`가 출력되고, routing 변경이 pod에 반영된 뒤(kubelet 동기화로 1분 안팎) trainer가 직전과 다른 풀에서 batch 응답을 받으면 `sandbox_version_switch` 이벤트를 출력합니다. batch의 결과가 모두 한 풀의 캐시에 있으면 샌드박스를 부르지 않으므로 그 batch에서는 이 이벤트가 나오지 않아요. **문제가 생기면:** [문제 해결](troubleshooting.md)의 "버전 전환 (routing)" 표를 보세요. 자세히: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md), [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)
+    **확인할 것:** golden 항목별 `PASS` 줄과 `{"event": "parity", ..., "passed": true}`가 출력되고, routing 변경이 pod에 반영된 뒤(kubelet 동기화로 1분 안팎) trainer가 직전과 다른 풀에서 batch 응답을 받으면 `sandbox_version_switch` 이벤트를 출력합니다. batch의 결과가 모두 한 풀의 캐시에 있으면 샌드박스를 부르지 않으므로 그 batch에서는 이 이벤트가 나오지 않습니다. **문제가 생기면:** [문제 해결](troubleshooting.md)의 "버전 전환 (routing)" 표를 보세요. 자세히: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md), [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)
 
 !!! question "❓ 오해: 인프라 오류에 reward 0을 주면 보수적이라 안전하다"
     **실제:** 0점은 "이 completion은 나쁘다"는 학습 신호라서, 채점하지 못한 샘플에 0을 주면 reward가 왜곡됩니다.
 
-    정답을 낸 샘플이 pod 장애 때문에 0점을 받으면 그 행동이 억제됩니다. 오류가 특정 노드에 몰리면 reward에 체계적인 오차가 생겨요. TRL 경로에서는 `sandbox_error`일 때 세 reward 함수가 모두 `None`을 반환해, 그 샘플을 group baseline에서 제외합니다. veRL 경로에는 샘플을 제외하는 신호가 없어서 format 점수 0.1과 `sandbox_error: 1`을 기록합니다. 그러니 그 비율을 모니터링하세요. 자세히: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md), [04 Reward 무결성](../production/04_reward_integrity.md)
+    정답을 낸 샘플이 pod 장애 때문에 0점을 받으면 그 행동이 억제됩니다. 오류가 특정 노드에 몰리면 reward에 체계적인 오차가 생깁니다. TRL 경로에서는 `sandbox_error`일 때 세 reward 함수가 모두 `None`을 반환해, 그 샘플을 group baseline에서 제외합니다. veRL 경로에는 샘플을 제외하는 신호가 없어서 format 점수 0.1과 `sandbox_error: 1`을 기록합니다. 그러니 그 비율을 모니터링하세요. 자세히: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md), [04 Reward 무결성](../production/04_reward_integrity.md)
 
 !!! question "❓ 오해: parity를 통과하면 reward도 바뀌지 않는다"
-    **실제:** parity는 golden 제출물만 확인합니다. 두 버전 모두 golden마다 정해 둔 status(지정된 경우 `custom_kernel` 여부도)를 내야 하고, 양쪽이 `ok`이고 speedup이 있으면 신버전과 구버전의 speedup 비율도 기본 0.65~1.35 범위에 들어야 해요.
+    **실제:** parity는 golden 제출물만 확인합니다. 두 버전 모두 golden마다 정해 둔 status(지정된 경우 `custom_kernel` 여부도)를 내야 하고, 양쪽이 `ok`이고 speedup이 있으면 신버전과 구버전의 speedup 비율도 기본 0.65~1.35 범위에 들어야 합니다.
 
-    v2처럼 seed를 3에서 5로 늘리고 speedup 상한을 10배로 두면, golden은 그대로 통과해도 통과 기준에 가까웠던 policy 샘플의 verdict와 speedup은 달라질 수 있어요. 의도한 reward 변화는 버전 교체가 아니라 reward 함수 변경으로 기록하세요. 자세히: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md)
+    v2처럼 seed를 3에서 5로 늘리고 speedup 상한을 10배로 두면, golden은 그대로 통과해도 통과 기준에 가까웠던 policy 샘플의 verdict와 speedup은 달라질 수 있습니다. 의도한 reward 변화는 버전 교체가 아니라 reward 함수 변경으로 기록하세요. 자세히: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md)
 
 !!! question "❓ 오해: speedup은 어떤 GPU에서 측정해도 비슷하다"
-    **실제:** speedup은 측정한 GPU에서만 의미가 있는 값입니다. gVisor 풀(A10G)과 Kata 풀(T4)의 speedup은 서로 다른 reward 함수로 다뤄야 해요.
+    **실제:** speedup은 측정한 GPU에서만 의미가 있는 값입니다. gVisor 풀(A10G)과 Kata 풀(T4)의 speedup은 서로 다른 reward 함수로 다뤄야 합니다.
 
     `scripts/ops/bench.sh`도 GPU 종류가 다른 풀의 speedup은 GPU별로 따로 비교하라고 안내합니다. 배포할 GPU가 정해져 있다면 그와 같거나 가까운 GPU로 reward를 측정하는 편이 좋습니다. 자세히: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), [08 런타임 벤치마크](../handson/08_benchmark.md)
 
@@ -155,12 +155,12 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
 !!! question "❓ 오해: Agent Sandbox는 gVisor만 지원한다"
     **실제:** Agent Sandbox는 RuntimeClass로 지정한 런타임에 격리를 맡기므로 Kata도 쓸 수 있습니다.
 
-    upstream README는 "Agent Sandbox is a sandbox orchestrator. It delegates low-level container isolation to secure Sandbox Runtimes (like gVisor or Kata Containers) by managing Pods configured to use these runtimes (via RuntimeClass)."라고 적습니다. 저장소에는 Kata 예시(kata-aks, kata-gke)와 GKE의 gVisor + L4 GPU 예시가 있어요. 이 에셋의 확장도 같은 SandboxTemplate을 gvisor, kata-qemu, kata-clh-cpu 같은 런타임 프로필마다 렌더링합니다. 다만 SandboxTemplate 안에서 Kata GPU(`kata-qemu-nvidia-gpu`와 `nvidia.com/pgpu`)를 쓰는 조합은 검증하지 않았습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
+    upstream README는 "Agent Sandbox is a sandbox orchestrator. It delegates low-level container isolation to secure Sandbox Runtimes (like gVisor or Kata Containers) by managing Pods configured to use these runtimes (via RuntimeClass)."라고 적습니다. 저장소에는 Kata 예시(kata-aks, kata-gke)와 GKE의 gVisor + L4 GPU 예시가 있습니다. 이 에셋의 확장도 같은 SandboxTemplate을 gvisor, kata-qemu, kata-clh-cpu 같은 런타임 프로필마다 렌더링합니다. 다만 SandboxTemplate 안에서 Kata GPU(`kata-qemu-nvidia-gpu`와 `nvidia.com/pgpu`)를 쓰는 조합은 검증하지 않았습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 !!! question "❓ 오해: Agent Sandbox의 기본 SandboxTemplate 정책이 인터넷 egress를 차단한다"
     **실제:** AWS 기술 블로그 2부에 따르면 기본 정책은 인터넷 egress를 허용합니다.
 
-    기본 정책은 sandbox-router에서 오는 ingress만 허용하고, egress는 0.0.0.0/0에서 RFC1918과 169.254.0.0/16을 뺀 범위로 허용해요. 내부망과 IMDS 대역은 제외되지만 인터넷은 허용되므로, 이 정책으로는 데이터 유출, C2 통신, 채굴을 차단할 수 없습니다. 같은 글은 VPC CNI NetworkPolicy를 켜기 전에는 샌드박스가 IMDS와 Kubernetes API에 접근할 수 있었다고 보고했어요. 기본 DNS 주입(`dnsPolicy: None`에 8.8.8.8, 1.1.1.1)이 Route 53 Resolver를 우회한다는 점도 함께 보고했습니다. 이 에셋의 확장은 `networkPolicy.egress: []`(전부 차단)와 nameserver 127.0.0.1을 명시해 이 기본값을 쓰지 않습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
+    기본 정책은 sandbox-router에서 오는 ingress만 허용하고, egress는 0.0.0.0/0에서 RFC1918과 169.254.0.0/16을 뺀 범위로 허용합니다. 내부망과 IMDS 대역은 제외되지만 인터넷은 허용되므로, 이 정책으로는 데이터 유출, C2 통신, 채굴을 차단할 수 없습니다. 같은 글은 VPC CNI NetworkPolicy를 켜기 전에는 샌드박스가 IMDS와 Kubernetes API에 접근할 수 있었다고 보고했습니다. 기본 DNS 주입(`dnsPolicy: None`에 8.8.8.8, 1.1.1.1)이 Route 53 Resolver를 우회한다는 점도 함께 보고했습니다. 이 에셋의 확장은 `networkPolicy.egress: []`(전부 차단)와 nameserver 127.0.0.1을 명시해 이 기본값을 쓰지 않습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 !!! question "❓ 오해: warm pool의 GPU 샌드박스는 요청이 없는 동안 비용이 들지 않는다"
     **실제:** warm 샌드박스는 claim을 기다리는 동안에도 GPU를 점유하고 있으므로, 그 GPU 노드의 비용이 계속 발생합니다.
@@ -172,17 +172,17 @@ EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에서 neste
 !!! question "❓ 오해: Qwen2.5-Coder 계열은 모두 Apache-2.0이다"
     **실제:** `Qwen/Qwen2.5-Coder-1.5B-Instruct`와 `Qwen/Qwen2.5-Coder-7B-Instruct`는 Apache-2.0이고 gate가 없지만, `Qwen2.5-Coder-3B-Instruct`는 qwen-research 라이선스(비상업)입니다.
 
-    이 에셋은 3B를 쓰지 않아요. 모델을 바꿀 때는 Hugging Face 모델 카드의 license 항목을 직접 확인하고, 데이터셋 라이선스도 함께 보세요. 자세히: [홈](../index.md)
+    이 에셋은 3B를 쓰지 않습니다. 모델을 바꿀 때는 Hugging Face 모델 카드의 license 항목을 직접 확인하고, 데이터셋 라이선스도 함께 보세요. 자세히: [홈](../index.md)
 
 !!! question "❓ 오해: 데모 사이트는 실제 GPU 클러스터에 연결된다"
-    **실제:** 데모는 정적 사이트(HTML, CSS, JS, 외부 스크립트 없음)입니다. `python -m gpusandbox.tools record`가 만든 채점 녹화(`recording.json`)를 재생하고, `demo/build_extras.py`로 만든 `extras.json`이 있으면 벤치마크와 학습 기록도 보여 줘요. 방문자는 클러스터나 GPU에 접속하지 않습니다.
+    **실제:** 데모는 정적 사이트(HTML, CSS, JS, 외부 스크립트 없음)입니다. `python -m gpusandbox.tools record`가 만든 채점 녹화(`recording.json`)를 재생하고, `demo/build_extras.py`로 만든 `extras.json`이 있으면 벤치마크와 학습 기록도 보여 줍니다. 방문자는 클러스터나 GPU에 접속하지 않습니다.
 
-    사이트는 Block Public Access를 켠 private S3 bucket에 있고, CloudFront만 Origin Access Control로 이 bucket을 읽습니다. 기본으로 올리는 채점 녹화(`demo/site/data/recording.json`)는 노트북 CPU 풀에서 만들었고, GPU 클러스터에서 만든 녹화로 교체해 쓰도록 되어 있습니다. 2026-11-18 EKS의 gVisor A10G 풀과 Kata QEMU T4 풀에서 만든 녹화는 `demo/recordings/2026-11-18-eks-gpu.json`에 있어요. 자세히: [09 데모 사이트 (CloudFront)](../handson/09_demo_site.md)
+    사이트는 Block Public Access를 켠 private S3 bucket에 있고, CloudFront만 Origin Access Control로 이 bucket을 읽습니다. 기본으로 올리는 채점 녹화(`demo/site/data/recording.json`)는 노트북 CPU 풀에서 만들었고, GPU 클러스터에서 만든 녹화로 교체해 쓰도록 되어 있습니다. 2026-11-18 EKS의 gVisor A10G 풀과 Kata QEMU T4 풀에서 만든 녹화는 `demo/recordings/2026-11-18-eks-gpu.json`에 있습니다. 자세히: [09 데모 사이트 (CloudFront)](../handson/09_demo_site.md)
 
 !!! question "❓ 오해: 이 가이드의 수치는 이 저장소가 AWS에서 측정한 값이다"
-    **실제:** 일부만 그렇습니다. 가격과 지원 버전은 공식 문서와 공개 자료를 인용했고, AWS 단계 전체를 end-to-end로 실행하지는 않았습니다. 실습 계정에서 2026-11-18에 시나리오 A의 gVisor 경로(`03`부터 `08`까지)를 `g5`로 실행했고, 같은 날 다섯 개 풀(gVisor A10G, Kata QEMU T4, CPU 런타임 세 개)을 배포 직후와 풀 재시작 뒤에 한 번씩 `ops/bench.sh`로 측정했어요. [08 런타임 벤치마크](../handson/08_benchmark.md)의 결과 표는 두 번째 측정값이고 측정 조건과 함께 있습니다. 같은 날 A10G와 T4 풀에서 golden 제출물을 채점한 녹화는 `demo/recordings/2026-11-18-eks-gpu.json`에 있어요. 그 밖의 수치는 여전히 공식 문서와 공개 자료의 값입니다.
+    **실제:** 일부만 그렇습니다. 가격과 지원 버전은 공식 문서와 공개 자료를 인용했고, AWS 단계 전체를 end-to-end로 실행하지는 않았습니다. 실습 계정에서 시나리오 A의 gVisor 경로(`03`부터 `08`까지)를 `g5`로 실행했고, 다섯 개 풀(gVisor A10G, Kata QEMU T4, CPU 런타임 세 개)을 배포 직후와 풀 재시작 뒤에 한 번씩 `ops/bench.sh`로 측정했습니다. [08 런타임 벤치마크](../handson/08_benchmark.md)의 결과 표는 두 번째 측정값이고 측정 조건과 함께 있습니다. A10G와 T4 풀에서 golden 제출물을 채점한 녹화는 `demo/recordings/2026-11-18-eks-gpu.json`에 있고, 날짜별 실행 기록은 [검증된 사실과 출처](sources.md#aws-실행-기록)에 있습니다. 그 밖의 수치는 여전히 공식 문서와 공개 자료의 값입니다.
 
-    로컬에서 확인한 것은 CPU에서 실행하는 pytest 테스트와 TRL GRPO dry run(2 step)이에요. 런타임별 지연과 speedup이 필요하면 `scripts/ops/bench.sh`로 직접 측정하세요. 출처와 검증 수준은 [검증된 사실과 출처](sources.md)에 모았습니다. 자세히: [홈](../index.md), [08 런타임 벤치마크](../handson/08_benchmark.md)
+    로컬에서 확인한 것은 CPU에서 실행하는 pytest 테스트와 TRL GRPO dry run(2 step)입니다. 런타임별 지연과 speedup이 필요하면 `scripts/ops/bench.sh`로 직접 측정하세요. 출처와 검증 수준은 [검증된 사실과 출처](sources.md)에 모았습니다. 자세히: [홈](../index.md), [08 런타임 벤치마크](../handson/08_benchmark.md)
 
 ??? note "참고 자료"
     | 주제 | 링크 |

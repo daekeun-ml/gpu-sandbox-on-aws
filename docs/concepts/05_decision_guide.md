@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-GPU 종류, 격리 강도, 운영 부담, 비용은 서로 영향을 주므로 한 가지 기준만 보고 선택하면 다른 조건을 충족하지 못할 수 있습니다. VM 경계와 H100 같은 최신 GPU가 모두 필요해도, EC2에서 VM에 직접 할당할 수 있는 x86 NVIDIA GPU는 `g4dn.metal`의 T4뿐이에요. 새로 출시된 관리형 격리 서비스로 GPU 샌드박스도 운영할 수 있을 것 같지만, 이 서비스는 출시 시점에 CPU만 지원합니다.
+GPU 종류, 격리 강도, 운영 부담, 비용은 서로 영향을 주므로 한 가지 기준만 보고 선택하면 다른 조건을 충족하지 못할 수 있습니다. VM 경계와 H100 같은 최신 GPU가 모두 필요해도, EC2에서 VM에 직접 할당할 수 있는 x86 NVIDIA GPU는 `g4dn.metal`의 T4뿐입니다. 새로 출시된 관리형 격리 서비스로 GPU 샌드박스도 운영할 수 있을 것 같지만, 이 서비스는 출시 시점에 CPU만 지원합니다.
 
 ![격리 경계와 측정 GPU를 두 축으로 한 표입니다. VM 경계와 T4 조합은 g4dn.metal의 Kata + QEMU(VFIO)로 가능합니다. VM 경계와 최신 GPU(L4, L40S, H100) 조합은 EC2에 없습니다(빨간색). 사용자 공간 커널 경계와 T4 조합은 g4dn의 gVisor이며, 이 에셋에서는 검증하지 않았습니다. 사용자 공간 커널 경계와 최신 GPU 조합은 G/P 계열 VM(g5, g6, g6e, p5)의 gVisor + nvproxy로 가능합니다. AWS 관리형 격리인 Nitro Sandboxes와 EKS isolated pods는 출시 시점에 CPU 전용이라 두 GPU 열 모두에서 쓸 수 없습니다(GPU passthrough 미지원, 빨간색).](../images/figures/concepts-05_decision_guide.svg)
 
@@ -13,9 +13,9 @@ GPU 종류, 격리 강도, 운영 부담, 비용은 서로 영향을 주므로 �
 
 ## Why
 
-- **정해진 순서대로 조건을 확인합니다.** GPU 필요 여부, 관리형 서비스 선호, VM 경계 필요 여부, 측정 GPU 순으로 선택지를 줄여요.
+- **정해진 순서대로 조건을 확인합니다.** GPU 필요 여부, 관리형 서비스 선호, VM 경계 필요 여부, 측정 GPU 순으로 선택지를 줄입니다.
 
-**사전 지식:** [02 격리 런타임 비교](02_isolation_runtimes.md)와 [04 플랫폼과 인스턴스 선택](04_platforms_and_instances.md)을 먼저 읽으면 표를 이해하기 쉽습니다. 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에서 확인할 수 있어요.
+**사전 지식:** [02 격리 런타임 비교](02_isolation_runtimes.md)와 [04 플랫폼과 인스턴스 선택](04_platforms_and_instances.md)을 먼저 읽으면 표를 이해하기 쉽습니다. 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에서 확인할 수 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **VM 경계**: 신뢰할 수 없는 코드를 하드웨어 가상화로 만든 별도 VM 안에서 실행하는 격리 방식입니다. VM 밖으로 탈출하려면 hypervisor의 취약점을 이용해야 합니다.
@@ -70,17 +70,17 @@ GPU 종류, 격리 강도, 운영 부담, 비용은 서로 영향을 주므로 �
 |---|---|---|---|---|---|
 | 격리 경계 | 사용자 공간 커널. GPU는 ioctl allowlist라 VM보다 약함 | VM + IOMMU | VM | VM + IOMMU (upstream 미검증) | AWS 관리형 (세부는 문서 확인) |
 | AWS에서 쓸 수 있는 GPU | G/P 계열 VM. 이 에셋은 A10G (`g5`, 기본)와 L4 (`g6`, 대안) | T4 (`g4dn.metal`)만 | 없음 | T4 (`g4dn.metal`) | 없음 (출시 시점) |
-| 설치 난이도 | 중간: user data로 runsc 설치, containerd handler, RuntimeClass, device plugin `cdi-cri` | 높음: IOMMU AMI 빌드, GPU Operator, kata-deploy, `.metal` 노드 | 중간: nested virtualization launch template, kata-deploy | 높음: QEMU 구성 외에 실험용 values 적용. 4.3.1용 values에는 guest 커널과 이미지 경로가 들어 있고, 다른 버전에서는 경로를 확인. 2026-11-18 실습에서는 VM이 시작되지 않음 | 낮음: Kubernetes 1.36 이상 |
+| 설치 난이도 | 중간: user data로 runsc 설치, containerd handler, RuntimeClass, device plugin `cdi-cri` | 높음: IOMMU AMI 빌드, GPU Operator, kata-deploy, `.metal` 노드 | 중간: nested virtualization launch template, kata-deploy | 높음: QEMU 구성 외에 실험용 values 적용. 4.3.1용 values에는 guest 커널과 이미지 경로가 들어 있고, 다른 버전에서는 경로를 확인. 이 저장소의 실습에서는 VM이 시작되지 않음 | 낮음: Kubernetes 1.36 이상 |
 | 밀도 (이 에셋 구성) | `g5.xlarge` 노드당 1개 | `g4dn.metal`당 VM 최대 8개, guest RAM 전체 pin | pod당 CPU 1.25개(요청 1 + overhead 250m)와 메모리 2 GiB + 130Mi. 노드의 할당 가능 CPU와 메모리 중 먼저 소진되는 쪽이 상한 | `kata-qemu`와 노드 공유 | 문서 확인 |
 | upstream 지원 | 지원 (nvproxy 문서) | 지원 (NVIDIA CI는 A100, H100) | 지원 | 미지원 | AWS 지원 (2026-11-09 출시) |
 | 드라이버 의존성 | host 드라이버 버전이 nvproxy 지원 목록과 정확히 일치해야 함 | guest 드라이버 (kata-deploy, open 615.71.09). host에는 드라이버를 설치하지 않음 | 없음 | guest 드라이버 | 없음 |
 | GPU 1개의 온디맨드 요금 (시간당) | 1.006 (A10G, `g5.xlarge`) | 약 0.978 (7.824 / 8, 8개를 모두 쓸 때) | 해당 없음 | 약 0.978 | 해당 없음 |
 
-가격은 us-east-1과 us-west-2의 온디맨드 요금으로 계산한 값입니다. `g4dn.metal`의 T4를 일부만 쓰면 GPU 1개당 비용이 올라가요.
+가격은 us-east-1과 us-west-2의 온디맨드 요금으로 계산한 값입니다. `g4dn.metal`의 T4를 일부만 쓰면 GPU 1개당 비용이 올라갑니다.
 
 ## 선택 후 바로 확인할 것
 
-실행 방법과 출력 예시는 해당 핸즈온 페이지에 있습니다. gVisor 조합(`04_install_gpu_stack.sh`, `scripts/ops/verify.sh gvisor v1`)은 실습 계정에서 2026-11-18에 `g5.xlarge`로 실행했습니다. Kata + QEMU(GPU)도 같은 날 `g4dn.metal`에서 `scripts/ops/verify.sh kata-qemu v1`으로 T4 인식과 golden verdict를 확인했어요. NVIDIA upstream CI의 검증 대상은 A100과 H100입니다. 기대 결과와 비교해 직접 검증하세요.
+실행 방법과 출력 예시는 해당 핸즈온 페이지에 있습니다. gVisor 조합(`04_install_gpu_stack.sh`, `scripts/ops/verify.sh gvisor v1`)은 실습 계정에서 `g5.xlarge`로 실행했습니다. Kata + QEMU(GPU)도 `g4dn.metal`에서 `scripts/ops/verify.sh kata-qemu v1`으로 T4 인식과 golden verdict를 확인했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). NVIDIA upstream CI의 검증 대상은 A100과 H100입니다. 기대 결과와 비교해 직접 검증하세요.
 
 | 조합 | 확인 스크립트 | 기대 결과 | 핸즈온 |
 |---|---|---|---|
@@ -107,7 +107,7 @@ GPU 종류, 격리 강도, 운영 부담, 비용은 서로 영향을 주므로 �
 | NVIDIA CI가 T4를 테스트하거나 Kata가 CLH GPU를 지원 | `g4dn.metal`의 검증 상태나 CLH GPU 지원 여부가 바뀜 | Kata 릴리스 노트, upstream `docs/hypervisors.md` |
 
 !!! question "❓ 오해: gVisor를 쓰면 GPU 코드도 VM만큼 격리된다"
-    gVisor는 syscall을 사용자 공간 커널(Sentry)에서 처리하지만, GPU 요청은 ioctl allowlist를 거쳐 host 드라이버로 전달됩니다. gVisor 문서도 nvproxy가 "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves"이며 "no validation of things like DMA buffers"라고 설명해요. 서로 다른 고객의 적대적 코드를 실행한다면 VM 경계(Kata + VFIO)를 먼저 검토하세요. 최신 GPU 때문에 gVisor를 쓴다면 보완 통제와 잔여 위험을 문서로 기록하세요.
+    gVisor는 syscall을 사용자 공간 커널(Sentry)에서 처리하지만, GPU 요청은 ioctl allowlist를 거쳐 host 드라이버로 전달됩니다. gVisor 문서도 nvproxy가 "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves"이며 "no validation of things like DMA buffers"라고 설명합니다. 서로 다른 고객의 적대적 코드를 실행한다면 VM 경계(Kata + VFIO)를 먼저 검토하세요. 최신 GPU 때문에 gVisor를 쓴다면 보완 통제와 잔여 위험을 문서로 기록하세요.
 
 !!! question "❓ 오해: Nitro Sandboxes가 나왔으니 GPU 샌드박스도 관리형으로 해결된다"
     AWS Nitro Sandboxes와 EKS isolated pods(2026-11-09 출시) 문서에는 "GPU and other device passthrough are not supported at launch"라고 명시돼 있습니다. 현재는 CPU 계층에 쓸 수 있는 관리형 대안입니다. GPU 계층은 이 에셋의 gVisor나 Kata + QEMU로 운영하세요.

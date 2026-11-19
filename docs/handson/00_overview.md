@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-런타임 smoke test(`04_install_gpu_stack.sh`)는 이미지(`03_build_push_images.sh`)가 먼저 있어야 하고, 샌드박스 풀(`06_deploy_sandboxes.sh`)은 네임스페이스와 인증(`05_setup_namespaces_auth.sh`)이 먼저 있어야 합니다. 이미지를 건너뛰면 이미지 URI가 없어 `set ... in scripts/config.env` 에러로 멈추고, 네임스페이스 설정을 건너뛰면 `sandbox` 네임스페이스가 없어 풀 배포가 실패합니다. 어느 단계가 어떤 과금 노드를 만드는지 모르면 실습이 끝난 뒤에도 노드가 남아 비용이 나가요. Kata + GPU 구성에는 최소 `g4dn.metal`(8x T4) 한 대가 필요하므로, GPU와 무관한 설정 실수도 시간당 7.8 USD인 노드에서 디버깅하게 됩니다. vCPU 기준인 `Running On-Demand G and VT instances` 쿼터는 문서상 기본값이 0일 수 있어, 먼저 올리지 않으면 `02_create_cluster.sh`의 노드 그룹 생성이 실패합니다.
+런타임 smoke test(`04_install_gpu_stack.sh`)는 이미지(`03_build_push_images.sh`)가 먼저 있어야 하고, 샌드박스 풀(`06_deploy_sandboxes.sh`)은 네임스페이스와 인증(`05_setup_namespaces_auth.sh`)이 먼저 있어야 합니다. 이미지를 건너뛰면 이미지 URI가 없어 `set ... in scripts/config.env` 에러로 멈추고, 네임스페이스 설정을 건너뛰면 `sandbox` 네임스페이스가 없어 풀 배포가 실패합니다. 어느 단계가 어떤 과금 노드를 만드는지 모르면 실습이 끝난 뒤에도 노드가 남아 비용이 나갑니다. Kata + GPU 구성에는 최소 `g4dn.metal`(8x T4) 한 대가 필요하므로, GPU와 무관한 설정 실수도 시간당 7.8 USD인 노드에서 디버깅하게 됩니다. vCPU 기준인 `Running On-Demand G and VT instances` 쿼터는 문서상 기본값이 0일 수 있어, 먼저 올리지 않으면 `02_create_cluster.sh`의 노드 그룹 생성이 실패합니다.
 
 ![a: 놓치기 쉬운 네 가지와 그 결과입니다. 03_build_push_images.sh를 건너뛰면 이미지 URI가 없어 config.env 에러로 멈추고, 05_setup_namespaces_auth.sh를 건너뛰면 sandbox 네임스페이스가 없어 풀 배포가 실패합니다. G and VT 쿼터를 올리지 않으면 02_create_cluster.sh에서 노드 그룹 생성이 실패합니다. 어느 단계가 노드를 켜는지 모르면 실습 뒤에도 노드 요금이 나갑니다. GPU와 무관한 설정 실수를 시간당 7.824 USD인 g4dn.metal에서 디버깅하게 됩니다. b: 이 핸즈온의 대응입니다. 번호 순서대로 실행하고, 각 스크립트는 그 단계에 필요한 설정값이 비었거나 __SET_ME__이면 중단됩니다. 02_create_cluster.sh 전에 실행하는 사전 확인(01_check_prereqs.sh)이 G and VT 쿼터를 조회합니다(읽기 전용). 끝나면 실행하는 정리(08_cleanup.sh)가 클러스터 이름을 입력받은 뒤 CDK 스택을 지우고, 설정에 기록된 AMI는 하나씩 확인한 뒤 지우며, ECR은 --images를 붙일 때만 지웁니다. Kata GPU 노드 추가(kata/gpu_nodes.sh)보다 Kata CPU 노드 추가(kata/cpu_nodes.sh)를 먼저 실행해 c8i.2xlarge에서 리허설하면 g4dn.metal은 GPU passthrough 확인에만 씁니다.](../images/figures/handson-00_overview.svg)
 
@@ -13,9 +13,9 @@
 
 ## Why
 
-- **번호가 실행 순서이고, 빠진 값이 있으면 스크립트가 멈춥니다.** 각 스크립트는 그 단계에 필요한 `scripts/config.env` 변수가 비어 있거나 `__SET_ME__`를 포함하면 멈추고, `g4dn.metal`을 추가하는 배포와 삭제(`08_cleanup.sh`)는 확인 단어를 입력해야 진행돼요.
-- **노드 그룹은 CDK 스택 하나에 차례로 추가합니다.** `WITH_KATA_CPU`나 `WITH_KATA_GPU`를 바꿔 `02_create_cluster.sh`를 다시 실행하면 CDK가 달라진 부분만 변경하므로, gVisor 최소 경로를 검증한 뒤 Kata 노드 그룹을 추가하면 됩니다. 시나리오 자체를 바꿀 때는 `CHANGE_SCENARIO=1`도 붙여야 하고, 없으면 배포 스크립트가 멈춰요.
-- **Kata는 비용이 적은 노드에서 먼저 리허설합니다.** nested virtualization을 지원하는 `c8i.2xlarge`에서 `kata-clh`와 `kata-qemu`를 먼저 실행해 보고, GPU passthrough가 필요할 때만 `g4dn.metal` 노드를 만들어요.
+- **번호가 실행 순서이고, 빠진 값이 있으면 스크립트가 멈춥니다.** 각 스크립트는 그 단계에 필요한 `scripts/config.env` 변수가 비어 있거나 `__SET_ME__`를 포함하면 멈추고, `g4dn.metal`을 추가하는 배포와 삭제(`08_cleanup.sh`)는 확인 단어를 입력해야 진행됩니다.
+- **노드 그룹은 CDK 스택 하나에 차례로 추가합니다.** `WITH_KATA_CPU`나 `WITH_KATA_GPU`를 바꿔 `02_create_cluster.sh`를 다시 실행하면 CDK가 달라진 부분만 변경하므로, gVisor 최소 경로를 검증한 뒤 Kata 노드 그룹을 추가하면 됩니다. 시나리오 자체를 바꿀 때는 `CHANGE_SCENARIO=1`도 붙여야 하고, 없으면 배포 스크립트가 멈춥니다.
+- **Kata는 비용이 적은 노드에서 먼저 리허설합니다.** nested virtualization을 지원하는 `c8i.2xlarge`에서 `kata-clh`와 `kata-qemu`를 먼저 실행해 보고, GPU passthrough가 필요할 때만 `g4dn.metal` 노드를 만듭니다.
 
 **사전 지식:** [시작하기](../getting_started.md)에서 로컬 smoke test와 `scripts/config.env` 준비를 먼저 끝내세요. 런타임 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
@@ -37,7 +37,7 @@
 
 ### 시나리오별 AWS 구성
 
-네 시나리오는 같은 CDK 스택(private EKS API, SSM 터널, KMS 키, 로그)을 쓰고, trainer와 샌드박스가 배치되는 위치만 다릅니다. 그림 원본(`.drawio`)과 화살표별 설명은 저장소의 `diagrams/`에 있어요.
+네 시나리오는 같은 CDK 스택(private EKS API, SSM 터널, KMS 키, 로그)을 쓰고, trainer와 샌드박스가 배치되는 위치만 다릅니다. 그림 원본(`.drawio`)과 화살표별 설명은 저장소의 `diagrams/`에 있습니다.
 
 === "A: EC2 GPU"
 
@@ -55,7 +55,7 @@
 
     [![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
 
-    *그림 요약: 샌드박스도 HyperPod 인스턴스 그룹(ml.g5.xlarge x2)에 올라가고, 이 노드는 한 번 빌드하는 custom AMI(드라이버 580.178.04)로 부팅해요. AWS에서 실행해 보지 않은 실험 경로입니다.*
+    *그림 요약: 샌드박스도 HyperPod 인스턴스 그룹(ml.g5.xlarge x2)에 올라가고, 이 노드는 한 번 빌드하는 custom AMI(드라이버 580.178.04)로 부팅합니다. AWS에서 실행해 보지 않은 실험 경로입니다.*
 
 === "C: CPU 전용"
 
@@ -65,7 +65,7 @@
 
 ### 노드 그룹과 네임스페이스
 
-학습 Job과 샌드박스 pod는 서로 다른 노드 그룹과 네임스페이스를 씁니다. 샌드박스 노드 그룹에는 전용 taint(`gpusandbox/role`)가 있어서, 이 taint를 허용(toleration)하지 않는 pod는 배치되지 않습니다. 이 노드에는 샌드박스 pod와 함께 NVIDIA device plugin 같은 노드 관리용 DaemonSet도 실행돼요.
+학습 Job과 샌드박스 pod는 서로 다른 노드 그룹과 네임스페이스를 씁니다. 샌드박스 노드 그룹에는 전용 taint(`gpusandbox/role`)가 있어서, 이 taint를 허용(toleration)하지 않는 pod는 배치되지 않습니다. 이 노드에는 샌드박스 pod와 함께 NVIDIA device plugin 같은 노드 관리용 DaemonSet도 실행됩니다.
 
 ```mermaid
 flowchart LR
@@ -89,7 +89,7 @@ flowchart LR
     T == "POST /v1/evaluate :8000" ==> G & KCP & KGP
 ```
 
-*그림 요약: 학습할 때는 trainer가 routing ConfigMap이 가리키는 풀을 부릅니다. 풀을 검증할 때는 `sandbox-probe` 계정의 Job이 부르고요.*
+*그림 요약: 학습할 때는 trainer가 routing ConfigMap이 가리키는 풀을 부르고, 풀을 검증할 때는 `sandbox-probe` 계정의 Job이 부릅니다.*
 
 | 노드 그룹 | 기본 인스턴스 | RuntimeClass | 샌드박스 풀 (`06_deploy_sandboxes.sh`의 인자) | 만드는 스크립트 |
 |---|---|---|---|---|
@@ -103,7 +103,7 @@ flowchart LR
     `scripts/02_create_cluster.sh --hyperpod`(B1)는 trainer 노드 그룹을 만들지 않습니다. 학습은 같은 EKS 클러스터에 연결한 HyperPod 인스턴스 그룹(`ml.g5.2xlarge`, 1대)에서 실행됩니다. B2(실험)는 `--hyperpod-b2`로 EC2 GPU 노드 그룹 없이 클러스터를 만들고, 샌드박스도 HyperPod에 배치합니다(위 B2 탭). 자세한 내용은 [07 HyperPod 시나리오](07_hyperpod.md)를 보세요.
 
 !!! tip "시나리오 C (GPU 없음, c8i 단독)"
-    GPU 쿼터가 없거나 비용을 먼저 줄이려면 `scripts/02_create_cluster.sh --cpu-only`로 시작하세요. system 노드와 `c8i.2xlarge` 한 대만으로 세 런타임의 CPU 풀(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)을 실행하고, 모델 없이 reward 배치를 보내는 루프(`scripts/ops/simulate.sh`)로 버전 교체(`scripts/ops/rollout.sh`)까지 진행합니다. 컴퓨트는 시간당 약 0.57 USD(추정)이고, 순서는 [10 c8i 단독 저비용 경로](10_cpu_only.md)에 있어요.
+    GPU 쿼터가 없거나 비용을 먼저 줄이려면 `scripts/02_create_cluster.sh --cpu-only`로 시작하세요. system 노드와 `c8i.2xlarge` 한 대만으로 세 런타임의 CPU 풀(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)을 실행하고, 모델 없이 reward 배치를 보내는 루프(`scripts/ops/simulate.sh`)로 버전 교체(`scripts/ops/rollout.sh`)까지 진행합니다. 컴퓨트는 시간당 약 0.57 USD(추정)이고, 순서는 [10 c8i 단독 저비용 경로](10_cpu_only.md)에 있습니다.
 
 ### 요청 경로
 
@@ -130,7 +130,7 @@ sequenceDiagram
 
 ### 인프라와 접속 (CDK, 터널)
 
-`02_create_cluster.sh`가 `cdk/deploy.sh`로 만드는 CloudFormation 스택 `<CLUSTER_NAME>-cdk`에는 VPC(AZ 2개, NAT gateway 1개), private endpoint만 활성화한 EKS 클러스터, add-on, 시나리오별 노드 그룹, access instance가 들어 있습니다. 클러스터 내부 구성 요소(device plugin, RuntimeClass, kata-deploy, 샌드박스 풀)는 CDK가 아니라 `scripts/`의 스크립트가 설치해요.
+`02_create_cluster.sh`가 `cdk/deploy.sh`로 만드는 CloudFormation 스택 `<CLUSTER_NAME>-cdk`에는 VPC(AZ 2개, NAT gateway 1개), private endpoint만 활성화한 EKS 클러스터, add-on, 시나리오별 노드 그룹, access instance가 들어 있습니다. 클러스터 내부 구성 요소(device plugin, RuntimeClass, kata-deploy, 샌드박스 풀)는 CDK가 아니라 `scripts/`의 스크립트가 설치합니다.
 
 ```mermaid
 flowchart LR
@@ -141,7 +141,7 @@ flowchart LR
 
 *그림 요약: 인터넷에서 클러스터 API로 들어오는 경로는 없고, 작업 PC는 SSM 세션 하나로만 API에 접속합니다.*
 
-kubectl이나 helm을 쓰는 단계(`04_install_gpu_stack.sh` 이후, HyperPod 스크립트 포함)는 두 번째 터미널에서 `cdk/tunnel.sh`로 터널을 열어 둔 상태로 실행합니다. 터널을 열려면 작업 PC에 Session Manager plugin이 있어야 하고, `cdk/tunnel.sh`가 kubectl context `<CLUSTER_NAME>-tunnel`을 만들어요. 터널을 여는 방법은 [01 클러스터와 이미지](01_cluster_and_images.md)에, 스택의 보안 기본값은 [Production 09 CDK](../production/09_cdk.md)에 있습니다.
+kubectl이나 helm을 쓰는 단계(`04_install_gpu_stack.sh` 이후, HyperPod 스크립트 포함)는 두 번째 터미널에서 `cdk/tunnel.sh`로 터널을 열어 둔 상태로 실행합니다. 터널을 열려면 작업 PC에 Session Manager plugin이 있어야 하고, `cdk/tunnel.sh`가 kubectl context `<CLUSTER_NAME>-tunnel`을 만듭니다. 터널을 여는 방법은 [01 클러스터와 이미지](01_cluster_and_images.md)에, 스택의 보안 기본값은 [Production 09 CDK](../production/09_cdk.md)에 있습니다.
 
 ## 단계 순서
 
@@ -205,7 +205,7 @@ flowchart LR
 | G and VT vCPU (시나리오 A) | 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2), 버전 교체 중 24 (`g5.xlarge` 4대) | 112 (16 + `g4dn.metal` 96), 버전 교체 중 120 |
 | 이런 경우에 | 처음 해 볼 때, gVisor의 격리 수준으로 충분할 때 | VM 경계 격리를 비교하거나 Kata + GPU가 필요할 때 |
 
-런타임이 달라도 샌드박스 이미지, `/v1/evaluate` API, 검증 스크립트(`ops/verify.sh`)는 같습니다. 09 데모 사이트는 클러스터와 독립된 선택 단계라, 저장소에 포함된 녹화 기록(노트북의 CPU 풀로 만든 것)으로 바로 배포할 수 있어요.
+런타임이 달라도 샌드박스 이미지, `/v1/evaluate` API, 검증 스크립트(`ops/verify.sh`)는 같습니다. 09 데모 사이트는 클러스터와 독립된 선택 단계라, 저장소에 포함된 녹화 기록(노트북의 CPU 풀로 만든 것)으로 바로 배포할 수 있습니다.
 
 ## 소요 시간과 비용
 
@@ -234,11 +234,11 @@ flowchart LR
       --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0
     ```
 
-    **확인할 것:** 명령은 `"type": "ConfigUpdate"`가 포함된 JSON을 출력합니다. 몇 분 뒤 터널을 연 상태에서 `kubectl get nodes -l gpusandbox/kata-gpu=true`를 실행해 노드가 나오지 않으면 됩니다. 노드 그룹마다 넣을 값과 다시 늘리는 법은 [99 정리](99_cleanup.md)의 "일시 정지" 절에 있어요.
+    **확인할 것:** 명령은 `"type": "ConfigUpdate"`가 포함된 JSON을 출력합니다. 몇 분 뒤 터널을 연 상태에서 `kubectl get nodes -l gpusandbox/kata-gpu=true`를 실행해 노드가 나오지 않으면 됩니다. 노드 그룹마다 넣을 값과 다시 늘리는 법은 [99 정리](99_cleanup.md)의 "일시 정지" 절에 있습니다.
 
 ## 사전 준비
 
-1. **도구:** `aws`, `cdk`(AWS CDK CLI 2.1148.1 이상), `node`(Node.js 22 또는 24), `kubectl`, `helm`, `docker`, `python3`, `jq`, `session-manager-plugin`(Session Manager plugin for the AWS CLI). `01_check_prereqs.sh`가 이 목록을 확인해요. 이미지 빌드에 쓰는 buildx는 확인하지 않으니 `docker buildx version`으로 따로 보세요. 시나리오 B는 `git`도 필요합니다(`hyperpod/create.sh`가 확인). CDK를 처음 쓰기 전의 준비(`cdk/requirements.txt` 설치, `cdk bootstrap`)는 [01 클러스터와 이미지](01_cluster_and_images.md)에 있습니다.
+1. **도구:** `aws`, `cdk`(AWS CDK CLI 2.1148.1 이상), `node`(Node.js 22 또는 24), `kubectl`, `helm`, `docker`, `python3`, `jq`, `session-manager-plugin`(Session Manager plugin for the AWS CLI). `01_check_prereqs.sh`가 이 목록을 확인합니다. 이미지 빌드에 쓰는 buildx는 확인하지 않으니 `docker buildx version`으로 따로 보세요. 시나리오 B는 `git`도 필요합니다(`hyperpod/create.sh`가 확인). CDK를 처음 쓰기 전의 준비(`cdk/requirements.txt` 설치, `cdk bootstrap`)는 [01 클러스터와 이미지](01_cluster_and_images.md)에 있습니다.
 2. **설정 파일:** [시작하기](../getting_started.md)에서 만든 `scripts/config.env`를 열어 `SCENARIO`, `WITH_KATA_CPU`, `WITH_KATA_GPU`를 확인합니다. 파일이 없을 때만 `cp scripts/config.env.example scripts/config.env`로 만드세요. 이미 채운 파일에 다시 복사하면 값이 예시값으로 돌아갑니다. `ADMIN_PRINCIPAL_ARN`을 비워 두면 지금 쓰는 IAM 사용자나 역할이 클러스터 관리자가 됩니다. 역할 세션에서는 역할 ARN을 세션 정보로 추정하므로, 역할에 path가 있으면 `ADMIN_PRINCIPAL_ARN`에 전체 ARN을 적으세요(자세히는 [01 클러스터와 이미지](01_cluster_and_images.md)).
 3. **EC2 쿼터 (vCPU 기준):**
     - `Running On-Demand G and VT instances`: 최소 경로 16, 전체 경로 112(`g4dn.metal` 한 대가 96). 버전 교체(`ops/rollout.sh`)는 v1을 둔 채 v2 pod 두 개를 띄우므로 그동안 `g5.xlarge` 두 대(8)가 더 필요해 각각 24와 120입니다. 문서상 기본값은 0일 수 있습니다.
@@ -252,7 +252,7 @@ flowchart LR
     *실습 계정의 예시 화면입니다(2026-11-14, ap-south-1). 계정 식별자는 가렸고, 값은 계정과 리전마다 다릅니다.*
 4. **리전:** 기본값은 `us-west-2`이고, 그 리전의 인스턴스 지원과 AZ별 제공 여부는 `01_check_prereqs.sh`가 출력합니다.
 5. **빌드 호스트:** 베이스 이미지(PyTorch, vLLM)가 크므로, 작업 PC가 arm64라면 디스크 100 GB 이상인 x86_64 호스트에서 `03_build_push_images.sh`를 실행하세요.
-6. **계정:** 운영(production) 계정 대신 실습용 계정을 권장합니다. CDK(CloudFormation)에는 EC2와 VPC, EKS, IAM 역할, KMS, CloudWatch Logs, Lambda, SSM 리소스를 만들 권한이 필요해요.
+6. **계정:** 운영(production) 계정 대신 실습용 계정을 권장합니다. CDK(CloudFormation)에는 EC2와 VPC, EKS, IAM 역할, KMS, CloudWatch Logs, Lambda, SSM 리소스를 만들 권한이 필요합니다.
 
 ## 확인 방법
 
@@ -271,13 +271,7 @@ flowchart LR
 | `ops/verify.sh` | 2번에서 4번 검사를 통과한 뒤 `pool sandbox-<runtime>-<version> verified`. 1번 커널 비교는 스크립트가 판정하지 않으니 출력된 두 값이 다른지 직접 확인 |
 
 !!! warning "검증 상태"
-    AWS에서 실행한 범위는 다음과 같습니다.
-
-    - **2026-11-14:** 저자가 실습 계정(us-west-2)에서 시나리오 C의 CDK 스택을 두 번 배포하고 삭제하면서 Kata CPU 노드 추가(`kata/cpu_nodes.sh`)까지 실행했습니다. 위 표의 `02_create_cluster.sh`(시나리오 C)와 `kata/cpu_nodes.sh` 신호가 이때의 실제 출력입니다.
-    - **2026-11-18:** 실습 계정(us-west-2)에서 `03_build_push_images.sh`(이미지 세 개), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1개)과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images`를 실행했습니다. smoke pod의 `cuda ok: NVIDIA A10G 2048.0`과 `ops/verify.sh` 통과는 이때 확인한 것입니다.
-    - **클러스터를 만든 방법 (2026-11-18):** GPU 노드 그룹을 포함한 처음 생성이 `InsufficientInstanceCapacity`로 전부 롤백됐습니다. 그래서 system 노드만 있는 구성(`02_create_cluster.sh --hyperpod-b2`)으로 먼저 만들고, `CHANGE_SCENARIO=1`로 B1(gVisor 노드 그룹 추가)과 A(trainer 추가)로 차례로 업데이트했어요.
-    - **2026-11-18 (계속):** 같은 날 다른 클러스터에서 `kata/gpu_nodes.sh`(IOMMU AMI, GPU Operator, `pgpu=8`), `kata/cpu_nodes.sh`, `kata-qemu`와 CPU 풀 세 개의 `ops/verify.sh`, 다섯 개 풀의 `ops/bench.sh`를 실행했습니다([08](08_benchmark.md), [03](03_kata.md)).
-    - **실행하지 않은 것:** 학습 중의 `ops/rollout.sh`(시나리오 A), HyperPod B1과 B2(HyperPod 클러스터 생성부터), 실험용 Kata CLH GPU(시도했지만 VM이 시작되지 않음). 이 단계의 신호는 스크립트 코드를 보고 적은 것입니다.
+    시나리오 A의 필수 경로(`02`부터 `08`까지), 시나리오 C, Kata GPU와 Kata CPU, 다섯 개 풀의 `ops/bench.sh`는 실습 계정에서 실행했습니다. 위 표의 `02_create_cluster.sh`(시나리오 C)와 `kata/cpu_nodes.sh` 신호, smoke pod의 `cuda ok: NVIDIA A10G 2048.0`, `ops/verify.sh` 통과는 그 실행의 실제 출력입니다. 학습 중의 `ops/rollout.sh`(시나리오 A)와 HyperPod B1, B2(HyperPod 클러스터 생성부터)는 실행하지 않았고, 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 이 단계의 신호는 스크립트 코드를 보고 적은 것입니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
     로컬(CPU, AWS 없음)에서는 `pytest` 테스트(당시 94개, 현재는 105개, 매니페스트 렌더링과 user data 포함)와 `cdk/tests`의 CDK 테스트 18개를 통과했습니다. AWS 단계는 각 페이지의 "확인할 것"으로 직접 검증하세요.
 

@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-이 핸즈온에서 gVisor는 A10G(`g5.xlarge`)에서, Kata QEMU는 T4(`g4dn.metal`)에서 실행됩니다. 그래서 두 풀의 측정값을 그대로 비교하면 런타임 차이와 GPU 차이가 섞입니다. 블로그와 CI에 공개된 boot time도 측정 구간, 머신, 버전이 서로 달라서 실습 환경에 그대로 적용할 수 없어요.
+이 핸즈온에서 gVisor는 A10G(`g5.xlarge`)에서, Kata QEMU는 T4(`g4dn.metal`)에서 실행됩니다. 그래서 두 풀의 측정값을 그대로 비교하면 런타임 차이와 GPU 차이가 섞입니다. 블로그와 CI에 공개된 boot time도 측정 구간, 머신, 버전이 서로 달라서 실습 환경에 그대로 적용할 수 없습니다.
 
 ![두 패널 그림입니다. a: 벤치마크 harness가 relu_bias_triton을 gVisor 풀(g5.xlarge, A10G)과 Kata QEMU 풀(g4dn.metal, T4)에 보냅니다. 두 풀의 숫자 차이에는 런타임 차이와 GPU 차이가 섞여 있어 분리할 수 없습니다. b: 같은 harness가 relu_bias_torch_only를 같은 c8i.2xlarge 노드의 Kata CLH CPU 풀(Cloud Hypervisor)과 Kata QEMU CPU 풀(QEMU)에 보냅니다. 노드, 이미지, golden이 같고 RuntimeClass만 다르므로, 숫자 차이는 RuntimeClass에 따라 함께 달라지는 hypervisor와 pod당 예약량(overhead.podFixed)의 차이입니다. 입력 seed는 요청마다 새로 뽑고 nested virtualization에서 얻은 값이므로, 이 노드 안의 상대 비교로만 씁니다.](../images/figures/handson-08_benchmark.svg)
 
@@ -14,10 +14,10 @@
 ## Why
 
 - **같은 golden 커널, 같은 harness, 같은 API로 측정합니다.** GPU 풀에는 `relu_bias_triton`, CPU 풀에는 `relu_bias_torch_only`를 보냅니다.
-- **결과를 JSONL 파일로 저장합니다.** 저장소 루트에 생기는 `bench-<timestamp>.jsonl`의 값을 표로 옮기기 쉬워요.
+- **결과를 JSONL 파일로 저장합니다.** 저장소 루트에 생기는 `bench-<timestamp>.jsonl`의 값을 표로 옮기기 쉽습니다.
 - **런타임 외의 조건이 같은 비교를 따로 정리합니다.** 같은 GPU 종류 안의 비교와, 같은 `c8i` 노드에서 Kata CLH CPU와 Kata QEMU CPU를 비교하는 경우입니다.
 
-**사전 지식:** 비교할 풀이 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)으로 배포되어 있어야 합니다(Kata는 [03 Kata 샌드박스](03_kata.md)에서 노드와 런타임을 준비하고, 04의 `scripts/06_deploy_sandboxes.sh`로 측정할 v1 풀을 배포합니다. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다). 세 런타임의 구조 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있어요.
+**사전 지식:** 비교할 풀이 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)으로 배포되어 있어야 합니다(Kata는 [03 Kata 샌드박스](03_kata.md)에서 노드와 런타임을 준비하고, 04의 `scripts/06_deploy_sandboxes.sh`로 측정할 v1 풀을 배포합니다. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다). 세 런타임의 구조 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **cold start**: 이 페이지에서는 pod가 만들어진 시각부터 마지막으로 Ready가 된 시각까지를 뜻합니다.
@@ -75,7 +75,7 @@ scripts/ops/bench.sh 64     # more requests per pool
 {"address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000", "golden": "relu_bias_triton", "runtime": "gvisor", "requests": 32, "ok": 32, ...}
 ```
 
-마지막 줄은 `results: <저장소 경로>/bench-<YYYYmmdd-HHMMSS>.jsonl`입니다. JSON 줄의 `ok`가 `requests`와 같아야 정상이에요.
+마지막 줄은 `results: <저장소 경로>/bench-<YYYYmmdd-HHMMSS>.jsonl`입니다. JSON 줄의 `ok`가 `requests`와 같아야 정상입니다.
 
 cold start 값은 터미널에만 출력되고 JSONL에는 저장되지 않으니 따로 기록해 두세요. 스크립트는 v1 풀만 측정합니다. v2는 seed 수(5개)가 달라 평가 시간이 다를 수 있으므로 같은 버전끼리 비교하세요.
 
@@ -97,7 +97,7 @@ cold start 값은 터미널에만 출력되고 JSONL에는 저장되지 않으�
 
 ## 평가 지연에 포함되는 과정
 
-`duration_s`는 서버가 요청 하나를 맡은 뒤 verdict를 낼 때까지 걸린 시간으로, 커널 실행 외의 과정도 모두 들어갑니다. 클라이언트가 pod를 기다린 시간은 들어가지 않아요. 서버는 요청마다 새 프로세스 트리를 만들고 아래 과정을 실행합니다. 그림의 CUDA 초기화와 Triton 컴파일은 GPU 풀의 `relu_bias_triton`에만 해당해요. CPU 풀에서 쓰는 `relu_bias_torch_only`는 CPU 텐서에 PyTorch 연산만 실행합니다.
+`duration_s`는 서버가 요청 하나를 맡은 뒤 verdict를 낼 때까지 걸린 시간으로, 커널 실행 외의 과정도 모두 들어갑니다. 클라이언트가 pod를 기다린 시간은 들어가지 않습니다. 서버는 요청마다 새 프로세스 트리를 만들고 아래 과정을 실행합니다. 그림의 CUDA 초기화와 Triton 컴파일은 GPU 풀의 `relu_bias_triton`에만 해당합니다. CPU 풀에서 쓰는 `relu_bias_torch_only`는 CPU 텐서에 PyTorch 연산만 실행합니다.
 
 ```mermaid
 flowchart LR
@@ -122,17 +122,17 @@ warmup 3번과 timed 20번은 서버 기본값(`HARNESS_WARMUP`, `HARNESS_ITERS`
 | GPU 종류가 다른 풀끼리 | A10G 대 T4 | 오버헤드 비교에 쓰지 않습니다. speedup은 GPU별로 따로 해석합니다 |
 
 - **처리량은 Ready pod 수에 따라 달라집니다.** pod 하나가 한 번에 평가 하나만 처리하기 때문입니다. 기본 replica는 `gvisor` 2, `kata-qemu` 4, `kata-clh` 2이고 CPU 풀은 각 2입니다. replica 수가 다른 풀은 전체 처리량과 함께 Ready pod 수로 나눈 pod당 값도 기록해 비교하세요.
-- **요청 수를 너무 크게 정하지 마세요.** pod는 한 번에 평가를 하나만 처리하므로 클라이언트는 비어 있는 pod를 기다립니다. 대기 시간이 600초(acquire timeout)를 넘으면 그 요청은 `sandbox_error`가 되어 `ok` 수가 줄어요.
+- **요청 수를 너무 크게 정하지 마세요.** pod는 한 번에 평가를 하나만 처리하므로 클라이언트는 비어 있는 pod를 기다립니다. 대기 시간이 600초(acquire timeout)를 넘으면 그 요청은 `sandbox_error`가 되어 `ok` 수가 줄어듭니다.
 - **nested virtualization에서 얻은 숫자는 bare metal에 그대로 적용되지 않습니다.** AWS는 성능이 중요한 가상화 워크로드에 bare metal을 권장합니다. `c8i`의 CLH 대 QEMU 결과는 두 hypervisor의 상대 비교로만 쓰세요.
-- **같은 GPU 종류에서 `ref_ms_median`이 다르면** 런타임이 kernel launch와 동기화 과정에 추가 비용을 발생시킨다는 뜻일 수 있습니다(추론). 이 harness는 host clock과 `torch.cuda.synchronize()`로 측정하므로 launch 비용이 결과에 포함돼요.
+- **같은 GPU 종류에서 `ref_ms_median`이 다르면** 런타임이 kernel launch와 동기화 과정에 추가 비용을 발생시킨다는 뜻일 수 있습니다(추론). 이 harness는 host clock과 `torch.cuda.synchronize()`로 측정하므로 launch 비용이 결과에 포함됩니다.
 - **KernelBench 수치와 직접 비교하지 않습니다.** KernelBench는 L2 flush와 CUDA event로 시간을 측정하고, 이 harness는 host clock과 반복마다 다른 입력을 씁니다.
 
 !!! question "❓ 오해: gVisor와 Kata의 숫자를 나란히 놓으면 런타임 비교가 된다"
-    이 핸즈온의 gVisor 풀(`g5.xlarge`, A10G)과 Kata GPU 풀(`g4dn.metal`, T4)은 GPU, 인스턴스, replica 수가 모두 달라서, 두 풀의 측정값 차이 중 런타임 때문에 생긴 부분만 따로 구할 수 없어요. 런타임을 비교할 때는 같은 노드의 Kata CLH CPU와 Kata QEMU CPU처럼 런타임 외의 조건이 모두 같은 두 풀을 쓰세요.
+    이 핸즈온의 gVisor 풀(`g5.xlarge`, A10G)과 Kata GPU 풀(`g4dn.metal`, T4)은 GPU, 인스턴스, replica 수가 모두 달라서, 두 풀의 측정값 차이 중 런타임 때문에 생긴 부분만 따로 구할 수 없습니다. 런타임을 비교할 때는 같은 노드의 Kata CLH CPU와 Kata QEMU CPU처럼 런타임 외의 조건이 모두 같은 두 풀을 쓰세요.
 
 ## cold start를 다시 측정하는 방법
 
-스크립트가 출력하는 cold start(pod 생성부터 마지막으로 Ready가 된 시각까지)에는 정의상 다음 시간이 모두 포함됩니다. pod가 노드보다 먼저 만들어졌다면 노드가 준비되기를 기다린 시간도 포함돼요.
+스크립트가 출력하는 cold start(pod 생성부터 마지막으로 Ready가 된 시각까지)에는 정의상 다음 시간이 모두 포함됩니다. pod가 노드보다 먼저 만들어졌다면 노드가 준비되기를 기다린 시간까지 들어갑니다.
 
 - 스케줄링과 이미지 pull (CUDA PyTorch 이미지는 큽니다)
 - 런타임 시작: gVisor Sentry, 또는 Kata VM 부팅. deployment 템플릿 주석에 따르면 GPU VM은 부팅 전에 guest 메모리를 모두 pin하므로 첫 readiness까지 몇 분이 걸릴 수 있습니다
@@ -152,13 +152,13 @@ scripts/ops/bench.sh
 
 아래 결과 표의 값(2차 측정)은 이 방법으로 모든 풀을 재시작한 뒤 측정했습니다.
 
-`maxSurge: 0`이라서 pod가 하나씩 교체됩니다. gVisor처럼 노드당 pod가 하나인 풀에서는 이전 pod가 GPU를 반환한 뒤에 새 pod가 시작돼요. 다른 풀을 측정하려면 Deployment 이름의 `kata-qemu`를 그 런타임 이름(예: `gvisor`)으로 바꾸세요.
+`maxSurge: 0`이라서 pod가 하나씩 교체됩니다. gVisor처럼 노드당 pod가 하나인 풀에서는 이전 pod가 GPU를 반환한 뒤에 새 pod가 시작됩니다. 다른 풀을 측정하려면 Deployment 이름의 `kata-qemu`를 그 런타임 이름(예: `gvisor`)으로 바꾸세요.
 
 **문제가 생기면:** 둘째 명령이 timeout으로 끝나면 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목과, Kata라면 "Kata" 항목을 보세요.
 
 ## 결과 기록 양식
 
-아래 표는 2026-11-18 실습 계정에서 측정한 값(2차 측정, 이미지 캐시 상태)입니다. 직접 측정할 때도 같은 열과 측정 조건을 기록하면 나중에 비교할 수 있어요.
+아래 표는 2026-11-18 실습 계정에서 측정한 값(2차 측정, 이미지 캐시 상태)입니다. 직접 측정할 때도 같은 열과 측정 조건을 기록하면 나중에 비교할 수 있습니다.
 
 | runtime | 인스턴스 (GPU) | Ready pod | cold start (s, pod 중앙값) | eval p50 (s) | eval p95 (s) | 처리량 (eval/s) | pod당 처리량 | speedup 중앙값 | ref_ms 중앙값 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -169,7 +169,7 @@ scripts/ops/bench.sh
 | `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.225 | 4.317 | 0.234 | 0.234 | n/a | 0.0062 |
 | `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.058 | 4.139 | 0.244 | 0.244 | n/a | 0.0061 |
 
-- **gVisor 행은 `g5.2xlarge`에서 측정했습니다.** 기본값 `g5.xlarge`에 그때 On-Demand 용량이 없어서, 같은 A10G에 vCPU와 메모리가 더 많은 `g5.2xlarge`를 썼어요.
+- **gVisor 행은 `g5.2xlarge`에서 측정했습니다.** 기본값 `g5.xlarge`에 그때 On-Demand 용량이 없어서, 같은 A10G에 vCPU와 메모리가 더 많은 `g5.2xlarge`를 썼습니다.
 - **pod당 처리량**은 처리량을 Ready pod 수로 나눈 값입니다(`kata-qemu`: 0.317 / 4 = 0.079).
 - **CPU 풀의 speedup**은 JSONL에 측정값(0.86에서 0.92)이 있지만, 양식대로 n/a로 둡니다.
 - 측정한 다섯 풀은 1차와 2차 모두 32개 요청 중 32개를 `ok`로 반환했습니다. `kata-clh`는 두 측정 모두에서 빠졌습니다.
@@ -184,7 +184,7 @@ scripts/ops/bench.sh
 - **노드 구성:** gVisor `g5.2xlarge` 1대(`GVISOR_NODES=1`), Kata GPU `g4dn.metal` 1대(`kata-qemu` replica 4), Kata CPU `c8i.2xlarge` 1대(`KATA_CPU_REPLICAS=1`, CPU 풀마다 replica 1)
 - **이미지 캐시:** 2차 측정. 배포 직후 1차 측정을 한 뒤, 모든 풀을 `kubectl -n sandbox rollout restart`로 재시작하고 이미지가 노드에 캐시된 상태에서 측정
 
-**1차 측정(배포 직후)의 cold start는 표에 넣지 않았습니다.** 풀마다 이미지 캐시 상태가 달랐고, 런타임과 무관한 시간이 섞여 있어요.
+**1차 측정(배포 직후)의 cold start는 표에 넣지 않았습니다.** 풀마다 이미지 캐시 상태가 달랐고, 런타임과 무관한 시간이 섞여 있습니다.
 
 - `gvisor-cpu` 141 s: c8i 노드의 첫 이미지 pull 포함
 - `kata-qemu` 약 1235 s: [03 Kata 샌드박스](03_kata.md)의 `vfio_iommu_type1` 수정 전까지 약 20분 동안 VM 시작에 실패한 시간 포함
@@ -218,7 +218,7 @@ PY
 
 ### 관찰 (2026-11-18)
 
-- **같은 c8i 노드, 같은 이미지와 golden:** eval p50은 `gvisor-cpu` 3.76 s, `kata-qemu-cpu` 4.058 s, `kata-clh-cpu` 4.225 s였습니다. 이미지가 캐시된 상태의 cold start는 세 풀 모두 10에서 11 s였어요. nested virtualization에서 얻은 값이므로 이 노드 안의 상대 비교로만 씁니다.
+- **같은 c8i 노드, 같은 이미지와 golden:** eval p50은 `gvisor-cpu` 3.76 s, `kata-qemu-cpu` 4.058 s, `kata-clh-cpu` 4.225 s였고, 이미지가 캐시된 상태의 cold start는 세 풀 모두 10에서 11 s였습니다. nested virtualization에서 얻은 값이므로 이 노드 안의 상대 비교로만 씁니다.
 - **GPU 풀의 cold start:** gVisor(A10G)는 16 s, Kata QEMU(T4)는 pod마다 30에서 36 s였습니다. GPU가 다르므로(A10G 대 T4) "해석하는 방법"의 규칙대로 이 차이는 오버헤드 비교가 아닙니다.
 - **GPU별 값:** `ref_ms` 중앙값은 A10G 0.58 ms, T4 1.15 ms였고, speedup은 A10G 1.75, T4 1.79였습니다.
 
@@ -237,14 +237,14 @@ PY
 
 - **결과 표는 한 번의 배포에서 얻은 값입니다.** 2026-11-18 실습 계정에서 배포 직후(1차)와 풀 재시작 뒤(2차) 두 번 측정했고, 표는 2차입니다. replica 수도 기본값과 달랐습니다(`gvisor` 1, CPU 풀 각 1).
 - **runc 기준선이 없습니다.** 그래서 gVisor의 오버헤드를 직접 계산할 수 없습니다.
-- **Kata CLH GPU는 upstream에서 지원하지 않습니다.** 2026-11-18 실행에서는 artifact 경로를 채운 뒤에도 실험용 `kata-clh` 풀의 VM이 시작되지 않아(`create container timeout`) 측정하지 못했어요([03 Kata 샌드박스](03_kata.md)의 3단계).
+- **Kata CLH GPU는 upstream에서 지원하지 않습니다.** 2026-11-18 실행에서는 artifact 경로를 채운 뒤에도 실험용 `kata-clh` 풀의 VM이 시작되지 않아(`create container timeout`) 측정하지 못했습니다([03 Kata 샌드박스](03_kata.md)의 3단계).
 - **nested virtualization 결과는 상대 비교용입니다.**
 - **cold start는 1초 해상도입니다.** Kubernetes timestamp가 초 단위라서 1초 미만의 차이는 측정할 수 없습니다.
 - **v1 풀만 측정합니다.** 스크립트에는 풀이 있는지 확인하는 pod selector, cold start를 읽는 pod selector, Service 주소 세 곳에 `v1`이 고정되어 있습니다. v2를 측정하려면 세 곳을 모두 바꿔야 합니다.
 
 ## 소요 시간과 비용
 
-벤치마크는 풀마다 Job 하나만 실행합니다. 2026-11-18 2차 측정에서 평가 구간(32 ÷ 처리량으로 계산)은 풀마다 약 100 s(`kata-qemu`)에서 약 300 s(`gvisor`)였고, 다섯 풀을 합하면 약 13분이었습니다. Job 생성, cold start 출력, 풀 재시작 시간은 이 값에 들어 있지 않아요. 비용은 그동안 발생하는 노드 요금입니다. 이 중 `g4dn.metal`이 시간당 7.824 USD로 가장 비쌉니다(us-east-1과 us-west-2 온디맨드 요금). gVisor 노드로 쓴 `g5.2xlarge`는 시간당 1.212 USD, `c8i.2xlarge`는 시간당 0.37484 USD입니다(같은 기준). 측정을 마치면 [99 정리](99_cleanup.md)에 따라 GPU 노드 그룹을 0으로 줄이거나 삭제하세요.
+벤치마크는 풀마다 Job 하나만 실행합니다. 2026-11-18 2차 측정에서 평가 구간(32 ÷ 처리량으로 계산)은 풀마다 약 100 s(`kata-qemu`)에서 약 300 s(`gvisor`)였고, 다섯 풀을 합하면 약 13분이었습니다. Job 생성, cold start 출력, 풀 재시작 시간은 이 값에 들어 있지 않습니다. 비용은 그동안 발생하는 노드 요금입니다. 이 중 `g4dn.metal`이 시간당 7.824 USD로 가장 비쌉니다(us-east-1과 us-west-2 온디맨드 요금). gVisor 노드로 쓴 `g5.2xlarge`는 시간당 1.212 USD, `c8i.2xlarge`는 시간당 0.37484 USD입니다(같은 기준). 측정을 마치면 [99 정리](99_cleanup.md)에 따라 GPU 노드 그룹을 0으로 줄이거나 삭제하세요.
 
 ## 확인 방법
 

@@ -4,20 +4,20 @@
 
 ## 기존 Pain Point
 
-GPU 노드를 띄운 뒤에야 import 오류나 설정 누락을 발견하면, 고치는 동안에도 노드 비용이 나갑니다. 스크립트가 읽는 값 중에는 이미지 URI나 AMI ID처럼 앞 단계가 끝나야 생기는 값도 있어요. EC2만 쓸지, HyperPod를 함께 쓸지, Production 구성으로 갈지에 따라 실행할 스크립트도 달라집니다.
+GPU 노드를 띄운 뒤에야 import 오류나 설정 누락을 발견하면, 고치는 동안에도 노드 비용이 나갑니다. 스크립트가 읽는 값 중에는 이미지 URI나 AMI ID처럼 앞 단계가 끝나야 생기는 값도 있습니다. EC2만 쓸지, HyperPod를 함께 쓸지, Production 구성으로 갈지에 따라 실행할 스크립트도 달라집니다.
 
 ![a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 105개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.](images/figures/getting_started.svg)
 
-*그림 요약: (a)는 GPU 노드부터 띄우는 순서이고, (b)는 로컬 CPU에서 pytest와 dry run을 마치고 설정 파일을 채운 뒤 경로를 고르는 순서입니다. AWS 노드는 그다음에 띄우고, 시나리오 C에서는 GPU 노드 없이 CPU 샌드박스를 실행해요.*
+*그림 요약: (a)는 GPU 노드부터 띄우는 순서이고, (b)는 로컬 CPU에서 pytest와 dry run을 마치고 설정 파일을 채운 뒤 경로를 고르는 순서입니다. AWS 노드는 그다음에 띄우고, 시나리오 C에서는 GPU 노드 없이 CPU 샌드박스를 실행합니다.*
 
 
 ## Why
 
-- **AWS 비용 없이 파이프라인부터 확인합니다.** 샌드박스 서버, 2-프로세스 harness, 인증, 라우팅, reward 함수는 CPU에서도 같은 코드로 실행돼요.
+- **AWS 비용 없이 파이프라인부터 확인합니다.** 샌드박스 서버, 2-프로세스 harness, 인증, 라우팅, reward 함수는 CPU에서도 같은 코드로 실행됩니다.
 - **저자가 확인한 범위를 같은 명령으로 재현합니다.** pytest와 GRPO dry run 2 step은 macOS(CPU 전용)에서 실행해 확인했습니다(당시 테스트 94개, 현재는 105개).
-- **설정은 한 파일에 모읍니다.** 모든 스크립트가 `scripts/lib.sh`를 거쳐 `scripts/config.env`를 읽습니다. 필요한 값이 비어 있거나 `__SET_ME__` 그대로이면 스크립트가 그 자리에서 멈춰요.
+- **설정은 한 파일에 모읍니다.** 모든 스크립트가 `scripts/lib.sh`를 거쳐 `scripts/config.env`를 읽습니다. 필요한 값이 비어 있거나 `__SET_ME__` 그대로이면 스크립트가 그 자리에서 멈춥니다.
 
-**사전 지식:** 터미널, `git`, Python 가상 환경을 다룰 수 있으면 충분하고, 로컬 단계(1~4장)에는 Kubernetes와 AWS 지식이 필요 없어요. 시작할 코스는 [학습 코스 고르기](learning_paths.md), 전체 구성은 [홈](index.md)의 "만드는 것", GPU 샌드박스가 필요한 이유는 [01 GPU 샌드박스가 필요한 경우](concepts/01_why_gpu_sandbox.md)에 있습니다.
+**사전 지식:** 터미널, `git`, Python 가상 환경을 다룰 수 있으면 충분하고, 로컬 단계(1~4장)에는 Kubernetes와 AWS 지식이 필요 없습니다. 시작할 코스는 [학습 코스 고르기](learning_paths.md), 전체 구성은 [홈](index.md)의 "만드는 것", GPU 샌드박스가 필요한 이유는 [01 GPU 샌드박스가 필요한 경우](concepts/01_why_gpu_sandbox.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **샌드박스(sandbox)**: 신뢰할 수 없는 코드를 격리해서 실행하는 환경입니다. 이 에셋에서는 모델이 쓴 커널 코드를 실행해 채점하는 HTTP 서버를 말합니다.
@@ -51,7 +51,7 @@ GPU 노드를 띄운 뒤에야 import 오류나 설정 누락을 발견하면, �
 | git | HyperPod 의존성 차트 clone (Scenario B) | |
 | uv | 로컬 Python 환경 | 로컬 테스트에만 필요 |
 
-`scripts/01_check_prereqs.sh`는 이 중 `aws cdk node kubectl helm docker python3 jq session-manager-plugin`의 설치 여부를 확인합니다. eksctl은 private endpoint만 있는 클러스터를 만들 수 없어서 쓰지 않아요.
+`scripts/01_check_prereqs.sh`는 이 중 `aws cdk node kubectl helm docker python3 jq session-manager-plugin`의 설치 여부를 확인합니다. eksctl은 private endpoint만 있는 클러스터를 만들 수 없어서 쓰지 않습니다.
 
 ### AWS 계정과 quota
 
@@ -62,7 +62,7 @@ GPU 노드를 띄운 뒤에야 import 오류나 설정 누락을 발견하면, �
 | `ml.g5.2xlarge for cluster usage` (SageMaker) | 1 (Scenario B) | HyperPod 전용 quota |
 | `ml.g5.xlarge for cluster usage` (SageMaker) | 2 (Scenario B2) | B2의 `sandbox` 인스턴스 그룹(`HYPERPOD_SANDBOX_COUNT`) |
 
-B1은 trainer가 HyperPod에서 실행되므로 G and VT 필요량이 gVisor 노드 몫인 8로 줄어요. B2와 C에는 EC2 GPU 노드가 없어서 G and VT 쿼터 없이 시작할 수 있습니다. B1과 B2는 위의 SageMaker 쿼터를 따로 확인하세요. quota 증가는 처리에 시간이 걸릴 수 있으니 클러스터를 만들기 전에 신청하세요.
+B1은 trainer가 HyperPod에서 실행되므로 G and VT 필요량이 gVisor 노드 몫인 8로 줄어듭니다. B2와 C에는 EC2 GPU 노드가 없어서 G and VT 쿼터 없이 시작할 수 있습니다. B1과 B2는 위의 SageMaker 쿼터를 따로 확인하세요. quota 증가는 처리에 시간이 걸릴 수 있으니 클러스터를 만들기 전에 신청하세요.
 
 ## 1. 저장소 받기
 
@@ -77,7 +77,7 @@ cd gpu-sandbox-on-aws
 
 ## 2. 로컬 Python 환경
 
-가상 환경을 만들고 CPU 전용 PyTorch를 먼저 설치한 뒤, 이 패키지를 `dev` extra와 함께 editable 모드(소스를 고치면 재설치 없이 반영)로 설치합니다. 순서는 GitHub Actions 테스트 워크플로와 같아요.
+가상 환경을 만들고 CPU 전용 PyTorch를 먼저 설치한 뒤, 이 패키지를 `dev` extra와 함께 editable 모드(소스를 고치면 재설치 없이 반영)로 설치합니다. 순서는 GitHub Actions 테스트 워크플로와 같습니다.
 
 === "macOS"
 
@@ -99,7 +99,7 @@ cd gpu-sandbox-on-aws
     uv pip install -e ".[dev]"
     ```
 
-`.[dev]`에는 pytest, FastAPI, uvicorn, httpx, PyJWT, PyYAML, kubernetes가 들어 있습니다. CI는 여기에 `gateway` extra와 `shellcheck-py`를 추가로 설치하고, pytest 다음에 셸 스크립트를 shellcheck로 검사해요.
+`.[dev]`에는 pytest, FastAPI, uvicorn, httpx, PyJWT, PyYAML, kubernetes가 들어 있습니다. CI는 여기에 `gateway` extra와 `shellcheck-py`를 추가로 설치하고, pytest 다음에 셸 스크립트를 shellcheck로 검사합니다.
 
 설치를 확인합니다.
 
@@ -119,14 +119,14 @@ python -m pytest -q
 
 **확인할 것:** 마지막 줄이 `105 passed`로 시작합니다(뒤에 붙는 소요 시간은 환경마다 다름).
 
-105개는 핵심 64개, [Agent Sandbox 확장](concepts/06_agent_sandbox.md)과 [multi-turn 에피소드](handson/11_multi_turn.md) 30개, [데모 사이트](handson/09_demo_site.md) 11개로 구성됩니다. 테스트 범위는 AST 정책, CPU 2-프로세스 harness(정답, 오답, 크래시, timeout, 벤치마크 치팅, monkeypatch), fail closed 인증, egress 차단 확인 뒤의 readiness, 클라이언트, gateway의 group 단위 버전 고정, 운영 도구, 매니페스트와 노드 user data(`infra/eks/userdata.py`)와 Karpenter 템플릿 렌더링, 데모 사이트의 보안 속성입니다. 파일별 범위는 [저장소 구조](reference/repository_map.md#tests)에 있어요. CDK 스택 테스트 18개는 `cdk/tests`에 따로 있고, 5장의 CDK 준비를 마친 뒤 `cd cdk && python -m pytest -q tests`로 실행합니다.
+105개는 핵심 64개, [Agent Sandbox 확장](concepts/06_agent_sandbox.md)과 [multi-turn 에피소드](handson/11_multi_turn.md) 30개, [데모 사이트](handson/09_demo_site.md) 11개로 구성됩니다. 테스트 범위는 AST 정책, CPU 2-프로세스 harness(정답, 오답, 크래시, timeout, 벤치마크 치팅, monkeypatch), fail closed 인증, egress 차단 확인 뒤의 readiness, 클라이언트, gateway의 group 단위 버전 고정, 운영 도구, 매니페스트와 노드 user data(`infra/eks/userdata.py`)와 Karpenter 템플릿 렌더링, 데모 사이트의 보안 속성입니다. 파일별 범위는 [저장소 구조](reference/repository_map.md#tests)에 있습니다. CDK 스택 테스트 18개는 `cdk/tests`에 따로 있고, 5장의 CDK 준비를 마친 뒤 `cd cdk && python -m pytest -q tests`로 실행합니다.
 
 **문제가 생기면:** `ModuleNotFoundError`는 대개 가상 환경이 비활성화됐거나 2장의 설치가 빠진 경우이니, `source .venv/bin/activate`를 다시 실행하고 2장을 반복하세요.
 
 !!! warning "Linux 호스트에서 서버를 띄우는 단계"
-    샌드박스 서버는 평가가 끝날 때마다 `/proc`에 보이는 프로세스 중 자신과 상위 프로세스를 뺀 모든 프로세스에 SIGKILL을 보냅니다([`procs.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py)). pod 안에서는 대상이 컨테이너의 PID namespace 안으로 한정됩니다. 하지만 Linux 호스트에서 직접 실행하면 같은 사용자의 다른 프로세스(편집기, 다른 서버, trainer)도 종료되고, root로 실행하면 시스템 프로세스도 종료돼요. macOS에는 `/proc`가 없어서 이 동작이 실행되지 않습니다.
+    샌드박스 서버는 평가가 끝날 때마다 `/proc`에 보이는 프로세스 중 자신과 상위 프로세스를 뺀 모든 프로세스에 SIGKILL을 보냅니다([`procs.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py)). pod 안에서는 대상이 컨테이너의 PID namespace 안으로 한정됩니다. 하지만 Linux 호스트에서 직접 실행하면 같은 사용자의 다른 프로세스(편집기, 다른 서버, trainer)도 종료되고, root로 실행하면 시스템 프로세스도 종료됩니다. macOS에는 `/proc`가 없어서 이 동작이 실행되지 않습니다.
 
-    pytest는 `tests/conftest.py`의 autouse fixture가 이 동작을 끄기 때문에, Linux 호스트에서도 위의 `python -m pytest -q`를 그대로 실행해도 됩니다. 4장처럼 서버를 직접 띄우는 단계는 Linux 호스트가 아니라 서버마다 별도 컨테이너(별도 PID namespace)에서 실행하세요. 서버의 기본 bind는 `127.0.0.1`(`SANDBOX_HOST`)이라, 컨테이너가 자기 네트워크 namespace를 쓰면 호스트에서 보낸 4.2와 4.3의 요청이 닿지 않습니다. 호스트 네트워크를 함께 쓰는 컨테이너(예: `docker run --network host`, PID namespace는 따로 유지)로 띄우면 기본 bind 그대로 접근할 수 있어요.
+    pytest는 `tests/conftest.py`의 autouse fixture가 이 동작을 끄기 때문에, Linux 호스트에서도 위의 `python -m pytest -q`를 그대로 실행해도 됩니다. 4장처럼 서버를 직접 띄우는 단계는 Linux 호스트가 아니라 서버마다 별도 컨테이너(별도 PID namespace)에서 실행하세요. 서버의 기본 bind는 `127.0.0.1`(`SANDBOX_HOST`)이라, 컨테이너가 자기 네트워크 namespace를 쓰면 호스트에서 보낸 4.2와 4.3의 요청이 닿지 않습니다. 호스트 네트워크를 함께 쓰는 컨테이너(예: `docker run --network host`, PID namespace는 따로 유지)로 띄우면 기본 bind 그대로 접근할 수 있습니다.
 
     서버를 띄우지 않는 테스트만 빠르게 확인하려면 `slow`를 제외합니다.
 
@@ -143,7 +143,7 @@ python -m pytest -q
 
 ### 4.1 샌드박스 서버 두 개 띄우기
 
-터미널 두 개에서 하나씩 실행합니다. 두 서버는 포트와 작업 디렉터리만 달라요.
+터미널 두 개에서 하나씩 실행합니다. 두 서버는 포트와 작업 디렉터리만 다릅니다.
 
 ```bash
 # Terminal 1
@@ -181,16 +181,16 @@ INFO:gpusandbox.server:device probe ok=True info={'torch': '2.15.0', 'cuda_runti
 INFO:     Uvicorn running on http://127.0.0.1:18001 (Press CTRL+C to quit)
 ```
 
-두 경고는 로컬에서 실행할 때 정상적으로 나오는 메시지입니다. 서버는 기본으로 `127.0.0.1`에만 바인딩합니다(`SANDBOX_HOST`). 클러스터에서는 pod 매니페스트가 `SANDBOX_HOST=0.0.0.0`을 설정합니다. trainer는 headless ClusterIP Service(가상 IP 없이 pod 주소를 DNS로 알려 줌)로 샌드박스 pod 주소를 조회하고, NetworkPolicy(pod 사이의 방화벽 규칙)는 trainer namespace에서 오는 연결만 허용해요.
+두 경고는 로컬에서 실행할 때 정상적으로 나오는 메시지입니다. 서버는 기본으로 `127.0.0.1`에만 바인딩합니다(`SANDBOX_HOST`). 클러스터에서는 pod 매니페스트가 `SANDBOX_HOST=0.0.0.0`을 설정합니다. trainer는 headless ClusterIP Service(가상 IP 없이 pod 주소를 DNS로 알려 줌)로 샌드박스 pod 주소를 조회하고, NetworkPolicy(pod 사이의 방화벽 규칙)는 trainer namespace에서 오는 연결만 허용합니다.
 
 **문제가 생기면:** `address already in use`는 다른 프로세스가 그 포트를 쓰고 있다는 뜻이니, 다른 포트(예: `18011`)로 바꾸고 4.2와 4.3의 주소도 맞추세요.
 
 !!! warning "테스트 bypass는 loopback에서만"
-    `SANDBOX_AUTH_TEST_BYPASS=1`은 `/v1/evaluate`, `/info`, `/metrics`의 토큰 검증을 모두 끕니다. 서버 코드는 bypass와 `SANDBOX_HOST=0.0.0.0`을 함께 설정해도 거부하지 않으므로 두 설정을 함께 쓰지 마세요. 저장소의 매니페스트는 이 변수를 설정하지 않습니다. 클러스터의 샌드박스 pod는 audience 기반 ServiceAccount 토큰을 검증하고, 인증 설정이 비어 있으면 평가, 서버 정보, 지표 요청(`/v1/evaluate`, `/info`, `/metrics`)을 401로 거부(fail closed)합니다. `/healthz`와 `/readyz`는 인증 없이 서버 상태만 알려 주므로, 아래 `/readyz` 응답은 인증 설정과 관계없어요.
+    `SANDBOX_AUTH_TEST_BYPASS=1`은 `/v1/evaluate`, `/info`, `/metrics`의 토큰 검증을 모두 끕니다. 서버 코드는 bypass와 `SANDBOX_HOST=0.0.0.0`을 함께 설정해도 거부하지 않으므로 두 설정을 함께 쓰지 마세요. 저장소의 매니페스트는 이 변수를 설정하지 않습니다. 클러스터의 샌드박스 pod는 audience 기반 ServiceAccount 토큰을 검증하고, 인증 설정이 비어 있으면 평가, 서버 정보, 지표 요청(`/v1/evaluate`, `/info`, `/metrics`)을 401로 거부(fail closed)합니다. `/healthz`와 `/readyz`는 인증 없이 서버 상태만 알려 주므로, 아래 `/readyz` 응답은 인증 설정과 관계없습니다.
 
 ### 4.2 서버 확인 (golden probe)
 
-세 번째 터미널에서 readiness를 확인하고 golden probe를 두 서버에 보냅니다. probe는 golden 제출물의 verdict를 기대값과 비교하는 운영 도구예요.
+세 번째 터미널에서 readiness를 확인하고 golden probe를 두 서버에 보냅니다. probe는 golden 제출물의 verdict를 기대값과 비교하는 운영 도구입니다.
 
 ```bash
 source .venv/bin/activate
@@ -198,7 +198,7 @@ curl -s http://127.0.0.1:18001/readyz
 python -m gpusandbox.tools probe --address 127.0.0.1:18001,127.0.0.1:18002 --device cpu
 ```
 
-**확인할 것:** 아래와 비슷하게 나오고 종료 코드가 0이면 됩니다(macOS 실행 예시). 서버는 device probe를 마친 뒤에 요청을 받으므로 두 터미널에 `Uvicorn running`이 나온 뒤 실행하세요. 그 전에는 연결이 거부되어 `curl -s`가 아무것도 출력하지 않아요. `pod`, `kernel_release`, `speedup` 값은 환경과 실행마다 다릅니다.
+**확인할 것:** 아래와 비슷하게 나오고 종료 코드가 0이면 됩니다(macOS 실행 예시). 서버는 device probe를 마친 뒤에 요청을 받으므로 두 터미널에 `Uvicorn running`이 나온 뒤 실행하세요. 그 전에는 연결이 거부되어 `curl -s`가 아무것도 출력하지 않습니다. `pod`, `kernel_release`, `speedup` 값은 환경과 실행마다 다릅니다.
 
 ```text
 {"status":"ready"}
@@ -219,13 +219,13 @@ CPU에서는 Triton 커널이 필요한 golden을 제외하고 아래 4개만 �
 | `relu_bias_benchmark_cheat` | `wrong_answer` (벤치마크가 시작되면 틀린 결과를 내는 코드) |
 | `read_host_file` | `policy_violation` |
 
-로컬에서 `egress_blocked`가 `true`로 나오는 이유는 self-test 대상(`SANDBOX_EGRESS_PROBE_TARGETS`)이 비어 있기 때문입니다. 클러스터에서는 샌드박스 서버가 IMDS(노드 자격 증명을 제공하는 EC2 인스턴스 메타데이터 서비스), API server, 노드 kubelet으로 가는 연결이 차단됐는지 확인한 뒤에만 Ready 상태가 돼요.
+로컬에서 `egress_blocked`가 `true`로 나오는 이유는 self-test 대상(`SANDBOX_EGRESS_PROBE_TARGETS`)이 비어 있기 때문입니다. 클러스터에서는 샌드박스 서버가 IMDS(노드 자격 증명을 제공하는 EC2 인스턴스 메타데이터 서비스), API server, 노드 kubelet으로 가는 연결이 차단됐는지 확인한 뒤에만 Ready 상태가 됩니다.
 
 **문제가 생기면:** `FAIL` 줄이 있거나 연결 오류가 나면 두 서버의 기동 로그에 `device probe ok=True`가 있는지 먼저 확인하세요. 클러스터에서 실패하면 [문제 해결](reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
 
 ### 4.3 TRL GRPO dry run
 
-trainer 이미지와 같은 버전의 TRL 스택을 설치한 뒤 dry run을 실행합니다. Hugging Face Hub에서 `HuggingFaceTB/SmolLM2-135M-Instruct`를 내려받아요.
+trainer 이미지와 같은 버전의 TRL 스택을 설치한 뒤 dry run을 실행합니다. Hugging Face Hub에서 `HuggingFaceTB/SmolLM2-135M-Instruct`를 내려받습니다.
 
 ```bash
 # Same pins as trainer/Dockerfile (as of 2026-11, re-verify)
@@ -240,8 +240,8 @@ python rl/trl/train_grpo.py --dry-run \
 
 - `--dry-run`은 vLLM 없이 CPU에서 2 step만 실행하고 completion을 32 token으로 자릅니다.
 - `--output-dir`는 쓰기 가능한 경로여야 합니다(기본값 `/outputs/grpo`는 pod 기준).
-- `--allow-torch-only`는 Triton 커널이 없어도 정답이면 correctness 점수 1.0을 주는 옵션입니다. 끄면 PyTorch만 쓴 정답은 0.3을 받아요. CPU에서는 Triton 커널을 실행할 수 없어서 이 dry run에서는 켭니다.
-- 로컬에서는 `SANDBOX_ADDRESS`에 쉼표로 나열한 두 서버 주소를 그대로 사용합니다. 클러스터 Job은 이 변수 대신 `SANDBOX_ROUTING_FILE`이 가리키는 routing 표(ConfigMap)에서 현재 풀의 Service 주소를 읽어요.
+- `--allow-torch-only`는 Triton 커널이 없어도 정답이면 correctness 점수 1.0을 주는 옵션입니다. 끄면 PyTorch만 쓴 정답은 0.3을 받습니다. CPU에서는 Triton 커널을 실행할 수 없어서 이 dry run에서는 켭니다.
+- 로컬에서는 `SANDBOX_ADDRESS`에 쉼표로 나열한 두 서버 주소를 그대로 사용합니다. 클러스터 Job은 이 변수 대신 `SANDBOX_ROUTING_FILE`이 가리키는 routing 표(ConfigMap)에서 현재 풀의 Service 주소를 읽습니다.
 - LoRA는 모델 가중치 전체 대신 작은 어댑터 행렬만 학습하는 방법이고, trainer가 기본으로 씁니다.
 
 **확인할 것:**
@@ -253,7 +253,7 @@ python rl/trl/train_grpo.py --dry-run \
 **문제가 생기면:** 모델 다운로드 오류는 네트워크나 Hugging Face Hub 접근 문제입니다. 클러스터 학습 중 오류가 나면 [문제 해결](reference/troubleshooting.md)의 "학습" 항목을 보세요.
 
 !!! note "`reward_batches`가 0이어도 정상"
-    135M 모델이 32 token 안에 코드 블록을 닫지 못하면 trainer가 `no_code`로 처리해 샌드박스를 호출하지 않아요. 이 단계는 TRL과 reward 함수의 연결(라우팅, 함수 시그니처, LoRA, 저장)을 확인하는 용도이고, 샌드박스 호출 경로는 4.2의 probe와 pytest로 확인합니다.
+    135M 모델이 32 token 안에 코드 블록을 닫지 못하면 trainer가 `no_code`로 처리해 샌드박스를 호출하지 않습니다. 이 단계는 TRL과 reward 함수의 연결(라우팅, 함수 시그니처, LoRA, 저장)을 확인하는 용도이고, 샌드박스 호출 경로는 4.2의 probe와 pytest로 확인합니다.
 
 ## 5. `scripts/config.env` 만들기
 
@@ -292,7 +292,7 @@ source scripts/config.env              # exports AWS_REGION
 cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
 ```
 
-**확인할 것:** 명령이 오류 없이 끝나고, CloudFormation에 bootstrap 스택 `CDKToolkit`이 생깁니다. 권한을 좁히는 법은 [Production 09 CDK로 프로비저닝](production/09_cdk.md)에 있어요.
+**확인할 것:** 명령이 오류 없이 끝나고, CloudFormation에 bootstrap 스택 `CDKToolkit`이 생깁니다. 권한을 좁히는 법은 [Production 09 CDK로 프로비저닝](production/09_cdk.md)에 있습니다.
 
 값을 채웠으면 사전 점검 스크립트를 실행합니다(읽기 전용).
 
@@ -326,15 +326,13 @@ scripts/01_check_prereqs.sh
 ## 적용 범위와 한계
 
 - 1~4장의 로컬 단계는 저자가 macOS(CPU 전용)에서 확인했고(당시 테스트 94개, 현재는 105개), Linux 호스트에서 서버를 띄우는 테스트는 확인하지 않았습니다.
-- 5장의 `scripts/01_check_prereqs.sh`는 저자가 실행하지 않았습니다. 2026-11-14에는 시나리오 C의 CDK 배포, 터널, Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`), 삭제를 실습 계정(us-west-2)에서 실행했어요.
-- 실습 계정에서 2026-11-18에는 `03_build_push_images.sh`(이미지 세 개), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1개)과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images`를 실행했습니다(us-west-2). 이 클러스터는 system 노드만 있는 구성(`02_create_cluster.sh --hyperpod-b2`)으로 만든 뒤 `CHANGE_SCENARIO=1`로 B1(gVisor 노드 그룹 추가)과 A(trainer 추가)로 차례로 업데이트한 환경이에요.
-- 같은 날 Kata + QEMU GPU(`g4dn.metal`, T4)와 다섯 풀의 `ops/bench.sh`도 실행했습니다. 실행하지 않은 것은 시나리오 A의 학습 중 `ops/rollout.sh`, HyperPod B1과 B2입니다. 이 단계는 각 핸즈온 페이지의 확인 단계로 검증하세요.
+- 5장의 `scripts/01_check_prereqs.sh`는 저자가 실행하지 않았습니다. 그 뒤 단계 가운데 시나리오 A의 gVisor 경로(`02`부터 `08`까지), 시나리오 C, Kata GPU(`g4dn.metal`), 런타임 벤치마크는 실습 계정에서 실행했고, 시나리오 A의 학습 중 `ops/rollout.sh`와 HyperPod B1, B2는 실행하지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다. 실행하지 않은 단계는 각 핸즈온 페이지의 확인 단계로 검증하세요.
 - dry run은 학습 효과를 보여 주지 않으며, 실제 학습은 [05 On-policy GRPO 학습](handson/05_grpo_training.md)에서 GPU로 실행합니다.
 
 ## 소요 시간과 비용
 
 - **로컬 단계(1~4장):** AWS 비용이 없고, 시간은 PyTorch wheel과 모델 다운로드 속도에 따라 대략 15~30분입니다(측정값이 아닌 추정).
-- **AWS 단계:** `02_create_cluster.sh`의 CDK 배포는 실습 계정에서 약 20분 걸렸습니다(시나리오 C). GPU 노드 그룹이 `InsufficientInstanceCapacity`로 인스턴스를 시작하지 못하면 CloudFormation이 약 30분을 기다린 뒤 처음 생성 전체를 롤백하니, 대처 순서는 [01 클러스터와 이미지](handson/01_cluster_and_images.md)의 클러스터 생성 절을 보세요. 실습 계정에서 2026-11-18에 실행한 5 step GRPO Job(`g5.2xlarge`)은 이미지 pull과 모델 다운로드를 포함해 약 12분 걸렸어요. GPU 인스턴스는 실행되는 동안 과금되고, 시나리오 A의 gVisor 최소 경로는 컴퓨트만 시간당 약 3.42 USD입니다(추정). 구성별 시간당 추정은 [04 플랫폼과 인스턴스 선택](concepts/04_platforms_and_instances.md)에 있어요.
+- **AWS 단계:** `02_create_cluster.sh`의 CDK 배포는 실습 계정에서 약 20분 걸렸습니다(시나리오 C). GPU 노드 그룹이 `InsufficientInstanceCapacity`로 인스턴스를 시작하지 못하면 CloudFormation이 약 30분을 기다린 뒤 처음 생성 전체를 롤백하니, 대처 순서는 [01 클러스터와 이미지](handson/01_cluster_and_images.md)의 클러스터 생성 절을 보세요. 실습 계정에서 2026-11-18에 실행한 5 step GRPO Job(`g5.2xlarge`)은 이미지 pull과 모델 다운로드를 포함해 약 12분 걸렸습니다. GPU 인스턴스는 실행되는 동안 과금되고, 시나리오 A의 gVisor 최소 경로는 컴퓨트만 시간당 약 3.42 USD입니다(추정). 구성별 시간당 추정은 [04 플랫폼과 인스턴스 선택](concepts/04_platforms_and_instances.md)에 있습니다.
 
 ## 정리
 
@@ -345,7 +343,7 @@ scripts/01_check_prereqs.sh
 rm -rf /tmp/gpusandbox /tmp/grpo-dry-run
 ```
 
-**확인할 것:** 아무것도 출력되지 않습니다. `train_grpo.py`는 출력 디렉터리의 `checkpoint-*`에서 이어 학습하므로, dry run을 처음부터 하려면 `/tmp/grpo-dry-run`을 지워야 해요. AWS 리소스는 [99 정리](handson/99_cleanup.md)를 따라 지우세요.
+**확인할 것:** 아무것도 출력되지 않습니다. `train_grpo.py`는 출력 디렉터리의 `checkpoint-*`에서 이어 학습하므로, dry run을 처음부터 하려면 `/tmp/grpo-dry-run`을 지워야 합니다. AWS 리소스는 [99 정리](handson/99_cleanup.md)를 따라 지우세요.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

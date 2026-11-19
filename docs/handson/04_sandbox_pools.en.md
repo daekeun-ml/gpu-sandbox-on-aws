@@ -33,7 +33,7 @@ Code written by the model runs in the same pod as the sandbox server, so setting
     - **Golden**: a test submission whose expected verdict is fixed in advance.
 
 !!! warning "AWS steps on this page"
-    In the practice account on 2026-11-18, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1` (1 replica) and the pool verification (`scripts/ops/verify.sh gvisor v1`) were run (us-west-2, `g5.xlarge`). The pool verification passed with 6 golden verdicts PASS, 4 egress targets blocked and the `default` namespace blocked. The same day, on another cluster, the `kata-qemu` GPU pool and the Kata CPU pools were deployed and passed the pool verification; the experimental `kata-clh` GPU pool's VM did not start (see "Scope and limits" below). Verify the behavior in the cluster against the "What to look for" items below.
+    The deployment and pool verification (`scripts/ops/verify.sh`) of the `gvisor`, `kata-qemu` and CPU pools on this page ran in a practice account and passed; the experimental `kata-clh` GPU pool's VM did not start (see "Scope and limits" below). The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record). Verify the behavior in the cluster against the "What to look for" items below.
 
 ## Namespaces, policies and authentication: `05_setup_namespaces_auth.sh`
 
@@ -289,8 +289,8 @@ PASS read_host_file               status=policy_violation  speedup=None
 ## Scope and limits
 
 - **Checked by local tests:** fail-closed authentication (wrong audience, expired token, subject not allowed), readiness that turns Ready only after egress denial is verified, the golden probe and parity against two CPU servers, and manifest rendering for every profile and version.
-- **Checked in the practice account (2026-11-18, us-west-2):** the pool verification (`scripts/ops/verify.sh`) passed on the `gvisor` pool (v1, 1 replica, `g5.xlarge`). The 4 egress targets, including the node kubelet, were blocked, and the NetworkPolicy blocked connections from the `default` namespace.
-- **Checked in the practice account (2026-11-18, another cluster):** the pool verification passed on the `kata-qemu` GPU pool (`g4dn.metal`, 4 pods, `Tesla T4`, guest kernel `6.18.56-nvidia-gpu`) and the three CPU pools. With the image already cached, the four `kata-qemu` pods took 30, 30, 31 and 36 seconds from creation to Ready ([03](03_kata.md), [08](08_benchmark.md)).
+- **Checked in the practice account (scenario A cluster):** the pool verification (`scripts/ops/verify.sh`) passed on the `gvisor` pool (v1, 1 replica, `g5.xlarge`). The 4 egress targets, including the node kubelet, were blocked, and the NetworkPolicy blocked connections from the `default` namespace.
+- **Checked in the practice account (Kata cluster):** the pool verification passed on the `kata-qemu` GPU pool (`g4dn.metal`, 4 pods, `Tesla T4`, guest kernel `6.18.56-nvidia-gpu`) and the three CPU pools. With the image already cached, the four `kata-qemu` pods took 30, 30, 31 and 36 seconds from creation to Ready ([03](03_kata.md), [08](08_benchmark.md)).
 - **Not checked on AWS:** the experimental `kata-clh` GPU pool (its VM did not start, [03](03_kata.md)).
 
 ## Time and cost

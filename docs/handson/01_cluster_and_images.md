@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-EKS 클러스터를 기본값으로 만들면 샌드박스에 위험한 설정이 그대로 적용됩니다. 노드의 IMDS hop limit이 2 이상이면 pod가 노드의 인스턴스 자격 증명을 읽을 수 있습니다. public API endpoint를 쓰면 IAM 인증은 그대로 적용되지만, 인터넷 어디서나 API에 접속을 시도할 수 있습니다. 그래서 회사 계정의 보안 점검(예: Security Hub 컨트롤 EKS.1)에서 지적 대상이 돼요. 이 저장소가 예전에 쓰던 eksctl은 private endpoint만 활성화한 클러스터를 처음부터 만드는 기능을 지원하지 않습니다(eksctl 문서). 이미지에서는 TRL, vLLM, torch, transformers가 서로의 버전 범위를 제한하므로, pip이 그중 하나만 업그레이드해도 import 단계에서 오류가 납니다.
+EKS 클러스터를 기본값으로 만들면 샌드박스에 위험한 설정이 그대로 적용됩니다. 노드의 IMDS hop limit이 2 이상이면 pod가 노드의 인스턴스 자격 증명을 읽을 수 있습니다. public API endpoint를 쓰면 IAM 인증은 그대로 적용되지만, 인터넷 어디서나 API에 접속을 시도할 수 있습니다. 그래서 회사 계정의 보안 점검(예: Security Hub 컨트롤 EKS.1)에서 지적 대상이 됩니다. 이 저장소가 예전에 쓰던 eksctl은 private endpoint만 활성화한 클러스터를 처음부터 만드는 기능을 지원하지 않습니다(eksctl 문서). 이미지에서는 TRL, vLLM, torch, transformers가 서로의 버전 범위를 제한하므로, pip이 그중 하나만 업그레이드해도 import 단계에서 오류가 납니다.
 
 ![a: 기본값으로 만든 EKS 클러스터에서는 인터넷의 누구나 public endpoint로 EKS API에 접속을 시도할 수 있습니다(IAM 인증은 그대로 적용됩니다). IMDS hop limit이 2 이상인 노드에서는 pod 안의 코드가 IMDS(169.254.169.254)에 요청해 노드의 인스턴스 자격 증명을 얻을 수 있습니다. b: CDK 스택은 private endpoint만 켜서 인터넷에서 EKS API로 접속하는 경로를 없애고, 작업 PC는 SSM 터널로 접속합니다. 노드는 IMDSv2 필수와 hop limit 1로 설정되어 pod가 IMDS 응답을 받지 못합니다.](../images/figures/handson-01_cluster_and_images.svg)
 
@@ -13,7 +13,7 @@ EKS 클러스터를 기본값으로 만들면 샌드박스에 위험한 설정�
 
 ## Why
 
-- **인프라는 CDK 스택 하나이고, 다시 실행하면 달라진 부분만 변경합니다.** 스택은 VPC, EKS 클러스터와 노드 그룹, access instance, KMS 키를 만듭니다. EKS는 CloudFormation 리소스(L1)로만 정의하고 Kubernetes manifest는 적용하지 않습니다. 그래서 `04_install_gpu_stack.sh` 이후 스크립트가 설치하는 device plugin, RuntimeClass, kata-deploy와 겹치지 않고, 설치 순서도 충돌하지 않아요.
+- **인프라는 CDK 스택 하나이고, 다시 실행하면 달라진 부분만 변경합니다.** 스택은 VPC, EKS 클러스터와 노드 그룹, access instance, KMS 키를 만듭니다. EKS는 CloudFormation 리소스(L1)로만 정의하고 Kubernetes manifest는 적용하지 않습니다. 그래서 `04_install_gpu_stack.sh` 이후 스크립트가 설치하는 device plugin, RuntimeClass, kata-deploy와 겹치지 않고, 설치 순서도 충돌하지 않습니다.
 - **노드 설정을 부팅 과정에 포함했습니다.** 런타임별 설정 작업이 launch template의 user data에 들어 있어서, 노드가 교체돼도 같은 상태로 부팅됩니다.
 
 **사전 지식:** [00 전체 흐름](00_overview.md)의 단계 표와 [시작하기](../getting_started.md)의 로컬 Python 환경을 먼저 보세요. CDK 스택의 보안 기본값 전체는 [Production 09 CDK](../production/09_cdk.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
@@ -46,7 +46,7 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 
 **확인할 것:** `scripts/config.env`가 있고 `AWS_REGION`, `CLUSTER_NAME`, `SCENARIO`가 원하는 값인지 확인하세요. 예시값 그대로면 `02_create_cluster.sh`가 시나리오 A를 만듭니다.
 
-모든 스크립트는 `scripts/lib.sh`를 통해 이 파일을 읽습니다. 필요한 값이 비었거나 `__SET_ME__`를 포함하면 `require_vars`가 `set <VAR> in scripts/config.env`를 출력하고 스크립트를 멈춥니다. `cdk/deploy.sh`도 같은 파일을 읽으므로 스크립트와 CDK가 쓰는 인스턴스 유형과 고정 버전이 일치해요.
+모든 스크립트는 `scripts/lib.sh`를 통해 이 파일을 읽습니다. 필요한 값이 비었거나 `__SET_ME__`를 포함하면 `require_vars`가 `set <VAR> in scripts/config.env`를 출력하고 스크립트를 멈춥니다. `cdk/deploy.sh`도 같은 파일을 읽으므로 스크립트와 CDK가 쓰는 인스턴스 유형과 고정 버전이 일치합니다.
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|
@@ -68,7 +68,7 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 
 ## 준비 2 (한 번만): CDK와 Session Manager plugin
 
-1. **Node.js와 CDK CLI.** Node.js 22 또는 24 LTS와 CDK CLI를 설치합니다. `cdk/requirements.txt`의 `aws-cdk-lib` 2.276.0을 사용하려면 CLI 2.1148.1 이상이 필요해요.
+1. **Node.js와 CDK CLI.** Node.js 22 또는 24 LTS와 CDK CLI를 설치합니다. `cdk/requirements.txt`의 `aws-cdk-lib` 2.276.0을 사용하려면 CLI 2.1148.1 이상이 필요합니다.
 
     ```bash
     node --version            # expect v22.x or v24.x
@@ -107,11 +107,11 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
     CDK 기본값에서는 CloudFormation 실행 역할에 `AdministratorAccess`가 연결됩니다(권한을 줄이는 방법은 [Production 09 CDK](../production/09_cdk.md)의 준비 절). `CDKToolkit`은 정리(`08_cleanup.sh`) 때도 삭제하지 않고 다음 배포에 다시 씁니다.
 
 !!! warning "이 페이지의 AWS 단계"
-    `02_create_cluster.sh`의 Outputs, 터널 출력, 소요 시간은 저자가 2026-11-14 실습 계정(us-west-2)에서 시나리오 C(`--cpu-only`)로 실행한 결과입니다. 실습 계정에서 2026-11-18에는 이미지 빌드(`03_build_push_images.sh`, 이미지 세 개)도 실행했고, 시나리오 A 클러스터는 아래 "문제가 생기면"의 용량 대처 순서(B2로 만든 뒤 B1, A로 업데이트)로 만들었습니다. 시나리오 A의 노드 목록 같은 나머지 "확인할 것"은 코드와 공식 문서 기준의 기대 출력이니 실제 출력과 비교하세요.
+    이 페이지의 단계는 실습 계정에서 실행했습니다. `02_create_cluster.sh`의 Outputs, 터널 출력, 소요 시간은 시나리오 C(`--cpu-only`) 실행의 결과이고, 시나리오 A 클러스터는 아래 "문제가 생기면"의 용량 대처 순서(B2로 만든 뒤 B1, A로 업데이트)로 만들었습니다. 시나리오 A의 노드 목록 같은 나머지 "확인할 것"은 코드와 공식 문서 기준의 기대 출력이니 실제 출력과 비교하세요. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 사전 확인: `01_check_prereqs.sh`
 
-읽기 전용 점검입니다. 1번 검사는 통과하면 아무것도 출력하지 않고, 빠진 도구나 변수가 있으면 `missing tool: <이름>`이나 `set <VAR> in scripts/config.env`를 출력하고 멈춥니다. 통과하면 2번부터 차례로 출력해요.
+읽기 전용 점검입니다. 1번 검사는 통과하면 아무것도 출력하지 않고, 빠진 도구나 변수가 있으면 `missing tool: <이름>`이나 `set <VAR> in scripts/config.env`를 출력하고 멈춥니다. 통과하면 2번부터 차례로 출력합니다.
 
 ```bash
 scripts/01_check_prereqs.sh
@@ -153,14 +153,14 @@ scripts/02_create_cluster.sh --cpu-only      # scenario C: the c8i node only, no
 
 1. `scripts/config.env`를 읽습니다.
 2. `WITH_KATA_GPU=1`이면 `g4dn.metal` 비용을 안내하고 확인 단어 `metal`을 입력하도록 요청합니다.
-3. `cdk deploy <CLUSTER_NAME>-cdk --require-approval broadening`을 실행합니다. synth 단계에서 cdk-nag(AwsSolutions 규칙)가 CDK 앱(`cdk/app.py`)이 만든 템플릿을 검사합니다. 인정(acknowledge)되지 않은 지적이 하나라도 있으면 배포가 멈춰요.
+3. `cdk deploy <CLUSTER_NAME>-cdk --require-approval broadening`을 실행합니다. synth 단계에서 cdk-nag(AwsSolutions 규칙)가 CDK 앱(`cdk/app.py`)이 만든 템플릿을 검사합니다. 인정(acknowledge)되지 않은 지적이 하나라도 있으면 배포가 멈춥니다.
 4. IAM 역할이나 security group의 권한을 넓히는 변경(첫 배포라면 새 역할과 규칙)이 있으면 변경 목록을 출력하고 `Do you wish to deploy these changes (y/n)?`를 묻습니다.
 5. CloudFormation이 리소스를 만듭니다(20~30분).
 
 **확인할 것:**
 
 1. `ADMIN_PRINCIPAL_ARN`을 비우고 역할 세션(STS assumed-role)으로 실행하면 시작할 때 `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` 경고가 나옵니다. IAM 사용자로 실행하면 경고 없이 현재 사용자 ARN을 씁니다. 역할에 path가 있다면 4번 질문에 `n`으로 답하고, 경고에 나온 `aws iam get-role` 명령으로 얻은 ARN을 `ADMIN_PRINCIPAL_ARN`에 넣은 뒤 다시 실행하세요.
-2. IAM과 security group 변경 목록에서 inbound 규칙이 `0.0.0.0/0`에 열려 있지 않은지 확인하고 `y`를 입력합니다. 스택이 만드는 inbound 규칙은 access instance에서 control plane으로 향하는 443 포트 규칙 하나뿐이에요.
+2. IAM과 security group 변경 목록에서 inbound 규칙이 `0.0.0.0/0`에 열려 있지 않은지 확인하고 `y`를 입력합니다. 스택이 만드는 inbound 규칙은 access instance에서 control plane으로 향하는 443 포트 규칙 하나뿐입니다.
 3. 끝나면 `Outputs` 아래에 `ClusterName`, `ClusterEndpoint`, `AccessInstanceId`, `EndpointPublicAccess = false`가 나오고, 이어서 다음 안내가 출력됩니다.
 
 ```text
@@ -192,7 +192,7 @@ EKS 콘솔의 클러스터 Networking 탭에서는 API server endpoint access가
     CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (A)
     ```
 
-    용량은 인스턴스 하나를 시작했다가 바로 종료해서 확인하세요. On-Demand Capacity Reservation 요청은 실제 시작이 성공하는 상황에서도 용량이 없다고 응답할 수 있습니다. 인스턴스 타입은 실행마다 `scripts/config.env`에서 바꿀 수 있어요(예: 용량이 있을 때는 `g6`).
+    용량은 인스턴스 하나를 시작했다가 바로 종료해서 확인하세요. On-Demand Capacity Reservation 요청은 실제 시작이 성공하는 상황에서도 용량이 없다고 응답할 수 있습니다. 인스턴스 타입은 실행마다 `scripts/config.env`에서 바꿀 수 있습니다(예: 용량이 있을 때는 `g6`).
 
 ### 터널 열기 (cdk/tunnel.sh)
 
@@ -202,7 +202,7 @@ kubectl이나 helm을 쓰는 동안 두 번째 터미널에서 실행해 둡니�
 cdk/tunnel.sh
 ```
 
-**확인할 것:** `kubectl context <CLUSTER_NAME>-tunnel -> 127.0.0.1:8443 -> <endpoint> (via i-...); Ctrl-C closes it` 로그 뒤에 `Waiting for connections...`가 나옵니다. 터널은 작업 PC의 `127.0.0.1`에서만 열려요.
+**확인할 것:** `kubectl context <CLUSTER_NAME>-tunnel -> 127.0.0.1:8443 -> <endpoint> (via i-...); Ctrl-C closes it` 로그 뒤에 `Waiting for connections...`가 나옵니다. 터널은 작업 PC의 `127.0.0.1`에서만 열립니다.
 
 첫 번째 터미널에서 노드를 확인합니다.
 
@@ -232,7 +232,7 @@ B1(`--hyperpod`)은 trainer 줄이 없고, B2는 system 두 대, C는 system 두
 
 ### CDK 스택이 만드는 것
 
-스택 코드는 `cdk/gpusandbox_cdk/stack.py`에 있고, 아래 보안 기본값은 `cdk/tests`가 synth한 템플릿에서 확인합니다. 인증 모드와 VPC CNI 설정이 처음부터 HyperPod 요구 사항에 맞으므로 시나리오 B에도 클러스터를 다시 만들 필요가 없어요.
+스택 코드는 `cdk/gpusandbox_cdk/stack.py`에 있고, 아래 보안 기본값은 `cdk/tests`가 synth한 템플릿에서 확인합니다. 인증 모드와 VPC CNI 설정이 처음부터 HyperPod 요구 사항에 맞으므로 시나리오 B에도 클러스터를 다시 만들 필요가 없습니다.
 
 | 리소스 | 값 | 이유 |
 |---|---|---|
@@ -275,7 +275,7 @@ B1(`--hyperpod`)은 trainer 줄이 없고, B2는 system 두 대, C는 system 두
 
 `gpusandbox/device-plugin=cdi` label은 `04_install_gpu_stack.sh`가 설치하는 device plugin이 실행될 노드를 지정합니다. `nvidia.com/gpu.deploy.operands=false`는 Kata GPU 노드 추가(`scripts/kata/gpu_nodes.sh`)가 설치하는 GPU Operator가 이 노드에 operand를 배포하지 않게 합니다.
 
-gVisor 노드 그룹의 user data는 `infra/eks/userdata.py`가 만듭니다. launch template에 AMI를 지정하지 않으므로, EKS가 노드를 클러스터에 join시키는 bootstrap 설정을 이 user data에 병합합니다(EKS launch template 문서 기준). nodeadm은 user data의 첫 부분인 NodeConfig를 부팅할 때마다 병합하므로, 재부팅 뒤에도 `runsc` handler 설정이 유지돼요. 다음 명령은 이 user data를 AWS 접속 없이 로컬에서 출력합니다.
+gVisor 노드 그룹의 user data는 `infra/eks/userdata.py`가 만듭니다. launch template에 AMI를 지정하지 않으므로, EKS가 노드를 클러스터에 join시키는 bootstrap 설정을 이 user data에 병합합니다(EKS launch template 문서 기준). nodeadm은 user data의 첫 부분인 NodeConfig를 부팅할 때마다 병합하므로, 재부팅 뒤에도 `runsc` handler 설정이 유지됩니다. 다음 명령은 이 user data를 AWS 접속 없이 로컬에서 출력합니다.
 
 ```bash
 source scripts/config.env
@@ -333,7 +333,7 @@ flowchart LR
 
 ### node-guard.sh
 
-샌드박스 노드(gVisor, Kata CPU, Kata GPU)에만 설치되는 iptables 규칙입니다. VPC CNI의 network policy agent는 kubelet probe를 위해 pod와 그 pod가 실행 중인 노드 IP 사이의 트래픽을 항상 허용합니다(policy agent 소스 기준). 그래서 default-deny NetworkPolicy가 있어도 후보 코드가 노드의 로컬 데몬(kubelet, hostNetwork 서비스, 메트릭 포트)에 접속할 수 있어요. 아래 규칙은 스크립트가 노드에 설치합니다(직접 실행하지 않음).
+샌드박스 노드(gVisor, Kata CPU, Kata GPU)에만 설치되는 iptables 규칙입니다. VPC CNI의 network policy agent는 kubelet probe를 위해 pod와 그 pod가 실행 중인 노드 IP 사이의 트래픽을 항상 허용합니다(policy agent 소스 기준). 그래서 default-deny NetworkPolicy가 있어도 후보 코드가 노드의 로컬 데몬(kubelet, hostNetwork 서비스, 메트릭 포트)에 접속할 수 있습니다. 아래 규칙은 스크립트가 노드에 설치합니다(직접 실행하지 않음).
 
 ```bash
 iptables -w -N GPUSANDBOX-GUARD 2>/dev/null || iptables -w -F GPUSANDBOX-GUARD
@@ -347,7 +347,7 @@ iptables -w -C INPUT -i eni+ -j GPUSANDBOX-GUARD 2>/dev/null \
 
 ### 매니페스트 렌더링 (render.py)
 
-`04_install_gpu_stack.sh` 이후 스크립트는 `scripts/render.py`로 `k8s/` 아래 템플릿(`*.tpl`)에 값을 채운 뒤 적용합니다. `${VAR}`는 환경변수와 `KEY=VALUE` 인자 값으로 치환됩니다. envsubst와 달리 템플릿이 참조한 변수 이름이 환경이나 인자에 없으면 렌더링이 중단되므로, 변수 이름의 오타 때문에 이미지 이름이나 네임스페이스가 빈 매니페스트가 만들어지지 않아요. 이미 정의된 빈 문자열(예: `ACTIVE_RUNTIME=`)은 그대로 들어갑니다. `$$`(리터럴 `$`)와 `@@include path@@` 문법 설명은 [저장소 구조](../reference/repository_map.md)에 있습니다.
+`04_install_gpu_stack.sh` 이후 스크립트는 `scripts/render.py`로 `k8s/` 아래 템플릿(`*.tpl`)에 값을 채운 뒤 적용합니다. `${VAR}`는 환경변수와 `KEY=VALUE` 인자 값으로 치환됩니다. envsubst와 달리 템플릿이 참조한 변수 이름이 환경이나 인자에 없으면 렌더링이 중단되므로, 변수 이름의 오타 때문에 이미지 이름이나 네임스페이스가 빈 매니페스트가 만들어지지 않습니다. 이미 정의된 빈 문자열(예: `ACTIVE_RUNTIME=`)은 그대로 들어갑니다. `$$`(리터럴 `$`)와 `@@include path@@` 문법 설명은 [저장소 구조](../reference/repository_map.md)에 있습니다.
 
 렌더링 결과는 AWS 접속 없이 로컬에서 확인할 수 있습니다.
 
@@ -389,7 +389,7 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 **문제가 생기면:** 빌드가 매우 느리거나 push가 실패하면 [문제 해결](../reference/troubleshooting.md)의 "설정과 스크립트" 항목을 보세요.
 
 !!! warning "태그는 덮어쓸 수 없습니다 (IMMUTABLE)"
-    이미 있는 태그를 push하면 `ImageTagAlreadyExistsException` 오류가 납니다. 한 태그가 여러 이미지를 가리키면 어떤 샌드박스 버전이 reward를 계산했는지 추적할 수 없으므로, 리포지토리를 IMMUTABLE로 설정해 태그 덮어쓰기를 막았어요. 다시 빌드하려면 `scripts/config.env`의 `IMAGE_TAG`를 새 값으로 바꾸고(예: `v2`) 다시 실행한 뒤, 출력된 URI 세 개로 config.env를 갱신하세요.
+    이미 있는 태그를 push하면 `ImageTagAlreadyExistsException` 오류가 납니다. 한 태그가 여러 이미지를 가리키면 어떤 샌드박스 버전이 reward를 계산했는지 추적할 수 없으므로, 리포지토리를 IMMUTABLE로 설정해 태그 덮어쓰기를 막았습니다. 다시 빌드하려면 `scripts/config.env`의 `IMAGE_TAG`를 새 값으로 바꾸고(예: `v2`) 다시 실행한 뒤, 출력된 URI 세 개로 config.env를 갱신하세요.
 
 베이스 이미지(PyTorch, vLLM)가 커서 디스크와 시간이 많이 듭니다. arm64 작업 PC라면 디스크 100 GB 이상인 x86_64 호스트에서 빌드하세요.
 
@@ -401,7 +401,7 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 | `trainer` | `trainer/Dockerfile` | `vllm/vllm-openai:v0.33.0` | TRL 1.18.0, PEFT 0.21.3, `datasets>=4.7`, `gpusandbox[client]`, `rl/`, (`HYPERPOD=1`일 때) `hyperpod-elastic-agent` | 베이스 이미지 기본값 |
 | `control` | `gateway/Dockerfile` | `public.ecr.aws/docker/library/python:3.14-slim` | `gpusandbox[gateway]`, gateway와 operator 도구(`python -m gpusandbox.tools`의 `probe`, `parity`, `bench`, `sync-jwks`), torch와 GPU 없음 | uid 10001 |
 
-샌드박스 이미지는 gVisor와 Kata가 함께 씁니다. 이미지에는 자격 증명과 NVIDIA 커널 드라이버가 없고, PyTorch wheel에 포함된 CUDA user-space 라이브러리만 들어 있습니다. 드라이버는 gVisor의 경우 nvproxy를 통해 호스트의 드라이버를, Kata의 경우 guest VM 안의 드라이버를 써요. CUDA 12.6 빌드는 Kata의 T4(sm_75)를 지원하고, CUDA 13 빌드보다 낮은 드라이버 버전에서도 동작합니다. pod 스펙은 `runAsNonRoot`와 읽기 전용 root filesystem을 강제하고, `/work`와 `/tmp`에만 emptyDir를 마운트합니다.
+샌드박스 이미지는 gVisor와 Kata가 함께 씁니다. 이미지에는 자격 증명과 NVIDIA 커널 드라이버가 없고, PyTorch wheel에 포함된 CUDA user-space 라이브러리만 들어 있습니다. 드라이버는 gVisor의 경우 nvproxy를 통해 호스트의 드라이버를, Kata의 경우 guest VM 안의 드라이버를 씁니다. CUDA 12.6 빌드는 Kata의 T4(sm_75)를 지원하고, CUDA 13 빌드보다 낮은 드라이버 버전에서도 동작합니다. pod 스펙은 `runAsNonRoot`와 읽기 전용 root filesystem을 강제하고, `/work`와 `/tmp`에만 emptyDir를 마운트합니다.
 
 ### trainer 이미지의 버전 고정
 
@@ -413,7 +413,7 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 | transformers | `>=5.16.1,<5.21` | vLLM 0.33.0이 고정 |
 | PEFT | 0.21.3 | `ARG PEFT_VERSION` |
 
-Dockerfile은 `pip freeze` 출력에서 torch, transformers, vllm, triton 버전을 추출해 constraints 파일을 만들고, 이후 모든 `pip install`에 `-c /tmp/constraints.txt`를 붙입니다. 그래서 TRL이나 PEFT를 설치하는 동안 pip이 torch나 vLLM 버전을 임의로 업그레이드하지 못해요. 마지막 단계의 `python -c "import trl, peft, vllm, gpusandbox.rewards; ..."`가 빌드 중에 import 호환성을 확인해요.
+Dockerfile은 `pip freeze` 출력에서 torch, transformers, vllm, triton 버전을 추출해 constraints 파일을 만들고, 이후 모든 `pip install`에 `-c /tmp/constraints.txt`를 붙입니다. 그래서 TRL이나 PEFT를 설치하는 동안 pip이 torch나 vLLM 버전을 임의로 업그레이드하지 못합니다. 마지막 단계의 `python -c "import trl, peft, vllm, gpusandbox.rewards; ..."`가 빌드 중에 import 호환성을 확인합니다.
 
 두 이미지의 torch 버전(sandbox 2.14.1, trainer 2.14.0)은 달라도 됩니다. 두 이미지는 HTTP로 JSON만 주고받고, reference 커널의 실행 시간은 샌드박스 이미지의 torch로 측정합니다.
 
@@ -430,10 +430,10 @@ aws ecr describe-images --region "$AWS_REGION" --repository-name "$ECR_REPO_PREF
 **확인할 것:** `IMAGE_TAG` 값(기본 `v1`)이 출력됩니다. 리포지토리 이름의 `sandbox`를 `trainer`, `control`로 바꿔 나머지도 확인하세요.
 
 !!! question "❓ 오해: private endpoint만 활성화하면 작업 PC에서 kubectl을 쓸 수 없다"
-    `cdk/tunnel.sh`로 연 터널을 거치면 쓸 수 있습니다. kubectl은 `127.0.0.1`에 연결하지만 API 서버 인증서는 실제 endpoint 이름으로 검증하므로(`--tls-server-name`) TLS 검증을 끄지 않아요. 노드와 control plane 사이의 요청은 기존과 같이 VPC 안의 private endpoint를 통해 전달됩니다.
+    `cdk/tunnel.sh`로 연 터널을 거치면 쓸 수 있습니다. kubectl은 `127.0.0.1`에 연결하지만 API 서버 인증서는 실제 endpoint 이름으로 검증하므로(`--tls-server-name`) TLS 검증을 끄지 않습니다. 노드와 control plane 사이의 요청은 기존과 같이 VPC 안의 private endpoint를 통해 전달됩니다.
 
 !!! question "❓ 오해: NVIDIA AMI 타입을 선택하면 GPU 설정이 끝난다"
-    EKS AL2023 NVIDIA AMI(v20261107)에는 드라이버(기본 580.178.04), nvidia-container-toolkit 1.20.1, containerd 2.3.7이 들어 있지만 device plugin은 없습니다. GPU를 `nvidia.com/gpu` 리소스로 등록하려면 `04_install_gpu_stack.sh`가 설치하는 device plugin이 필요합니다. gVisor로 GPU 워크로드를 실행하려면 이 페이지의 `runsc` 설치와 같은 스크립트가 등록하는 RuntimeClass도 필요해요.
+    EKS AL2023 NVIDIA AMI(v20261107)에는 드라이버(기본 580.178.04), nvidia-container-toolkit 1.20.1, containerd 2.3.7이 들어 있지만 device plugin은 없습니다. GPU를 `nvidia.com/gpu` 리소스로 등록하려면 `04_install_gpu_stack.sh`가 설치하는 device plugin이 필요합니다. gVisor로 GPU 워크로드를 실행하려면 이 페이지의 `runsc` 설치와 같은 스크립트가 등록하는 RuntimeClass도 있어야 합니다.
 
 ## 소요 시간과 비용
 
@@ -461,7 +461,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 ## 다음 단계
 
-터널을 열어 둔 상태로 시나리오에 맞는 페이지로 이어 갑니다. A는 [02 gVisor GPU 샌드박스](02_gvisor.md)의 `04_install_gpu_stack.sh`를 실행하고, B1과 B2는 [07 HyperPod 시나리오](07_hyperpod.md)로 이어 갑니다. 이 장에서 `--hyperpod`(B2는 `--hyperpod-b2`)로 클러스터를 만들고 `HYPERPOD=1`로 올린 이미지의 `export` 세 줄을 `config.env`에 넣었다면, B1은 "B1 단계"의 3단계부터, B2는 [B2 절차](07_hyperpod.md#b2) 1단계의 `scripts/04_install_gpu_stack.sh`부터 실행하세요. 같은 `IMAGE_TAG`로 이미지를 다시 빌드하면 IMMUTABLE 태그라 push가 거부될 수 있어요. C는 [10 c8i 단독 저비용 경로](10_cpu_only.md)의 `kata/cpu_nodes.sh`로 진행하세요.
+터널을 열어 둔 상태로 시나리오에 맞는 페이지로 이어 갑니다. A는 [02 gVisor GPU 샌드박스](02_gvisor.md)의 `04_install_gpu_stack.sh`를 실행하고, B1과 B2는 [07 HyperPod 시나리오](07_hyperpod.md)로 이어 갑니다. 이 장에서 `--hyperpod`(B2는 `--hyperpod-b2`)로 클러스터를 만들고 `HYPERPOD=1`로 올린 이미지의 `export` 세 줄을 `config.env`에 넣었다면, B1은 "B1 단계"의 3단계부터, B2는 [B2 절차](07_hyperpod.md#b2) 1단계의 `scripts/04_install_gpu_stack.sh`부터 실행하세요. 같은 `IMAGE_TAG`로 이미지를 다시 빌드하면 IMMUTABLE 태그라 push가 거부될 수 있습니다. C는 [10 c8i 단독 저비용 경로](10_cpu_only.md)의 `kata/cpu_nodes.sh`로 진행하세요.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

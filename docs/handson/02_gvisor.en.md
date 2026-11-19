@@ -33,7 +33,7 @@ gVisor's own kernel (the Sentry) receives the container's system calls. The `nvi
     - **CDI hook**: a helper command listed in the CDI specification that the runtime runs while creating the container.
 
 !!! warning "AWS steps on this page"
-    `04_install_gpu_stack.sh` was run in the practice account on 2026-11-18 (us-west-2, `g5.xlarge`). The smoke pod's `cuda ok: NVIDIA A10G 2048.0` line and the GPU count briefly showing `0` were seen in that run; the rest of the output is an example of the shape. Compare the "What to look for" items below with your actual output.
+    `04_install_gpu_stack.sh` was run in the practice account (`g5.xlarge`, [run record](../reference/sources.md#aws-run-record)). The smoke pod's `cuda ok: NVIDIA A10G 2048.0` line and the GPU count briefly showing `0` were seen in that run; the rest of the output is an example of the shape. Compare the "What to look for" items below with your actual output.
 
 ## Install the GPU stack and gVisor: `04_install_gpu_stack.sh`
 
@@ -269,7 +269,7 @@ Despite the nvproxy ioctl allowlist, the gVisor documentation states that it is 
 
 ## Scope and limits
 
-- On AWS only `g5` (A10G, the proprietary GSP-off module the gVisor documentation does not cover) has been run. The smoke test, `ops/verify.sh` and the 5-step training used `g5.xlarge` sandboxes; the benchmark on another cluster the same day (`ops/bench.sh`, [08](08_benchmark.md)) used a gVisor pool on `g5.2xlarge`. `g6` and T4 have not been run with gVisor.
+- On AWS only `g5` (A10G, the proprietary GSP-off module the gVisor documentation does not cover) has been run. The smoke test, `ops/verify.sh` and the 5-step training used `g5.xlarge` sandboxes; the benchmark on another cluster (`ops/bench.sh`, [08](08_benchmark.md)) used a gVisor pool on `g5.2xlarge`. `g6` and T4 have not been run with gVisor.
 - The kernel string and dmesg lines can change between gVisor releases, so the test is not the value but whether the kernel differs from the node's and the first dmesg line is `Starting gVisor...`.
 
 ## Time and cost

@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-증상은 원인이 생긴 단계보다 한참 뒤에 나타나는 경우가 많습니다. 예를 들어 노드 user data 오류가 몇 단계 뒤에 "pod Pending"이나 "GPU 없음"으로 나타납니다. gVisor와 Kata pod 안에서 보이는 커널, 장치, 네트워크는 노드와 달라서, 노드에서 확인할 것과 pod 안에서 확인할 것을 구분해야 합니다. 인증 실패나 NetworkPolicy 차단은 그 샘플을 `sandbox_error`로 만들 뿐 학습을 멈추지 않습니다. TRL은 세 reward를 모두 `None`으로 반환해 group baseline에서 빼고, veRL은 format 점수 0.1과 `sandbox_error: 1`을 기록하므로, 학습 로그에는 `sandbox_error` 개수로만 나타나요.
+증상은 원인이 생긴 단계보다 한참 뒤에 나타나는 경우가 많습니다. 예를 들어 노드 user data 오류가 몇 단계 뒤에 "pod Pending"이나 "GPU 없음"으로 나타납니다. gVisor와 Kata pod 안에서 보이는 커널, 장치, 네트워크는 노드와 달라서, 노드에서 확인할 것과 pod 안에서 확인할 것을 구분해야 합니다. 인증 실패나 NetworkPolicy 차단은 그 샘플을 `sandbox_error`로 만들 뿐 학습을 멈추지 않습니다. TRL은 세 reward를 모두 `None`으로 반환해 group baseline에서 빼고, veRL은 format 점수 0.1과 `sandbox_error: 1`을 기록하므로, 학습 로그에는 `sandbox_error` 개수로만 나타납니다.
 
 ## Why
 
@@ -12,7 +12,7 @@
 - **"(추정)"으로 표시한 원인은 코드나 문서로 확인하지 못한 것입니다.** pod 이벤트와 노드 로그로 직접 확인하세요.
 
 !!! warning "이 페이지의 근거"
-    2026-11-14에 저자는 시나리오 C의 CDK 배포, 터널, Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 삭제를 실습 계정에서 실행했습니다. 실습 계정에서 2026-11-18에는 us-west-2의 시나리오 A를 `g5`로 실행했어요. 클러스터는 GPU 노드 그룹 없이 만든 뒤 update로 추가했고(아래 "GPU 용량이 없을 때"), `03_build_push_images.sh`, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(1 replica)과 `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5`, `08_cleanup.sh --images`를 실행했어요. 같은 날 다른 클러스터 구성(system 전용으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가)에서 Kata GPU(`g4dn.metal`), `ops/bench.sh`, 데모 사이트(us-east-1)도 실행했습니다. 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행은 이 실행에서 나왔어요. 시나리오 A의 `ops/rollout.sh`, 기본값 60 step 학습, HyperPod B1과 B2는 실행하지 않았고, 실험용 CLH GPU는 VM이 시작되지 않았습니다([검증 상태](../index.md)). 증상과 원인은 스크립트 오류 메시지, 코드 동작, 공식 문서에서 가져왔습니다. 에러 문구는 도구 버전마다 다를 수 있어요.
+    시나리오 C, 시나리오 A(`g5`), Kata GPU(`g4dn.metal`), 런타임 벤치마크, 데모 사이트는 실습 계정에서 실행했습니다. 시나리오 A 클러스터는 GPU 노드 그룹 없이 만든 뒤 update로 추가했고(아래 "GPU 용량이 없을 때"), 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행은 Kata GPU 실행에서 나왔습니다. 시나리오 A의 `ops/rollout.sh`, 기본값 60 step 학습, HyperPod B1과 B2는 실행하지 않았고, 실험용 CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](sources.md#aws-실행-기록)에 있습니다. 증상과 원인은 스크립트 오류 메시지, 코드 동작, 공식 문서에서 가져왔습니다. 에러 문구는 도구 버전마다 다를 수 있습니다.
 
 ??? note "용어"
     - **readiness**: kubelet이 pod가 요청을 받을 준비가 됐는지 확인하는 검사입니다. 이 저장소에서는 GPU probe와 egress 차단 확인이 모두 통과해야 Ready가 됩니다.
@@ -39,11 +39,11 @@ kubectl -n sandbox logs <pod> --previous       # after a restart (for example a 
 kubectl get events -A --sort-by=.lastTimestamp | tail -30
 ```
 
-readiness 문제는 서버 로그의 두 줄로 대부분 분류할 수 있습니다. 샌드박스 서버는 시작할 때 `device probe ok=<True|False> info=<...>`를 남기고, egress 대상에 연결되면 `egress is open, refusing work: <대상 목록>`을 ERROR 로그로 남겨요.
+readiness 문제는 서버 로그의 두 줄로 대부분 분류할 수 있습니다. 샌드박스 서버는 시작할 때 `device probe ok=<True|False> info=<...>`를 남기고, egress 대상에 연결되면 `egress is open, refusing work: <대상 목록>`을 ERROR 로그로 남깁니다.
 
 ### 샌드박스 안에서 확인 (kubectl exec)
 
-아래 명령은 gVisor v1 풀의 pod 하나를 선택해 샌드박스 안과 노드의 커널 버전을 비교하고, 새 프로세스에서 GPU가 보이는지와 첫 CUDA 연산이 되는지 확인합니다. GPU가 보여도 첫 연산이나 동기화에서 실패할 수 있어요.
+아래 명령은 gVisor v1 풀의 pod 하나를 선택해 샌드박스 안과 노드의 커널 버전을 비교하고, 새 프로세스에서 GPU가 보이는지와 첫 CUDA 연산이 되는지 확인합니다. GPU가 보여도 첫 연산이나 동기화에서 실패할 수 있습니다.
 
 ```bash
 pod="$(kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v1 \
@@ -65,7 +65,7 @@ kubectl -n sandbox exec "$pod" --\
 
 ### probe 도구로 /info 보기
 
-`/info`는 인증이 필요합니다. audience가 `SANDBOX_AUDIENCE`인, 허용 목록에 있는 ServiceAccount의 토큰을 Bearer로 보내야 하고, 연결도 NetworkPolicy가 허용한 pod에서만 됩니다. 그래서 내 PC에서 `curl`로 바로 볼 수는 없어요. 대신 control 이미지의 probe 도구를 `rl-trainer` namespace의 Job으로 실행하면(ServiceAccount `sandbox-probe`, 라벨 `gpusandbox/client: "true"`) pod마다 `/info` 요약과 golden verdict가 출력돼요. 아래 첫 명령은 Ready pod 전체를, 두 번째 명령은 Ready가 아닌 pod 하나를 IP로 직접 점검합니다.
+`/info`는 인증이 필요합니다. audience가 `SANDBOX_AUDIENCE`인, 허용 목록에 있는 ServiceAccount의 토큰을 Bearer로 보내야 하고, 연결도 NetworkPolicy가 허용한 pod에서만 됩니다. 그래서 내 PC에서 `curl`로 바로 볼 수는 없습니다. 대신 control 이미지의 probe 도구를 `rl-trainer` namespace의 Job으로 실행하면(ServiceAccount `sandbox-probe`, 라벨 `gpusandbox/client: "true"`) pod마다 `/info` 요약과 golden verdict가 출력됩니다. 아래 첫 명령은 Ready pod 전체를, 두 번째 명령은 Ready가 아닌 pod 하나를 IP로 직접 점검합니다.
 
 ```bash
 # Ready pods behind the headless Service: /info summary per pod and golden verdicts
@@ -76,7 +76,7 @@ pod_ip="$(kubectl -n sandbox get pod "$pod" -o jsonpath='{.status.podIP}')"
 bash -c "source scripts/lib.sh && source scripts/lib_jobs.sh && run_tool_job probe-debug probe --address ${pod_ip}:8000 --device cuda"
 ```
 
-출력 앞부분에는 pod마다 `{"endpoint": ..., "pod": ..., "runtime": ..., "version": ..., "kernel_release": ..., "gpu": ..., "egress_blocked": ...}` 한 줄이 나오고, 그 뒤에 golden마다 `PASS` 또는 `FAIL` 줄이 이어집니다. Ready가 아닌 pod는 평가 요청에 503을 반환하므로 golden 줄이 `sandbox_error`로 FAIL 하는 것이 정상이에요. probe 도구는 `/info`의 `egress_open_targets`를 출력하지 않으니, 어느 대상이 열려 있는지는 서버 로그의 `egress is open` 줄에서 확인하세요. CPU 풀이면 `--device cpu`를 씁니다.
+출력 앞부분에는 pod마다 `{"endpoint": ..., "pod": ..., "runtime": ..., "version": ..., "kernel_release": ..., "gpu": ..., "egress_blocked": ...}` 한 줄이 나오고, 그 뒤에 golden마다 `PASS` 또는 `FAIL` 줄이 이어집니다. Ready가 아닌 pod는 평가 요청에 503을 반환하므로 golden 줄이 `sandbox_error`로 FAIL 하는 것이 정상입니다. probe 도구는 `/info`의 `egress_open_targets`를 출력하지 않으니, 어느 대상이 열려 있는지는 서버 로그의 `egress is open` 줄에서 확인하세요. CPU 풀이면 `--device cpu`를 씁니다.
 
 ### 노드에서 확인 (kubectl debug node)
 
@@ -126,7 +126,7 @@ aws autoscaling describe-scaling-activities --auto-scaling-group-name "$asg" \
   --region "$AWS_REGION" --max-items 5 --query 'Activities[].[StatusCode,StatusMessage]' --output text
 ```
 
-노드가 클러스터에 등록되지 않으면 `health`에 나온 인스턴스 ID로 접속해 user data 로그를 봅니다. Session Manager plugin이 로컬에 있어야 하고, 노드 IAM 역할에 SSM 권한(`AmazonSSMManagedInstanceCore`)이 있어야 세션이 열려요. CDK 스택의 노드 역할에는 이 정책이 없습니다(`cdk/gpusandbox_cdk/stack.py`의 `node_policies`). SSM 세션이 필요하면 디버깅하는 동안만 이 정책을 노드 역할에 연결하고, 그렇지 않으면 아래 콘솔 출력을 보세요.
+노드가 클러스터에 등록되지 않으면 `health`에 나온 인스턴스 ID로 접속해 user data 로그를 봅니다. Session Manager plugin이 로컬에 있어야 하고, 노드 IAM 역할에 SSM 권한(`AmazonSSMManagedInstanceCore`)이 있어야 세션이 열립니다. CDK 스택의 노드 역할에는 이 정책이 없습니다(`cdk/gpusandbox_cdk/stack.py`의 `node_policies`). SSM 세션이 필요하면 디버깅하는 동안만 이 정책을 노드 역할에 연결하고, 그렇지 않으면 아래 콘솔 출력을 보세요.
 
 ```bash
 aws ssm start-session --target <instance-id> --region "$AWS_REGION"
@@ -188,7 +188,7 @@ while sleep 60; do kubectl get --raw /healthz >/dev/null || echo "$(date +%T) AP
 | 노드 그룹은 있는데 노드가 `kubectl get nodes`에 나타나지 않음(health에 노드 생성 실패) | user data(`infra/eks/userdata.py`가 만든 NodeConfig와 셸 part) 오류, gVisor tarball 다운로드나 sha512 검사 실패, 잘못된 커스텀 AMI | 위 "AWS 쪽 확인"으로 인스턴스를 찾아 `/var/log/cloud-init-output.log`와 `journalctl -u nodeadm-config -u nodeadm-run` 확인 |
 | `kubectl`이나 `helm`이 `Unable to connect to the server`, timeout, `127.0.0.1:8443` 연결 거부로 실패 | EKS API endpoint는 private만이라 터널 없이는 접속할 수 없음. 터널 터미널이 닫혔거나 다른 kubectl 컨텍스트를 씀 | 두 번째 터미널에서 `cdk/tunnel.sh`를 다시 실행하고, `kubectl config current-context`가 `<CLUSTER_NAME>-tunnel`인지 확인 |
 
-**GPU 용량이 없을 때:** GPU 노드 그룹이 포함된 첫 생성은 용량 부족 하나로 전체가 롤백됩니다. GPU 노드 그룹 없는 구성으로 클러스터를 먼저 만들고, update로 노드 그룹을 하나씩 추가하세요. 실패한 update는 그 update만 롤백돼요.
+**GPU 용량이 없을 때:** GPU 노드 그룹이 포함된 첫 생성은 용량 부족 하나로 전체가 롤백됩니다. GPU 노드 그룹 없는 구성으로 클러스터를 먼저 만들고, update로 노드 그룹을 하나씩 추가하세요. 실패한 update는 그 update만 롤백됩니다.
 
 ```bash
 scripts/02_create_cluster.sh --hyperpod-b2                  # no EC2 GPU node groups
@@ -196,7 +196,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh --hyperpod   # adds the gVisor no
 CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (A)
 ```
 
-용량은 인스턴스를 하나 시작했다가 바로 종료해서 확인합니다. On-Demand Capacity Reservation 요청은 실제 시작이 성공하는 상황에서도 용량이 없다고 응답할 수 있어요. 인스턴스 유형은 실행마다 `scripts/config.env`에서 바꿀 수 있습니다. 예를 들어 `g6`에 용량이 있으면 `GVISOR_INSTANCE_TYPE`과 `TRAINER_INSTANCE_TYPE`을 `g6.xlarge`, `g6.2xlarge`로 지정하세요.
+용량은 인스턴스를 하나 시작했다가 바로 종료해서 확인합니다. On-Demand Capacity Reservation 요청은 실제 시작이 성공하는 상황에서도 용량이 없다고 응답할 수 있습니다. 인스턴스 유형은 실행마다 `scripts/config.env`에서 바꿀 수 있습니다. 예를 들어 `g6`에 용량이 있으면 `GVISOR_INSTANCE_TYPE`과 `TRAINER_INSTANCE_TYPE`을 `g6.xlarge`, `g6.2xlarge`로 지정하세요.
 
 ## gVisor
 
@@ -296,7 +296,7 @@ kubectl -n sandbox get endpointslices -l kubernetes.io/service-name=sandbox-gvis
 
 ## 401, 403 응답
 
-실제 오류 문자열(`HTTP 401: {"detail": ...}`)은 probe 도구의 `FAIL` 줄에서 확인하세요. trainer 로그의 `reward_batch` 이벤트에는 상태별 개수만 나옵니다. 클라이언트는 4xx를 다른 pod에서 재시도하지 않습니다. 아래 표에서 `06_deploy_sandboxes.sh`를 다시 실행할 때는 문제가 난 풀의 runtime, 버전, 현재 replica 수를 모두 넘기세요. runtime을 빼면 스크립트가 멈추고, 버전과 replica 수를 빼면 v1과 프로필 기본 replica 수로 배포해요.
+실제 오류 문자열(`HTTP 401: {"detail": ...}`)은 probe 도구의 `FAIL` 줄에서 확인하세요. trainer 로그의 `reward_batch` 이벤트에는 상태별 개수만 나옵니다. 클라이언트는 4xx를 다른 pod에서 재시도하지 않습니다. 아래 표에서 `06_deploy_sandboxes.sh`를 다시 실행할 때는 문제가 난 풀의 runtime, 버전, 현재 replica 수를 모두 넘기세요. runtime을 빼면 스크립트가 멈추고, 버전과 replica 수를 빼면 v1과 프로필 기본 replica 수로 배포합니다.
 
 | 응답과 detail | 원인 | 해결 |
 |---|---|---|
@@ -447,10 +447,10 @@ multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <ru
 | `cdk destroy`가 오래 걸리거나 `DELETE_FAILED`로 실패(추정) | 스택 밖에서 만든 리소스가 VPC를 계속 사용 중임(HyperPod ENI, Karpenter가 시작한 노드 등) | HyperPod를 먼저 삭제(`scripts/hyperpod/delete.sh`)하고 `scripts/08_cleanup.sh`를 재시도. CloudFormation 콘솔의 스택 이벤트에서 실패한 리소스 확인 |
 
 > ❓ **오해: pod가 Running이면 샌드박스가 준비된 것이다.**
-> 이 저장소에서 Running은 컨테이너가 시작됐다는 뜻일 뿐입니다. readiness는 GPU probe와 egress 차단 확인까지 통과해야 하고, Ready가 아닌 pod는 headless Service DNS에 나타나지 않아 요청을 받지 않아요. "Running인데 요청이 가지 않는다"는 증상은 대부분 readiness 문제이니, `kubectl -n sandbox get pods`의 READY 열(`0/1`)과 서버 로그를 먼저 보세요.
+> 이 저장소에서 Running은 컨테이너가 시작됐다는 뜻일 뿐입니다. readiness는 GPU probe와 egress 차단 확인까지 통과해야 하고, Ready가 아닌 pod는 headless Service DNS에 나타나지 않아 요청을 받지 않습니다. "Running인데 요청이 가지 않는다"는 증상은 대부분 readiness 문제이니, `kubectl -n sandbox get pods`의 READY 열(`0/1`)과 서버 로그를 먼저 보세요.
 
 > ❓ **오해: 학습이 계속 진행되면 샌드박스도 정상이다.**
-> 인프라 오류(`sandbox_error`)는 학습을 멈추지 않습니다. TRL은 그 샘플의 세 reward를 모두 `None`으로 반환해 group baseline에서 빼고, veRL은 format 점수 0.1과 `sandbox_error: 1`을 기록해요. 오류가 계속돼도 학습은 진행됩니다. TRL에서는 점수를 받는 샘플이 줄어드니, `reward_batch` 이벤트가 기록된 batch에서 `status.sandbox_error / n`을 주기적으로 확인하세요. veRL에서는 오류 샘플도 0.1점을 받으므로 `reward_extra_info`의 `sandbox_error`를 집계합니다.
+> 인프라 오류(`sandbox_error`)는 학습을 멈추지 않습니다. TRL은 그 샘플의 세 reward를 모두 `None`으로 반환해 group baseline에서 빼고, veRL은 format 점수 0.1과 `sandbox_error: 1`을 기록합니다. 오류가 계속돼도 학습은 진행됩니다. TRL에서는 점수를 받는 샘플이 줄어드니, `reward_batch` 이벤트가 기록된 batch에서 `status.sandbox_error / n`을 주기적으로 확인하세요. veRL에서는 오류 샘플도 0.1점을 받으므로 `reward_extra_info`의 `sandbox_error`를 집계합니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

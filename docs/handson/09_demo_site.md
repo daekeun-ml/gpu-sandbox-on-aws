@@ -1,10 +1,10 @@
 # 09 데모 사이트 (CloudFront)
 
-**TL;DR** 클러스터의 실행 기록(JSON)을 재생하는 정적 데모를 private S3 버킷과 CloudFront로 공개합니다. 방문자는 클러스터나 GPU에 접근할 수 없어요.
+**TL;DR** 클러스터의 실행 기록(JSON)을 재생하는 정적 데모를 private S3 버킷과 CloudFront로 공개합니다. 방문자는 클러스터나 GPU에 접근할 수 없습니다.
 
 ## 기존 Pain Point
 
-방문자 입력을 GPU 샌드박스로 보내는 라이브 데모는 신뢰할 수 없는 코드를 실행하는 경로를 인터넷에 노출합니다. 또 GPU 노드를 켜 두면 요금이 계속 발생하고, 노드를 줄이면 데모가 동작하지 않아요. 정적 호스팅에서도 버킷을 공개하거나 S3 website endpoint(OAC 불가, CloudFront 문서 기준)를 쓰면 CloudFront를 우회하는 경로가 생깁니다. 기록에 들어 있는 오류 메시지와 정책 위반 내용은 평가된 코드가 만든 문자열입니다. 이 문자열을 HTML로 삽입하면 그 안의 스크립트가 실행됩니다.
+방문자 입력을 GPU 샌드박스로 보내는 라이브 데모는 신뢰할 수 없는 코드를 실행하는 경로를 인터넷에 노출합니다. 또 GPU 노드를 켜 두면 요금이 계속 발생하고, 노드를 줄이면 데모가 동작하지 않습니다. 정적 호스팅에서도 버킷을 공개하거나 S3 website endpoint(OAC 불가, CloudFront 문서 기준)를 쓰면 CloudFront를 우회하는 경로가 생깁니다. 기록에 들어 있는 오류 메시지와 정책 위반 내용은 평가된 코드가 만든 문자열입니다. 이 문자열을 HTML로 삽입하면 그 안의 스크립트가 실행됩니다.
 
 ![두 패널 그림입니다. a: 라이브 데모에서는 방문자가 인터넷에 열린 API를 통해 GPU 샌드박스를 호출하고, 이 샌드박스는 켜 둔 동안 계속 과금됩니다. 공개 버킷이나 website endpoint를 쓰면 방문자가 CloudFront를 거치지 않고 S3 버킷에 직접 접근합니다. 기록 속 오류 메시지와 정책 위반 문자열을 HTML로 넣으면 데모 페이지에서 스크립트로 실행됩니다. b: 기록 재생 방식에서는 방문자가 CloudFront까지만 접근하고, GPU 샌드박스는 기록을 만들 때만 필요합니다. OAC와 AWS:SourceArn 조건 때문에 버킷에 직접 접근하면 403이 반환됩니다. 기록의 문자열은 텍스트로만 삽입하고, CSP는 자기 origin만 허용합니다.](../images/figures/handson-09_demo_site.svg)
 
@@ -13,16 +13,16 @@
 
 ## Why
 
-- **기록을 재생합니다.** 방문자의 요청은 CloudFront까지만 전달되고, 클러스터와 GPU는 기록을 만들 때만 필요해요.
-- **버킷은 비공개로 두고 이 CloudFront 배포만 읽을 수 있게 합니다.** 버킷 정책에 OAC와 `AWS:SourceArn` 조건을 설정하고, `deploy.sh`가 버킷에 직접 접근하면 403이 반환되는지 확인해요.
-- **브라우저에서 실행되는 내용도 제한합니다.** CSP는 같은 origin의 스크립트, 스타일, 연결만 허용합니다. 페이지는 기록의 문자열을 텍스트로만 삽입해요.
+- **기록을 재생합니다.** 방문자의 요청은 CloudFront까지만 전달되고, 클러스터와 GPU는 기록을 만들 때만 필요합니다.
+- **버킷은 비공개로 두고 이 CloudFront 배포만 읽을 수 있게 합니다.** 버킷 정책에 OAC와 `AWS:SourceArn` 조건을 설정하고, `deploy.sh`가 버킷에 직접 접근하면 403이 반환되는지 확인합니다.
+- **브라우저에서 실행되는 내용도 제한합니다.** CSP는 같은 origin의 스크립트, 스타일, 연결만 허용합니다. 페이지는 기록의 문자열을 텍스트로만 삽입합니다.
 
-**사전 지식:** 로컬 Python 환경([시작하기](../getting_started.md) 2장)이 필요합니다. GPU 기록에는 [04](04_sandbox_pools.md)에서 배포한 풀이 필요합니다. 4절의 GRPO 차트에는 [05](05_grpo_training.md)의 학습 로그가 필요하고, 버전 전환 차트는 [06](06_sandbox_update.md)의 전환을 거친 학습 로그나 [10](10_cpu_only.md)의 CPU 시뮬레이션 로그로 만들 수 있어요. verdict와 reward의 의미는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에 있어요.
+**사전 지식:** 로컬 Python 환경([시작하기](../getting_started.md) 2장)이 필요합니다. GPU 기록에는 [04](04_sandbox_pools.md)에서 배포한 풀이 필요합니다. 4절의 GRPO 차트에는 [05](05_grpo_training.md)의 학습 로그가 필요하고, 버전 전환 차트는 [06](06_sandbox_update.md)의 전환을 거친 학습 로그나 [10](10_cpu_only.md)의 CPU 시뮬레이션 로그로 만들 수 있습니다. verdict와 reward의 의미는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 설명합니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **정적 사이트**: 서버 쪽 코드 없이 HTML, CSS, JavaScript 파일만 제공하는 사이트입니다.
     - **Amazon CloudFront**: 전 세계 edge location에서 파일을 캐시해 제공하는 CDN입니다. 배포(distribution) 하나가 도메인 하나를 담당합니다.
-    - **OAC (Origin Access Control)**: CloudFront가 S3에 서명된 요청을 보내는 방식입니다. 버킷을 공개하지 않고 CloudFront만 버킷을 읽도록 설정할 수 있어요.
+    - **OAC (Origin Access Control)**: CloudFront가 S3에 서명된 요청을 보내는 방식입니다. 버킷을 공개하지 않고 CloudFront만 버킷을 읽도록 설정할 수 있습니다.
     - **S3 Block Public Access**: 버킷 정책이나 ACL로 버킷이 공개되는 것을 막는 설정 네 가지입니다.
     - **service principal**: AWS 서비스가 권한 주체로 쓰는 이름입니다. CloudFront는 `cloudfront.amazonaws.com`입니다.
     - **`AWS:SourceArn`**: 요청을 보낸 AWS 리소스의 ARN을 조건으로 거는 정책 키입니다. 여기서는 이 CloudFront 배포가 보낸 요청만 허용하는 조건으로 씁니다.
@@ -46,7 +46,7 @@
 | 5. 벤치마크 | 런타임별 eval p50, p95, cold start, pod당 처리량, speedup 막대 차트. 이미지 캐시 후와 배포 직후를 바꿔 볼 수 있습니다 | `extras.json`의 `bench`(`scripts/ops/bench.sh` 출력) |
 | 패턴별 아키텍처 (`architecture.html`) | 시나리오 A, B1, B2, C를 AWS 아이콘으로 그린 구성도. 패턴마다 "준비와 배포", "학습 한 step", "버전 바꾸기" 흐름을 단계별로 재생하고, 요청과 결과가 선을 따라 움직입니다. 기본 한국어이고 `?lang=en`이나 `EN` 버튼으로 영어로 바뀝니다 | 페이지에 들어 있는 정적 데이터(`arch.js`). 데이터 파일을 읽지 않습니다 |
 
-공개되는 것은 HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다. 저장소의 `recording.json` 샘플은 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요. 2026-11-18에 공개한 GPU 기록은 `demo/recordings/2026-11-18-eks-gpu.json`에 있고, `extras.json`의 GRPO 차트와 벤치마크는 같은 날 EKS 실행(us-west-2)의 로그로 만들었고, 버전 전환 차트는 2026-11-17에 모델 없이 golden 제출물로 실행한 CPU 시뮬레이션 로그를 씁니다. 2절의 진행 막대는 기록된 전체 평가 시간이고, 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워져요.
+공개되는 것은 HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다. 저장소의 `recording.json` 샘플은 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요. 2026-11-18에 공개한 GPU 기록은 `demo/recordings/2026-11-18-eks-gpu.json`에 있고, `extras.json`의 GRPO 차트와 벤치마크는 같은 날 EKS 실행(us-west-2)의 로그로 만들었고, 버전 전환 차트는 2026-11-17에 모델 없이 golden 제출물로 실행한 CPU 시뮬레이션 로그를 씁니다. 2절의 진행 막대는 기록된 전체 평가 시간이고, 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.
 
 ```mermaid
 flowchart LR
@@ -64,37 +64,37 @@ flowchart LR
 ## 소요 시간과 비용
 
 - **로컬 미리보기와 샘플 재생성**은 AWS 비용이 들지 않습니다.
-- **배포** 시간은 대부분 스택 생성과 CloudFront 전파를 기다리는 시간입니다. 스크립트가 200 응답을 기다리는 시간은 최대 약 10분입니다(4절 7번 단계). 실제 소요 시간은 측정하지 않았어요.
+- **배포** 시간은 대부분 스택 생성과 CloudFront 전파를 기다리는 시간입니다. 스크립트가 200 응답을 기다리는 시간은 최대 약 10분입니다(4절 7번 단계). 실제 소요 시간은 측정하지 않았습니다.
 - **사이트 비용**: 작은 정적 사이트의 비용은 보통 크지 않지만 트래픽에 따라 달라지므로 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)과 [S3 요금](https://aws.amazon.com/s3/pricing/)을 확인하세요.
-- **WAF 비용**: web ACL 월 약 5 USD, 규칙마다 월 1 USD(규칙 5개), 요청 100만 건마다 0.60 USD입니다([AWS WAF 요금](https://aws.amazon.com/waf/pricing/)). 스택이 있는 동안은 트래픽이 없어도 고정 비용(월 약 10 USD)이 나와요.
+- **WAF 비용**: web ACL 월 약 5 USD, 규칙마다 월 1 USD(규칙 5개), 요청 100만 건마다 0.60 USD입니다([AWS WAF 요금](https://aws.amazon.com/waf/pricing/)). 스택이 있는 동안은 트래픽이 없어도 고정 비용(월 약 10 USD)이 나옵니다.
 - **영상 전송 비용**: 둘러보기 영상은 언어마다 약 5.5 MB입니다. 전송량은 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)에 따라 과금되고, WAF가 IP마다 `/media/` 요청을 5분에 100건으로 제한해 한 클라이언트가 만들 수 있는 전송량에 상한을 둡니다. 예상보다 많이 쓰일 것 같으면 AWS Budgets 알림을 걸어 두세요.
 - **로그 비용**: 로그 버킷의 S3 저장 요금만 듭니다. 객체는 90일 뒤 만료되고, 버킷은 정리 뒤에도 남습니다(6절).
 - **GPU 기록 비용**: 기록하는 동안 GPU 샌드박스 노드가 실행 중이어야 합니다(`g5.2xlarge` 시간당 1.212 USD, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1과 us-west-2 온디맨드 요금). recorder pod는 system 노드에서 GPU 없이 실행되고, trainer pod로 기록하면 trainer 노드도 실행 중이어야 합니다. 기록을 만든 뒤에는 [99 정리](99_cleanup.md)에 따라 GPU 노드를 줄이세요.
 
 ## 1. 로컬에서 미리 보기
 
-저장소 루트에서 실행합니다. 서버가 loopback 주소에만 bind하므로 다른 컴퓨터에서는 접속할 수 없어요.
+저장소 루트에서 실행합니다. 서버가 loopback 주소에만 bind하므로 다른 컴퓨터에서는 접속할 수 없습니다.
 
 ```bash
 # Serve demo/site on loopback only (Ctrl-C stops it)
 python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 ```
 
-브라우저에서 http://127.0.0.1:8080 을 엽니다. 파일을 직접 열면(`file://`) 브라우저가 `fetch`를 차단해 기록을 불러오지 못할 수 있어요.
+브라우저에서 http://127.0.0.1:8080 을 엽니다. 파일을 직접 열면(`file://`) 브라우저가 `fetch`를 차단해 기록을 불러오지 못할 수 있습니다.
 
 **확인할 것:**
 
 - 맨 위 "기록 출처:" 줄에 `Local CPU smoke run on a laptop (127.0.0.1, no gVisor or Kata, no GPU).`로 시작하는 문구와 기록 시각이 보입니다.
-- 핵심 수치 타일은 `8/8`(예상대로 나온 채점 결과), `10/10`(타일 이름은 "샌드박스 안에서 막힌 접근 시도"이지만 바깥에서 들어오는 연결 검사도 포함합니다. 두 풀의 `verify.sh` 기록에서 `blocked`가 들어간 줄을 센 값으로, 송신 검사 8줄과 `default` namespace에서 들어오는 연결 검사 2줄이에요. 분모에도 같은 줄 수를 표시합니다), `160/160`(성능 측정 요청 중 성공) 세 개입니다. 샘플 기록에는 GPU 풀이 없어서 GPU 격리 방식 타일은 나오지 않아요.
+- 핵심 수치 타일은 `8/8`(예상대로 나온 채점 결과), `10/10`(타일 이름은 "샌드박스 안에서 막힌 접근 시도"이지만 바깥에서 들어오는 연결 검사도 포함합니다. 두 풀의 `verify.sh` 기록에서 `blocked`가 들어간 줄을 센 값으로, 송신 검사 8줄과 `default` namespace에서 들어오는 연결 검사 2줄입니다. 분모에도 같은 줄 수를 표시합니다), `160/160`(성능 측정 요청 중 성공) 세 개입니다. 샘플 기록에는 GPU 풀이 없어서 GPU 격리 방식 타일은 나오지 않습니다.
 - 2절에 제출 코드 카드 네 개(PyTorch만 사용, ReLU 빠뜨린 오답, 속도 측정 속이기, 서버 파일 읽기)가 있고, 재생하면 `local-cpu v1`, `local-cpu v2` 두 줄이 채워집니다. 코드는 문법 색상과 줄 번호로 표시됩니다.
 - 3절에 공격 카드 여덟 개와 터미널 탭 네 개(verify.sh gvisor, verify.sh kata-qemu, gVisor GPU 동작 확인, rollout.sh v1 → v2)가 있습니다.
 - 4절 아래 차트의 요약이 "배치 30개가 하나도 빠지지 않고 채점됐습니다. step 8에서 kata-clh-cpu/v1에서 kata-clh-cpu/v2로 바뀌었고"로 시작합니다.
 - 5절 막대 여섯 개 중 `kata-clh`는 "측정 못 함: VM이 시작되지 않음"으로 나옵니다.
-- 기본 언어는 한국어입니다. 주소에 `?lang=en`을 붙이거나 오른쪽 위 `EN` 버튼을 누르면 영어로 바뀌고, 고른 언어는 주소에 남아 새로고침해도 유지됩니다. 터미널에는 파일마다 200 응답 로그가 출력돼요.
+- 기본 언어는 한국어입니다. 주소에 `?lang=en`을 붙이거나 오른쪽 위 `EN` 버튼을 누르면 영어로 바뀌고, 고른 언어는 주소에 남아 새로고침해도 유지됩니다. 터미널에는 파일마다 200 응답 로그가 출력됩니다.
 
-이 항목은 2026-11-18에 Linux의 Chromium(Playwright)으로 확인했습니다. 3절의 풀 카드는 `recording.json`을 읽고, 3절의 공격 카드와 터미널, 4절, 5절은 저장소의 `extras.json`에서 나오며 각 차트 옆에 그 출처가 표시됩니다. 공개본의 GRPO 학습과 벤치마크는 2026-11-18 EKS 기록이고, 버전 전환은 2026-11-17 CPU 시뮬레이션이에요.
+이 항목은 2026-11-18에 Linux의 Chromium(Playwright)으로 확인했습니다. 3절의 풀 카드는 `recording.json`을 읽고, 3절의 공격 카드와 터미널, 4절, 5절은 저장소의 `extras.json`에서 나오며 각 차트 옆에 그 출처가 표시됩니다. 공개본의 GRPO 학습과 벤치마크는 2026-11-18 EKS 기록이고, 버전 전환은 2026-11-17 CPU 시뮬레이션입니다.
 
-**문제가 생기면:** `Address already in use`가 나오면 다른 포트(예: `8081`)로 실행하고 브라우저에서도 그 포트의 주소를 여세요. "기록 출처" 자리에 `failed to load recording:`이 나오면 `demo/site/data/recording.json`이 있는지, 올바른 JSON인지 확인하세요. `data/extras.json`이 없으면 맨 위의 차단 수와 벤치마크 타일, 터미널 출력이 사라집니다. 5절은 제목과 빈 차트 영역이 남아요. 3절의 공격 카드와 4절의 GRPO 차트 자리에는 "이 기록에는 이 부분의 데이터가 없습니다."가 나오고, 4절의 버전 전환 차트는 `recording.json`의 학습 이벤트로 그려집니다. 그 밖의 경우에는 [문제 해결](../reference/troubleshooting.md)을 보세요.
+**문제가 생기면:** `Address already in use`가 나오면 다른 포트(예: `8081`)로 실행하고 브라우저에서도 그 포트의 주소를 여세요. "기록 출처" 자리에 `failed to load recording:`이 나오면 `demo/site/data/recording.json`이 있는지, 올바른 JSON인지 확인하세요. `data/extras.json`이 없으면 맨 위의 차단 수와 벤치마크 타일, 터미널 출력이 사라집니다. 5절은 제목과 빈 차트 영역이 남습니다. 3절의 공격 카드와 4절의 GRPO 차트 자리에는 "이 기록에는 이 부분의 데이터가 없습니다."가 나오고, 4절의 버전 전환 차트는 `recording.json`의 학습 이벤트로 그려집니다. 그 밖의 경우에는 [문제 해결](../reference/troubleshooting.md)을 보세요.
 
 ## 2. 클러스터에서 GPU 기록 만들기
 
@@ -105,7 +105,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 - trainer와 같은 `score_verdict`로 계산한 reward 구성 요소
 - `--training-events`를 주면 그 파일의 `reward_batch`, `sandbox_version_switch` 이벤트
 
-pod IP와 endpoint 주소는 별도 필드로 저장하지 않고, 토큰도 넣지 않습니다(`record`가 저장하는 필드 목록 기준). 다만 연결 오류의 `error`에는 endpoint 주소가 남을 수 있어요. `deploy.sh`는 업로드 전에 `demo/build_extras.py --check`로 IP 주소를 찾습니다. `127.0.0.1`, `0.0.0.0`, `169.254.169.254`는 허용하고, 그 밖의 IP 주소가 남아 있으면 멈추니 2.5에서 미리 확인하세요. 이 명령은 클러스터 안에서, 다음 조건을 모두 갖춘 pod에서 실행해야 해요.
+pod IP와 endpoint 주소는 별도 필드로 저장하지 않고, 토큰도 넣지 않습니다(`record`가 저장하는 필드 목록 기준). 다만 연결 오류의 `error`에는 endpoint 주소가 남을 수 있습니다. `deploy.sh`는 업로드 전에 `demo/build_extras.py --check`로 IP 주소를 찾습니다. `127.0.0.1`, `0.0.0.0`, `169.254.169.254`는 허용하고, 그 밖의 IP 주소가 남아 있으면 멈추니 2.5에서 미리 확인하세요. 이 명령은 클러스터 안에서, 다음 조건을 모두 갖춘 pod에서 실행해야 합니다.
 
 | 조건 | 이유 |
 |---|---|
@@ -121,12 +121,12 @@ pod IP와 endpoint 주소는 별도 필드로 저장하지 않고, 토큰도 넣
 | recorder pod (`demo/recorder-pod.yaml.tpl`) | 실행 중인 학습 Job 없이 기록할 때 | 비어 있음 |
 | 학습 중인 trainer pod | 학습 이벤트까지 기록할 때. 이벤트 파일 `/outputs/grpo/sandbox_metrics.jsonl`이 이 pod 안에 있음 | 채워짐 |
 
-recorder pod는 trainer 이미지(`rl-trainer`)로 `sleep`만 실행하는 pod입니다. label `gpusandbox/client: "true"`, ServiceAccount `grpo-trainer`, audience `gpu-sandbox`인 projected token, Pod Security restricted(uid 2000) 설정을 갖추고, GPU 없이 system 노드에서 실행돼요. golden set은 샌드박스 풀에서 실행됩니다.
+recorder pod는 trainer 이미지(`rl-trainer`)로 `sleep`만 실행하는 pod입니다. label `gpusandbox/client: "true"`, ServiceAccount `grpo-trainer`, audience `gpu-sandbox`인 projected token, Pod Security restricted(uid 2000) 설정을 갖추고, GPU 없이 system 노드에서 실행되고, golden set은 샌드박스 풀에서 실행됩니다.
 
 ??? info "probe Job 템플릿(`k8s/probe/job-probe.yaml.tpl`)으로 기록하지 않는 이유"
     probe Job은 `rl-trainer` 네임스페이스, client label, audience 토큰 조건은 갖췄지만, 기록 파일을 만들거나 밖으로 복사할 수 없습니다.
 
-    - control 이미지(`gateway/Dockerfile`, `python:3.14-slim` 기반)에는 torch가 없습니다. 로컬 환경에서 torch import를 차단하고 실행하자 같은 코드 경로가 `get_task`의 `ModuleNotFoundError`로 실패했어요.
+    - control 이미지(`gateway/Dockerfile`, `python:3.14-slim` 기반)에는 torch가 없습니다. 로컬 환경에서 torch import를 차단하고 실행하자 같은 코드 경로가 `get_task`의 `ModuleNotFoundError`로 실패했습니다.
     - root filesystem이 읽기 전용이고 쓸 수 있는 볼륨이 없어 `--out` 파일을 저장할 위치가 없습니다.
     - `kubectl cp`는 실행 중인 컨테이너 안의 `tar`를 사용합니다. Job이 끝나면 pod가 종료되므로 파일을 복사할 수 없습니다.
 
@@ -134,8 +134,8 @@ recorder pod는 trainer 이미지(`rl-trainer`)로 `sleep`만 실행하는 pod�
 
 ### 2.1 기록할 시점 고르기
 
-- **학습 Job이 없으면 recorder pod로 기록합니다(2.2).** 이때 기록에는 학습 이벤트가 들어가지 않습니다. 4절의 버전 전환 차트는 `extras.json`의 `simulation`을 먼저 쓰고, 없을 때만 기록의 학습 이벤트를 씁니다. 둘 다 없으면 이 차트는 표시되지 않아요.
-- **trainer pod로 기록할 때는 학습 Job이 Running인 동안 실행합니다.** Job이 끝나면 컨테이너가 종료되어 emptyDir에 있는 이벤트 파일을 복사할 수 없어요([05 On-policy GRPO 학습](05_grpo_training.md)).
+- **학습 Job이 없으면 recorder pod로 기록합니다(2.2).** 이때 기록에는 학습 이벤트가 들어가지 않습니다. 4절의 버전 전환 차트는 `extras.json`의 `simulation`을 먼저 쓰고, 없을 때만 기록의 학습 이벤트를 씁니다. 둘 다 없으면 이 차트는 표시되지 않습니다.
+- **trainer pod로 기록할 때는 학습 Job이 Running인 동안 실행합니다.** Job이 끝나면 컨테이너가 종료되어 emptyDir에 있는 이벤트 파일을 복사할 수 없습니다([05 On-policy GRPO 학습](05_grpo_training.md)).
 - **학습 이벤트에 버전 전환을 넣으려면** [06](06_sandbox_update.md)의 `scripts/ops/rollout.sh gvisor v1 v2`로 routing을 바꾸고, trainer 로그에 `sandbox_version_switch`가 나온 뒤 기록하세요. `record`는 기록할 때 `--training-events` 파일에 있는 이벤트만 읽습니다. `--pool`로 넘긴 주소는 golden을 실행할 대상이라, 두 풀의 golden도 기록하려면 `--finish`로 v1을 줄이기 전에 2.3의 예처럼 v1과 v2 주소를 각각 `--pool`로 넘기세요. B2에서는 Service 이름에 `gvisor-hyperpod`를 씁니다(`sandbox-gvisor-hyperpod-v1`). 4절 차트는 `extras.json`의 `simulation`을 먼저 쓰므로, 내 전환을 표시하려면 2.6에서 `extras.json`을 만들 때 `--simulation-log`를 빼세요.
 - **학습이 잠깐 느려질 수 있습니다.** 기록과 학습이 같은 풀을 쓰고 pod는 한 번에 평가를 하나만 처리하므로, golden 평가가 reward 평가 사이에 추가로 실행됩니다.
 
@@ -152,7 +152,7 @@ echo "${POD}"
 
 **확인할 것:** pod 이름 한 줄이 출력됩니다(시나리오 A에서는 `grpo-<RUN_ID>-<접미사>` 형태). 비어 있으면 학습이 실행 중이 아닌 것이니 [05](05_grpo_training.md)부터 실행하거나, 아래 recorder pod를 쓰세요.
 
-**학습 Job 없이 기록하려면** recorder pod를 만듭니다. `scripts/config.env`의 `TRAINER_IMAGE_URI`와 `SANDBOX_AUDIENCE`로 템플릿을 렌더링해요.
+**학습 Job 없이 기록하려면** recorder pod를 만듭니다. `scripts/config.env`의 `TRAINER_IMAGE_URI`와 `SANDBOX_AUDIENCE`로 템플릿을 렌더링합니다.
 
 ```bash
 # Recorder pod: trainer image, client label, grpo-trainer ServiceAccount, no GPU (runs on a system node)
@@ -166,7 +166,7 @@ POD=demo-recorder
 
 ### 2.3 trainer pod 안에서 record 실행
 
-GPU 풀마다 golden set을 실행하고 결과를 pod의 `/tmp/rec.json`에 저장합니다. `--pool`은 `라벨=주소` 형식이며, 라벨은 페이지의 카드 제목으로 그대로 쓰여요.
+GPU 풀마다 golden set을 실행하고 결과를 pod의 `/tmp/rec.json`에 저장합니다. `--pool`은 `라벨=주소` 형식이며, 라벨은 페이지의 카드 제목으로 그대로 쓰입니다.
 
 ```bash
 # Run the golden set on each GPU pool and write the recording inside the trainer pod.
@@ -186,7 +186,7 @@ kubectl -n rl-trainer exec "${POD}" -c trainer --\
 - **v1과 v2를 함께 넣으려면** 라벨에 버전을 붙입니다. 예: `--pool "gvisor v1=sandbox-gvisor-v1.sandbox.svc.cluster.local:8000" --pool "gvisor v2=sandbox-gvisor-v2.sandbox.svc.cluster.local:8000"`.
 - **`--source`는 "기록 출처" 줄에 그대로 나옵니다.** 리전, 인스턴스, 날짜 같은 기록 조건을 적으세요.
 
-**확인할 것:** 마지막 줄에 다음과 같은 JSON이 나옵니다. `training_events`는 그 시점까지 기록된 배치 수에 따라 달라요. recorder pod에서는 `training_events`가 0입니다(2026-11-18 기록: `goldens: 6`, `training_events: 0`).
+**확인할 것:** 마지막 줄에 다음과 같은 JSON이 나옵니다. `training_events`는 그 시점까지 기록된 배치 수에 따라 다릅니다. recorder pod에서는 `training_events`가 0입니다(2026-11-18 기록: `goldens: 6`, `training_events: 0`).
 
 ```text
 {"event": "recorded", "out": "/tmp/rec.json", "pools": ["gvisor", "kata-qemu"], "goldens": 6, "training_events": <N>}
@@ -206,7 +206,7 @@ kubectl -n rl-trainer cp -c trainer "${POD}:/tmp/rec.json" /tmp/rec.json
 python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['schema'] == 1 and d['pools']" /tmp/rec.json
 ```
 
-**확인할 것:** `kubectl cp`가 `tar` 경고를 한 줄 출력할 수 있지만 복사는 정상적으로 됩니다. 스키마 검사는 아무것도 출력하지 않고 종료 코드 0으로 끝나요.
+**확인할 것:** `kubectl cp`가 `tar` 경고를 한 줄 출력할 수 있지만 복사는 정상적으로 됩니다. 스키마 검사는 아무것도 출력하지 않고 종료 코드 0으로 끝납니다.
 
 ### 2.5 공개하기 전에 검토하기
 
@@ -237,7 +237,7 @@ print("training events:", len(rec["training"]))
 PY
 ```
 
-**확인할 것:** 풀마다 `egress_blocked: True`이고, golden 줄이 모두 `as expected`입니다. 2026-11-18 기록에서는 두 풀 모두 `egress_blocked: True`였고, verdict 12개가 모두 `expected_status`와 같았으며, 파일에 IP, 계정 ID, 호스트 이름이 없었습니다. 저장소의 샘플 기록으로 실행하면 `local-cpu v1`, `local-cpu v2`와 golden 4개씩, `training events: 7`이 나와요(로컬 확인).
+**확인할 것:** 풀마다 `egress_blocked: True`이고, golden 줄이 모두 `as expected`입니다. 2026-11-18 기록에서는 두 풀 모두 `egress_blocked: True`였고, verdict 12개가 모두 `expected_status`와 같았으며, 파일에 IP, 계정 ID, 호스트 이름이 없었습니다. 저장소의 샘플 기록으로 실행하면 `local-cpu v1`, `local-cpu v2`와 golden 4개씩, `training events: 7`이 나옵니다(로컬 확인).
 
 브라우저로 확인하려면 사이트를 임시 폴더에 복사한 뒤 로컬 서버로 실행합니다.
 
@@ -271,7 +271,7 @@ python3 demo/build_extras.py --out demo/site/data/extras.json \
   --transcript verify-gvisor=verify-gvisor.txt --transcript verify-kata-qemu=verify-kata-qemu.txt
 ```
 
-스크립트는 모든 문자열에서 ANSI 색 코드와 shell prompt를 지우고, IP 주소(IPv4, IPv6, `10-0-12-34` 같은 pod DNS 형식)를 `<private-ip>`, `<public-ip>`, `<ipv6>`로, 노드 이름을 `<node>`로, `*.amazonaws.com` 호스트(EKS API endpoint, OIDC, ELB 등)를 `<aws-endpoint>`로 바꿉니다. 계정 ID, ARN, EC2 리소스 ID, 토큰(access key, Hugging Face, GitHub, JWT)도 자리 표시로 바꿔요. `169.254.169.254`(IMDS)처럼 누구에게나 같은 주소는 그대로 둡니다. 바꾼 뒤에도 이런 값이나 `*.internal` 호스트, `user@host`, home 경로(`/home`, `/root`, `/Users`)가 남아 있으면 파일을 쓰지 않고 실패합니다.
+스크립트는 모든 문자열에서 ANSI 색 코드와 shell prompt를 지우고, IP 주소(IPv4, IPv6, `10-0-12-34` 같은 pod DNS 형식)를 `<private-ip>`, `<public-ip>`, `<ipv6>`로, 노드 이름을 `<node>`로, `*.amazonaws.com` 호스트(EKS API endpoint, OIDC, ELB 등)를 `<aws-endpoint>`로 바꿉니다. 계정 ID, ARN, EC2 리소스 ID, 토큰(access key, Hugging Face, GitHub, JWT)도 자리 표시로 대체합니다. `169.254.169.254`(IMDS)처럼 누구에게나 같은 주소는 그대로 둡니다. 바꾼 뒤에도 이런 값이나 `*.internal` 호스트, `user@host`, home 경로(`/home`, `/root`, `/Users`)가 남아 있으면 파일을 쓰지 않고 실패합니다.
 
 **확인할 것:** 위 명령의 마지막 줄에는 `"transcripts": 2`가 나옵니다. 아래는 2026-11-18 로그로 터미널 기록 4개(`verify-gvisor`, `verify-kata-qemu`, `smoke-gvisor`, `rollout`)를 넣어 만든 공개본의 출력입니다.
 
@@ -283,7 +283,7 @@ python3 demo/build_extras.py --out demo/site/data/extras.json \
 
 ### 2.7 둘러보기 영상 다시 만들기 (선택)
 
-`demo/record_tour.py`는 Chromium으로 페이지를 열어 기능을 차례로 재생하고, 화면을 녹화해 `media/tour-ko.mp4`, `tour-en.mp4`와 썸네일을 만듭니다. 자막과 클릭 위치 표시는 녹화할 때만 겹쳐 그리며, 사이트 파일은 바뀌지 않습니다. 페이지는 녹화하는 동안만 `127.0.0.1`에서 제공돼요. 녹화 전에 `--site`의 데이터 파일에 2.6과 같은 검사를 하고, 문제가 있으면 녹화하지 않습니다. 녹화에 쓴 데이터의 해시는 `media/tour-data.json`에 남아서, `deploy.sh`가 게시할 데이터와 다르면 경고합니다(이 파일은 업로드하지 않음).
+`demo/record_tour.py`는 Chromium으로 페이지를 열어 기능을 차례로 재생하고, 화면을 녹화해 `media/tour-ko.mp4`, `tour-en.mp4`와 썸네일을 만듭니다. 자막과 클릭 위치 표시는 녹화할 때만 겹쳐 그리며, 사이트 파일은 바뀌지 않습니다. 페이지는 녹화하는 동안만 `127.0.0.1`에서 제공됩니다. 녹화 전에 `--site`의 데이터 파일에 2.6과 같은 검사를 하고, 문제가 있으면 녹화하지 않습니다. 녹화에 쓴 데이터의 해시는 `media/tour-data.json`에 남아서, `deploy.sh`가 게시할 데이터와 다르면 경고합니다(이 파일은 업로드하지 않음).
 
 ```bash
 # Playwright and ffmpeg are needed on the workstation only (not project dependencies)
@@ -294,11 +294,11 @@ cp /tmp/rec.json /tmp/demo-stage/data/recording.json
 python3 demo/record_tour.py --site /tmp/demo-stage --out demo/site/media
 ```
 
-**확인할 것:** 언어마다 `[tour] demo/site/media/tour-ko.mp4 (<크기> KiB)` 줄이 나옵니다. 2026-11-18 데이터로는 언어마다 약 2분 길이였어요. 자막에는 그날 기록의 수치(예: Triton 커널의 speedup 약 1.78배)가 들어 있으니, 다른 기록으로 녹화할 때는 `record_tour.py`의 `CAPTIONS`도 고치세요.
+**확인할 것:** 언어마다 `[tour] demo/site/media/tour-ko.mp4 (<크기> KiB)` 줄이 나옵니다. 2026-11-18 데이터로는 언어마다 약 2분 길이였습니다. 자막에는 그날 기록의 수치(예: Triton 커널의 speedup 약 1.78배)가 들어 있으니, 다른 기록으로 녹화할 때는 `record_tour.py`의 `CAPTIONS`도 고치세요.
 
 ### 2.8 패턴 페이지 그림 검사하기 (선택)
 
-`architecture.html`의 그림(`arch.js`의 좌표)을 고쳤다면 `demo/check_arch_layout.py`로 겹침을 확인하세요. 네 패턴을 한국어와 영어로 열고, 흐름의 모든 단계에서 다음을 확인합니다. 화살표가 아이콘을 둘러싼 상자의 가장자리에서 시작하고 끝나는지, 선이나 화살촉이 글자, 아이콘, 다른 선과 겹치지 않는지, 라벨과 배지가 상자 테두리에 닿지 않는지 봅니다. 페이지는 검사하는 동안만 `127.0.0.1`에서 제공돼요.
+`architecture.html`의 그림(`arch.js`의 좌표)을 고쳤다면 `demo/check_arch_layout.py`로 겹침을 확인하세요. 네 패턴을 한국어와 영어로 열고, 흐름의 모든 단계에서 다음을 확인합니다. 화살표가 아이콘을 둘러싼 상자의 가장자리에서 시작하고 끝나는지, 선이나 화살촉이 글자, 아이콘, 다른 선과 겹치지 않는지, 라벨과 배지가 상자 테두리에 닿지 않는지 봅니다. 페이지는 검사하는 동안만 `127.0.0.1`에서 제공됩니다.
 
 ```bash
 # Playwright is needed on the workstation only, as for record_tour.py
@@ -350,7 +350,7 @@ RECORDING=/tmp/rec.json demo/deploy.sh
 RECORDING=demo/recordings/2026-11-18-eks-gpu.json demo/deploy.sh
 ```
 
-**리전은 us-east-1로 고정됩니다.** CloudFront용 WAF web ACL과 CloudFront 로그 전송이 us-east-1 리소스이기 때문이에요. 스크립트는 `AWS_REGION`과 `scripts/config.env`를 읽지 않고, 템플릿의 `Rules`도 다른 리전의 배포를 거부합니다(`Deploy the demo stack in us-east-1 ...`). 클러스터가 다른 리전에 있어도 됩니다(2026-11-18에는 클러스터 us-west-2, 데모 us-east-1). CloudFormation, S3, CloudFront, AWS WAF, CloudWatch Logs(로그 전송) 리소스를 만들 권한이 필요합니다. 공유 계정이나 production 계정이라면 데모 전용 계정이나 최소 권한 역할을 쓰는 편이 안전합니다.
+**리전은 us-east-1로 고정됩니다.** CloudFront용 WAF web ACL과 CloudFront 로그 전송이 us-east-1 리소스이기 때문입니다. 스크립트는 `AWS_REGION`과 `scripts/config.env`를 읽지 않고, 템플릿의 `Rules`도 다른 리전의 배포를 거부합니다(`Deploy the demo stack in us-east-1 ...`). 클러스터가 다른 리전에 있어도 됩니다(2026-11-18에는 클러스터 us-west-2, 데모 us-east-1). CloudFormation, S3, CloudFront, AWS WAF, CloudWatch Logs(로그 전송) 리소스를 만들 권한이 필요합니다. 공유 계정이나 production 계정이라면 데모 전용 계정이나 최소 권한 역할을 쓰는 편이 안전합니다.
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|
@@ -387,16 +387,16 @@ RECORDING=demo/recordings/2026-11-18-eks-gpu.json demo/deploy.sh
 
 **문제가 생기면:**
 
-- `the data files above would leak details. Fix before publishing.`: 바로 위의 `[check]` 줄이 문제가 된 파일과 위치를 알려 줍니다. 입력 로그에서 그 줄을 지우거나 가린 뒤 `extras.json`을 다시 만드세요(2.6). 스택은 아직 바뀌지 않았어요.
+- `the data files above would leak details. Fix before publishing.`: 바로 위의 `[check]` 줄이 문제가 된 파일과 위치를 알려 줍니다. 입력 로그에서 그 줄을 지우거나 가린 뒤 `extras.json`을 다시 만드세요(2.6). 스택은 아직 바뀌지 않았습니다.
 - `no WAF web ACL on <distribution>. Fix before sharing.`: 배포에 web ACL이 연결되지 않았습니다. 스택 이벤트에서 `WebAcl` 리소스를 확인하고, 고칠 때까지 URL을 공유하지 마세요.
 - `direct S3 access returned <code>, expected 403`: 버킷 정책이나 Block Public Access 설정이 바뀌었는지 확인하고, 설정을 고칠 때까지 URL을 공유하지 마세요.
 - `CSP header missing` 또는 `HSTS header missing`: 배포가 아직 전파되는 중일 수 있으니 몇 분 뒤 같은 명령을 다시 실행하세요. 다시 실행해도 안전합니다.
 - `http:// returned <code>, expected a 301 redirect to https`: 배포의 `ViewerProtocolPolicy`가 `redirect-to-https`인지 확인하세요. 전파 중이라면 몇 분 뒤 다시 실행합니다.
-- 스택 생성 실패: `aws cloudformation describe-stack-events --region us-east-1 --stack-name gpu-sandbox-demo`로 실패한 리소스와 이유를 확인합니다. 정리와 비용 문제는 [문제 해결](../reference/troubleshooting.md)의 "정리와 비용" 항목에 있어요.
+- 스택 생성 실패: `aws cloudformation describe-stack-events --region us-east-1 --stack-name gpu-sandbox-demo`로 실패한 리소스와 이유를 확인합니다. 정리와 비용 문제는 [문제 해결](../reference/troubleshooting.md)의 "정리와 비용" 항목에 있습니다.
 
 ## 5. custom domain (선택)
 
-기본 `*.cloudfront.net` 인증서를 쓰면 viewer security policy가 TLSv1로 고정되고 더 높은 버전으로 바꿀 수 없습니다(CloudFront 문서 기준). 2026-11-18 배포의 기본 도메인도 TLS 1.0과 1.1 handshake를 받아들였어요(TLS 1.2와 1.3도 제공). TLS 1.2 이상의 연결만 허용하려면 custom domain과 ACM 인증서를 쓰세요. 두 값을 모두 지정하면 템플릿이 `sni-only`와 `TLSv1.2_2021`을 적용합니다.
+기본 `*.cloudfront.net` 인증서를 쓰면 viewer security policy가 TLSv1로 고정되고 더 높은 버전으로 바꿀 수 없습니다(CloudFront 문서 기준). 2026-11-18 배포의 기본 도메인도 TLS 1.0과 1.1 handshake를 받아들였습니다(TLS 1.2와 1.3도 제공). TLS 1.2 이상의 연결만 허용하려면 custom domain과 ACM 인증서를 쓰세요. 두 값을 모두 지정하면 템플릿이 `sni-only`와 `TLSv1.2_2021`을 적용합니다.
 
 ```bash
 # Custom domain with an ACM certificate in us-east-1 (required by CloudFront)
@@ -405,7 +405,7 @@ DEMO_CERT_ARN=arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id> \
 demo/deploy.sh
 ```
 
-- **인증서는 us-east-1에 있어야 합니다.** US East (N. Virginia)에서 요청하거나 가져온 ACM 인증서여야 하고, SAN이 `DEMO_DOMAIN`을 포괄해야 해요(CloudFront 문서 기준).
+- **인증서는 us-east-1에 있어야 합니다.** US East (N. Virginia)에서 요청하거나 가져온 ACM 인증서여야 하고, SAN이 `DEMO_DOMAIN`을 포괄해야 합니다(CloudFront 문서 기준).
 - **DNS 레코드는 직접 만듭니다.** `DEMO_DOMAIN`을 스택 출력의 `DistributionDomainName`으로 연결하는 CNAME(또는 Route 53 alias)이 없으면 7번 단계의 헤더 검사가 실패합니다. 레코드를 만든 뒤 같은 명령을 다시 실행하세요.
 - **전용 하위 도메인을 쓰세요(예: `demo.example.com`).** 이 템플릿의 HSTS는 `max-age`가 2년(63072000초)이고 `includeSubDomains`를 포함합니다. 그래서 apex 도메인(`example.com`)에 적용하면 모든 하위 도메인에 2년 동안 HTTPS가 강제됩니다.
 
@@ -447,7 +447,7 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-d
 응답 헤더는 모두 `Override: true`로 설정되어 있어서, origin이 보낸 같은 이름의 헤더보다 정책 값이 우선합니다. 버킷 정책의 `AWS:SourceArn` 조건은 고정값이므로 S3는 이 정책을 public으로 판단하지 않습니다. 그래서 `BlockPublicPolicy`를 켠 상태에서도 이 정책을 적용할 수 있습니다(S3 문서의 "public" 정의).
 
 !!! warning "누구나 볼 수 있는 공개 페이지입니다"
-    이 데모는 의도적으로 공개하므로 템플릿에 인증이나 접근 제어가 없습니다. WAF는 rate limit과 managed rule로 비정상 요청만 차단해요. URL을 아는 사람은 누구나 볼 수 있으니, 업로드하기 전에 2.5의 검토 항목을 확인하세요.
+    이 데모는 의도적으로 공개하므로 템플릿에 인증이나 접근 제어가 없습니다. WAF는 rate limit과 managed rule로 비정상 요청만 차단합니다. URL을 아는 사람은 누구나 볼 수 있으니, 업로드하기 전에 2.5의 검토 항목을 확인하세요.
 
 !!! warning "남은 위험: 기본 인증서의 TLS 1.0과 1.1"
     기본 `*.cloudfront.net` 인증서에서는 viewer security policy가 TLSv1로 고정됩니다. 2026-11-18 배포에서 이 엔드포인트는 TLS 1.0과 1.1 handshake를 받아들였습니다(TLS 1.2와 1.3도 제공). `TLSv1.2_2021`은 us-east-1의 ACM 인증서를 쓰는 custom domain(`DEMO_DOMAIN`, `DEMO_CERT_ARN`)에서만 적용할 수 있으니 5절을 보세요. 이 실습 계정에는 Route 53 hosted zone이 없어 기본 인증서로 배포했습니다.
@@ -466,7 +466,7 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-d
     - WAF가 `/media/` 요청을 IP마다 제한하고, `deploy.sh`가 허용 목록으로만 업로드하며 업로드 전에 `--check`를 실행하는지
     - 패턴별 아키텍처 페이지도 외부 리소스와 HTML 삽입이 없고 아무것도 `fetch`하지 않는지, 아이콘 SVG에 스크립트나 외부 참조가 없는지
 
-    2026-11-18에 us-east-1에 실제로 배포했고, 배포 뒤 외부에서 다음을 확인했습니다.
+    us-east-1에 실제로 배포한 뒤 외부에서 다음을 확인했습니다([실행 기록](../reference/sources.md#aws-실행-기록)).
 
     - **헤더:** CSP, HSTS(max-age 63072000, includeSubDomains), `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: strict-origin-when-cross-origin`, Permissions-Policy
     - **요청:** POST, PUT, DELETE는 403, 없는 경로는 403, `http://`는 301. GET과 HEAD만 허용
@@ -510,7 +510,7 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-d
 
 ## 6. 정리 (demo/teardown.sh)
 
-이 스크립트는 `aws s3 rm --recursive`로 사이트 버킷을 비우고 us-east-1의 CloudFormation 스택을 삭제한 뒤, 삭제가 끝날 때까지 기다립니다. 사이트 버킷의 파일, CloudFront 배포, WAF web ACL이 삭제되고 URL은 더 이상 동작하지 않아요. CloudFront 배포 삭제에는 시간이 걸릴 수 있습니다. **로그 버킷은 `DeletionPolicy: Retain`이라 남습니다.**
+이 스크립트는 `aws s3 rm --recursive`로 사이트 버킷을 비우고 us-east-1의 CloudFormation 스택을 삭제한 뒤, 삭제가 끝날 때까지 기다립니다. 사이트 버킷의 파일, CloudFront 배포, WAF web ACL이 삭제되고 URL은 더 이상 동작하지 않습니다. CloudFront 배포 삭제에는 시간이 걸릴 수 있습니다. **로그 버킷은 `DeletionPolicy: Retain`이라 남습니다.**
 
 ```bash
 demo/teardown.sh
@@ -529,15 +529,15 @@ GPU 노드와 클러스터 정리는 [99 정리](99_cleanup.md)에 있습니다.
 
 ## 적용 범위와 한계
 
-- **2026-11-18에 AWS에서 실행했습니다.** recorder pod에서 `record`로 GPU 기록(gVisor A10G, Kata QEMU T4)을 만들고, `deploy.sh`로 us-east-1에 공개한 뒤 외부 점검까지 했어요("보안 설계"의 검증 상태). 공개한 기록은 실제 GPU 풀의 기록이며, 학습 이벤트는 들어 있지 않습니다. 4절의 GRPO 차트는 같은 날 시나리오 A의 5 step 학습 로그에서, 버전 전환 차트는 2026-11-17 시나리오 C의 시뮬레이션(golden 제출물이 모델 출력을 대신함, 학습 아님)에서 나옵니다.
+- **AWS에서 실행했습니다.** recorder pod에서 `record`로 GPU 기록(gVisor A10G, Kata QEMU T4)을 만들고, `deploy.sh`로 us-east-1에 공개한 뒤 외부 점검까지 했습니다("보안 설계"의 검증 상태). 공개한 기록은 실제 GPU 풀의 기록이며, 학습 이벤트는 들어 있지 않습니다. 4절의 GRPO 차트는 시나리오 A의 5 step 학습 로그에서, 버전 전환 차트는 시나리오 C의 시뮬레이션(golden 제출물이 모델 출력을 대신함, 학습 아님)에서 나옵니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 - **방문자가 코드를 실행해 볼 수는 없습니다.** 2절은 기록을 재생하는 것이고, 단계별 시간은 기록에 없습니다. 3절의 공격 카드는 `verify.sh`가 실제로 시도한 항목과 golden 제출물로 한정됩니다.
 - **`record`는 trainer 이미지로 만든 pod에서 실행합니다.** 기록의 학습 이벤트는 학습 중인 trainer pod에서 기록할 때만 들어갑니다(2절).
 - **200 응답 대기가 시간 초과되어도 실패로 처리하지 않습니다**(`deploy.sh`의 7번 단계).
 - **custom domain의 DNS는 자동으로 만들지 않습니다**(5절).
-- **기본 `*.cloudfront.net` 인증서에서는 viewer TLS 정책이 TLSv1로 고정됩니다.** 2026-11-18 배포에서 TLS 1.0과 1.1 handshake가 성공했어요. `TLSv1.2_2021`은 custom domain에서만 적용됩니다(5절).
+- **기본 `*.cloudfront.net` 인증서에서는 viewer TLS 정책이 TLSv1로 고정됩니다.** 2026-11-18 배포에서 TLS 1.0과 1.1 handshake가 성공했습니다. `TLSv1.2_2021`은 custom domain에서만 적용됩니다(5절).
 - **WAF는 트래픽이 없어도 고정 비용이 듭니다**("소요 시간과 비용"). 로그 버킷은 정리 뒤에도 남습니다(6절).
 - **`PriceClass_100`을 씁니다.** 기본값(모든 edge location)보다 범위가 좁으므로, 방문자가 많은 지역에 맞는 price class를 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)에서 확인하세요.
-- **저장소의 샘플 기록(`demo/site/data/recording.json`)은 여전히 노트북의 CPU 풀에서 만든 기록입니다.** 샘플의 수치는 GPU 샌드박스 성능과 관계가 없으며, 페이지 footer에도 이 내용이 적혀 있어요.
+- **저장소의 샘플 기록(`demo/site/data/recording.json`)은 여전히 노트북의 CPU 풀에서 만든 기록입니다.** 샘플의 수치는 GPU 샌드박스 성능과 관계가 없으며, 페이지 footer에도 이 내용이 적혀 있습니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

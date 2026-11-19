@@ -107,7 +107,7 @@ If your role has a path (for example one created by IAM Identity Center), put th
     By CDK default the CloudFormation execution role gets `AdministratorAccess` (to narrow it, see the preparation section of [Production 09 CDK](../production/09_cdk.md)). The cleanup script (`08_cleanup.sh`) keeps `CDKToolkit` for the next deployment.
 
 !!! warning "AWS steps on this page"
-    The `02_create_cluster.sh` Outputs, tunnel output and duration below are from the author's scenario C (`--cpu-only`) run in a practice account (us-west-2) on 2026-11-14. In the practice account on 2026-11-18, the image build (`03_build_push_images.sh`, all three images) was also run, and the scenario A cluster was created in the capacity workaround order under "If it fails" below (created as B2, then updated to B1 and A). The other "What to look for" items, such as the scenario A node list, are expected output from the code and official documentation, so compare them with yours.
+    The steps on this page ran in a practice account. The `02_create_cluster.sh` Outputs, tunnel output and duration below come from the scenario C (`--cpu-only`) run, and the scenario A cluster was created in the capacity workaround order under "If it fails" below (created as B2, then updated to B1 and A). The other "What to look for" items, such as the scenario A node list, are expected output from the code and official documentation, so compare them with yours. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Preflight: `01_check_prereqs.sh`
 

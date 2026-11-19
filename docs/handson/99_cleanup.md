@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-`g4dn.metal`은 시간당 7.824 USD여서 이 노드 그룹 하나만 남아 있어도 하루에 약 188 USD가 청구됩니다(us-east-1과 us-west-2 온디맨드 요금). HyperPod는 EKS 클러스터를 orchestrator로 쓰므로, 정리 스크립트는 HyperPod를 먼저 삭제했다고 가정합니다. Agent Sandbox warm pool의 GPU 샌드박스는 처리할 요청이 없어도 GPU를 계속 점유해요. 데모 사이트는 별도의 CloudFormation stack이라 `08_cleanup.sh`가 삭제하지 않습니다. AMI와 snapshot, ECR 이미지, HyperPod의 S3 버킷과 IAM 역할, CDK bootstrap 스택도 CDK 스택을 삭제한 뒤에 남습니다.
+`g4dn.metal`은 시간당 7.824 USD여서 이 노드 그룹 하나만 남아 있어도 하루에 약 188 USD가 청구됩니다(us-east-1과 us-west-2 온디맨드 요금). HyperPod는 EKS 클러스터를 orchestrator로 쓰므로, 정리 스크립트는 HyperPod를 먼저 삭제했다고 가정합니다. Agent Sandbox warm pool의 GPU 샌드박스는 처리할 요청이 없어도 GPU를 계속 점유합니다. 데모 사이트는 별도의 CloudFormation stack이라 `08_cleanup.sh`가 삭제하지 않습니다. AMI와 snapshot, ECR 이미지, HyperPod의 S3 버킷과 IAM 역할, CDK bootstrap 스택도 CDK 스택을 삭제한 뒤에 남습니다.
 
 ![두 패널 그림입니다. a: CDK 스택 삭제(cdk destroy)는 클러스터, 노드 그룹, VPC, NAT gateway만 함께 삭제합니다. AMI와 snapshot, ECR 이미지, HyperPod의 S3 버킷과 IAM 역할, 데모 사이트 stack, CDK bootstrap 스택(CDKToolkit)은 남습니다. b: 08_cleanup.sh는 클러스터 이름을 입력받아 CDK 스택을 삭제하고, ami와 images를 입력받아 AMI와 snapshot, ECR 이미지(--images일 때)를 삭제합니다. hyperpod/delete.sh는 HyperPod 이름과 bucket을 입력받아 S3 버킷과 IAM 역할을 삭제합니다. demo/teardown.sh는 stack 이름을 입력받아 데모 사이트 stack을 삭제합니다. CDKToolkit은 더 쓰지 않을 계정에서만 직접 삭제합니다.](../images/figures/handson-99_cleanup.svg)
 
@@ -13,15 +13,15 @@
 
 ## Why
 
-- **단계마다 확인 단어를 입력받습니다.** 다른 클러스터나 stack을 실수로 삭제할 위험을 줄여요.
+- **단계마다 확인 단어를 입력받습니다.** 다른 클러스터나 stack을 실수로 삭제할 위험을 줄입니다.
 - **리소스를 만든 단계마다 삭제 명령이 따로 있습니다.** 확장, 데모, HyperPod, 클러스터를 각각 삭제하므로 무엇이 삭제되는지 분명합니다. 인프라는 CDK 스택 하나로 만들었으므로 `cdk destroy`를 한 번 실행하면 됩니다.
 - **마지막에 남은 인스턴스를 보여 줍니다.** `project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스가 남았는지 표로 출력합니다.
 
-**사전 지식:** 무엇을 만들었는지 확인하세요. 클러스터와 이미지는 [01 클러스터와 이미지](01_cluster_and_images.md), HyperPod는 [07 HyperPod 시나리오](07_hyperpod.md), 데모 사이트는 [09 데모 사이트 (CloudFront)](09_demo_site.md), Agent Sandbox 확장은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 만들었어요.
+**사전 지식:** 무엇을 만들었는지 확인하세요. 클러스터와 이미지는 [01 클러스터와 이미지](01_cluster_and_images.md), HyperPod는 [07 HyperPod 시나리오](07_hyperpod.md), 데모 사이트는 [09 데모 사이트 (CloudFront)](09_demo_site.md), Agent Sandbox 확장은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 만들었습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **CloudFormation stack**: 여러 AWS 리소스를 한 묶음으로 만들고 지우는 단위입니다. 클러스터 생성(`02_create_cluster.sh`)이 만드는 CDK 스택(`<CLUSTER_NAME>-cdk`)과 데모 사이트는 각각 별도의 stack입니다.
-    - **CDKToolkit**: `cdk bootstrap`이 만드는 stack입니다. CDK가 배포에 쓰는 S3 버킷, ECR 저장소, 배포 역할이 들어 있어요.
+    - **CDKToolkit**: `cdk bootstrap`이 만드는 stack입니다. CDK가 배포에 쓰는 S3 버킷, ECR 저장소, 배포 역할이 들어 있습니다.
     - **노드 그룹 (node group)**: 같은 인스턴스 유형과 설정을 쓰는 EKS 노드 묶음입니다. 노드 수(`desiredSize`)를 바꿔 늘리고 줄입니다.
     - **scale to zero**: 노드 그룹의 노드 수를 0으로 줄여 인스턴스 요금이 발생하지 않게 하면서, 설정은 남겨 두는 방법입니다.
     - **launch template**: EC2 인스턴스를 시작할 때 쓰는 설정 묶음입니다. 이 저장소에서는 CDK 스택이 노드 그룹마다 하나씩 만들고, Kata CPU 노드의 nested virtualization 옵션도 여기에 포함됩니다.
@@ -35,7 +35,7 @@
     더 자세한 설명은 [용어 사전](../reference/glossary.md)에 있습니다.
 
 !!! warning "검증 상태와 안전"
-    시나리오 C의 CDK 스택은 2026-11-14 실습 계정에서 배포하고 삭제해 봤습니다. 2026-11-18에는 시나리오 A 클러스터(us-west-2)에서 `08_cleanup.sh --images`를 실행했습니다. 그 실행에서 AMI 삭제 단계가 돌았는지는 기록에 없어요. `hyperpod/delete.sh`와 `demo/teardown.sh`는 shellcheck만 통과했고 AWS에서 끝까지 실행하지 않았습니다. 공유 계정이나 production 계정이라면 삭제 전에 이름, 태그, 생성 시각으로 이 실습의 리소스인지 확인하세요. 가능하면 이 실습 전용 계정이나 역할에서 실행하세요. 아래 확인 명령은 조회만 하고 리소스를 변경하지 않습니다.
+    시나리오 C의 CDK 스택 삭제와 시나리오 A 클러스터의 `08_cleanup.sh --images`는 실습 계정에서 실행했습니다. 그 실행에서 AMI 삭제 단계가 돌았는지는 기록에 없습니다([실행 기록](../reference/sources.md#aws-실행-기록)). `hyperpod/delete.sh`와 `demo/teardown.sh`는 shellcheck만 통과했고 AWS에서 끝까지 실행하지 않았습니다. 공유 계정이나 production 계정이라면 삭제 전에 이름, 태그, 생성 시각으로 이 실습의 리소스인지 확인하세요. 가능하면 이 실습 전용 계정이나 역할에서 실행하세요. 아래 확인 명령은 조회만 하고 리소스를 변경하지 않습니다.
 
 ## 순서
 
@@ -51,7 +51,7 @@ flowchart TD
 
 ## 소요 시간과 비용
 
-CDK 스택 삭제(`cdk destroy`)는 노드 그룹, 클러스터, NAT gateway를 차례로 삭제하므로 시간이 걸립니다. HyperPod 삭제 스크립트는 클러스터가 삭제될 때까지 30초 간격으로 기다립니다. 두 작업 모두 소요 시간은 측정하지 않았습니다. 데모 stack 삭제에도 CloudFront 배포 삭제가 포함되어 시간이 걸릴 수 있어요. 정리한 뒤에는 GPU 노드 요금이 더 발생하지 않지만, 남겨 둔 ECR 이미지와 AMI snapshot에는 저장 요금이 계속 발생합니다. secrets용 KMS 키는 7일 삭제 대기 기간이 지난 뒤 삭제됩니다.
+CDK 스택 삭제(`cdk destroy`)는 노드 그룹, 클러스터, NAT gateway를 차례로 삭제하므로 시간이 걸립니다. HyperPod 삭제 스크립트는 클러스터가 삭제될 때까지 30초 간격으로 기다립니다. 두 작업 모두 소요 시간은 측정하지 않았습니다. 데모 stack 삭제에도 CloudFront 배포 삭제가 포함되어 시간이 걸릴 수 있습니다. 정리한 뒤에는 GPU 노드 요금이 더 발생하지 않지만, 남겨 둔 ECR 이미지와 AMI snapshot에는 저장 요금이 계속 발생합니다. secrets용 KMS 키는 7일 삭제 대기 기간이 지난 뒤 삭제됩니다.
 
 `$AWS_REGION`, `$CLUSTER_NAME` 같은 변수는 먼저 `source scripts/config.env`로 불러오세요. 클러스터 안의 리소스(Agent Sandbox 객체, HyperPodPyTorchJob, 샌드박스 풀)는 kubectl로 삭제하므로, 정리가 끝날 때까지 두 번째 터미널에서 `cdk/tunnel.sh`를 실행해 두세요. kubectl은 현재 context의 클러스터에서 삭제합니다. 시작 전에 `kubectl config current-context`가 정리할 클러스터의 `<CLUSTER_NAME>-tunnel`인지 확인하세요.
 
@@ -59,7 +59,7 @@ CDK 스택 삭제(`cdk destroy`)는 노드 그룹, 클러스터, NAT gateway를 
 
 `08_cleanup.sh`는 `sandbox` namespace의 Deployment와 Service만 먼저 삭제하고 Agent Sandbox 객체는 삭제하지 않습니다. 그러니 클러스터를 삭제하기 전에 이 객체를 먼저 삭제해 GPU를 반환하게 하세요.
 
-멀티턴 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes`)은 끝날 때 자신이 만든 claim을 삭제합니다. Job pod가 claim을 삭제하기 전에 종료되면, 스크립트가 Job이 끝난 뒤 run label(`gpusandbox/run=episodes-<epoch>`)로 남은 claim을 삭제해요. 그래도 남은 claim에는 이 label이 붙어 있으므로 `kubectl -n sandbox get sandboxclaims -L gpusandbox/run`으로 어느 실행에서 남은 claim인지 확인할 수 있습니다.
+멀티턴 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes`)은 끝날 때 자신이 만든 claim을 삭제합니다. Job pod가 claim을 삭제하기 전에 종료되면, 스크립트가 Job이 끝난 뒤 run label(`gpusandbox/run=episodes-<epoch>`)로 남은 claim을 지웁니다. 그래도 남은 claim에는 이 label이 붙어 있으므로 `kubectl -n sandbox get sandboxclaims -L gpusandbox/run`으로 어느 실행에서 남은 claim인지 확인할 수 있습니다.
 
 아래 명령은 남은 claim, warm pool, template을 이 순서로 모두 삭제합니다.
 
@@ -79,7 +79,7 @@ kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox
 
 ## 데모 사이트 (09를 만든 경우)
 
-데모 stack과 버킷의 모든 파일을 삭제합니다(아래 표). CloudFront 배포도 삭제되므로 데모 URL은 더 이상 동작하지 않아요.
+데모 stack과 버킷의 모든 파일을 삭제합니다(아래 표). CloudFront 배포도 삭제되므로 데모 URL은 더 이상 동작하지 않습니다.
 
 ```bash
 demo/teardown.sh
@@ -87,7 +87,7 @@ demo/teardown.sh
 DEMO_STACK_NAME=<stack-name> demo/teardown.sh
 ```
 
-스크립트는 `scripts/config.env`를 읽지 않고, `demo/deploy.sh`처럼 리전을 `us-east-1`로 고정합니다. 셸의 `AWS_REGION` 값은 쓰지 않아요.
+스크립트는 `scripts/config.env`를 읽지 않고, `demo/deploy.sh`처럼 리전을 `us-east-1`로 고정합니다. 셸의 `AWS_REGION` 값은 쓰지 않습니다.
 
 | 프롬프트 | 입력할 단어 | 지우는 것 |
 |---|---|---|
@@ -114,7 +114,7 @@ scripts/hyperpod/delete.sh
 
 **확인할 것:** `waiting for the cluster to disappear`, `deleted role <이름>-execution` 뒤에 마지막 줄 `HyperPod resources deleted`가 나옵니다.
 
-HyperPod dependency Helm release와 training operator add-on은 EKS 클러스터 안에 있으므로 2단계에서 클러스터와 함께 삭제됩니다. 버킷 프롬프트에서 다른 단어를 입력하면 스크립트가 `aborted`로 멈추고 버킷만 남습니다. 이때 HyperPod 클러스터와 역할은 이미 삭제된 상태예요.
+HyperPod dependency Helm release와 training operator add-on은 EKS 클러스터 안에 있으므로 2단계에서 클러스터와 함께 삭제됩니다. 버킷 프롬프트에서 다른 단어를 입력하면 스크립트가 `aborted`로 멈추고 버킷만 남습니다. 이때 HyperPod 클러스터와 역할은 이미 삭제된 상태입니다.
 
 **문제가 생기면:** training operator add-on이 없어도 스크립트는 멈추지 않습니다. 스크립트는 `HyperPodPyTorchJob` CRD가 있을 때만 Job을 삭제하고 다음 단계로 넘어갑니다. 클러스터 삭제가 오래 걸리면 SageMaker 콘솔에서 상태를 확인하세요. 그 밖의 증상은 [문제 해결](../reference/troubleshooting.md)의 "정리와 비용" 항목을 보세요.
 
@@ -122,7 +122,7 @@ HyperPod dependency Helm release와 training operator add-on은 EKS 클러스터
 
 현재 kubectl context로 `sandbox` namespace를 조회할 수 있으면 스크립트는 샌드박스 풀과 학습 Job을 먼저 삭제합니다. 그래야 노드를 종료하기 전에 GPU와 VFIO 장치가 반환됩니다. 그다음 CDK 스택(클러스터, 노드 그룹, launch template, VPC, NAT gateway, access instance, 로그 그룹)을 삭제하고, AMI를 삭제할지 묻습니다.
 
-두 명령 중 하나만 실행하세요. ECR 이미지를 남기려면 첫 줄, 함께 지우려면 처음부터 둘째 줄을 실행합니다. 두 줄을 차례로 실행하면 둘째 호출이 클러스터와 AMI 단계부터 다시 시작해요.
+두 명령 중 하나만 실행하세요. ECR 이미지를 남기려면 첫 줄, 함께 지우려면 처음부터 둘째 줄을 실행합니다. 두 줄을 차례로 실행하면 둘째 호출이 클러스터와 AMI 단계부터 다시 시작합니다.
 
 ```bash
 scripts/08_cleanup.sh            # pools, Jobs, the CDK stack, AMIs (asks); keeps ECR
@@ -137,11 +137,11 @@ scripts/08_cleanup.sh --images   # the same, plus the ECR repositories
 | 4 | `Delete the ECR repositories ${ECR_REPO_PREFIX}/{sandbox,trainer,control} and all images?` | `images` | `--images`일 때만: 세 이름의 리포지토리를 차례로 `--force`로 삭제. 없는 리포지토리는 오류를 출력하고 넘어갑니다 |
 | 끝 | 없음 | | `project=gpu-sandbox-on-aws` 태그가 붙은 pending, running, stopping, stopped 인스턴스 목록 |
 
-**확인할 것:** 현재 kubectl context에서 `sandbox` namespace가 조회되면 `deleting sandbox pools and training jobs first`가, 조회가 실패하면 `cluster API not reachable (is cdk/tunnel.sh running?); the stack deletion removes the nodes anyway` 경고가 나옵니다. 그 뒤로 `cdk destroy` 진행 출력, (있으면) `deleting leftover log group /aws/lambda/<CLUSTER_NAME>-cdk-...`, 첫 번째 인스턴스 표가 차례로 나와요. `cdk/destroy.sh`가 끝에 `ECR repositories are kept. To delete them:`와 삭제 명령을 안내하더라도, `--images`로 실행했다면 뒤 단계에서 ECR 리포지토리를 삭제하므로 무시하세요. 마지막 `remaining instances tagged project=gpu-sandbox-on-aws (should be none):` 아래 표가 비어 있어야 합니다. `--images`는 이번 실습에서 만들었는지와 관계없이 접두사가 같은 `sandbox`, `trainer`, `control` 리포지토리를 모두 삭제합니다. 다른 실습과 `ECR_REPO_PREFIX`를 함께 쓴다면 세 리포지토리의 사용처를 먼저 확인하세요. `deleted gpu-sandbox/sandbox` 같은 줄은 삭제에 성공한 리포지토리마다 하나씩 나옵니다(예: trainer 리포지토리가 없으면 sandbox와 control 두 줄).
+**확인할 것:** 현재 kubectl context에서 `sandbox` namespace가 조회되면 `deleting sandbox pools and training jobs first`가, 조회가 실패하면 `cluster API not reachable (is cdk/tunnel.sh running?); the stack deletion removes the nodes anyway` 경고가 나옵니다. 그 뒤로 `cdk destroy` 진행 출력, (있으면) `deleting leftover log group /aws/lambda/<CLUSTER_NAME>-cdk-...`, 첫 번째 인스턴스 표가 차례로 나옵니다. `cdk/destroy.sh`가 끝에 `ECR repositories are kept. To delete them:`와 삭제 명령을 안내하더라도, `--images`로 실행했다면 뒤 단계에서 ECR 리포지토리를 삭제하므로 무시하세요. 마지막 `remaining instances tagged project=gpu-sandbox-on-aws (should be none):` 아래 표가 비어 있어야 합니다. `--images`는 이번 실습에서 만들었는지와 관계없이 접두사가 같은 `sandbox`, `trainer`, `control` 리포지토리를 모두 삭제합니다. 다른 실습과 `ECR_REPO_PREFIX`를 함께 쓴다면 세 리포지토리의 사용처를 먼저 확인하세요. `deleted gpu-sandbox/sandbox` 같은 줄은 삭제에 성공한 리포지토리마다 하나씩 나옵니다(예: trainer 리포지토리가 없으면 sandbox와 control 두 줄).
 
 bootstrap 스택 `CDKToolkit`은 다음 배포에 다시 쓰므로 남겨 둡니다. 더는 쓰지 않을 계정이라면 그 S3 버킷을 비운 뒤 `CDKToolkit` 스택을 삭제하세요.
 
-프롬프트에서 다른 단어를 입력하면 스크립트가 그 자리에서 `aborted`로 끝나고, 뒤 단계(마지막 인스턴스 목록 포함)는 실행되지 않습니다. 그래서 AMI를 일부러 남기려면 프롬프트에서 거절하지 말고, ID를 따로 기록한 뒤 실행 전에 `config.env`에서 `KATA_IOMMU_AMI_ID`(B2 AMI는 `HYPERPOD_B2_AMI_ID`)를 지우세요. 셸에서 `config.env`를 불러왔다면 `unset KATA_IOMMU_AMI_ID`(또는 `unset HYPERPOD_B2_AMI_ID`)도 실행합니다. 그러면 해당 AMI 단계를 건너뜁니다. `WITH_KATA_GPU`는 바꾸지 않아도 됩니다. `cdk/destroy.sh`가 synth 전에 두 Kata 스위치를 0으로 설정해요.
+프롬프트에서 다른 단어를 입력하면 스크립트가 그 자리에서 `aborted`로 끝나고, 뒤 단계(마지막 인스턴스 목록 포함)는 실행되지 않습니다. 그래서 AMI를 일부러 남기려면 프롬프트에서 거절하지 말고, ID를 따로 기록한 뒤 실행 전에 `config.env`에서 `KATA_IOMMU_AMI_ID`(B2 AMI는 `HYPERPOD_B2_AMI_ID`)를 지우세요. 셸에서 `config.env`를 불러왔다면 `unset KATA_IOMMU_AMI_ID`(또는 `unset HYPERPOD_B2_AMI_ID`)도 실행합니다. 그러면 해당 AMI 단계를 건너뜁니다. `WITH_KATA_GPU`는 바꾸지 않아도 됩니다. `cdk/destroy.sh`가 synth 전에 두 Kata 스위치를 0으로 설정합니다.
 
 **문제가 생기면:** `cdk destroy`가 실패하거나 오래 걸리면 CloudFormation 콘솔에서 `<CLUSTER_NAME>-cdk` 스택의 이벤트로 실패한 리소스를 찾으세요. [문제 해결](../reference/troubleshooting.md)의 "정리와 비용" 항목도 참고하세요(HyperPod가 남아 VPC를 계속 쓰는 경우 포함).
 
@@ -150,7 +150,7 @@ bootstrap 스택 `CDKToolkit`은 다음 배포에 다시 쓰므로 남겨 둡니
 
 ## 일시 정지: 노드 그룹을 0으로 줄이기
 
-며칠 뒤 다시 쓸 예정이라면 스택은 그대로 두고 GPU 노드 그룹만 0으로 줄일 수 있습니다. CDK 스택에서 이 노드 그룹들의 최소 크기는 0입니다. 아래 명령은 `maxSize`를 스택의 값과 같게 유지합니다. AWS API만 호출하므로 터널이 없어도 돼요.
+며칠 뒤 다시 쓸 예정이라면 스택은 그대로 두고 GPU 노드 그룹만 0으로 줄일 수 있습니다. CDK 스택에서 이 노드 그룹들의 최소 크기는 0입니다. 아래 명령은 `maxSize`를 스택의 값과 같게 유지합니다. AWS API만 호출하므로 터널이 없어도 됩니다.
 
 ```bash
 source scripts/config.env
@@ -170,19 +170,19 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 - 만들지 않은 노드 그룹의 명령은 건너뛰세요. 실행하면 그 명령만 오류로 끝납니다. 시나리오 B에는 `trainer` 노드 그룹이 없고, 시나리오 C에는 `sandbox-kata-cpu`만 있습니다.
 - 학습 중에는 노드 수를 줄이지 마세요. trainer Job은 `backoffLimit: 0`이라 노드가 종료되면 실패합니다. 결과도 emptyDir에 있으므로 학습을 처음부터 다시 시작해야 합니다.
 - Agent Sandbox 확장을 썼다면 먼저 warm pool을 0으로 줄이세요(예: `kubectl -n sandbox patch sandboxwarmpool kernel-eval-gvisor --type merge -p '{"spec":{"replicas":0}}'`). `agent_sandbox.sh pool <runtime> 0`은 template도 다시 적용해서, `VERSION_FILE`을 지정하지 않으면 v1 설정으로 돌아갑니다.
-- 다시 쓸 때는 같은 명령에서 `desiredSize`만 바꿔 실행합니다. `trainer`, `sandbox-kata-gpu`, `sandbox-kata-cpu`는 1로, `sandbox-gvisor`는 `$GVISOR_NODES`(기본 2)로 설정하세요. 새 노드는 부팅할 때 노드 그룹마다 정해진 설정을 다시 실행합니다. `sandbox-gvisor`와 `sandbox-kata-cpu`에는 gVisor와 node guard가, `sandbox-kata-gpu`에는 node guard가 다시 설치되고, Kata 런타임은 kata-deploy(DaemonSet)가 새 Kata 노드에 설치해요. `trainer` 노드에는 추가 부팅 설정이 없습니다. 샌드박스 Deployment는 replica 수를 유지하므로, 노드가 다시 준비되면 pod가 다시 스케줄됩니다.
+- 다시 쓸 때는 같은 명령에서 `desiredSize`만 바꿔 실행합니다. `trainer`, `sandbox-kata-gpu`, `sandbox-kata-cpu`는 1로, `sandbox-gvisor`는 `$GVISOR_NODES`(기본 2)로 설정하세요. 새 노드는 부팅할 때 노드 그룹마다 정해진 설정을 다시 실행합니다. `sandbox-gvisor`와 `sandbox-kata-cpu`에는 gVisor와 node guard가, `sandbox-kata-gpu`에는 node guard가 다시 설치되고, Kata 런타임은 kata-deploy(DaemonSet)가 새 Kata 노드에 설치합니다. `trainer` 노드에는 추가 부팅 설정이 없습니다. 샌드박스 Deployment는 replica 수를 유지하므로, 노드가 다시 준비되면 pod가 다시 스케줄됩니다.
 - 이 명령은 CloudFormation을 거치지 않고 노드 수만 바꿉니다. 그러니 클러스터 생성(`02_create_cluster.sh`)을 다시 실행하기 전에 원래 값으로 되돌려 두세요. 되돌리지 않고 다시 배포했을 때의 동작은 확인하지 않았습니다.
 
 **문제가 생기면:** 노드가 줄지 않거나 다시 늘지 않으면 [문제 해결](../reference/troubleshooting.md)의 "AWS 쪽 확인 (노드 그룹, 인스턴스)" 항목을 보세요.
 
 !!! question "❓ 오해: 노드 그룹을 0으로 줄이면 과금이 멈춘다"
-    이 방법으로는 GPU 노드 요금만 더 발생하지 않습니다. EKS control plane, NAT gateway, 최소 크기가 2인 system 노드 그룹(`m6i.large` 2대, 시간당 0.192 USD), access instance(`t4g.nano`), KMS 키, CloudWatch 로그, ECR 저장소, AMI snapshot, S3 버킷, 데모의 CloudFront와 S3는 계속 과금됩니다. HyperPod 인스턴스도 이 명령으로는 종료되지 않아요. `CreateCluster` API는 인스턴스 그룹의 `InstanceCount` 최솟값으로 0을 허용합니다. 하지만 이 저장소는 그 방법을 스크립트로 제공하거나 검증하지 않았으므로, HyperPod를 쓰지 않을 때는 `hyperpod/delete.sh`로 삭제하기를 권합니다.
+    이 방법으로는 GPU 노드 요금만 더 발생하지 않습니다. EKS control plane, NAT gateway, 최소 크기가 2인 system 노드 그룹(`m6i.large` 2대, 시간당 0.192 USD), access instance(`t4g.nano`), KMS 키, CloudWatch 로그, ECR 저장소, AMI snapshot, S3 버킷, 데모의 CloudFront와 S3는 계속 과금됩니다. HyperPod 인스턴스도 이 명령으로는 종료되지 않습니다. `CreateCluster` API는 인스턴스 그룹의 `InstanceCount` 최솟값으로 0을 허용합니다. 하지만 이 저장소는 그 방법을 스크립트로 제공하거나 검증하지 않았으므로, HyperPod를 쓰지 않을 때는 `hyperpod/delete.sh`로 삭제하기를 권합니다.
 
 ## 3. 남은 리소스 확인
 
 ### 인스턴스
 
-다음은 스크립트 마지막 단계와 같은 명령으로, `project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스를 표로 출력해요.
+다음은 스크립트 마지막 단계와 같은 명령으로, `project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스를 표로 출력합니다.
 
 ```bash
 aws ec2 describe-instances --region "$AWS_REGION" \
@@ -247,7 +247,7 @@ aws ec2 deregister-image --region "$AWS_REGION" --image-id <ami-id> --delete-ass
 ## 적용 범위와 한계
 
 - **태그 범위:** `project=gpu-sandbox-on-aws` 태그가 없는 HyperPod 인스턴스는 유형과 이름으로 찾아야 합니다(3단계).
-- **로그 그룹 이름:** HyperPod의 로그 그룹 이름 규칙은 확인하지 못했으니 직접 확인하세요. EKS control plane 로그 그룹 `/aws/eks/<CLUSTER_NAME>/cluster`는 실습 계정에서 확인했어요.
+- **로그 그룹 이름:** HyperPod의 로그 그룹 이름 규칙은 확인하지 못했으니 직접 확인하세요. EKS control plane 로그 그룹 `/aws/eks/<CLUSTER_NAME>/cluster`는 실습 계정에서 확인했습니다.
 - **KMS 키:** 7일 삭제 대기 동안 키가 계정에 남습니다(KMS 문서에 따르면 실제 삭제는 최대 24시간 늦어질 수 있습니다). 대기 기간의 요금은 확인하지 않았으니 KMS 요금 페이지를 보세요.
 - **HyperPod scale to zero:** 이 저장소에는 스크립트가 없습니다(위 ❓ 노트).
 - **Agent Sandbox 객체:** `08_cleanup.sh`는 이 객체를 삭제하지 않습니다(0단계 참고). 클러스터와 함께 삭제되기 전까지 warm pool이 GPU를 계속 점유합니다.
@@ -263,7 +263,7 @@ aws ec2 deregister-image --region "$AWS_REGION" --image-id <ami-id> --delete-ass
 
 3. `aws sagemaker list-clusters` 목록에 `${HYPERPOD_CLUSTER_NAME}`이 없습니다(시나리오 B).
 4. 데모를 만들었다면 `demo/teardown.sh`가 `deleted <stack>`과 로그 버킷 보존 안내를 출력했고, `us-east-1`의 데모 stack 조회가 stack이 없다는 오류를 반환합니다.
-5. 리소스마다 위 표의 기대 상태와 대조합니다. 삭제 직후 KMS 키는 `Pending deletion`, `CDKToolkit`은 남아 있는 것이 정상입니다. ECR은 `--images`로 실행했을 때 세 저장소가 목록에서 사라지고, 같은 접두사로 따로 만든 저장소는 남아요.
+5. 리소스마다 위 표의 기대 상태와 대조합니다. 삭제 직후 KMS 키는 `Pending deletion`, `CDKToolkit`은 남아 있는 것이 정상입니다. ECR은 `--images`로 실행했을 때 세 저장소가 목록에서 사라지고, 같은 접두사로 따로 만든 저장소는 남습니다.
 
 삭제 대상으로 고른 리소스가 표의 기대 상태와 다르면 [문제 해결](../reference/troubleshooting.md)의 "정리와 비용" 항목을 보세요.
 

@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-이 저장소의 reward 풀은 요청마다 유휴 pod를 선택합니다. 그래서 에이전트가 한 에피소드에서 커널을 여러 번 수정해 제출하면 turn마다 다른 pod와 다른 GPU에서 채점될 수 있습니다. 에이전트 앱은 파일, 실행 중인 프로세스, 설치한 패키지를 다음 turn까지 유지해야 합니다. 그런데 채점 서버는 제출마다 작업 디렉터리를 새로 만들고, 평가가 끝나면 그 디렉터리와 남은 실행 프로세스를 정리해요. 이 확장도 같은 서버를 쓰므로 에피소드가 끝까지 유지하는 것은 pod, GPU, 샌드박스 버전이고, 에이전트는 turn마다 코드 전체를 다시 제출합니다. 그렇다고 에피소드마다 샌드박스를 새로 만들면, Kata GPU VM은 guest 메모리를 모두 pin하고 guest 안에서 CUDA를 초기화하기 때문에 첫 Ready까지 몇 분이 걸릴 수 있습니다(deployment 템플릿 주석). Agent Sandbox를 gVisor 전용 도구로 오해하거나 격리 런타임과 같은 계층으로 혼동하는 경우도 많습니다.
+이 저장소의 reward 풀은 요청마다 유휴 pod를 선택합니다. 그래서 에이전트가 한 에피소드에서 커널을 여러 번 수정해 제출하면 turn마다 다른 pod와 다른 GPU에서 채점될 수 있습니다. 에이전트 앱은 파일, 실행 중인 프로세스, 설치한 패키지를 다음 turn까지 유지해야 합니다. 그런데 채점 서버는 제출마다 작업 디렉터리를 새로 만들고, 평가가 끝나면 그 디렉터리와 남은 실행 프로세스를 정리합니다. 이 확장도 같은 서버를 쓰므로 에피소드가 끝까지 유지하는 것은 pod, GPU, 샌드박스 버전이고, 에이전트는 turn마다 코드 전체를 다시 제출합니다. 그렇다고 에피소드마다 샌드박스를 새로 만들면, Kata GPU VM은 guest 메모리를 모두 pin하고 guest 안에서 CUDA를 초기화하기 때문에 첫 Ready까지 몇 분이 걸릴 수 있습니다(deployment 템플릿 주석). Agent Sandbox를 gVisor 전용 도구로 오해하거나 격리 런타임과 같은 계층으로 혼동하는 경우도 많습니다.
 
 ![두 패널 그림입니다. a reward 풀: 에피소드 하나에서 turn 1 제출은 pod A의 GPU 1로, turn 2 수정 제출은 pod B의 GPU 2로 전송됩니다. 두 pod 모두 요청이 끝나면 그 요청의 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드마다 샌드박스를 새로 생성하는 점선 경로에서는 Kata GPU VM이 처음 Ready가 될 때까지 몇 분이 걸립니다(빨간색). b Agent Sandbox: 에피소드가 SandboxClaim을 생성하면 SandboxWarmPool이 대기 중인 Sandbox를 할당합니다. 이 풀의 Sandbox는 미리 기동되어 egress 차단을 확인한 뒤 Ready가 된 상태입니다. turn 1과 turn 2는 모두 claim한 샌드박스 하나로 전송됩니다(같은 pod와 GPU, 파일은 제출마다 삭제, 격리는 RuntimeClass gVisor 또는 Kata).](../images/figures/concepts-06_agent_sandbox.svg)
 
@@ -13,9 +13,9 @@
 
 ## Why
 
-- **격리와 오케스트레이션을 구분합니다.** 격리 강도는 RuntimeClass(gVisor, Kata)가 결정하고, Agent Sandbox는 샌드박스를 미리 만들어 두고 할당하고 회수하는 일을 담당해요.
-- **서버, 이미지, 인증 방식은 그대로 사용합니다.** 크게 바뀌는 것은 pod를 만들고 삭제하는 주체와 시점입니다. 그 밖에 호출을 허용하는 계정(에피소드 Job 계정이 들어가고 gateway 계정은 빠짐)과 `livenessProbe` 유무(확장 template에는 없음)가 기본 풀과 달라요.
-- **AWS 기술 블로그 시리즈가 CPU 샌드박스에서 겪은 NetworkPolicy, DNS, router, IMDS 문제는 GPU 샌드박스에서도 그대로 생깁니다.** GPU 프로필에서는 대기 샌드박스가 GPU를 점유하므로 warm pool 비용이 더 커요.
+- **격리와 오케스트레이션을 구분합니다.** 격리 강도는 RuntimeClass(gVisor, Kata)가 결정하고, Agent Sandbox는 샌드박스를 미리 만들어 두고 할당하고 회수하는 일을 담당합니다.
+- **서버, 이미지, 인증 방식은 그대로 사용합니다.** 크게 바뀌는 것은 pod를 만들고 삭제하는 주체와 시점입니다. 그 밖에 호출을 허용하는 계정(에피소드 Job 계정이 들어가고 gateway 계정은 빠짐)과 `livenessProbe` 유무(확장 template에는 없음)가 기본 풀과 다릅니다.
+- **AWS 기술 블로그 시리즈가 CPU 샌드박스에서 겪은 NetworkPolicy, DNS, router, IMDS 문제는 GPU 샌드박스에서도 그대로 생깁니다.** GPU 프로필에서는 대기 샌드박스가 GPU를 점유하므로 warm pool 비용이 더 큽니다.
 
 **사전 지식:** RuntimeClass와 gVisor, Kata의 차이는 [02 격리 런타임 비교](02_isolation_runtimes.md), reward 채점 흐름은 [03 On-policy RL과 샌드박스](03_onpolicy_rl_with_sandboxes.md), 풀과 인증, NetworkPolicy는 [핸즈온 04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md), 보안 경계 전체는 [Production 02 보안](../production/02_security.md)에 있습니다.
 
@@ -36,7 +36,7 @@
 
 ## 개요
 
-이 저장소의 reward 풀은 completion마다 유휴 pod에서 따로 채점하는 single-turn 채점용이고, 채점 결과를 보고 코드를 고쳐 다시 내는 과정은 없습니다. multi-turn 에이전트는 한 에피소드 안에서 코드를 제출하고, verdict를 읽고, 코드를 고쳐 다시 제출하므로 모든 turn을 같은 샌드박스에서 채점해야 합니다. Agent Sandbox는 미리 실행해 둔 샌드박스를 에피소드마다 하나씩 할당하고, 에피소드가 끝나면 그 샌드박스를 삭제합니다. 격리는 지금과 같이 RuntimeClass(gVisor, Kata)가 담당해요. 처음 읽는다면 초심자 가이드 [06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md)를 먼저 보세요.
+이 저장소의 reward 풀은 completion마다 유휴 pod에서 따로 채점하는 single-turn 채점용이고, 채점 결과를 보고 코드를 고쳐 다시 내는 과정은 없습니다. multi-turn 에이전트는 한 에피소드 안에서 코드를 제출하고, verdict를 읽고, 코드를 고쳐 다시 제출하므로 모든 turn을 같은 샌드박스에서 채점해야 합니다. Agent Sandbox는 미리 실행해 둔 샌드박스를 에피소드마다 하나씩 할당하고, 에피소드가 끝나면 그 샌드박스를 삭제합니다. 격리는 지금과 같이 RuntimeClass(gVisor, Kata)가 담당합니다. 처음 읽는다면 초심자 가이드 [06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md)를 먼저 보세요.
 
 ## Agent Sandbox가 하는 일
 
@@ -44,7 +44,7 @@ Agent Sandbox는 Kubernetes SIG Apps에서 개발하는 프로젝트이고, upst
 
 | 리소스 | API group (모두 `v1beta1`) | 하는 일 | 이 확장에서 |
 |---|---|---|---|
-| `Sandbox` | `agents.x-k8s.io` | 샌드박스 하나. pod 하나와, 설정에 따라 headless Service와 PVC를 함께 관리합니다. `operatingMode`를 `Suspended`로 설정하면 pod를 삭제하고 객체와 볼륨은 유지합니다 | warm pool이 생성합니다. 직접 만들지 않아요 |
+| `Sandbox` | `agents.x-k8s.io` | 샌드박스 하나. pod 하나와, 설정에 따라 headless Service와 PVC를 함께 관리합니다. `operatingMode`를 `Suspended`로 설정하면 pod를 삭제하고 객체와 볼륨은 유지합니다 | warm pool이 생성합니다. 직접 만들지 않습니다 |
 | `SandboxTemplate` | `extensions.agents.x-k8s.io` | Sandbox를 만들 때 쓰는 템플릿. `podTemplate`, `networkPolicy`, `service`, `envVarsInjectionPolicy`, `volumeClaimTemplates` | 런타임 프로필마다 `kernel-eval-<runtime>` |
 | `SandboxWarmPool` | `extensions.agents.x-k8s.io` | template으로 미리 만들어 둘 Sandbox 수(`replicas`)와 갱신 방식(`updateStrategy`: `OnReplenish` 또는 `Recreate`) | 런타임 프로필마다 `kernel-eval-<runtime>` |
 | `SandboxClaim` | `extensions.agents.x-k8s.io` | warm pool에서 Sandbox 하나를 할당받습니다. `spec.warmPoolRef`(필수), `spec.lifecycle`(`shutdownTime`, `ttlSecondsAfterFinished`, `shutdownPolicy`), `status.sandbox`(`name`, `podIPs`, `serviceFQDN`) | 에피소드마다 하나 |
@@ -74,11 +74,11 @@ sequenceDiagram
 
 *그림 요약: 에피소드 하나가 샌드박스 하나를 처음부터 끝까지 혼자 쓰고, 반납한 샌드박스는 다시 쓰이지 않고 지워집니다.*
 
-Sandbox가 claim되면 소유권이 warm pool에서 claim으로 넘어가고, pool은 그 Sandbox를 더 이상 관리하지 않습니다(v1.0.11 `sandboxwarmpool_types.go` 주석). 따라서 claim을 삭제하면 Sandbox와 pod도 함께 삭제돼요. `shutdownTime`은 claim이 만료되는 절대 시각이며, 이 시각에 controller가 Sandbox 리소스를 삭제합니다. `shutdownPolicy`의 기본값 `Retain`은 claim 객체를 `Expired` 상태로 유지하고, `Delete`는 claim까지 삭제합니다.
+Sandbox가 claim되면 소유권이 warm pool에서 claim으로 넘어가고, pool은 그 Sandbox를 더 이상 관리하지 않습니다(v1.0.11 `sandboxwarmpool_types.go` 주석). 따라서 claim을 삭제하면 Sandbox와 pod도 함께 삭제됩니다. `shutdownTime`은 claim이 만료되는 절대 시각이며, 이 시각에 controller가 Sandbox 리소스를 삭제합니다. `shutdownPolicy`의 기본값 `Retain`은 claim 객체를 `Expired` 상태로 유지하고, `Delete`는 claim까지 삭제합니다.
 
 ## Agent Sandbox는 RuntimeClass를 그대로 따릅니다
 
-Agent Sandbox는 pod의 수명과 할당을 관리하고, 격리 방식은 podTemplate의 `runtimeClassName`이 결정합니다. 그래서 노드가 해당 RuntimeClass를 지원한다면, 같은 template에 런타임 프로필만 바꿔 넣어 gVisor와 Kata(Cloud Hypervisor 또는 QEMU)를 모두 쓸 수 있어요. 프로필은 RuntimeClass와 함께 노드 선택 조건과 GPU 리소스 이름(`nvidia.com/gpu` 또는 `nvidia.com/pgpu`)도 지정합니다.
+Agent Sandbox는 pod의 수명과 할당을 관리하고, 격리 방식은 podTemplate의 `runtimeClassName`이 결정합니다. 그래서 노드가 해당 RuntimeClass를 지원한다면, 같은 template에 런타임 프로필만 바꿔 넣어 gVisor와 Kata(Cloud Hypervisor 또는 QEMU)를 모두 쓸 수 있습니다. 프로필은 RuntimeClass와 함께 노드 선택 조건과 GPU 리소스 이름(`nvidia.com/gpu` 또는 `nvidia.com/pgpu`)도 지정합니다.
 
 | 조합 | 근거 | 상태 |
 |---|---|---|
@@ -89,7 +89,7 @@ Agent Sandbox는 pod의 수명과 할당을 관리하고, 격리 방식은 podTe
 | Kata on EKS | AWS 블로그 3부: 에이블리는 현재 runc로 운영하고, Agent Sandbox API는 유지한 채 런타임만 Kata(microVM)로 바꾸는 평가를 계획 | 계획 단계 |
 | 이 저장소 (`gvisor`, `gvisor-cpu`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`, `kata-clh-cpu`, `kata-qemu-cpu` 프로필) | `template.yaml.tpl`이 일곱 프로필 모두에서 렌더링됨 | 로컬 렌더링 테스트만 통과. 클러스터 미실행. SandboxTemplate 안의 Kata GPU(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)는 미검증 |
 
-AWS에서 각 RuntimeClass를 실행할 수 있는 위치는 Agent Sandbox와 상관없이 [02 격리 런타임 비교](02_isolation_runtimes.md)의 위치 표와 같습니다. Kata + GPU는 이 저장소의 x86 구성에서 `g4dn.metal`에서만, Kata CPU는 nested virtualization 인스턴스에서도, gVisor + GPU는 일반 GPU VM에서 실행돼요.
+AWS에서 각 RuntimeClass를 실행할 수 있는 위치는 Agent Sandbox와 상관없이 [02 격리 런타임 비교](02_isolation_runtimes.md)의 위치 표와 같습니다. Kata + GPU는 이 저장소의 x86 구성에서 `g4dn.metal`에서만, Kata CPU는 nested virtualization 인스턴스에서도, gVisor + GPU는 일반 GPU VM에서 실행됩니다.
 
 !!! question "❓ 오해: Agent Sandbox는 gVisor용 도구다"
     Agent Sandbox는 격리를 직접 구현하지 않고 RuntimeClass로 지정한 런타임에 맡깁니다. upstream 예제도 Kata(AKS, GKE)와 gVisor(GKE)를 함께 다룹니다. AWS 블로그 1부도 강한 격리를 "RuntimeClass로 지정하는 gVisor나 Kata"로 설명합니다. 블로그 시리즈가 EKS에서 gVisor를 쓴 것은 블로그 저자의 선택이며, Agent Sandbox의 제약 때문이 아닙니다.
@@ -101,7 +101,7 @@ AWS에서 각 RuntimeClass를 실행할 수 있는 위치는 Agent Sandbox와 �
 | 항목 | 이 저장소의 reward 풀 | Agent Sandbox 에피소드 샌드박스 |
 |---|---|---|
 | 만드는 리소스 | (runtime, version)마다 Deployment와 headless Service (`sandbox-<runtime>-<version>`) | 런타임마다 SandboxTemplate과 SandboxWarmPool, 에피소드마다 SandboxClaim |
-| pod 수명 | 오래 유지됩니다. 평가를 계속 이어서 처리합니다. v2 pod는 평가 200회 뒤 새 요청을 받지 않고, Production gateway가 이 pod를 삭제해 교체합니다. direct 모드에서는 NotReady로 남아요 | 에피소드 하나. claim을 삭제하면 Sandbox와 pod도 삭제됩니다 |
+| pod 수명 | 오래 유지됩니다. 평가를 계속 이어서 처리합니다. v2 pod는 평가 200회 뒤 새 요청을 받지 않고, Production gateway가 이 pod를 삭제해 교체합니다. direct 모드에서는 NotReady로 남습니다 | 에피소드 하나. claim을 삭제하면 Sandbox와 pod도 삭제됩니다 |
 | 동시성 | pod마다 한 번에 평가 하나. 처리 중이면 503을 반환하고, 클라이언트가 다른 pod로 요청을 보냅니다 | 샌드박스 하나를 에피소드 하나가 독점합니다 |
 | 상태 | 상태 없음. 요청마다 새 프로세스 트리를 만들고 끝나면 정리합니다 | Agent Sandbox 자체는 작업 공간(파일, 프로세스)을 유지할 수 있고 pause(`Suspended`)와 resume, PVC를 지원합니다. 이 확장은 한 에피소드의 모든 제출을 같은 pod와 GPU에서 채점하고, 제출별 작업 디렉터리와 프로세스는 평가가 끝날 때 정리합니다 |
 | 주소 | Service DNS 이름 하나에 Ready pod IP 여러 개가 연결됨. 클라이언트가 유휴 pod를 선택합니다 | claim의 `status.sandbox.serviceFQDN` (Sandbox마다 headless Service 하나) |
@@ -113,33 +113,33 @@ AWS에서 각 RuntimeClass를 실행할 수 있는 위치는 Agent Sandbox와 �
 
 - **single-turn reward 채점이라면 이 저장소의 reward 풀을 쓰세요.** 요청마다 유휴 pod를 선택하므로 GPU 유휴 시간이 줄어듭니다.
 - **multi-turn agentic RL이라면 에피소드 단위 샌드박스가 적합합니다.** 한 에피소드의 모든 turn이 같은 GPU와 같은 샌드박스 버전에서 실행됩니다.
-- **사용자 세션마다 작업 공간이 필요한 에이전트 앱이라면** Agent Sandbox의 원래 용도에 해당해요. AWS 블로그 3부의 에이블리는 프로젝트마다 Sandbox 하나를 사용합니다.
+- **사용자 세션마다 작업 공간이 필요한 에이전트 앱이라면** Agent Sandbox의 원래 용도에 해당합니다. AWS 블로그 3부의 에이블리는 프로젝트마다 Sandbox 하나를 사용합니다.
 - **두 구조를 함께 운영한다면** 같은 프로필의 pod가 같은 노드와 GPU를 나눠 씁니다. 예를 들어 `gvisor` 노드 2대에서 Deployment pod 2개가 이미 실행 중이면, warm sandbox는 GPU가 해제될 때까지 Pending 상태입니다(매니페스트 기준).
 
 !!! question "❓ 오해: Agent Sandbox의 warm pool은 Production의 warm capacity와 같다"
-    [Production 01](../production/01_capacity_and_nodes.md)의 warm capacity는 CPU와 메모리만 요청하는 placeholder pod로 예비 노드 한 대를 확보해 두는 방식이라 GPU를 점유하지 않아요. warm pool은 GPU 초기화와 egress 확인까지 끝낸 샌드박스 pod를 대기시키므로, 대기 중인 샌드박스마다 GPU 하나를 계속 점유합니다.
+    [Production 01](../production/01_capacity_and_nodes.md)의 warm capacity는 CPU와 메모리만 요청하는 placeholder pod로 예비 노드 한 대를 확보해 두는 방식이라 GPU를 점유하지 않습니다. warm pool은 GPU 초기화와 egress 확인까지 끝낸 샌드박스 pod를 대기시키므로, 대기 중인 샌드박스마다 GPU 하나를 계속 점유합니다.
 
 ## 이 저장소의 확장
 
 | 파일 | 역할 |
 |---|---|
 | [`k8s/extensions/agent-sandbox/template.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/extensions/agent-sandbox/template.yaml.tpl) | 런타임 프로필마다 SandboxTemplate과 SandboxWarmPool `kernel-eval-<runtime>` |
-| [`k8s/base/trainer-rbac.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/trainer-rbac.yaml) | `rl-trainer`의 ServiceAccount `grpo-trainer`, `sandbox-probe`, `sandbox-episode`와 `sandbox`의 `gpu-sandbox`. 모두 `automountServiceAccountToken: false`입니다. `sandbox-episode`는 multi-turn 에피소드 Job이 쓰는 계정이에요 |
-| [`k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml) | Role과 RoleBinding `sandbox-claims`. `rl-trainer`의 ServiceAccount `grpo-trainer`와 `sandbox-episode`에 `sandbox` 네임스페이스의 `sandboxclaims` create, get, list, watch, delete 권한만 부여합니다. pod나 secret 권한은 없어요 |
+| [`k8s/base/trainer-rbac.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/trainer-rbac.yaml) | `rl-trainer`의 ServiceAccount `grpo-trainer`, `sandbox-probe`, `sandbox-episode`와 `sandbox`의 `gpu-sandbox`. 모두 `automountServiceAccountToken: false`입니다. `sandbox-episode`는 multi-turn 에피소드 Job이 쓰는 계정입니다 |
+| [`k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml) | Role과 RoleBinding `sandbox-claims`. `rl-trainer`의 ServiceAccount `grpo-trainer`와 `sandbox-episode`에 `sandbox` 네임스페이스의 `sandboxclaims` create, get, list, watch, delete 권한만 부여합니다. pod나 secret 권한은 없습니다 |
 | [`k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl) | `episodes`가 실행하는 일회성 Job. `rl-trainer`에서 ServiceAccount `sandbox-episode`로 실행되며, 이 계정을 쓰는 pod 중 Kubernetes API 토큰을 마운트하는 것은 이 Job뿐입니다 |
 | [`scripts/extensions/agent_sandbox.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/extensions/agent_sandbox.sh) | `install`, `pool <runtime> [n]`, `claim <runtime>`, `episodes <runtime> [episodes] [max_turns]` |
 | [`src/gpusandbox/agent_sandbox.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/agent_sandbox.py) | `EpisodeSandbox`: 에피소드마다 claim, 평가, 반납 |
 | [`src/gpusandbox/multiturn.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/multiturn.py) | 에피소드 실행기, Policy 인터페이스, `ScriptedPolicy`, 피드백 형식, 중지 규칙, JSON 이벤트. `python -m gpusandbox.tools multiturn`이 사용합니다 |
 | [`rl/verl/sandbox_tool.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool.py), [`rl/verl/sandbox_tool_config.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool_config.yaml) | veRL v0.9.1용 tool `KernelSandboxTool`, reward 함수 `compute_score`, `SandboxToolAgentLoop`와 tool 설정 예시(아래 "veRL multi-turn rollout에 연결하기") |
 
-샌드박스 서버, 이미지, 인증은 [핸즈온 04](../handson/04_sandbox_pools.md)의 풀과 같습니다. 이 확장의 단위 테스트(`tests/test_agent_sandbox.py` 4개, `tests/test_multiturn.py` 16개, `tests/test_manifests.py`)는 로컬에서 통과했습니다. 검사 항목은 아래 "적용 범위와 한계"에 있습니다. 클러스터와 AWS에서는 실행하지 않았으므로 각 명령의 확인 단계로 검증하세요. 명령을 순서대로 실행하는 방법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있어요.
+샌드박스 서버, 이미지, 인증은 [핸즈온 04](../handson/04_sandbox_pools.md)의 풀과 같습니다. 이 확장의 단위 테스트(`tests/test_agent_sandbox.py` 4개, `tests/test_multiturn.py` 16개, `tests/test_manifests.py`)는 로컬에서 통과했습니다. 검사 항목은 아래 "적용 범위와 한계"에 있습니다. 클러스터와 AWS에서는 실행하지 않았으므로 각 명령의 확인 단계로 검증하세요. 명령을 순서대로 실행하는 방법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있습니다.
 
 ### template 설정과 이유
 
 | 설정 | 값 | 이유 |
 |---|---|---|
 | `networkPolicy.ingress` | `rl-trainer` 네임스페이스의 `gpusandbox/client=true` pod에서 TCP 8000만 | controller의 기본 정책(sandbox-router에서 오는 ingress만 허용, 공용 인터넷 egress 허용)을 대체합니다 |
-| `networkPolicy.egress` | `[]` | 모든 egress를 차단합니다. DNS 트래픽도 차단돼요 |
+| `networkPolicy.egress` | `[]` | 모든 egress를 차단합니다. DNS 트래픽도 차단됩니다 |
 | `dnsPolicy`, `dnsConfig` | `None`, nameserver `127.0.0.1` | controller가 public resolver를 주입하지 않게 합니다. 샌드박스에는 DNS 이름 해석이 필요 없습니다 |
 | `envVarsInjectionPolicy` | `Disallowed` | claim이 harness가 측정하는 환경을 바꾸지 못하게 합니다. v1.0.11의 기본값과 같지만 의도를 분명히 하려고 명시합니다 |
 | `service` | `true` | Sandbox마다 headless Service를 만들고, 주소를 `status.sandbox.serviceFQDN`에 기록합니다 |
@@ -150,7 +150,7 @@ AWS에서 각 RuntimeClass를 실행할 수 있는 위치는 Agent Sandbox와 �
 v1.0.11 controller(`extensions/controllers/utils.go`)는 template이 `networkPolicy`를 생략해 기본 정책을 쓰고 pod의 `dnsPolicy`도 비어 있을 때만 `dnsPolicy: None`과 nameserver `8.8.8.8`, `1.1.1.1`을 주입합니다. 이 template은 정책을 직접 지정하므로 v1.0.11에서는 주입 대상이 아닙니다. 그래도 정책 블록이 삭제되거나 controller 동작이 바뀌었을 때 외부 resolver가 주입되지 않도록 `dnsPolicy`를 명시합니다. `127.0.0.1`에는 응답할 DNS 서버가 없습니다.
 
 !!! warning "NetworkPolicy는 허용 규칙의 합집합입니다"
-    `sandbox` 네임스페이스에 `default-deny-all` 정책([핸즈온 04](../handson/04_sandbox_pools.md))이 있어도, controller가 만든 기본 정책(공용 인터넷 egress 허용)이 적용되면 egress가 허용됩니다. Kubernetes 문서에 따르면 NetworkPolicy의 허용 규칙은 합산되기 때문입니다("they are additive"). 그래서 이 template은 기본 정책을 대체하며, 적용한 뒤에는 생성된 정책을 직접 확인해야 해요.
+    `sandbox` 네임스페이스에 `default-deny-all` 정책([핸즈온 04](../handson/04_sandbox_pools.md))이 있어도, controller가 만든 기본 정책(공용 인터넷 egress 허용)이 적용되면 egress가 허용됩니다. Kubernetes 문서에 따르면 NetworkPolicy의 허용 규칙은 합산되기 때문입니다("they are additive"). 그래서 이 template은 기본 정책을 대체하며, 적용한 뒤에는 생성된 정책을 직접 확인해야 합니다.
 
 ### install: controller와 CRD
 
@@ -198,8 +198,8 @@ VERSION_FILE=v2 scripts/extensions/agent_sandbox.sh pool gvisor 1   # harness se
 
 - `k8s/sandbox/profiles/<runtime>.env`와 `k8s/sandbox/versions/${VERSION_FILE:-v1}.env`를 읽고 template을 렌더링해 적용합니다.
 - `scripts/config.env`에 `SANDBOX_IMAGE_URI`와 `SANDBOX_AUDIENCE`가 있어야 하고, OIDC issuer는 `aws eks describe-cluster`로 가져옵니다.
-- 허용 subject 기본값은 `grpo-trainer`, `sandbox-probe`, `sandbox-episode`이고(`06_deploy_sandboxes.sh`와 달리 production gateway 없음), `SANDBOX_ALLOWED_SUBJECTS`로 바꿀 수 있어요.
-- `sandbox-episode`가 기본값에 추가되기 전에 pool을 만들었다면 `install` 뒤에 `pool`을 다시 실행하세요. `SANDBOX_ALLOWED_SUBJECTS`를 직접 지정했다면 그 값에 `system:serviceaccount:rl-trainer:sandbox-episode`를 먼저 추가해야 합니다. `pool`은 template과 대기 수를 함께 적용하므로, 다시 실행할 때는 지금 쓰는 버전 파일(`VERSION_FILE`, 기본 v1)과 대기 수(기본 1)를 지정하세요. 대기 샌드박스는 시작할 때 받은 env를 그대로 유지하므로(`updateStrategy: OnReplenish`), 이전에 시작한 샌드박스는 에피소드의 요청에 403을 반환합니다. `episodes`의 사전 점검은 이런 샌드박스의 pod 이름을 claim 여부와 관계없이 출력해요. 각 pod가 속한 Sandbox를 확인해 claim에 할당되지 않은 대기 Sandbox만 삭제하세요.
+- 허용 subject 기본값은 `grpo-trainer`, `sandbox-probe`, `sandbox-episode`이고(`06_deploy_sandboxes.sh`와 달리 production gateway 없음), `SANDBOX_ALLOWED_SUBJECTS`로 바꿀 수 있습니다.
+- `sandbox-episode`가 기본값에 추가되기 전에 pool을 만들었다면 `install` 뒤에 `pool`을 다시 실행하세요. `SANDBOX_ALLOWED_SUBJECTS`를 직접 지정했다면 그 값에 `system:serviceaccount:rl-trainer:sandbox-episode`를 먼저 추가해야 합니다. `pool`은 template과 대기 수를 함께 적용하므로, 다시 실행할 때는 지금 쓰는 버전 파일(`VERSION_FILE`, 기본 v1)과 대기 수(기본 1)를 지정하세요. 대기 샌드박스는 시작할 때 받은 env를 그대로 유지하므로(`updateStrategy: OnReplenish`), 이전에 시작한 샌드박스는 에피소드의 요청에 403을 반환합니다. `episodes`의 사전 점검은 이런 샌드박스의 pod 이름을 claim 여부와 관계없이 출력합니다. 각 pod가 속한 Sandbox를 확인해 claim에 할당되지 않은 대기 Sandbox만 삭제하세요.
 - 먼저 [핸즈온 04](../handson/04_sandbox_pools.md)의 `05_setup_namespaces_auth.sh`(네임스페이스, `gpu-sandbox` ServiceAccount, `sandbox-auth-jwks` ConfigMap)를 실행하고 그 프로필의 노드([02 gVisor](../handson/02_gvisor.md), [03 Kata](../handson/03_kata.md))를 준비해야 합니다.
 - GPU 없이 흐름만 확인하려면 `kata-clh-cpu`(nested virtualization을 켠 `c8i` 노드)로 먼저 실행해 보세요.
 
@@ -213,7 +213,7 @@ VERSION_FILE=v2 scripts/extensions/agent_sandbox.sh pool gvisor 1   # harness se
     kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox -L gpusandbox/runtime -w
     ```
 
-- 생성된 NetworkPolicy를 확인합니다. egress가 비어 있고, ingress가 `rl-trainer`의 `gpusandbox/client=true` pod와 TCP 8000만 허용하는 정책이 있어야 해요.
+- 생성된 NetworkPolicy를 확인합니다. egress가 비어 있고, ingress가 `rl-trainer`의 `gpusandbox/client=true` pod와 TCP 8000만 허용하는 정책이 있어야 합니다.
 
     ```bash
     kubectl -n sandbox get networkpolicy -o yaml
@@ -269,11 +269,11 @@ bash -c "source scripts/lib.sh && source scripts/lib_jobs.sh && run_tool_job pro
 kubectl -n sandbox delete sandboxclaim episode-manual
 ```
 
-**확인할 것:** 첫 줄은 `/info` 요약이고 `"egress_blocked": true`여야 합니다. 그 뒤로 GPU golden 6개(`vector_add_triton`, `relu_bias_triton`, `relu_bias_torch_only`, `relu_bias_wrong`, `relu_bias_benchmark_cheat`, `read_host_file`)가 모두 `PASS`로 출력돼야 해요. CPU 프로필이라면 `--device cpu`를 쓰고 golden은 4개입니다.
+**확인할 것:** 첫 줄은 `/info` 요약이고 `"egress_blocked": true`여야 합니다. 그 뒤로 GPU golden 6개(`vector_add_triton`, `relu_bias_triton`, `relu_bias_torch_only`, `relu_bias_wrong`, `relu_bias_benchmark_cheat`, `read_host_file`)가 모두 `PASS`로 출력돼야 합니다. CPU 프로필이라면 `--device cpu`를 쓰고 golden은 4개입니다.
 
 ### episodes: multi-turn 에피소드 실행
 
-모델 없이 multi-turn 에피소드를 실행합니다. `rl-trainer`의 Job 하나가 에피소드마다 샌드박스 하나를 claim하고, golden 커널을 turn마다 하나씩 제출한 뒤 claim을 삭제합니다. 기본값은 에피소드 2개, 에피소드당 최대 3 turn이고, `max_turns`를 1로 주면 single-turn 채점과 같습니다. 명령을 순서대로 실행하는 방법과 출력 읽는 법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있어요.
+모델 없이 multi-turn 에피소드를 실행합니다. `rl-trainer`의 Job 하나가 에피소드마다 샌드박스 하나를 claim하고, golden 커널을 turn마다 하나씩 제출한 뒤 claim을 삭제합니다. 기본값은 에피소드 2개, 에피소드당 최대 3 turn이고, `max_turns`를 1로 주면 single-turn 채점과 같습니다. 명령을 순서대로 실행하는 방법과 출력 읽는 법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있습니다.
 
 ```bash
 scripts/extensions/agent_sandbox.sh pool gvisor-cpu 2         # or kata-clh-cpu on the c8i nested-virtualization node
@@ -283,7 +283,7 @@ scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1   # single-turn base
 
 - Job은 제어 이미지(`CONTROL_IMAGE_URI`)로 `python -m gpusandbox.tools multiturn`을 실행합니다. 이 이미지에 `gpusandbox.multiturn`이 있어야 하므로, 이 모듈이 추가되기 전에 이미지를 빌드했다면 다시 빌드하세요. ECR 저장소는 기존 태그를 덮어쓸 수 없으므로(`IMMUTABLE`) `scripts/config.env`의 `IMAGE_TAG`를 새 값으로 바꾸고 `scripts/03_build_push_images.sh --no-trainer`를 실행합니다. 출력된 `SANDBOX_IMAGE_URI`와 `CONTROL_IMAGE_URI`는 `scripts/config.env`에 반영하세요(절차는 [핸즈온 11](../handson/11_multi_turn.md)).
 - 사전 점검은 CRD, ServiceAccount `rl-trainer/sandbox-episode`, 그 계정의 claim 생성 권한, `kernel-eval-<runtime>`의 Ready 샌드박스(`status.readyReplicas`가 1 이상)를 확인합니다. 하나라도 없으면 실행할 명령(`install` 또는 `pool`)을 출력하고 종료합니다.
-- 허용 목록에 `sandbox-episode`가 없는 상태로 시작한 샌드박스 pod가 있으면, 사전 점검이 그 pod 이름을 출력하고 종료합니다. 대기 중인 것과 claim된 것을 구분하지 않아요.
+- 허용 목록에 `sandbox-episode`가 없는 상태로 시작한 샌드박스 pod가 있으면, 사전 점검이 그 pod 이름을 출력하고 종료합니다. 대기 중인 것과 claim된 것을 구분하지 않습니다.
 - device는 `*-cpu` 런타임이면 `cpu`, 그 밖에는 `cuda`입니다. 에피소드 수가 Ready 샌드박스 수보다 많으면 경고를 출력하고 계속 실행합니다.
 - Job(`job-multiturn.yaml.tpl`)은 ServiceAccount `sandbox-episode`로 실행되고, Kubernetes API 토큰, sandbox audience 토큰, `gpusandbox/client=true` label을 가집니다. Job 이름(`episodes-<epoch 초>`)은 그 Job이 만드는 모든 claim의 label `gpusandbox/run` 값으로도 쓰입니다.
 - Job이 끝나면 스크립트가 이 label로 남은 claim을 삭제하고, Job의 결과를 종료 코드로 반환합니다. Job이 삭제되거나 pod가 eviction되어 SIGTERM을 받으면 CLI가 정상 종료 경로로 빠져나오므로 claim이 바로 삭제됩니다.
@@ -306,7 +306,7 @@ scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1   # single-turn base
 ```
 
 - 마지막 줄에서 `one_sandbox_per_episode`가 `true`이고 `unexpected`가 `[]`여야 합니다. 에피소드마다 새 샌드박스를 받으므로 `distinct_sandboxes`는 에피소드 수와 같습니다.
-- `max_turns` 1로 실행하면 두 에피소드 모두 `stop_reason`이 `max_turns`이고 reward가 0.1입니다. CPU에서는 speedup이 실행마다 달라요.
+- `max_turns` 1로 실행하면 두 에피소드 모두 `stop_reason`이 `max_turns`이고 reward가 0.1입니다. CPU에서는 speedup이 실행마다 다릅니다.
 
 **비용과 수명:**
 
@@ -337,7 +337,7 @@ kubectl -n sandbox delete sandboxtemplate kernel-eval-gvisor
 kubectl -n sandbox get sandboxclaims
 ```
 
-**확인할 것:** `kubectl -n sandbox get sandboxwarmpool` 출력에 `kernel-eval-gvisor`가 없고, `kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox,gpusandbox/runtime=gvisor`에는 사용 중인 claim의 pod만 남으면 됩니다. 다른 런타임의 대기 pod는 그 런타임의 pool에서 따로 확인하세요. `SandboxWarmPool.spec.replicas`의 최솟값은 0입니다(v1.0.11 소스 주석). 노드와 클러스터 전체 정리는 [99 정리](../handson/99_cleanup.md)에 있어요.
+**확인할 것:** `kubectl -n sandbox get sandboxwarmpool` 출력에 `kernel-eval-gvisor`가 없고, `kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox,gpusandbox/runtime=gvisor`에는 사용 중인 claim의 pod만 남으면 됩니다. 다른 런타임의 대기 pod는 그 런타임의 pool에서 따로 확인하세요. `SandboxWarmPool.spec.replicas`의 최솟값은 0입니다(v1.0.11 소스 주석). 노드와 클러스터 전체 정리는 [99 정리](../handson/99_cleanup.md)에 있습니다.
 
 ### EpisodeSandbox: 코드에서 쓰는 법
 
@@ -374,13 +374,13 @@ with EpisodeSandbox(
     print(verdict["status"], verdict.get("speedup"), verdict["episode_claim"])
 ```
 
-`token_file`을 전달하지 않으면 `Authorization` 헤더 없이 요청이 전송되어 샌드박스가 401을 반환하고, verdict는 `sandbox_error`가 됩니다. 클러스터 안에서 쓰려면 다음 조건을 모두 충족해야 해요.
+`token_file`을 전달하지 않으면 `Authorization` 헤더 없이 요청이 전송되어 샌드박스가 401을 반환하고, verdict는 `sandbox_error`가 됩니다. 클러스터 안에서 쓰려면 다음 조건을 모두 충족해야 합니다.
 
 | 필요한 것 | 이유 | 이 저장소의 현재 상태 |
 |---|---|---|
 | Kubernetes API 토큰 | `config.load_incluster_config()`로 claim을 만들고 삭제합니다 | 핸즈온 trainer Job은 `automountServiceAccountToken: false`라 토큰이 없습니다. 에피소드 Job(`job-multiturn.yaml.tpl`)만 pod spec에서 토큰 마운트를 켭니다 |
 | RBAC | `sandboxclaims`의 create, get, list, watch, delete | `install`이 적용하는 `trainer-claims-rbac.yaml`이 `grpo-trainer`와 `sandbox-episode`에 부여합니다 |
-| `kubernetes` Python 패키지 | `CustomObjectsApi` | `gateway` extra에만 있습니다. trainer 이미지는 `client` extra만 설치해요. 에피소드 Job은 `gateway` extra를 설치한 제어 이미지를 씁니다 |
+| `kubernetes` Python 패키지 | `CustomObjectsApi` | `gateway` extra에만 있습니다. trainer 이미지는 `client` extra만 설치합니다. 에피소드 Job은 `gateway` extra를 설치한 제어 이미지를 씁니다 |
 | sandbox audience 토큰 | 평가 API 인증 | `token_file`로 전달합니다. trainer와 에피소드 Job에서는 `SANDBOX_TOKEN_FILE`이 토큰 경로를 가리킵니다 |
 | 네트워크 | template의 ingress 규칙 | 호출하는 pod가 `rl-trainer` 네임스페이스에 있고 `gpusandbox/client=true` label이 있어야 합니다 |
 | 허용 subject | 샌드박스가 토큰의 subject를 확인합니다 | `pool` 기본값은 `grpo-trainer`, `sandbox-probe`, `sandbox-episode` |
@@ -416,7 +416,7 @@ veRL v0.9.1은 tool을 아래와 같이 호출합니다. 그래서 `create`에�
 - **인프라 오류를 오답으로 처리하지 않습니다.** claim 실패를 포함한 `sandbox_error`는 [Production 06 veRL로 확장](../production/06_scaling_with_verl.md)의 규칙과 같이(`reward_fn.py`) format 점수만 주고 `sandbox_error: 1`로 표시합니다. 제출이 없으면 점수는 0.0이고 status는 `no_submission`입니다.
 - **`compute_score`는 결과와 관계없이 같은 key를 반환합니다**(`score`, `status`, `turns`, `first_turn_reward`, `sandbox_error`). veRL이 `reward_extra_info`를 key별로 batch에 쌓기 때문입니다.
 - **블로킹 호출은 스레드로 실행합니다.** `EpisodeSandbox`는 Ready를 기다리는 동안과 평가하는 동안 호출한 스레드를 블로킹하므로, tool은 claim과 평가를 `asyncio.to_thread`로 실행해 rollout 이벤트 루프가 블로킹되지 않게 합니다. worker 하나의 모든 에피소드는 `BackgroundLoop` 하나를 공유합니다.
-- **warm pool 크기는 기다리지 않고 시작할 수 있는 에피소드 수를 정합니다.** claim한 샌드박스는 pool에서 빠지고 pool은 대기분을 다시 채웁니다. 실행 중인 GPU 에피소드는 첫 제출부터 반납까지 GPU 하나를 점유하므로, 동시 에피소드 수의 상한은 GPU 수예요. 동시 에피소드가 대기 없이 시작하게 하려면 replicas를 그 수에 맞추세요.
+- **warm pool 크기는 기다리지 않고 시작할 수 있는 에피소드 수를 정합니다.** claim한 샌드박스는 pool에서 빠지고 pool은 대기분을 다시 채웁니다. 실행 중인 GPU 에피소드는 첫 제출부터 반납까지 GPU 하나를 점유하므로, 동시 에피소드 수의 상한은 GPU 수입니다. 동시 에피소드가 대기 없이 시작하게 하려면 replicas를 그 수에 맞추세요.
 
 ### 설정 (veRL v0.9.1 key)
 
@@ -439,7 +439,7 @@ veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습�
 - **tool 전체의 동작과 `SandboxToolAgentLoop` 등록.** 등록은 `AgentLoopWorker`가 `default_agent_loop`를 찾기 전에 tool(즉 이 module)을 먼저 load한다는 전제에 의존합니다. 이 전제는 v0.9.1 `agent_loop.py`를 읽고 판단한 것입니다.
 - **Ray worker의 `PYTHONPATH`에 `rl/verl`을 넣는 방법.** RayCluster pod의 env와 `ray job submit --runtime-env-json`의 `env_vars` 중 어느 쪽이 동작하는지 클러스터에서 확인해야 합니다.
 - **`extra_fields`가 `extra_info`로 전달되는 경로.** reward-loop manager(naive, remote, limited)에서만 소스로 확인했습니다.
-- **rollout worker의 실행 조건.** `k8s/production/raycluster-verl.yaml.tpl`의 worker에는 `gpusandbox/client=true` label과 `grpo-trainer` ServiceAccount가 이미 있습니다. 이 계정은 warm pool의 기본 허용 subject이고, `install`이 적용하는 `sandbox-claims` RoleBinding에도 들어 있어요. 빠진 것은 Kubernetes API 토큰(`automountServiceAccountToken: false`), veRL 이미지의 `kubernetes` Python 패키지(`client` extra만 설치), `SANDBOX_TOKEN_FILE`의 sandbox audience 토큰(지금 마운트된 토큰은 gateway audience)입니다. rollout worker가 claim을 직접 만들지, broker에 맡길지도 먼저 정하세요(위 조건 표).
+- **rollout worker의 실행 조건.** `k8s/production/raycluster-verl.yaml.tpl`의 worker에는 `gpusandbox/client=true` label과 `grpo-trainer` ServiceAccount가 이미 있습니다. 이 계정은 warm pool의 기본 허용 subject이고, `install`이 적용하는 `sandbox-claims` RoleBinding에도 들어 있습니다. 빠진 것은 Kubernetes API 토큰(`automountServiceAccountToken: false`), veRL 이미지의 `kubernetes` Python 패키지(`client` extra만 설치), `SANDBOX_TOKEN_FILE`의 sandbox audience 토큰(지금 마운트된 토큰은 gateway audience)입니다. rollout worker가 claim을 직접 만들지, broker에 맡길지도 먼저 정하세요(위 조건 표).
 
 ## AWS 블로그 시리즈의 교훈을 GPU 샌드박스에 적용하기
 
@@ -448,9 +448,9 @@ veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습�
 | 교훈 (출처) | GPU 샌드박스에서의 의미 | 이 저장소의 대응 |
 |---|---|---|
 | VPC CNI NetworkPolicy를 먼저 켭니다. 켜기 전에는 샌드박스에서 IMDS와 Kubernetes API에 접근할 수 있었습니다 (1부, 2부) | enforcer가 없으면 NetworkPolicy 객체가 있어도 트래픽이 차단되지 않습니다 | CDK 스택(`cdk/gpusandbox_cdk/stack.py`)이 vpc-cni add-on에 `enableNetworkPolicy`를 켜고, readiness 검사가 IMDS, API server, kubelet 차단을 확인한 뒤에만 pod가 Ready가 됩니다 |
-| SandboxTemplate의 기본 정책은 sandbox-router에서 오는 ingress만 허용하고, egress는 `0.0.0.0/0`에서 RFC1918과 `169.254.0.0/16`을 제외한 범위를 허용합니다. 인터넷 접근이 허용되므로 이 정책으로는 데이터 유출, C2 통신, 채굴을 차단할 수 없어요. 블로그는 사용자 정의 정책, egress proxy, AWS Network Firewall을 권장합니다 (2부) | GPU 샌드박스에서 채굴이 일어나면 그만큼 GPU 비용이 발생합니다 | `networkPolicy`를 직접 지정합니다. ingress는 trainer만, egress는 `[]` |
+| SandboxTemplate의 기본 정책은 sandbox-router에서 오는 ingress만 허용하고, egress는 `0.0.0.0/0`에서 RFC1918과 `169.254.0.0/16`을 제외한 범위를 허용합니다. 인터넷 접근이 허용되므로 이 정책으로는 데이터 유출, C2 통신, 채굴을 차단할 수 없습니다. 블로그는 사용자 정의 정책, egress proxy, AWS Network Firewall을 권장합니다 (2부) | GPU 샌드박스에서 채굴이 일어나면 그만큼 GPU 비용이 발생합니다 | `networkPolicy`를 직접 지정합니다. ingress는 trainer만, egress는 `[]` |
 | 기본 DNS 주입(`dnsPolicy: None`, `8.8.8.8`, `1.1.1.1`)은 Route 53 Resolver를 우회합니다 (2부) | 외부 resolver를 쓰면 DNS 질의로 데이터를 외부에 전송할 수 있습니다(추론) | `dnsPolicy: None`과 `127.0.0.1`을 명시하고, egress가 `[]`이므로 DNS 트래픽도 차단됩니다 |
-| sandbox-router의 기본 authorization 설정은 모든 요청을 허용하고, SDK v1.0.5는 인증 헤더를 보내지 않았습니다. TokenReview는 토큰의 유효성만 확인하고 권한은 확인하지 않아요. port-forward(Tunnel 모드)는 NetworkPolicy를 우회하고, 30초를 넘는 명령은 502 오류가 발생했습니다 (2부) | GPU 평가는 컴파일과 timing 때문에 30초를 넘길 수 있습니다(추론). port-forward 권한이 있으면 네트워크 경계를 우회할 수 있습니다 | router와 SDK를 쓰지 않습니다. 서버가 audience, issuer, subject 허용 목록을 직접 확인하고, 클라이언트 요청 timeout은 300초(`SandboxPool` 기본값)입니다. `sandbox` 네임스페이스의 `pods/portforward`, `pods/exec` 권한은 최소한으로 부여하세요 |
+| sandbox-router의 기본 authorization 설정은 모든 요청을 허용하고, SDK v1.0.5는 인증 헤더를 보내지 않았습니다. TokenReview는 토큰의 유효성만 확인하고 권한은 확인하지 않습니다. port-forward(Tunnel 모드)는 NetworkPolicy를 우회하고, 30초를 넘는 명령은 502 오류가 발생했습니다 (2부) | GPU 평가는 컴파일과 timing 때문에 30초를 넘길 수 있습니다(추론). port-forward 권한이 있으면 네트워크 경계를 우회할 수 있습니다 | router와 SDK를 쓰지 않습니다. 서버가 audience, issuer, subject 허용 목록을 직접 확인하고, 클라이언트 요청 timeout은 300초(`SandboxPool` 기본값)입니다. `sandbox` 네임스페이스의 `pods/portforward`, `pods/exec` 권한은 최소한으로 부여하세요 |
 | RuntimeClass의 scheduling 설정만으로는 같은 taint를 허용하는 다른 pod가 그 노드에 배치되는 것을 막을 수 없습니다 (1부) | GPU 샌드박스 노드에 다른 pod가 배치되면 노드당 샌드박스 하나라는 가정이 성립하지 않습니다(추론) | 전용 taint `gpusandbox/role`과 node guard를 씁니다. `kubectl get pods -A -o wide --field-selector spec.nodeName=<node>`로 노드에서 실행 중인 pod를 직접 확인하세요 |
 | 전용 노드 그룹에 IMDSv2 필수와 hop limit 1을 설정합니다 (1부). EKS Best Practices도 같은 방법을 권장합니다 | 샌드박스가 노드 IAM 자격 증명에 접근하지 못하게 합니다 | CDK 스택의 모든 노드 그룹 launch template이 IMDSv2 필수와 hop limit 1을 쓰고, Karpenter는 기본 hop limit 1입니다. readiness 검사도 IMDS 차단을 확인합니다 |
 | EKS Auto Mode에는 runsc를 등록할 수 없습니다 (1부) | 커스텀 런타임이 필요한 GPU 샌드박스에도 같은 제약이 적용됩니다 | CDK 스택의 EKS 관리형 노드 그룹과 Karpenter NodePool을 씁니다 |
@@ -461,7 +461,7 @@ veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습�
 | `SandboxClaim.spec.env`를 쓰면 warm pool을 거치지 않고 template으로 Sandbox를 새로 만듭니다 (3부, upstream v1.0.8). v1.0.11 소스 주석에도 같은 내용이 있고, claim에 `volumeClaimTemplates`를 지정해도 cold start가 발생합니다 | GPU 샌드박스에서는 cold start에 몇 분이 걸릴 수 있습니다 | `envVarsInjectionPolicy: Disallowed`로 claim에서 env를 지정하지 못하게 하고, `EpisodeSandbox`는 env와 볼륨을 지정하지 않습니다 |
 | 에이블리는 전용 on-demand Karpenter NodePool에 `karpenter.sh/do-not-disrupt`와 일정 기반 disruption budget을 씁니다 (3부) | 에피소드 도중 노드가 종료되면 그 에피소드는 폐기해야 합니다 | GPU 샌드박스 NodePool은 `consolidationPolicy: WhenEmpty`라 샌드박스가 실행 중인 노드를 consolidation하지 않습니다. `sandbox-kata-cpu`는 `WhenEmptyOrUnderutilized`이므로, CPU 계층에서 에피소드 샌드박스를 실행한다면 `do-not-disrupt`를 검토하세요 |
 
-gVisor 프로필은 `g5.xlarge` 한 대에 샌드박스 하나를 실행하므로, 대기 샌드박스 하나가 시간당 1.006 USD인 노드 한 대를 점유해요. Kata GPU 샌드박스는 `g4dn.metal`(시간당 7.824 USD, T4 8개)의 T4 하나를 쓰므로, 단순 나눗셈으로 계산하면 T4 하나에 시간당 약 0.978 USD입니다(가격은 us-east-1과 us-west-2 온디맨드 요금).
+gVisor 프로필은 `g5.xlarge` 한 대에 샌드박스 하나를 실행하므로, 대기 샌드박스 하나가 시간당 1.006 USD인 노드 한 대를 점유합니다. Kata GPU 샌드박스는 `g4dn.metal`(시간당 7.824 USD, T4 8개)의 T4 하나를 쓰므로, 단순 나눗셈으로 계산하면 T4 하나에 시간당 약 0.978 USD입니다(가격은 us-east-1과 us-west-2 온디맨드 요금).
 
 ## AI on EKS의 Agent Sandbox 솔루션과 비교
 
@@ -484,7 +484,7 @@ GPU가 필요 없고 허용한 도메인으로만 외부 접속을 허용하는 
 - **클러스터에서 실행하지 않은 것:** `install`, `pool`, `claim`, `episodes`, 위의 평가 확인 절차, pod 안의 `EpisodeSandbox`입니다. SandboxTemplate 안의 Kata GPU(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)도 검증하지 않았습니다. veRL tool은 veRL에서 실행하지 않았습니다(위 "확인하지 않은 것").
 - **trainer에서 바로 쓰려면 추가 준비가 필요합니다.** 위 조건 표에 있는 API 토큰과 `kubernetes` 패키지를 준비하고, broker 사용 여부를 결정하세요.
 - **template 이름에 버전이 없습니다.** `VERSION_FILE=v2`로 `pool`을 다시 적용하면 같은 `kernel-eval-<runtime>` template이 수정됩니다. `OnReplenish`는 대기 중인 이전 버전 샌드박스를 claim되거나 삭제될 때까지 유지하므로, 전환 중에는 claim마다 v1과 v2가 섞일 수 있습니다(upstream 주석 기준 추론). `multiturn` CLI에서는 각 `turn` 이벤트의 `version`으로 확인할 수 있습니다. veRL tool은 에피소드 요약과 `compute_score` 결과에 버전을 싣지 않으므로, GRPO group 안에서 버전이 섞이면 안 되는 veRL 학습이라면 그 값을 직접 기록하거나 버전마다 이름이 다른 template과 pool을 만들어 group의 claim을 한 풀로 보내세요(둘 다 이 저장소에 없음).
-- **template에는 livenessProbe가 없습니다.** Deployment 풀과 달리 GPU 오류로 draining된 샌드박스를 kubelet이 다시 시작하지 않아요. 그 에피소드의 남은 평가는 `sandbox_error`가 되므로(코드 기준), 에피소드를 폐기하고 새 claim을 만드세요.
+- **template에는 livenessProbe가 없습니다.** Deployment 풀과 달리 GPU 오류로 draining된 샌드박스를 kubelet이 다시 시작하지 않습니다. 그 에피소드의 남은 평가는 `sandbox_error`가 되므로(코드 기준), 에피소드를 폐기하고 새 claim을 만드세요.
 - **`loop`를 전달하지 않은 `EpisodeSandbox`는 인스턴스마다 이벤트 루프 스레드를 하나 만들고 닫지 않습니다.** 한 프로세스에서 에피소드를 매우 많이 실행하면 스레드가 계속 늘어나므로, `BackgroundLoop` 하나를 `loop`로 전달하세요(코드 검토 결과). `multiturn` CLI와 veRL tool은 루프 하나를 공유합니다.
 - **upstream이 빠르게 변경되고 있습니다.** 필드 이름은 v1.0.11의 `sandboxclaim_types.go`를 따릅니다.
 

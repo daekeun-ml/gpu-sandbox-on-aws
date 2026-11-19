@@ -256,7 +256,7 @@ cdk/destroy.sh
 
 ## Scope and limits
 
-- Part 2 was run in this order on 2026-11-14 in a practice account (us-west-2); output may differ a little by account and time.
+- Part 2 was run in this order in a practice account ([run record](../reference/sources.md#aws-run-record)); output may differ a little by account and time.
 - This chapter uses only CPUs. GPU sandboxes and real training are covered in the experienced path.
 - Kata on nested virtualization can be slower than on bare metal, so do not generalize its performance numbers as they are.
 

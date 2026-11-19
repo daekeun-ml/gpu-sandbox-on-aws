@@ -14,7 +14,7 @@
 
 ![만드는 것: 학습 노드의 policy 모델과 vLLM이 버전을 고정한 채 gVisor, Kata + QEMU, Kata + Cloud Hypervisor(CPU 계층) 중 선택한 샌드박스 풀에 커널 코드를 보내고, 정확성과 speedup을 reward로 받는 구성](docs/images/figures/index--what-we-build.ko.svg)
 
-*그림 요약: policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 선택한 런타임의 샌드박스 풀에 전달되고, 풀이 측정한 정확성과 speedup이 reward로 쓰입니다. GPU 채점은 gVisor와 Kata + QEMU 풀이 맡고, Kata + Cloud Hypervisor는 기본적으로 CPU에서 실행해요.*
+*그림 요약: policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 선택한 런타임의 샌드박스 풀에 전달되고, 풀이 측정한 정확성과 speedup이 reward로 쓰입니다. GPU 채점은 gVisor와 Kata + QEMU 풀이 맡고, Kata + Cloud Hypervisor는 기본적으로 CPU에서 실행합니다.*
 
 네 시나리오는 같은 CDK 스택(private EKS API, SSM 터널, KMS 키, 로그)을 씁니다. A, B1, B2는 trainer와 샌드박스가 배치되는 위치가 다르고, C는 trainer와 모델 없이 CPU 샌드박스에서 채점과 버전 교체를 실습합니다.
 
@@ -38,7 +38,7 @@
 
 ![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](docs/images/architecture/scenario-b2.drawio.png)
 
-*그림 요약: 샌드박스도 HyperPod 인스턴스 그룹(ml.g5.xlarge x2)에 올라가고, 이 노드는 한 번 빌드하는 custom AMI(드라이버 580.178.04)로 부팅해요. AWS에서 실행해 보지 않은 실험 경로입니다.*
+*그림 요약: 샌드박스도 HyperPod 인스턴스 그룹(ml.g5.xlarge x2)에 올라가고, 이 노드는 한 번 빌드하는 custom AMI(드라이버 580.178.04)로 부팅합니다. AWS에서 실행해 보지 않은 실험 경로입니다.*
 
 </details>
 
@@ -53,11 +53,11 @@
 
 ### 요청 경로
 
-- trainer는 샌드박스에 요청을 보낼 때마다 routing ConfigMap(`sandbox-routing`)의 snapshot으로 런타임과 버전을 정하고, 한 reward batch의 결과는 한 풀에서 받습니다. 학습 중에 v2로 바꾸면 같은 batch에 든 이전 풀의 캐시 결과도 v2 풀에서 다시 채점해요. batch 전체가 한 풀의 캐시로 채워지면 샌드박스를 부르지 않고 그 결과를 씁니다. 한 batch 안에서 전환이 거듭되면 세 번째 요청에서 batch 전체를 한 풀에 보내므로, 한 batch는 항상 한 버전으로 채점돼요.
+- trainer는 샌드박스에 요청을 보낼 때마다 routing ConfigMap(`sandbox-routing`)의 snapshot으로 런타임과 버전을 정하고, 한 reward batch의 결과는 한 풀에서 받습니다. 학습 중에 v2로 바꾸면 같은 batch에 든 이전 풀의 캐시 결과도 v2 풀에서 다시 채점합니다. batch 전체가 한 풀의 캐시로 채워지면 샌드박스를 부르지 않고 그 결과를 씁니다. 한 batch 안에서 전환이 거듭되면 세 번째 요청에서 batch 전체를 한 풀에 보내므로, 한 batch는 항상 한 버전으로 채점됩니다.
 - trainer는 headless Service를 CoreDNS로 풀어 Ready 상태인 pod에 `POST /v1/evaluate`를 직접 보냅니다. 바쁜 pod는 `503`을 돌려주고, trainer는 다른 pod로 다시 시도합니다.
-- 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있어요.
+- 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있습니다.
 
-Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Production 00 아키텍처](https://daekeun-ml.github.io/gpu-sandbox-on-aws/production/00_architecture/)에, 노드 그룹과 네임스페이스, 화살표별 설명은 [핸즈온 00 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에 있습니다. 그림 원본(`.drawio`)은 [`diagrams/`](diagrams/)에 있어요.
+Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Production 00 아키텍처](https://daekeun-ml.github.io/gpu-sandbox-on-aws/production/00_architecture/)에, 노드 그룹과 네임스페이스, 화살표별 설명은 [핸즈온 00 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에 있습니다. 그림 원본(`.drawio`)은 [`diagrams/`](diagrams/)에서 볼 수 있습니다.
 
 ## 시나리오와 런타임
 
@@ -79,7 +79,7 @@ Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Prod
 
 ## 시작하기
 
-로컬 테스트(AWS 비용 없음)부터 스크립트 순서대로 진행합니다. 단계별 설명과 확인할 것은 가이드북의 [시작하기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/getting_started/)에 있어요.
+로컬 테스트(AWS 비용 없음)부터 스크립트 순서대로 진행합니다. 단계별 설명과 확인할 것은 가이드북의 [시작하기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/getting_started/)에 있습니다.
 
 ### 1. 로컬 테스트부터 (AWS 비용 없음)
 
@@ -98,14 +98,14 @@ uv pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-**확인할 것:** 마지막 줄에 실패 없이 `105 passed`가 나옵니다. 테스트는 AST 정책, 2-프로세스 harness, 토큰 인증, readiness, 클라이언트와 gateway, 매니페스트와 노드 user data 렌더링을 CPU에서 확인해요. CDK 스택 테스트 18개는 `cdk/tests`에 따로 있고, CDK 라이브러리를 설치한 뒤 `cd cdk && python -m pytest -q tests`로 실행합니다.
+**확인할 것:** 마지막 줄에 실패 없이 `105 passed`가 나옵니다. 테스트는 AST 정책, 2-프로세스 harness, 토큰 인증, readiness, 클라이언트와 gateway, 매니페스트와 노드 user data 렌더링을 CPU에서 확인합니다. CDK 스택 테스트 18개는 `cdk/tests`에 따로 있고, CDK 라이브러리를 설치한 뒤 `cd cdk && python -m pytest -q tests`로 실행합니다.
 
 > [!WARNING]
-> **Linux 호스트에서 서버를 직접 띄울 때:** 샌드박스 서버는 평가가 끝날 때마다 `/proc`에 보이는 프로세스 중 자신과 조상을 뺀 모두에 SIGKILL을 보냅니다. pod 안에서는 컨테이너 범위로 한정되지만, Linux 호스트에서 `gpusandbox-server`를 직접 띄우면 같은 사용자의 다른 프로세스도 대상이 되니 별도 컨테이너에서 실행하세요. pytest는 `tests/conftest.py`에서 이 동작을 끄므로 Linux 호스트에서도 위 명령을 그대로 실행할 수 있어요([시작하기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/getting_started/)).
+> **Linux 호스트에서 서버를 직접 띄울 때:** 샌드박스 서버는 평가가 끝날 때마다 `/proc`에 보이는 프로세스 중 자신과 조상을 뺀 모두에 SIGKILL을 보냅니다. pod 안에서는 컨테이너 범위로 한정되지만, Linux 호스트에서 `gpusandbox-server`를 직접 띄우면 같은 사용자의 다른 프로세스도 대상이 되니 별도 컨테이너에서 실행하세요. pytest는 `tests/conftest.py`에서 이 동작을 끄므로 Linux 호스트에서도 위 명령을 그대로 실행할 수 있습니다([시작하기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/getting_started/)).
 
 ### 2. 스크립트를 번호 순서대로 (AWS, 과금 발생)
 
-먼저 `cp scripts/config.env.example scripts/config.env`로 설정 파일을 만듭니다. `SCENARIO`(A, B1, B2, C)는 `02_create_cluster.sh`의 옵션으로도 고를 수 있고, `ADMIN_PRINCIPAL_ARN`을 비워 두면 지금 쓰는 IAM 역할이 클러스터 관리자가 돼요. 역할 ARN에 경로(path)가 있으면 경로를 포함한 역할 ARN을 직접 넣으세요. 모든 스크립트는 이 파일을 읽고, 그 단계에 필요한 값이 비었거나 `__SET_ME__`를 포함하면 멈춥니다. HyperPod 전용 값(`HYPERPOD_LCS_BUCKET` 등)은 B1, B2를 시작하기 전에 채우세요.
+먼저 `cp scripts/config.env.example scripts/config.env`로 설정 파일을 만듭니다. `SCENARIO`(A, B1, B2, C)는 `02_create_cluster.sh`의 옵션으로도 고를 수 있고, `ADMIN_PRINCIPAL_ARN`을 비워 두면 지금 쓰는 IAM 역할이 클러스터 관리자가 됩니다. 역할 ARN에 경로(path)가 있으면 경로를 포함한 역할 ARN을 직접 넣으세요. 모든 스크립트는 이 파일을 읽고, 그 단계에 필요한 값이 비었거나 `__SET_ME__`를 포함하면 멈춥니다. HyperPod 전용 값(`HYPERPOD_LCS_BUCKET` 등)은 B1, B2를 시작하기 전에 채우세요.
 
 인프라는 CDK 앱이 만들므로 `02_create_cluster.sh`를 실행하기 전에 한 번 준비합니다. Node.js 22 또는 24, AWS CDK CLI 2.1148.1 이상, AWS CLI용 Session Manager plugin을 설치하고, 가상 환경에 CDK 라이브러리를 넣은 뒤 계정과 리전마다 bootstrap을 한 번 실행하세요.
 
@@ -136,7 +136,7 @@ cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text
 | 운영 | `scripts/ops/bench.sh` | (선택) 배포된 v1 풀의 cold start, 지연, speedup 비교. 교체한 런타임도 재려면 `scripts/ops/rollout.sh gvisor v1 v2 --finish`처럼 v1을 줄이기 전에 실행 |
 | 08 | `scripts/08_cleanup.sh` | 클러스터 이름을 확인한 뒤 `cdk/destroy.sh`로 스택 전체 삭제, AMI는 하나씩 물어봄, `--images`면 ECR 저장소까지 (HyperPod를 만들었다면 `scripts/hyperpod/delete.sh` 먼저) |
 
-인프라(VPC, 클러스터, 노드 그룹)는 CDK 앱 하나가, 클러스터 안쪽 설치는 `scripts/`의 스크립트가 터널을 거쳐 실행합니다. eksctl은 private endpoint만 있는 클러스터를 만들 수 없어서(eksctl 문서) 쓰지 않아요. 스택 구성과 보안 기본값은 [Production 09 CDK로 프로비저닝](https://daekeun-ml.github.io/gpu-sandbox-on-aws/production/09_cdk/)에 있습니다.
+인프라(VPC, 클러스터, 노드 그룹)는 CDK 앱 하나가, 클러스터 안쪽 설치는 `scripts/`의 스크립트가 터널을 거쳐 실행합니다. eksctl은 private endpoint만 있는 클러스터를 만들 수 없어서(eksctl 문서) 쓰지 않습니다. 스택 구성과 보안 기본값은 [Production 09 CDK로 프로비저닝](https://daekeun-ml.github.io/gpu-sandbox-on-aws/production/09_cdk/)에 있습니다.
 
 GPU 없이 시작하려면 시나리오 C(`--cpu-only`, `c8i.2xlarge` 한 대)를 [핸즈온 10](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/10_cpu_only/)대로 따라가세요. HyperPod 시나리오(B1)는 `scripts/02_create_cluster.sh --hyperpod` 뒤에 `scripts/hyperpod/create.sh`를 실행하고, `07_run_grpo.sh` 대신 `scripts/hyperpod/run_grpo.sh`를 씁니다. B2(`--hyperpod-b2`)는 EKS에 system 노드만 만들므로, 06 전에 `scripts/hyperpod/build_b2_ami.sh`로 custom AMI를 빌드하고 `scripts/hyperpod/create.sh --b2`로 HyperPod 노드를 만드세요. 학습은 B1과 같이 `scripts/hyperpod/run_grpo.sh`로 시작합니다. 단계별 설명과 확인 방법은 [핸즈온 00 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에 있고, 막히면 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)을 보세요.
 
@@ -155,32 +155,31 @@ GPU 없이 시작하려면 시나리오 C(`--cpu-only`, `c8i.2xlarge` 한 대)�
 
 ## Agent Sandbox 확장
 
-[kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) v1.0.11로 multi-turn episode마다 미리 띄운 샌드박스 하나를 빌려 쓰는 확장입니다. `k8s/extensions/agent-sandbox/`의 SandboxTemplate과 SandboxWarmPool이 이 저장소의 샌드박스 서버를 런타임 프로필(gvisor, kata-qemu, kata-clh-cpu 등)마다 감싸고, `src/gpusandbox/agent_sandbox.py`의 `EpisodeSandbox`가 SandboxClaim으로 하나를 받아 쓴 뒤 반납해요. 설치와 풀 생성은 `scripts/extensions/agent_sandbox.sh install`, `scripts/extensions/agent_sandbox.sh pool <runtime> [n]`입니다.
+[kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) v1.0.11로 multi-turn episode마다 미리 띄운 샌드박스 하나를 빌려 쓰는 확장입니다. `k8s/extensions/agent-sandbox/`의 SandboxTemplate과 SandboxWarmPool이 이 저장소의 샌드박스 서버를 런타임 프로필(gvisor, kata-qemu, kata-clh-cpu 등)마다 감싸고, `src/gpusandbox/agent_sandbox.py`의 `EpisodeSandbox`가 SandboxClaim으로 하나를 받아 쓴 뒤 반납합니다. 설치와 풀 생성은 `scripts/extensions/agent_sandbox.sh install`, `scripts/extensions/agent_sandbox.sh pool <runtime> [n]`입니다.
 
-template은 label이 붙은 trainer pod의 8000번 ingress만 허용하고 egress는 전부 막으며(`egress: []`), `dnsPolicy: None`에 nameserver 127.0.0.1을 명시해 controller가 공개 resolver를 넣지 못하게 합니다. 가짜 API를 쓰는 단위 테스트는 통과하지만 클러스터에서는 실행하지 않았고, SandboxTemplate 안의 Kata GPU는 미검증입니다. warm GPU 샌드박스는 쉬는 동안에도 GPU를 쥐고 있어 과금됩니다. 자세한 내용은 [06 Agent Sandbox로 확장](https://daekeun-ml.github.io/gpu-sandbox-on-aws/concepts/06_agent_sandbox/)에 있어요.
+template은 label이 붙은 trainer pod의 8000번 ingress만 허용하고 egress는 전부 막으며(`egress: []`), `dnsPolicy: None`에 nameserver 127.0.0.1을 명시해 controller가 공개 resolver를 넣지 못하게 합니다. 가짜 API를 쓰는 단위 테스트는 통과하지만 클러스터에서는 실행하지 않았고, SandboxTemplate 안의 Kata GPU는 미검증입니다. warm GPU 샌드박스는 쉬는 동안에도 GPU를 쥐고 있어 과금됩니다. 자세한 내용은 [06 Agent Sandbox로 확장](https://daekeun-ml.github.io/gpu-sandbox-on-aws/concepts/06_agent_sandbox/)에 있습니다.
 
 ## 리플레이 데모 사이트
 
-`demo/`는 실행 기록을 재생할 뿐인 정적 리플레이 사이트(HTML, CSS, JS, 외부 스크립트 없음)라서, 방문자는 클러스터나 GPU에 닿지 않아요. 클릭해 보는 아키텍처 그림, gVisor와 Kata에서 같은 코드를 채점하는 재생, 샌드박스 안에서 시도한 접근이 막히는 실제 터미널 출력, GRPO 학습과 버전 전환 차트, 벤치마크 차트, 약 2분짜리 둘러보기 영상, 그리고 시나리오별 흐름을 단계마다 움직여 보여 주는 패턴별 아키텍처 페이지를 담고 있습니다. 데이터는 `python -m gpusandbox.tools record`의 녹화와, `demo/build_extras.py`가 클러스터 로그에서 만든 `extras.json`이에요. 로그의 IP 주소와 노드 이름은 가리고, 배포 전에 한 번 더 검사합니다. 2026-11-18에 공개한 GPU 녹화는 `demo/recordings/`에 있습니다.
+`demo/`는 실행 기록을 재생할 뿐인 정적 리플레이 사이트(HTML, CSS, JS, 외부 스크립트 없음)라서, 방문자는 클러스터나 GPU에 닿지 않습니다. 클릭해 보는 아키텍처 그림, gVisor와 Kata에서 같은 코드를 채점하는 재생, 샌드박스 안에서 시도한 접근이 막히는 실제 터미널 출력, GRPO 학습과 버전 전환 차트, 벤치마크 차트, 약 2분짜리 둘러보기 영상, 그리고 시나리오별 흐름을 단계마다 움직여 보여 주는 패턴별 아키텍처 페이지를 담고 있습니다. 데이터는 `python -m gpusandbox.tools record`의 녹화와, `demo/build_extras.py`가 클러스터 로그에서 만든 `extras.json`입니다. 로그의 IP 주소와 노드 이름은 가리고, 배포 전에 한 번 더 검사합니다. 2026-11-18에 공개한 GPU 녹화는 `demo/recordings/`에 있습니다.
 
-사이트는 Block Public Access를 켠 private S3 bucket에 두고 CloudFront가 Origin Access Control로만 읽습니다. bucket policy는 `AWS:SourceArn` 조건을 건 CloudFront 서비스 주체만 허용하고 TLS가 아닌 요청을 거부하며, 응답에는 엄격한 Content-Security-Policy, HSTS, nosniff, `frame-ancestors 'none'`, referrer policy를 붙여요. AWS WAF(IP별 rate limit과 관리형 규칙)를 붙이고 접근 로그를 비공개 로그 버킷에 남깁니다. 배포는 `demo/deploy.sh`(us-east-1 고정), 삭제는 `demo/teardown.sh`입니다. 기본 `*.cloudfront.net` 인증서로는 viewer TLS 정책을 올릴 수 없으니, TLSv1.2_2021이 필요하면 custom domain과 us-east-1의 ACM 인증서를 쓰세요. 절차는 [09 데모 사이트 (CloudFront)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/09_demo_site/)에 있어요.
+사이트는 Block Public Access를 켠 private S3 bucket에 두고 CloudFront가 Origin Access Control로만 읽습니다. bucket policy는 `AWS:SourceArn` 조건을 건 CloudFront 서비스 주체만 허용하고 TLS가 아닌 요청을 거부하며, 응답에는 엄격한 Content-Security-Policy, HSTS, nosniff, `frame-ancestors 'none'`, referrer policy를 붙입니다. AWS WAF(IP별 rate limit과 관리형 규칙)를 붙이고 접근 로그를 비공개 로그 버킷에 남깁니다. 배포는 `demo/deploy.sh`(us-east-1 고정), 삭제는 `demo/teardown.sh`입니다. 기본 `*.cloudfront.net` 인증서로는 viewer TLS 정책을 올릴 수 없으니, TLSv1.2_2021이 필요하면 custom domain과 us-east-1의 ACM 인증서를 쓰세요. 절차는 [09 데모 사이트 (CloudFront)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/09_demo_site/)에 있습니다.
 
 ## 검증 상태
 
-- **AWS에서 실행한 것:** 2026-11-14에 실습 계정 us-west-2에서 시나리오 C의 CDK 배포, Kata CPU 노드 추가(`kata/cpu_nodes.sh`)와 세 런타임의 smoke pod, 삭제를 실행했습니다. 2026-11-17에는 같은 리전의 C 클러스터에서 `ops/rollout.sh kata-clh-cpu v1 v2`를 실행했고, 함께 돌린 모델 없는 reward 루프(`ops/simulate.sh`) 30배치 중 8번째 배치에서 v2 전환이 기록됐어요. 실습 계정에서 2026-11-18에는 시나리오 A의 gVisor 경로도 실행했어요(us-west-2). 이미지 빌드, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`과 `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 5 step GRPO, `08_cleanup.sh --images`입니다.
-- **AWS에서 실행한 것 (2026-11-18, 계속):** Kata GPU(`g4dn.metal`의 Kata + QEMU, T4)와 Kata CPU, 다섯 개 풀의 `ops/bench.sh`, 공개 데모 사이트(CloudFront, WAF) 배포도 실행했습니다. 측정값은 [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)에 있어요. 실험용 Kata CLH GPU도 시도했지만 VM이 시작되지 않았습니다.
+- **AWS에서 실행한 것:** 시나리오 A(gVisor GPU, `g5`), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 풀의 런타임 벤치마크, 공개 데모 사이트를 실습 계정에서 실행했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 측정값은 [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/), 날짜별 실행 기록은 [검증된 사실과 출처](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/sources/#aws-실행-기록)에 있습니다.
 - **AWS에서 실행하지 않은 것:** 학습 중의 `ops/rollout.sh`(시나리오 A), `rollout.sh --finish`, 60 step 기본 학습, HyperPod B1과 B2. 이 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
 - **수치:** 가격과 버전 같은 수치는 측정값이 아니라 공식 문서와 공개 자료의 값입니다.
 
 ## 비용
 
-GPU 인스턴스는 실행되는 동안 과금됩니다. 핸즈온의 gVisor 최소 경로는 컴퓨트만 시간당 약 3.42 USD(온디맨드 요금을 더한 추정)이고, `g4dn.metal`은 한 대에 시간당 7.824 USD입니다(us-east-1과 us-west-2 On-Demand, 2026-11 기준, 배포 전 재확인). 쉬는 동안에는 노드 그룹을 0으로 줄이고(예: `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`), 끝나면 `scripts/08_cleanup.sh`를 실행하세요. NAT gateway, EBS, ECR 같은 항목은 위 합계에 들어 있지 않아요.
+GPU 인스턴스는 실행되는 동안 과금됩니다. 핸즈온의 gVisor 최소 경로는 컴퓨트만 시간당 약 3.42 USD(온디맨드 요금을 더한 추정)이고, `g4dn.metal`은 한 대에 시간당 7.824 USD입니다(us-east-1과 us-west-2 On-Demand, 2026-11 기준, 배포 전 재확인). 쉬는 동안에는 노드 그룹을 0으로 줄이고(예: `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`), 끝나면 `scripts/08_cleanup.sh`를 실행하세요. NAT gateway, EBS, ECR 같은 항목은 위 합계에 들어 있지 않습니다.
 
 ## 보안
 
-- **사설 바인딩:** 샌드박스 서버는 기본으로 `127.0.0.1`에만 바인딩합니다. pod 매니페스트만 pod 네트워크 안에서 `0.0.0.0`을 쓰고, Service는 headless ClusterIP뿐이며 NetworkPolicy allowlist가 호출자를 제한해요.
-- **audience로 묶인 토큰:** 샌드박스 pod는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰을 클러스터 issuer의 JWKS(공개 키)로 오프라인 검증하고, 인증 설정이 비어 있으면 `/v1/evaluate`, `/info`, `/metrics` 요청을 거부합니다(fail closed). kubelet이 쓰는 `/healthz`와 `/readyz`는 토큰 없이 응답하므로 Ready 상태만으로 인증 설정을 확인할 수는 없어요. pod 안에 시크릿이 없고 Kubernetes API에도 접근하지 않습니다. gateway는 TokenReview와 subject allowlist로 호출자를 확인해요.
-- **공개 endpoint 없음:** 클러스터의 서비스는 인터넷에 공개하지 않고, 설계상 공개되는 것은 녹화 JSON과 정적 파일만 담은 데모 사이트뿐입니다. EKS API endpoint는 private만 열려 있고, 운영자는 inbound 규칙이 없는 SSM access instance를 거치는 `cdk/tunnel.sh`로 접속해요.
+- **사설 바인딩:** 샌드박스 서버는 기본으로 `127.0.0.1`에만 바인딩합니다. pod 매니페스트만 pod 네트워크 안에서 `0.0.0.0`을 쓰고, Service는 headless ClusterIP뿐이며 NetworkPolicy allowlist가 호출자를 제한합니다.
+- **audience로 묶인 토큰:** 샌드박스 pod는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰을 클러스터 issuer의 JWKS(공개 키)로 오프라인 검증하고, 인증 설정이 비어 있으면 `/v1/evaluate`, `/info`, `/metrics` 요청을 거부합니다(fail closed). kubelet이 쓰는 `/healthz`와 `/readyz`는 토큰 없이 응답하므로 Ready 상태만으로 인증 설정을 확인할 수는 없습니다. pod 안에 시크릿이 없고 Kubernetes API에도 접근하지 않습니다. gateway는 TokenReview와 subject allowlist로 호출자를 확인합니다.
+- **공개 endpoint 없음:** 클러스터의 서비스는 인터넷에 공개하지 않고, 설계상 공개되는 것은 녹화 JSON과 정적 파일만 담은 데모 사이트뿐입니다. EKS API endpoint는 private만 열려 있고, 운영자는 inbound 규칙이 없는 SSM access instance를 거치는 `cdk/tunnel.sh`로 접속합니다.
 - **egress 차단 확인:** 샌드박스는 IMDS, API 서버, 노드 kubelet에 닿지 않는 것을 확인한 뒤에만 Ready가 되고, 샌드박스 노드에는 iptables node guard가 있습니다.
 - **로컬 전용 설정:** `SANDBOX_AUTH_TEST_BYPASS=1`은 loopback 테스트 전용이니 `0.0.0.0` 바인딩과 함께 쓰지 마세요. `scripts/config.env`에는 계정별 값이 들어가므로 커밋하지 않습니다(`.gitignore`에 포함).
 

@@ -182,7 +182,7 @@ If it fails, see the sandbox pool and readiness table (step 2) and the NetworkPo
 ## Scope and limits
 
 - **Verified by local tests:** audience-bound authentication fails closed (wrong audience, expired token and a subject outside the allowlist are rejected), readiness requires verified egress denial, the manifest templates carry the hardening values, and the node user data (`infra/eks/userdata.py`) includes the node guard (`pytest`, CPU, no AWS). The CDK stack tests (`cdk/tests`) check the private endpoint, no `0.0.0.0/0` inbound rule, required IMDSv2 (the hop limit is checked for 1 only where it is set) and volume encryption in the synthesized template.
-- **Executed on AWS (2026-11-18, lab account, us-west-2):** `ops/verify.sh` from "How to verify" passed on `gvisor` v1, `kata-qemu` v1 and the three CPU pools, with the hands-on NetworkPolicies.
+- **Executed on AWS:** `ops/verify.sh` from "How to verify" passed in the practice account on `gvisor` v1, `kata-qemu` v1 and the three CPU pools ([run record](../reference/sources.md#aws-run-record)), with the hands-on NetworkPolicies.
 - **Not executed on AWS:** the production setup with the gateway-only NetworkPolicy, and the allowlist redeploy above. Run them to check that the verification Jobs can still connect and that traffic is actually blocked.
 - **Behavior not verified:** the EKS signing key rotation schedule, how processes inside gVisor and Kata appear to GuardDuty Runtime Monitoring, and whether GPU firmware state persists between VMs.
 - **Risks not stopped:** the shared host driver under gVisor, shared hardware on one node, possible leftover GPU firmware state and the rest of "What is not covered" above. For multi-tenant use, review Kata and per-tenant NodePools in "Production options".

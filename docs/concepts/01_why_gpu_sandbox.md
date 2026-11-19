@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-코드 실행 RL용 샌드박스는 대부분 CPU 전용이라 GPU에서 커널의 정확성과 속도를 측정하는 과제는 채점하지 못합니다. 샌드박스에 GPU를 연결하면 신뢰할 수 없는 코드가 GPU 드라이버를 직접 호출할 수 있습니다. 평가 여러 개가 한 GPU를 차례로 사용하면 이전 평가의 상태가 다음 평가에 남고, 샌드박스마다 GPU를 하나씩 할당하면 비용이 커집니다. reward가 speedup 측정값이면 policy가 커널을 빠르게 만드는 대신 측정 방식을 속이는 방법을 학습할 수도 있어요.
+코드 실행 RL용 샌드박스는 대부분 CPU 전용이라 GPU에서 커널의 정확성과 속도를 측정하는 과제는 채점하지 못합니다. 샌드박스에 GPU를 연결하면 신뢰할 수 없는 코드가 GPU 드라이버를 직접 호출할 수 있습니다. 평가 여러 개가 한 GPU를 차례로 사용하면 이전 평가의 상태가 다음 평가에 남고, 샌드박스마다 GPU를 하나씩 할당하면 비용이 커집니다. reward가 speedup 측정값이면 policy가 커널을 빠르게 만드는 대신 측정 방식을 속이는 방법을 학습할 수도 있습니다.
 
 ![두 패널 그림입니다. a: 후보 커널 코드를 CPU 전용 샌드박스로 보내면 GPU에서 측정하는 과제를 채점할 수 없습니다. GPU 샌드박스로 보내면 네 가지 위험이 생깁니다. 신뢰할 수 없는 코드가 GPU 드라이버에 접근하고, 이전 평가의 상태가 다음 평가에 남고, 샌드박스마다 GPU 1개가 필요해 비용이 늘고, 측정을 속여 reward를 얻을 수 있습니다. b: 이 에셋은 CPU에서 형식과 AST 정책을 먼저 검사해, 위반은 GPU 실행 전에 판정합니다. GPU 샌드박스 pod는 pod당 GPU 1개와 평가 1개를 쓰고, gVisor 또는 Kata가 노드를 보호합니다. 실행마다 새 프로세스 트리와 캐시를 쓰고, GPU로는 정확성과 timing만 측정하며, host clock timing과 출력 checksum 비교로 측정 조작을 막습니다.](../images/figures/concepts-01_why_gpu_sandbox.svg)
 
@@ -13,18 +13,18 @@
 
 ## Why
 
-- **reward 계산에 GPU가 필요한지가 첫 기준입니다.** GPU가 필요 없는 작업에 GPU 샌드박스를 쓰면 비용과 격리 부담만 늘어요.
-- **GPU 시간은 정책을 통과한 코드에만 씁니다.** 코드 블록이 없거나 정책을 어긴 completion은 샌드박스를 부르지 않고 CPU에서 판정돼요.
-- **이 저장소의 과제는 10개이고 reward는 세 요소로 나뉩니다.** 측정을 속이는 시도는 AST 정책과 측정 harness가 함께 막아요.
+- **reward 계산에 GPU가 필요한지가 첫 기준입니다.** GPU가 필요 없는 작업에 GPU 샌드박스를 쓰면 비용과 격리 부담만 늘어납니다.
+- **GPU 시간은 정책을 통과한 코드에만 씁니다.** 코드 블록이 없거나 정책을 어긴 completion은 샌드박스를 부르지 않고 CPU에서 판정됩니다.
+- **이 저장소의 과제는 10개이고 reward는 세 요소로 나뉩니다.** 측정을 속이는 시도는 AST 정책과 측정 harness가 함께 막습니다.
 
-**사전 지식:** 필요 없습니다. 저장소가 만드는 것은 [홈](../index.md)에서, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에서 확인할 수 있어요.
+**사전 지식:** 필요 없습니다. 저장소가 만드는 것은 [홈](../index.md)에서, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에서 확인할 수 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **on-policy RL**: 지금 학습 중인 모델이 방금 생성한 completion으로만 다음 업데이트를 하는 강화학습 방식입니다.
     - **GRPO**: prompt 하나에 completion을 여러 개(group) 만들고, group 평균보다 나은 completion의 확률을 높이는 RL 알고리즘입니다.
     - **advantage**: 어떤 completion의 reward가 같은 group 평균보다 얼마나 높은지를 나타내는 값입니다. GRPO는 이 값으로 업데이트 방향을 정합니다.
     - **reward hacking**: 모델이 과제를 실제로 풀지 않고 채점 방식의 빈틈을 이용해 점수를 얻는 현상입니다.
-    - **Triton 커널**: Python과 비슷한 문법으로 작성하는 GPU 프로그램입니다. 이 에셋에서는 모델이 Triton 커널을 작성해요.
+    - **Triton 커널**: Python과 비슷한 문법으로 작성하는 GPU 프로그램입니다. 이 에셋에서는 모델이 Triton 커널을 작성합니다.
     - **CUDA stream**: GPU 작업이 순서대로 실행되는 대기열입니다. stream을 여러 개 쓰면 작업이 병렬로 실행될 수 있습니다.
     - **AST 정책**: 코드를 실행하기 전에 구문 트리(AST)를 읽어 금지된 API나 패턴을 찾는 정적 검사입니다.
     - **GPU passthrough (VFIO)**: 물리 GPU 장치를 VM에 직접 할당해 guest가 쓰게 하는 방식입니다.
@@ -62,9 +62,9 @@ GPU 노드는 CPU 노드보다 시간당 요금이 높으므로(예: `g5.xlarge`
 *그림 요약: 코드가 없거나 정책을 위반한 completion은 GPU 샌드박스를 호출하기 전에 CPU에서 판정되고, GPU 샌드박스는 정확성과 timing만 측정합니다.*
 
 
-첫 단계는 trainer 프로세스 안의 `KernelRewards`입니다. `KernelRewards`는 코드 블록을 추출해 `check_source`로 AST 정책을 검사합니다. 정책 위반이면 샌드박스를 호출하지 않고, 샌드박스가 반환하는 것과 같은 `policy_violation` verdict를 기록해요. 샌드박스 harness도 같은 정책을 다시 검사합니다. 이 정책은 reward 무결성을 위한 검사이고, 노드를 보호하는 보안 경계는 gVisor나 Kata입니다.
+첫 단계는 trainer 프로세스 안의 `KernelRewards`입니다. `KernelRewards`는 코드 블록을 추출해 `check_source`로 AST 정책을 검사합니다. 정책 위반이면 샌드박스를 호출하지 않고, 샌드박스가 반환하는 것과 같은 `policy_violation` verdict를 기록합니다. 샌드박스 harness도 같은 정책을 다시 검사합니다. 이 정책은 reward 무결성을 위한 검사이고, 노드를 보호하는 보안 경계는 gVisor나 Kata입니다.
 
-CPU 계층은 `kata-clh-cpu` 프로필과 Kata + Cloud Hypervisor 노드 그룹으로 구성됩니다. 이 노드 그룹은 nested virtualization(일반 EC2 VM 안에서 다시 VM을 실행하는 기능)을 켠 `c8i.2xlarge` 노드를 씁니다. 핸즈온에서는 `g4dn.metal` 비용이 발생하기 전에 이 계층에서 Kata를 적은 비용으로 연습합니다. Production에서는 nvcc 컴파일처럼 GPU가 필요 없는 단계를 이 계층에 둘 수 있습니다. harness에는 컴파일만 하는 모드가 없으므로 그 단계는 직접 만들어야 해요.
+CPU 계층은 `kata-clh-cpu` 프로필과 Kata + Cloud Hypervisor 노드 그룹으로 구성됩니다. 이 노드 그룹은 nested virtualization(일반 EC2 VM 안에서 다시 VM을 실행하는 기능)을 켠 `c8i.2xlarge` 노드를 씁니다. 핸즈온에서는 `g4dn.metal` 비용이 발생하기 전에 이 계층에서 Kata를 적은 비용으로 연습합니다. Production에서는 nvcc 컴파일처럼 GPU가 필요 없는 단계를 이 계층에 둘 수 있습니다. harness에는 컴파일만 하는 모드가 없으므로 그 단계는 직접 만들어야 합니다.
 
 ## 이 에셋의 시나리오
 
@@ -85,7 +85,7 @@ CPU 계층은 `kata-clh-cpu` 프로필과 Kata + Cloud Hypervisor 노드 그룹�
 | 2 | `layer_norm` | weight, bias를 쓰는 마지막 차원 LayerNorm |
 | 3 | `matmul_bias_relu` | float16 `relu(x @ w + b)`, 커널 안에서 float32 누산 |
 
-`train_grpo.py`는 기본값으로 `--max-level 2`(9개 과제)를 쓰고 과제마다 64행(`--repeats`)을 만듭니다. prompt에는 system prompt, 규칙, 과제에 없는 연산(`y = 2 * x`)의 Triton 예시, reference 소스가 들어가요. 과제 집합은 샌드박스 버전의 일부라서 과제를 바꾸면 새 샌드박스 버전으로 배포합니다.
+`train_grpo.py`는 기본값으로 `--max-level 2`(9개 과제)를 쓰고 과제마다 64행(`--repeats`)을 만듭니다. prompt에는 system prompt, 규칙, 과제에 없는 연산(`y = 2 * x`)의 Triton 예시, reference 소스가 들어갑니다. 과제 집합은 샌드박스 버전의 일부라서 과제를 바꾸면 새 샌드박스 버전으로 배포합니다.
 
 ### Reward 3요소
 
@@ -120,17 +120,17 @@ speedup을 reward로 쓰면 policy는 측정 방식의 허점을 이용하는 �
 KernelBench의 기본 timing인 CUDA event(L2 flush 포함)는 추가 stream에서 실행된 작업을 측정에 포함하지 못할 수 있습니다(host_time 모드는 모든 stream을 포함해 측정합니다). KernelBench는 10배를 넘는 speedup을 의심 대상으로 표시하고(`excessive_speedup_threshold 10`), 이 에셋의 샌드박스 v2는 10배를 넘는 측정값에 `implausible_speedup` 플래그를 달고 speedup을 1배로 채점합니다.
 
 ??? info "기존 샌드박스 프로젝트 대신 작은 서버를 쓴 이유"
-    GPU timing을 측정하려면 샌드박스마다 독점 GPU 하나와 신뢰할 수 있는 측정 harness가 필요합니다. 그래서 이 두 기능만 제공하는 작은 서버(`src/gpusandbox/server/app.py`)를 씁니다. 기존 프로젝트로는 kubernetes-sigs/agent-sandbox(v1.0.11), OpenSandbox(release-1.2.1), GPU 실행을 직렬화하는 ByteDance SandboxFusion이 있습니다. 이 서버를 Agent Sandbox의 warm pool에서 실행하는 방법은 [06 Agent Sandbox로 확장](06_agent_sandbox.md)에서 설명해요.
+    GPU timing을 측정하려면 샌드박스마다 독점 GPU 하나와 신뢰할 수 있는 측정 harness가 필요합니다. 그래서 이 두 기능만 제공하는 작은 서버(`src/gpusandbox/server/app.py`)를 씁니다. 기존 프로젝트로는 kubernetes-sigs/agent-sandbox(v1.0.11), OpenSandbox(release-1.2.1), GPU 실행을 직렬화하는 ByteDance SandboxFusion이 있습니다. 이 서버를 Agent Sandbox의 warm pool에서 실행하는 방법은 [06 Agent Sandbox로 확장](06_agent_sandbox.md)에서 설명합니다.
 
 !!! question "❓ 오해: trainer GPU에서 바로 채점하면 된다"
-    그렇게 하면 신뢰할 수 없는 코드가 trainer와 같은 드라이버와 노드를 사용합니다. vLLM 생성과 역전파도 같은 GPU를 사용하므로 timing 측정값이 불안정해집니다. 이 에셋은 GPU 하나를 독점하는 별도 샌드박스 pod에서 채점해요.
+    그렇게 하면 신뢰할 수 없는 코드가 trainer와 같은 드라이버와 노드를 사용합니다. vLLM 생성과 역전파도 같은 GPU를 사용하므로 timing 측정값이 불안정해집니다. 이 에셋은 GPU 하나를 독점하는 별도 샌드박스 pod에서 채점합니다.
 
 !!! question "❓ 오해: speedup은 어떤 GPU에서 측정해도 비슷하다"
-    speedup은 GPU 종류마다 다르고, policy는 reward를 측정한 GPU에 맞춰 최적화됩니다. 런타임 벤치마크(`scripts/ops/bench.sh`)도 gVisor 풀(A10G)과 Kata 풀(T4)의 speedup을 따로 비교하라고 안내해요. 배포할 GPU가 정해져 있다면 같은 GPU나 비슷한 GPU에서 측정하세요. GPU 종류와 런타임 선택의 관계는 [05 상황별 선택 가이드](05_decision_guide.md)에서 설명합니다.
+    speedup은 GPU 종류마다 다르고, policy는 reward를 측정한 GPU에 맞춰 최적화됩니다. 런타임 벤치마크(`scripts/ops/bench.sh`)도 gVisor 풀(A10G)과 Kata 풀(T4)의 speedup을 따로 비교하라고 안내합니다. 배포할 GPU가 정해져 있다면 같은 GPU나 비슷한 GPU에서 측정하세요. GPU 종류와 런타임 선택의 관계는 [05 상황별 선택 가이드](05_decision_guide.md)에서 설명합니다.
 
 ## 적용 범위와 한계
 
-- CPU 계층에서 GPU 계층으로 작업을 자동으로 전달하는 파이프라인은 없습니다. 두 계층 패턴은 trainer 안의 사전 검사와 별도 CPU 풀로 구현돼 있어요.
+- CPU 계층에서 GPU 계층으로 작업을 자동으로 전달하는 파이프라인은 없습니다. 두 계층 패턴은 trainer 안의 사전 검사와 별도 CPU 풀로 구현돼 있습니다.
 - harness 방어는 위 표의 공개 사례를 대상으로 합니다. 그 밖의 위험과 운영 대책은 [Production 04 Reward 무결성](../production/04_reward_integrity.md)에서 다룹니다.
 
 ??? note "참고 자료"

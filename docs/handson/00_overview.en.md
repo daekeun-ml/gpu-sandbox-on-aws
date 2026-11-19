@@ -271,13 +271,7 @@ The detailed output is under "What to look for" on each page; when something fai
 | `ops/verify.sh` | `pool sandbox-<runtime>-<version> verified` after checks 2 to 4 pass. The script does not judge check 1 (kernel comparison), so confirm that the two printed values differ |
 
 !!! warning "Validation status"
-    What has been run on AWS:
-
-    - **2026-11-14:** the author deployed and deleted the scenario C CDK stack twice in a practice account (us-west-2) and ran the Kata CPU node step (`kata/cpu_nodes.sh`). The `02_create_cluster.sh` (scenario C) and `kata/cpu_nodes.sh` signals above are real output from that run.
-    - **2026-11-18:** in the practice account (us-west-2), `03_build_push_images.sh` (all three images), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1` (1 replica) with `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5` on `g5.2xlarge` and `08_cleanup.sh --images` were run. The smoke pod's `cuda ok: NVIDIA A10G 2048.0` and the `ops/verify.sh` pass were seen in that run.
-    - **How the cluster was created (2026-11-18):** initial creates that included GPU node groups rolled back completely on `InsufficientInstanceCapacity`. So the cluster was first created as the system-only layout (`02_create_cluster.sh --hyperpod-b2`), then updated with `CHANGE_SCENARIO=1` to B1 (adds the gVisor node group) and to A (adds the trainer).
-    - **2026-11-18 (continued):** the same day, on another cluster, `kata/gpu_nodes.sh` (IOMMU AMI, GPU Operator, `pgpu=8`), `kata/cpu_nodes.sh`, `ops/verify.sh` for `kata-qemu` and the three CPU pools, and `ops/bench.sh` on five pools were run ([08](08_benchmark.md), [03](03_kata.md)).
-    - **Not run:** `ops/rollout.sh` during training (scenario A), HyperPod B1 and B2 (from the HyperPod cluster creation on), and the experimental Kata CLH GPU (attempted; the VM did not start). The signals of these steps come from the script code.
+    The required path of scenario A (`02` to `08`), scenario C, Kata GPU and Kata CPU, and `ops/bench.sh` on five pools ran in a practice account. The `02_create_cluster.sh` (scenario C) and `kata/cpu_nodes.sh` signals above, the smoke pod's `cuda ok: NVIDIA A10G 2048.0` and the `ops/verify.sh` pass are real output from those runs. `ops/rollout.sh` during training (scenario A) and HyperPod B1 and B2 (from the HyperPod cluster creation on) were not run, and the experimental Kata CLH GPU did not start its VM. The signals of these steps come from the script code. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
     Locally (CPU, no AWS) the `pytest` tests (94 at the time, 105 now, including manifest rendering and user data) and the 18 CDK tests in `cdk/tests` pass, so verify each step yourself with the "What to look for" checks on each page.
 

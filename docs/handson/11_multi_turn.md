@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-reward 풀은 요청마다 유휴 pod 하나를 선택하므로 한 에피소드의 turn이 서로 다른 pod에서 채점될 수 있습니다. 서버는 요청이 끝날 때마다 그 요청의 작업 디렉터리와 남은 프로세스를 지워요. 에피소드마다 샌드박스를 새로 만들면 Ready가 될 때까지 기다려야 하고, Kata GPU VM은 처음 Ready가 될 때까지 몇 분이 걸릴 수 있습니다(deployment 템플릿 주석). 이 동작을 GPU warm pool에서 처음 확인하면, 대기 중인 샌드박스가 평가를 처리하지 않는 동안에도 GPU를 하나씩 점유하므로 그만큼 GPU 요금이 발생합니다.
+reward 풀은 요청마다 유휴 pod 하나를 선택하므로 한 에피소드의 turn이 서로 다른 pod에서 채점될 수 있습니다. 서버는 요청이 끝날 때마다 그 요청의 작업 디렉터리와 남은 프로세스를 지웁니다. 에피소드마다 샌드박스를 새로 만들면 Ready가 될 때까지 기다려야 하고, Kata GPU VM은 처음 Ready가 될 때까지 몇 분이 걸릴 수 있습니다(deployment 템플릿 주석). 이 동작을 GPU warm pool에서 처음 확인하면, 대기 중인 샌드박스가 평가를 처리하지 않는 동안에도 GPU를 하나씩 점유하므로 그만큼 GPU 요금이 발생합니다.
 
 ![두 패널 그림입니다. a 에피소드 단위 샌드박스가 없는 경우: 에피소드 하나의 turn 1 제출은 reward 풀(Deployment)의 pod A로, turn 2 수정 제출은 pod B로 전송되고, 두 pod는 요청이 끝나면 그 요청의 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드마다 새 샌드박스를 만드는 점선 경로(빨간색)에서는 Ready까지 기다려야 하고, Kata GPU VM은 몇 분이 걸릴 수 있습니다. b 시나리오 C의 Agent Sandbox: c8i.2xlarge 노드(nested virtualization)에서 SandboxWarmPool kernel-eval-gvisor-cpu가 대기 샌드박스 2개를 실행합니다. rl-trainer 네임스페이스의 Job episodes(ServiceAccount sandbox-episode)가 에피소드마다 SandboxClaim을 만들면(1) 대기 샌드박스 하나가 할당됩니다(2). Job은 turn 1, 2, 3을 그 샌드박스에 제출하고(3) verdict를 피드백으로 받습니다(4). 세 turn은 같은 pod에서 채점되지만, 작업 디렉터리는 제출마다 삭제됩니다. 에피소드가 끝나면 Job이 claim을 삭제하고(5), 샌드박스도 함께 삭제됩니다.](../images/figures/handson-11_multi_turn.svg)
 
@@ -13,9 +13,9 @@ reward 풀은 요청마다 유휴 pod 하나를 선택하므로 한 에피소드
 
 ## Why
 
-- **가장 적은 비용으로 multi-turn 경로 전체를 실행합니다.** GPU와 모델 없이 controller 설치, warm pool, claim, turn, 반납을 모두 실행합니다. 샌드박스 서버, 인증, NetworkPolicy는 GPU 경로와 같아요. CPU 프로필이라 RuntimeClass, 노드, 자원(가속기 없음), `device=cpu`, 입력 크기(`SANDBOX_SIZE=smoke`)가 다릅니다.
+- **가장 적은 비용으로 multi-turn 경로 전체를 실행합니다.** GPU와 모델 없이 controller 설치, warm pool, claim, turn, 반납을 모두 실행합니다. 샌드박스 서버, 인증, NetworkPolicy는 GPU 경로와 같습니다. CPU 프로필이라 RuntimeClass, 노드, 자원(가속기 없음), `device=cpu`, 입력 크기(`SANDBOX_SIZE=smoke`)가 다릅니다.
 - **에피소드의 수명 주기를 이벤트로 확인합니다.** Job이 출력하는 `episode_start`, `turn`, `episode_end`, `multiturn_summary` 이벤트에 claim, 샌드박스, pod, reward가 기록됩니다.
-- **multi-turn과 single-turn을 같은 조건에서 비교합니다.** 같은 warm pool과 같은 제출 순서에서 `max_turns`만 3과 1로 바꿔 실행하므로, episode reward와 첫 turn의 reward를 바로 비교할 수 있어요.
+- **multi-turn과 single-turn을 같은 조건에서 비교합니다.** 같은 warm pool과 같은 제출 순서에서 `max_turns`만 3과 1로 바꿔 실행하므로, episode reward와 첫 turn의 reward를 바로 비교할 수 있습니다.
 
 **사전 지식:** [10 c8i 단독 저비용 경로](10_cpu_only.md)의 시나리오 C 클러스터가 필요하고, 개념은 [초심자 06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md)와 [개념 06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에 있습니다.
 
@@ -23,11 +23,11 @@ reward 풀은 요청마다 유휴 pod 하나를 선택하므로 한 에피소드
     - **에피소드(episode)**: 모델이 과제 하나를 여러 turn에 걸쳐 푸는 한 번의 시도입니다. 이 실습의 과제는 `relu_bias`입니다.
     - **turn**: 코드를 한 번 제출하고 verdict를 받는 한 차례입니다.
     - **scripted policy (`ScriptedPolicy`)**: 모델 대신 golden 제출물을 정해진 순서로 제출하는 policy입니다. 피드백을 읽지 않으므로 학습을 하지 않고, 에피소드의 동작(claim 하나, turn 사이의 피드백, 조기 종료, 마지막 제출 채점)만 확인합니다.
-    - **피드백(feedback)**: 에이전트가 다음 turn 전에 읽는 verdict 요약입니다. 상태, flag, speedup, 오류 메시지의 마지막 줄을 240자 이내로 담습니다. veRL이 tool 응답을 기본 256자에서 자르기 때문에 그보다 짧게 만들어요.
+    - **피드백(feedback)**: 에이전트가 다음 turn 전에 읽는 verdict 요약입니다. 상태, flag, speedup, 오류 메시지의 마지막 줄을 240자 이내로 담습니다. veRL이 tool 응답을 기본 256자에서 자르기 때문에 그보다 짧게 만듭니다.
     - **episode reward**: 에피소드의 마지막 제출을 `score_verdict`로 채점한 값입니다. 앞선 turn의 실패는 피드백으로만 쓰입니다.
     - **`single_turn_reward`, `first_turn_reward`**: 각 제출을 단독으로 채점한 값(single-turn 채점과 같은 계산)과, 그중 첫 turn의 값입니다.
     - **SandboxWarmPool, SandboxClaim**: 미리 실행해 둔 샌드박스 묶음과, 그 묶음에서 샌드박스 하나를 할당받는 요청입니다.
-    - **`shutdownTime`**: claim이 만료되는 시각입니다. 이 시각이 지나면 controller가 claim과 샌드박스를 삭제합니다. 이 실습의 CLI는 claim을 만든 시각에서 3600초 뒤로 지정해요.
+    - **`shutdownTime`**: claim이 만료되는 시각입니다. 이 시각이 지나면 controller가 claim과 샌드박스를 삭제합니다. 이 실습의 CLI는 claim을 만든 시각에서 3600초 뒤로 지정합니다.
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
@@ -86,7 +86,7 @@ sequenceDiagram
 
     **확인할 것:** 끝에 나오는 `SANDBOX_IMAGE_URI`와 `CONTROL_IMAGE_URI` 두 줄의 태그가 새 값입니다. 두 줄을 `scripts/config.env`에 붙여 넣으세요. 새 sandbox 이미지는 2단계에서 만드는 warm pool에만 쓰이고, 10에서 배포한 Deployment 풀은 이전 이미지를 그대로 씁니다.
 
-3. **설정 값:** `scripts/config.env`에 `SANDBOX_IMAGE_URI`, `CONTROL_IMAGE_URI`, `SANDBOX_AUDIENCE`가 있어야 합니다. `pool`은 `SANDBOX_IMAGE_URI`와 `SANDBOX_AUDIENCE`를, `episodes`는 `CONTROL_IMAGE_URI`와 `SANDBOX_AUDIENCE`를 읽어요.
+3. **설정 값:** `scripts/config.env`에 `SANDBOX_IMAGE_URI`, `CONTROL_IMAGE_URI`, `SANDBOX_AUDIENCE`가 있어야 합니다. `pool`은 `SANDBOX_IMAGE_URI`와 `SANDBOX_AUDIENCE`를, `episodes`는 `CONTROL_IMAGE_URI`와 `SANDBOX_AUDIENCE`를 읽습니다.
 
 ## 1단계: Agent Sandbox 설치 (`extensions/agent_sandbox.sh install`)
 
@@ -140,7 +140,7 @@ scripts/extensions/agent_sandbox.sh pool gvisor-cpu 2
     kubectl -n sandbox get sandboxwarmpool kernel-eval-gvisor-cpu -o jsonpath='{.status.readyReplicas}{"\n"}'
     ```
 
-**문제가 생기면:** pod가 `Pending`이면 `kubectl -n sandbox describe pod <pod>`의 출력에 `Insufficient cpu` 또는 `Insufficient memory`가 있는지 확인하세요. pod 하나는 CPU 1개와 메모리 2Gi를 요청합니다. 에피소드가 실행되는 동안에는 warm pool이 claim된 샌드박스를 대신할 샌드박스를 새로 시작하므로, `gvisor-cpu` pod가 3개(대기 2개와 claim된 1개)까지 실행될 수 있습니다(코드 기준 추론). 10의 Deployment 풀이 같은 노드에서 실행 중이라 CPU가 부족하면, 그 풀을 0으로 줄이거나(`kubectl -n sandbox scale deployment/sandbox-<runtime>-<version> --replicas=0`) warm pool을 1로 줄이세요(`pool gvisor-cpu 1`). Ready가 되지 않으면 서버 로그의 `egress is open` 줄을 확인합니다. 원인별 대처는 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness", "NetworkPolicy" 항목에 있어요.
+**문제가 생기면:** pod가 `Pending`이면 `kubectl -n sandbox describe pod <pod>`의 출력에 `Insufficient cpu` 또는 `Insufficient memory`가 있는지 확인하세요. pod 하나는 CPU 1개와 메모리 2Gi를 요청합니다. 에피소드가 실행되는 동안에는 warm pool이 claim된 샌드박스를 대신할 샌드박스를 새로 시작하므로, `gvisor-cpu` pod가 3개(대기 2개와 claim된 1개)까지 실행될 수 있습니다(코드 기준 추론). 10의 Deployment 풀이 같은 노드에서 실행 중이라 CPU가 부족하면, 그 풀을 0으로 줄이거나(`kubectl -n sandbox scale deployment/sandbox-<runtime>-<version> --replicas=0`) warm pool을 1로 줄이세요(`pool gvisor-cpu 1`). Ready가 되지 않으면 서버 로그의 `egress is open` 줄을 확인합니다. 원인별 대처는 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness", "NetworkPolicy" 항목에 있습니다.
 
 !!! note "Kata(Cloud Hypervisor) VM으로 실행하려면"
     2단계부터 4단계까지 `gvisor-cpu` 대신 `kata-clh-cpu`를 쓰면 같은 c8i 노드의 Kata VM에서 같은 실습을 실행합니다(`pool kata-clh-cpu 2`, `episodes kata-clh-cpu 2 3`). Kata pod에는 VM용 overhead로 CPU 250m과 메모리 130Mi가 추가됩니다. claim을 삭제할 때마다 그 샌드박스의 VM도 삭제되고, pool이 새 VM을 시작합니다. 10의 9단계에서 만든 `kernel-eval-kata-clh-cpu` pool이 있다면 `pool kata-clh-cpu 2`를 다시 실행해 template과 replica 수를 갱신하세요.
@@ -200,9 +200,9 @@ kubectl -n sandbox get sandboxclaims -l gpusandbox/episode=true -w
 kubectl -n sandbox get sandboxclaims -l gpusandbox/run=<Job 이름>
 ```
 
-**확인할 것:** `No resources found in sandbox namespace.`가 출력됩니다. warm pool은 삭제된 샌드박스 대신 새 샌드박스를 시작하므로, 잠시 뒤 `readyReplicas`가 다시 대기 수(기본 2, `pool gvisor-cpu 1`로 줄였다면 1)가 됩니다. 스크립트의 종료 코드는 `episodes` 명령이 끝난 터미널에서 다른 명령을 실행하기 전에 `echo $?`로 확인하세요. 0이어야 합니다. 위 claim 조회는 별도로 연 작업 터미널에서 실행하면 종료 코드를 덮어쓰지 않아요.
+**확인할 것:** `No resources found in sandbox namespace.`가 출력됩니다. warm pool은 삭제된 샌드박스 대신 새 샌드박스를 시작하므로, 잠시 뒤 `readyReplicas`가 다시 대기 수(기본 2, `pool gvisor-cpu 1`로 줄였다면 1)가 됩니다. 스크립트의 종료 코드는 `episodes` 명령이 끝난 터미널에서 다른 명령을 실행하기 전에 `echo $?`로 확인하세요. 0이어야 합니다. 위 claim 조회는 별도로 연 작업 터미널에서 실행하면 종료 코드를 덮어쓰지 않습니다.
 
-turn마다 기록되는 `single_turn_reward`는 `0.1 × format + 1.0 × correctness + 0.5 × speedup 점수`입니다. 정책 위반은 코드가 구문 오류 없이 `ModelNew`를 정의하면 format 점수 0.1만 받고, 그렇지 않으면 0점이에요. 오답은 0.1과 correctness 0.2를 합친 0.3을 받습니다. CPU 경로는 Triton을 요구하지 않으므로(`require_triton=False`) 정답의 correctness가 1.0이고, speedup 점수는 CPU 측정 노이즈 때문에 실행마다 달라집니다.
+turn마다 기록되는 `single_turn_reward`는 `0.1 × format + 1.0 × correctness + 0.5 × speedup 점수`입니다. 정책 위반은 코드가 구문 오류 없이 `ModelNew`를 정의하면 format 점수 0.1만 받고, 그렇지 않으면 0점입니다. 오답은 0.1과 correctness 0.2를 합친 0.3을 받습니다. CPU 경로는 Triton을 요구하지 않으므로(`require_triton=False`) 정답의 correctness가 1.0이고, speedup 점수는 CPU 측정 노이즈 때문에 실행마다 달라집니다.
 
 CLI는 어느 turn의 verdict가 golden의 기대값과 다르거나(`unexpected`에 기록), `sandbox_error`가 있거나, 한 에피소드의 turn을 pod 두 개 이상이 처리하면 종료 코드 1로 끝납니다.
 
@@ -309,7 +309,7 @@ reward.custom_reward_function.name=compute_score
 ```
 
 - **reward:** `compute_score`는 마지막 제출의 점수(3단계의 episode reward와 같은 규칙)를 반환합니다. 에피소드가 `sandbox_error`로 끝나면 format 점수(0.1)만 주고 `sandbox_error` flag를 1로 기록하며, 제출이 없으면 0입니다.
-- **동시 trajectory 수:** trajectory 하나는 첫 제출부터 에피소드가 끝날 때까지 샌드박스 하나(GPU 풀이면 GPU 하나)를 점유합니다. 대기 샌드박스 수만큼의 trajectory는 바로 시작하고, 그 뒤의 trajectory는 pool이 보충한 샌드박스가 Ready가 될 때까지 기다립니다. GPU 풀에서는 실행 중인 샌드박스마다 GPU를 하나씩 쓰므로 GPU 수가 상한이에요.
+- **동시 trajectory 수:** trajectory 하나는 첫 제출부터 에피소드가 끝날 때까지 샌드박스 하나(GPU 풀이면 GPU 하나)를 점유합니다. 대기 샌드박스 수만큼의 trajectory는 바로 시작하고, 그 뒤의 trajectory는 pool이 보충한 샌드박스가 Ready가 될 때까지 기다립니다. GPU 풀에서는 실행 중인 샌드박스마다 GPU를 하나씩 쓰므로 GPU 수가 상한입니다.
 
 확인하지 않은 항목(코드의 `# TODO verify`)은 다음과 같습니다.
 
@@ -355,7 +355,7 @@ warm pool과 Job은 [10](10_cpu_only.md)에서 만든 노드에서 실행되므�
 - **학습이 아닙니다.** scripted policy는 피드백을 읽지 않고 정해진 golden 제출물을 순서대로 제출합니다. 이 실습은 claim 하나, turn 사이의 피드백, 조기 종료, 마지막 제출 채점, claim 삭제가 동작하는지만 확인합니다.
 - **GPU와 Triton은 확인하지 않습니다.** CPU 경로는 `require_triton=False`로 채점하고 speedup은 CPU timing입니다. GPU 경로의 동작은 위 선택 절에서 직접 확인해야 합니다.
 - **에피소드는 차례로 실행됩니다.** Job은 에피소드를 하나씩 실행하므로 동시 에피소드에서 생기는 경합(claim 대기, 노드 자원 부족)은 이 실습에서 재현되지 않습니다. 대기 없이 동시에 시작하려는 에피소드 수만큼 대기 샌드박스를 준비하세요. GPU 풀에서는 실행 중인 샌드박스마다 GPU 하나를 점유하므로 GPU 수가 상한입니다.
-- **Kubernetes API 토큰은 이 Job만 마운트합니다.** `sandbox-claims` RoleBinding에는 `sandbox-episode`와 `grpo-trainer`가 모두 들어 있지만, 기본 trainer Job은 토큰 자동 마운트를 끕니다. 기본 GRPO trainer에는 sandbox audience 토큰과 claim 권한이 이미 있습니다. trainer에서 `EpisodeSandbox`를 직접 쓰려면 Kubernetes API 토큰을 마운트하고 `kubernetes` 패키지를 준비하세요. trainer 이미지가 설치하는 `.[client]` extra에는 이 패키지가 없어요([개념 06](../concepts/06_agent_sandbox.md)의 조건 표). RBAC 파일의 주석은 GPU trainer에 API 권한을 주는 대신 claim만 처리하는 작은 broker를 두도록 권장합니다.
+- **Kubernetes API 토큰은 이 Job만 마운트합니다.** `sandbox-claims` RoleBinding에는 `sandbox-episode`와 `grpo-trainer`가 모두 들어 있지만, 기본 trainer Job은 토큰 자동 마운트를 끕니다. 기본 GRPO trainer에는 sandbox audience 토큰과 claim 권한이 이미 있습니다. trainer에서 `EpisodeSandbox`를 직접 쓰려면 Kubernetes API 토큰을 마운트하고 `kubernetes` 패키지를 준비하세요. trainer 이미지가 설치하는 `.[client]` extra에는 이 패키지가 없습니다([개념 06](../concepts/06_agent_sandbox.md)의 조건 표). RBAC 파일의 주석은 GPU trainer에 API 권한을 주는 대신 claim만 처리하는 작은 broker를 두도록 권장합니다.
 
 ## 다음 단계
 

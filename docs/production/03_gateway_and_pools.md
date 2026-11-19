@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-trainer 프로세스마다 빈 pod를 따로 판단하면, 여러 TRL rank와 veRL reward worker가 같은 pod에 요청을 보내 503을 받고 재시도합니다. 샘플을 하나씩 채점하는 veRL은 배치 스냅샷이 없어, 같은 GRPO group의 샘플이 routing 전환 전후로 다른 버전으로 채점될 수 있어요. 버전 고정 규칙이 trainer 코드마다 따로 있으면 샌드박스 환경의 버전을 trainer와 독립적으로 관리하기도 어렵습니다. INTELLECT-3는 API를 거친 `kubectl exec`의 지연이 명령당 약 2.5초까지 늘어나자 gateway, headless Service, sidecar 구성으로 바꿨다고 보고했습니다(arXiv 2512.16144).
+trainer 프로세스마다 빈 pod를 따로 판단하면, 여러 TRL rank와 veRL reward worker가 같은 pod에 요청을 보내 503을 받고 재시도합니다. 샘플을 하나씩 채점하는 veRL은 배치 스냅샷이 없어, 같은 GRPO group의 샘플이 routing 전환 전후로 다른 버전으로 채점될 수 있습니다. 버전 고정 규칙이 trainer 코드마다 따로 있으면 샌드박스 환경의 버전을 trainer와 독립적으로 관리하기도 어렵습니다. INTELLECT-3는 API를 거친 `kubectl exec`의 지연이 명령당 약 2.5초까지 늘어나자 gateway, headless Service, sidecar 구성으로 바꿨다고 보고했습니다(arXiv 2512.16144).
 
 ![a: TRL rank 0과 veRL reward worker가 각자 샌드박스 pod A를 빈 pod로 판단해 같은 pod로 요청을 보내고, 503 응답과 재시도가 발생합니다. group 17의 샘플 1은 v1로, routing 전환 뒤에 보낸 샘플 2는 v2로 채점되어 같은 group이 서로 다른 버전으로 채점됩니다. b: 네 요청이 모두 sandbox gateway 하나를 거칩니다. gateway가 in-flight 요청 수를 한곳에서 집계해 pod A와 pod B에 동시 1건씩 보내고, group_key pin으로 두 샘플을 첫 샘플의 버전인 v1로 채점합니다(group pin, TTL 900초).](../images/figures/production-03_gateway_and_pools.svg)
 
@@ -13,9 +13,9 @@ trainer 프로세스마다 빈 pod를 따로 판단하면, 여러 TRL rank와 ve
 
 ## Why
 
-- **in-flight 요청 수를 한곳에서 집계합니다.** 평상시에는 모든 요청이 gateway 프로세스 하나를 거치므로 한 pod에 요청 두 개를 동시에 보내지 않아요. gateway Deployment를 교체하는 동안에는 이전 gateway와 새 gateway가 잠시 함께 실행되어 같은 pod를 고를 수 있습니다. 이때 샌드박스는 두 번째 요청에 503(busy)을 반환하고, gateway가 그 요청을 다른 pod로 다시 보냅니다.
+- **in-flight 요청 수를 한곳에서 집계합니다.** 평상시에는 모든 요청이 gateway 프로세스 하나를 거치므로 한 pod에 요청 두 개를 동시에 보내지 않습니다. gateway Deployment를 교체하는 동안에는 이전 gateway와 새 gateway가 잠시 함께 실행되어 같은 pod를 고를 수 있습니다. 이때 샌드박스는 두 번째 요청에 503(busy)을 반환하고, gateway가 그 요청을 다른 pod로 다시 보냅니다.
 - **버전 고정을 gateway에서 처리합니다.** 배치는 스냅샷 하나로, 샘플은 `group_key` pin으로 같은 버전에 고정합니다. TRL과 veRL은 고정 규칙을 직접 구현하지 않아도 `SANDBOX_GATEWAY` 하나로 같은 호출 경로를 씁니다.
-- **pod 재활용을 자동으로 처리합니다.** gateway가 draining 상태의 pod를 삭제하면 새 pod가 만들어지며, Kata에서는 새 pod마다 새 VM이 만들어져요.
+- **pod 재활용을 자동으로 처리합니다.** gateway가 draining 상태의 pod를 삭제하면 새 pod가 만들어지며, Kata에서는 새 pod마다 새 VM이 만들어집니다.
 
 ??? note "용어"
     - **TokenReview**: 호출자가 보낸 토큰이 유효한지 Kubernetes API server에 직접 확인을 요청하는 API입니다. gateway는 이 결과로 호출자를 인증합니다.
@@ -37,7 +37,7 @@ trainer 프로세스마다 빈 pod를 따로 판단하면, 여러 TRL rank와 ve
 | `GET /metrics` | Bearer | | Prometheus 형식 | 모니터링 |
 | `GET /healthz`, `GET /readyz` | 없음 | | `readyz`는 유효한 routing 표를 한 번도 읽지 못했거나 active 풀의 주소가 표에 없으면 503. 정상 표를 읽은 뒤의 파일 읽기나 JSON 파싱 오류에는 마지막 정상 표를 씀 | kubelet probe |
 
-필드 길이는 `task_id` 64자, `code` 32,768자, `request_id` 128자, `group_key` 256자, `runtime` 32자까지입니다. pod가 평가를 마친 결과에는 샌드박스 verdict(`status`, `correct`, `custom_kernel`, `speedup`, `flags` 등)와 gateway가 붙인 `sandbox_version`, `runtime`, `routing_revision`과 `pod`, `endpoint`, `attempts`, `draining`이 포함돼요. 빈 pod를 얻지 못했거나 샌드박스가 4xx를 반환한 `sandbox_error` 결과에는 `status`, `error`와 gateway가 붙인 세 필드만 있으므로, `status`와 `error`를 먼저 읽고 나머지 필드는 있을 때만 쓰세요. trainer에서는 클라이언트 라이브러리로 gateway를 호출합니다. 아래는 항목이 하나인 배치 예시입니다.
+필드 길이는 `task_id` 64자, `code` 32,768자, `request_id` 128자, `group_key` 256자, `runtime` 32자까지입니다. pod가 평가를 마친 결과에는 샌드박스 verdict(`status`, `correct`, `custom_kernel`, `speedup`, `flags` 등)와 gateway가 붙인 `sandbox_version`, `runtime`, `routing_revision`과 `pod`, `endpoint`, `attempts`, `draining`이 포함됩니다. 빈 pod를 얻지 못했거나 샌드박스가 4xx를 반환한 `sandbox_error` 결과에는 `status`, `error`와 gateway가 붙인 세 필드만 있으므로, `status`와 `error`를 먼저 읽고 나머지 필드는 있을 때만 쓰세요. trainer에서는 클라이언트 라이브러리로 gateway를 호출합니다. 아래는 항목이 하나인 배치 예시입니다.
 
 ```python
 from gpusandbox.client import SandboxClient
@@ -69,32 +69,32 @@ sequenceDiagram
 
 *그림: active version이 바뀌어도 이미 시작한 group은 TTL 동안 첫 샘플의 버전으로 끝나고, 새 group부터 새 버전을 씁니다.*
 
-- gateway는 첫 요청(또는 만료 뒤 첫 요청) 때 만든 routing 스냅샷(runtime, version, 주소)을 만료 시각과 함께 저장합니다. 같은 `group_key`의 이후 요청은 active version이 바뀌어도 이 스냅샷을 써요.
+- gateway는 첫 요청(또는 만료 뒤 첫 요청) 때 만든 routing 스냅샷(runtime, version, 주소)을 만료 시각과 함께 저장합니다. 같은 `group_key`의 이후 요청은 active version이 바뀌어도 이 스냅샷을 씁니다.
 - TTL 기본값은 900초(`GATEWAY_GROUP_PIN_TTL_S`)이고, pin이 10만 개를 넘으면 만료된 pin부터 삭제합니다.
-- veRL [`reward_fn.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/reward_fn.py)는 `group_key`를 `f"{task_id}:{info.get('index', 'na')}"`로 만듭니다. 같은 데이터 행이 TTL이 지난 뒤 다음 epoch에 다시 나오면 새 스냅샷으로 채점돼요.
+- veRL [`reward_fn.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/reward_fn.py)는 `group_key`를 `f"{task_id}:{info.get('index', 'na')}"`로 만듭니다. 같은 데이터 행이 TTL이 지난 뒤 다음 epoch에 다시 나오면 새 스냅샷으로 채점됩니다.
 - runtime도 첫 요청 때 고정되므로, pin이 생긴 뒤에는 gateway가 요청의 `runtime` 값을 무시합니다.
-- pin은 gateway 메모리에만 저장되므로 gateway가 재시작하면 사라집니다. 이때 진행 중이던 group은 버전이 섞일 수 있어요.
+- pin은 gateway 메모리에만 저장되므로 gateway가 재시작하면 사라집니다. 이때 진행 중이던 group은 버전이 섞일 수 있습니다.
 - TTL은 group 하나를 채점하는 최대 시간보다 길어야 합니다(TTL이 더 짧으면 마지막 샘플이 새 스냅샷으로 채점됩니다).
-- 이전 풀은 pin이 모두 만료될 때까지 유지하세요. 전환 직후 `scripts/ops/rollout.sh <runtime> <from> <to> --finish`로 이전 풀을 0으로 줄이면, 이전 버전에 고정된 group의 요청을 처리할 pod가 없습니다. gateway는 빈 pod를 최대 600초 기다리지만, veRL 단건 요청은 클라이언트가 기본 300초 안에 응답을 받지 못하면 먼저 `sandbox_error`로 끝나요. TTL(기본 15분)과 진행 중인 배치가 끝나는 시간만큼 기다린 뒤 전환을 마무리합니다. ([05 샌드박스 버전 관리](05_sandbox_updates.md))
+- 이전 풀은 pin이 모두 만료될 때까지 유지하세요. 전환 직후 `scripts/ops/rollout.sh <runtime> <from> <to> --finish`로 이전 풀을 0으로 줄이면, 이전 버전에 고정된 group의 요청을 처리할 pod가 없습니다. gateway는 빈 pod를 최대 600초 기다리지만, veRL 단건 요청은 클라이언트가 기본 300초 안에 응답을 받지 못하면 먼저 `sandbox_error`로 끝납니다. TTL(기본 15분)과 진행 중인 배치가 끝나는 시간만큼 기다린 뒤 전환을 마무리합니다. ([05 샌드박스 버전 관리](05_sandbox_updates.md))
 
-`evaluate_batch`는 group pin 없이 배치 전체에 스냅샷 하나를 사용합니다. 프로세스 하나가 group의 completion을 모두 한 배치로 보낸다면 이것으로 충분해요. 여러 rank로 학습해 한 group의 completion이 여러 rank에 나뉘면(TRL 설정에 따라 다름) 스냅샷도 rank마다 따로 만들어집니다. 이 경우 전환 시점에 한 group이 두 버전으로 채점될 수 있습니다. 같은 `global_step`에서 모든 rank의 `reward_batch` 이벤트를 모아 `version`과 `served_versions`를 비교하세요. 이 필드는 그 프로세스가 실제로 보낸 항목만 세고, 전부 캐시로 채점한 rank는 이벤트를 남기지 않으므로 그 rank가 어느 풀의 결과를 썼는지는 이 이벤트로 알 수 없어요.
+`evaluate_batch`는 group pin 없이 배치 전체에 스냅샷 하나를 사용합니다. 프로세스 하나가 group의 completion을 모두 한 배치로 보낸다면 이것으로 충분합니다. 여러 rank로 학습해 한 group의 completion이 여러 rank에 나뉘면(TRL 설정에 따라 다름) 스냅샷도 rank마다 따로 만들어집니다. 이 경우 전환 시점에 한 group이 두 버전으로 채점될 수 있습니다. 같은 `global_step`에서 모든 rank의 `reward_batch` 이벤트를 모아 `version`과 `served_versions`를 비교하세요. 이 필드는 그 프로세스가 실제로 보낸 항목만 세고, 전부 캐시로 채점한 rank는 이벤트를 남기지 않으므로 그 rank가 어느 풀의 결과를 썼는지는 이 이벤트로 알 수 없습니다.
 
 ## 스케줄링
 
-- gateway는 routing 주소(headless Service)마다 `SandboxPool` 하나를 두고, DNS를 10초마다 다시 조회해 Ready pod의 IP 목록을 가져옵니다. 따라서 egress 확인을 통과하지 못한 pod는 처음부터 후보에 포함되지 않아요.
+- gateway는 routing 주소(headless Service)마다 `SandboxPool` 하나를 두고, DNS를 10초마다 다시 조회해 Ready pod의 IP 목록을 가져옵니다. 따라서 egress 확인을 통과하지 못한 pod는 처음부터 후보에 포함되지 않습니다.
 - pod마다 동시에 요청 하나만 보냅니다(`per_endpoint_concurrency=1`). 빈 pod 가운데 in-flight 요청이 가장 적고 가장 오래전에 사용한 pod를 고릅니다.
 - 빈 pod가 없으면 최대 600초(`acquire_timeout_s`) 기다렸다가 `sandbox_error`(`no free sandbox`)를 반환합니다.
-- pod가 503(busy, not ready)을 반환하면 gateway는 그 pod를 5초 동안 후보에서 제외하고(cooldown) 다른 유휴 pod로 요청을 다시 보내요. cooldown이 끝난 pod는 다시 후보가 됩니다. 연결 오류도 같은 방식으로 처리하며, 시도는 최대 4번입니다.
+- pod가 503(busy, not ready)을 반환하면 gateway는 그 pod를 5초 동안 후보에서 제외하고(cooldown) 다른 유휴 pod로 요청을 다시 보냅니다. cooldown이 끝난 pod는 다시 후보가 됩니다. 연결 오류도 같은 방식으로 처리하며, 시도는 최대 4번입니다.
 - 4xx는 인증이나 요청 자체의 문제라 다른 pod로 보내도 결과가 같으므로 재시도하지 않습니다.
-- 샌드박스 호출 하나의 timeout은 300초이고, 샌드박스 안 harness 전체에 걸리는 제한 시간은 `SANDBOX_EVAL_TIMEOUT_S`(기본 90초) × 2 + 30초 = 210초예요.
+- 샌드박스 호출 하나의 timeout은 300초이고, 샌드박스 안 harness 전체에 걸리는 제한 시간은 `SANDBOX_EVAL_TIMEOUT_S`(기본 90초) × 2 + 30초 = 210초입니다.
 
 GPU 타이밍 측정이 다른 평가의 영향을 받지 않도록 pod당 요청을 하나로 제한해, 평가 하나가 GPU 하나를 독점하게 합니다. 따라서 동시 평가 수는 Ready 샌드박스 pod 수와 같고, 배치 하나에 걸리는 시간은 대략 ⌈항목 수 / pod 수⌉ × 평가 시간입니다. [08 런타임 벤치마크](../handson/08_benchmark.md)의 AWS 측정값은 gateway 없이 샌드박스 풀을 직접 호출한 결과입니다. gateway를 거친 배치 시간은 측정하지 않았으니 직접 측정하세요.
 
 ## Recycling
 
-- 샌드박스는 `SANDBOX_MAX_EVALS`번(v2: 200, v1: 0 = 끄기) 평가했거나 reference 경로에서 CUDA 오류(`gpu_fault`)가 나면 draining 상태가 되어 Ready에서 제외됩니다. `gpu_fault`면 liveness도 실패해 컨테이너가 재시작돼요.
-- 응답에 `draining: true`와 pod 이름이 포함되면 gateway(`GATEWAY_RECYCLE_PODS=1`)는 Role `gpu-sandbox-gateway-recycler`(sandbox namespace의 pods get, delete)의 권한으로 그 pod를 grace period 10초로 삭제하고, Deployment가 새 pod를 만듭니다. 삭제는 best effort이며 실패하면 로그만 남겨요.
-- Kata에서는 새 pod마다 새 VM이 만들어지고, 이전 VM이 GPU를 해제할 때 vfio-pci가 GPU를 reset해요. 같은 VM 안에서 컨테이너만 재시작하면 GPU가 reset되지 않으므로 gateway는 pod 자체를 삭제합니다.
+- 샌드박스는 `SANDBOX_MAX_EVALS`번(v2: 200, v1: 0 = 끄기) 평가했거나 reference 경로에서 CUDA 오류(`gpu_fault`)가 나면 draining 상태가 되어 Ready에서 제외됩니다. `gpu_fault`면 liveness도 실패해 컨테이너가 재시작됩니다.
+- 응답에 `draining: true`와 pod 이름이 포함되면 gateway(`GATEWAY_RECYCLE_PODS=1`)는 Role `gpu-sandbox-gateway-recycler`(sandbox namespace의 pods get, delete)의 권한으로 그 pod를 grace period 10초로 삭제하고, Deployment가 새 pod를 만듭니다. 삭제는 best effort이며 실패하면 로그만 남깁니다.
+- Kata에서는 새 pod마다 새 VM이 만들어지고, 이전 VM이 GPU를 해제할 때 vfio-pci가 GPU를 reset합니다. 같은 VM 안에서 컨테이너만 재시작하면 GPU가 reset되지 않으므로 gateway는 pod 자체를 삭제합니다.
 - gVisor에서는 새 pod가 새 Sentry로 실행되지만 호스트 드라이버와 GPU는 그대로입니다.
 - gateway가 없는 direct 모드에서는 draining pod를 삭제하는 구성 요소가 없습니다. 평가 횟수 상한에 이른 pod는 NotReady로 남아 GPU를 계속 점유하니, 직접 삭제하거나(`kubectl -n sandbox delete pod <pod>`) gateway를 쓰세요. `gpu_fault`이면 liveness가 실패해 kubelet이 같은 pod의 컨테이너를 재시작합니다.
 - pod 직접 삭제는 eviction API를 쓰지 않으므로 PDB가 적용되지 않습니다.
@@ -129,9 +129,9 @@ kubectl -n sandbox get networkpolicy allow-clients-to-sandbox-api -o jsonpath='{
 문제가 생기면: `render: ... missing variable 'CONTROL_IMAGE_URI'` 같은 오류는 [문제 해결](../reference/troubleshooting.md)의 "설정과 스크립트" 표를, gateway pod가 Ready가 되지 않으면 [07 Observability와 운영](07_observability_and_operations.md)의 런북을 보세요.
 
 - gateway pod는 `sandbox-routing` ConfigMap이 생길 때까지 ContainerCreating 상태로 있다가 2단계가 끝난 뒤에 시작합니다.
-- 2단계는 `rl-trainer`의 routing 표를 그대로 복사하므로 gateway도 trainer와 같은 active 풀(예: B2의 `gvisor-hyperpod`, C의 `kata-clh-cpu`)을 씁니다. gateway의 `/readyz`는 routing 표를 읽을 수 있는지만 확인하고, active 풀이 실제로 배포돼 있는지는 확인하지 않아요.
+- 2단계는 `rl-trainer`의 routing 표를 그대로 복사하므로 gateway도 trainer와 같은 active 풀(예: B2의 `gvisor-hyperpod`, C의 `kata-clh-cpu`)을 씁니다. gateway의 `/readyz`는 routing 표를 읽을 수 있는지만 확인하고, active 풀이 실제로 배포돼 있는지는 확인하지 않습니다.
 - `scripts/05_setup_namespaces_auth.sh`는 routing ConfigMap을 `rl-trainer`에만 만들고, 이후 전환 때는 `scripts/ops/rollout.sh`가 `rl-trainer`와 `sandbox-gateway`를 함께 갱신합니다.
-- `GATEWAY_ALLOWED_SUBJECTS`는 gateway를 호출할 ServiceAccount를 쉼표로 구분한 목록이고, TRL Job과 veRL RayCluster 템플릿은 둘 다 `rl-trainer:grpo-trainer`를 써요.
+- `GATEWAY_ALLOWED_SUBJECTS`는 gateway를 호출할 ServiceAccount를 쉼표로 구분한 목록이고, TRL Job과 veRL RayCluster 템플릿은 둘 다 `rl-trainer:grpo-trainer`를 씁니다.
 
 | Deployment 설정 | 값 | 이유 |
 |---|---|---|
@@ -144,11 +144,11 @@ kubectl -n sandbox get networkpolicy allow-clients-to-sandbox-api -o jsonpath='{
 
 replica 1은 의도한 설계입니다. replica를 늘려야 한다면 다음 순서로 검토하세요.
 
-1. **먼저 수직 확장합니다.** gateway는 대부분 응답을 기다리기만 하므로 병목은 대개 샌드박스 pod 수입니다. limits를 올리고 TokenReview 캐시(60초)가 효과가 있는지 확인해요.
+1. **먼저 수직 확장합니다.** gateway는 대부분 응답을 기다리기만 하므로 병목은 대개 샌드박스 pod 수입니다. limits를 올리고 TokenReview 캐시(60초)가 효과가 있는지 확인합니다.
 2. **풀 단위로 gateway를 나눕니다.** runtime마다 gateway를 따로 두면 pin과 in-flight 정보가 섞이지 않습니다. 이때 trainer마다 다른 `SANDBOX_GATEWAY`를 지정합니다.
 3. **여러 replica에는 외부 pin 저장소가 필요합니다.** 템플릿 주석에 적힌 대로 group pin을 replica 외부의 공유 저장소로 옮겨야 합니다. 그리고 `group_key` 해시로 같은 group을 같은 replica에 보내거나, 샌드박스의 503 응답과 재시도에 의존해야 합니다(이 저장소에는 구현되어 있지 않습니다).
 
-replica가 1개이므로 gateway가 재시작하는 동안에는 요청이 실패합니다. trainer는 `sandbox_error`를 받습니다. TRL에서는 그 샘플이 reward 계산에서 제외되고, veRL에서는 그 샘플이 format 점수와 오류 표시만 받아요([04 Reward 무결성](04_reward_integrity.md)).
+replica가 1개이므로 gateway가 재시작하는 동안에는 요청이 실패합니다. trainer는 `sandbox_error`를 받습니다. TRL에서는 그 샘플이 reward 계산에서 제외되고, veRL에서는 그 샘플이 format 점수와 오류 표시만 받습니다([04 Reward 무결성](04_reward_integrity.md)).
 
 ## NetworkPolicy 전환
 
@@ -206,7 +206,7 @@ volumes:
             path: token
 ```
 
-`k8s/trainer/job-grpo.yaml.tpl`의 trainer 컨테이너 `env`와 pod의 `volumes`를 위 조각대로 바꾸고 Job을 다시 제출하세요. trainer 로그 앞부분에 `{"event": "routing", "mode": "gateway", "gateway": "gateway.sandbox-gateway.svc.cluster.local:8080"}`가 있으면 gateway 모드로 동작하는 것입니다. `reward_batch` 이벤트에는 배치의 `version`과 `routing_revision`, 결과의 `sandbox_version`별 건수(`served_versions`)가 기록돼요.
+`k8s/trainer/job-grpo.yaml.tpl`의 trainer 컨테이너 `env`와 pod의 `volumes`를 위 조각대로 바꾸고 Job을 다시 제출하세요. trainer 로그 앞부분에 `{"event": "routing", "mode": "gateway", "gateway": "gateway.sandbox-gateway.svc.cluster.local:8080"}`가 있으면 gateway 모드로 동작하는 것입니다. `reward_batch` 이벤트에는 배치의 `version`과 `routing_revision`, 결과의 `sandbox_version`별 건수(`served_versions`)가 기록됩니다.
 
 ## 장애 모드
 
@@ -224,7 +224,7 @@ volumes:
 ## ❓ 오해
 
 !!! question "❓ 오해: gateway replica를 늘리면 처리량이 늘어난다"
-    처리량은 Ready 샌드박스 pod 수로 정해집니다. 공유 pin 저장소 없이 replica만 늘리면 같은 group이 replica마다 다른 버전으로 채점될 수 있어요.
+    처리량은 Ready 샌드박스 pod 수로 정해집니다. 공유 pin 저장소 없이 replica만 늘리면 같은 group이 replica마다 다른 버전으로 채점될 수 있습니다.
 
 !!! question "❓ 오해: group pin은 학습이 끝날 때까지 유지된다"
     pin은 gateway 메모리에 저장되며 기본 900초 뒤 만료되고, gateway가 재시작하면 사라집니다. 버전 전환은 pin TTL보다 긴 간격을 두고 마무리하세요.

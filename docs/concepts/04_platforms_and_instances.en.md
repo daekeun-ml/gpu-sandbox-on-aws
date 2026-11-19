@@ -39,7 +39,7 @@ Once you choose HyperPod it seems natural to put the sandboxes on HyperPod nodes
 | Trainer node failures | you build it (GPU fault detection, node replacement, job restarts) | `NodeRecovery: Automatic`, health monitoring agent, deep health checks (optional) | same as B1 |
 | Trainer job | Kubernetes Job (`k8s/trainer/job-grpo.yaml.tpl`) | `HyperPodPyTorchJob` (`k8s/trainer/hyperpod-job-grpo.yaml.tpl`) | same as B1 |
 | Extra setup | none | HyperPod dependency Helm chart, execution role, lifecycle-script bucket, training operator add-on, a trainer image with `hyperpodrun` | B1 + a custom AMI with the driver replaced by 580.178.04 (`scripts/hyperpod/build_b2_ami.sh`) and the `sandbox` instance group |
-| Status | available. Ran with `g5` in the practice account on 2026-11-18 | available. Not run on AWS, so not verified | experimental: set up to work with a custom AMI, not run on AWS (not verified). gVisor release-20261109.0 does not know the default AMI's driver 595.91.07 |
+| Status | available. Ran with `g5` in the practice account | available. Not run on AWS, so not verified | experimental: set up to work with a custom AMI, not run on AWS (not verified). gVisor release-20261109.0 does not know the default AMI's driver 595.91.07 |
 
 ## What HyperPod gives the trainer
 
@@ -98,7 +98,7 @@ The pod limit above still applies to B2, and a taint can only be added to an ins
 
 | Role | Choice | Reason | On-Demand (USD/hour) |
 |---|---|---|---|
-| Trainer (A) | `g5.2xlarge` (1 x A10G 24 GB, 8 vCPU, 32 GiB) | configured to fit a 1.5B model + LoRA + vLLM colocate on one A10G (`vllm_gpu_memory_utilization` 0.35). A 5-step GRPO run finished in the practice account on 2026-11-18 | 1.212 |
+| Trainer (A) | `g5.2xlarge` (1 x A10G 24 GB, 8 vCPU, 32 GiB) | configured to fit a 1.5B model + LoRA + vLLM colocate on one A10G (`vllm_gpu_memory_utilization` 0.35). A 5-step GRPO run finished in the practice account | 1.212 |
 | Trainer (B) | `ml.g5.2xlarge` | the same hardware through HyperPod. About 25% higher at list prices (1.515 / 1.212 = 1.25) | 1.515 |
 | gVisor sandbox | `g5.xlarge` (1 x A10G), one sandbox per node | the driver the AMI loads, 580.178.04, is on the nvproxy support list. Verification scope is in "Driver and verification scope of `g5`" below | 1.006 |
 | Kata GPU sandbox | `g4dn.metal` (8 x T4, 96 vCPU, 384 GiB), one T4 per VM | the only `.metal` type with an x86 NVIDIA GPU | 7.824 (Seoul 9.624) |
@@ -108,7 +108,7 @@ The pod limit above still applies to B2, and a taint can only be added to an ins
 Prices are On-Demand list prices in us-east-1 and us-west-2.
 
 !!! note "Driver and verification scope of `g5`"
-    On a `g5.xlarge` node deployed on 2026-11-18, the EKS AL2023 NVIDIA AMI loaded the proprietary kernel module 580.178.04 with GSP off (`/proc/driver/nvidia/version`, and `EnableGpuFirmware: 0` in `/proc/driver/nvidia/params`). gVisor documents nvproxy against NVIDIA's open driver and does not mention the proprietary driver. Still, 580.178.04 is on the support list of runsc `release-20261109.0` (`runsc nvproxy list-supported-drivers`). In the practice account on 2026-11-18, the gVisor smoke test (`cuda ok: NVIDIA A10G 2048.0`) and `scripts/ops/verify.sh gvisor v1` passed on `g5.xlarge`, and a 5-step GRPO run finished with the trainer on `g5.2xlarge`. So this combination is verified by this repository, not documented by gVisor. Check again after changing the driver, AMI or gVisor version. The `04_install_gpu_stack.sh` smoke test creates its own pod that uses one GPU, so run it while a gVisor node has a free GPU; check a pool that is already deployed with `scripts/ops/verify.sh gvisor v1`.
+    On a `g5.xlarge` node deployed on 2026-11-18, the EKS AL2023 NVIDIA AMI loaded the proprietary kernel module 580.178.04 with GSP off (`/proc/driver/nvidia/version`, and `EnableGpuFirmware: 0` in `/proc/driver/nvidia/params`). gVisor documents nvproxy against NVIDIA's open driver and does not mention the proprietary driver. Still, 580.178.04 is on the support list of runsc `release-20261109.0` (`runsc nvproxy list-supported-drivers`). In the practice account, the gVisor smoke test (`cuda ok: NVIDIA A10G 2048.0`) and `scripts/ops/verify.sh gvisor v1` passed on `g5.xlarge`, and a 5-step GRPO run finished with the trainer on `g5.2xlarge`. So this combination is verified by this repository, not documented by gVisor. Check again after changing the driver, AMI or gVisor version. The `04_install_gpu_stack.sh` smoke test creates its own pod that uses one GPU, so run it while a gVisor node has a free GPU; check a pool that is already deployed with `scripts/ops/verify.sh gvisor v1`.
 
     `g6` (L4) is a supported alternative. The AMI loads the open module 580.178.04 there, which matches the gVisor documentation, and it is cheaper (`g6.xlarge` 0.8048, `g6.2xlarge` 0.9776). To use it, set `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` (`HYPERPOD_*` for HyperPod) in `scripts/config.env`.
 
@@ -180,8 +180,8 @@ The table is an estimate from list prices and leaves out the EKS control plane, 
 
 ## Scope and limits
 
-- Scenario A's `g5` setup ran in the practice account on 2026-11-18 (us-west-2). The gVisor sandbox (1 replica) and `scripts/ops/verify.sh gvisor v1` passed, and a 5-step GRPO run finished with the trainer configuration (1.5B + LoRA + vLLM colocate on one A10G).
-- The same day, on a different cluster setup, Kata + QEMU ran on `g4dn.metal` (`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`), and `scripts/ops/bench.sh 32` measured two GPU pools and three CPU pools.
+- Scenario A's `g5` setup ran in the practice account ([run record](../reference/sources.md#aws-run-record)). The gVisor sandbox (1 replica) and `scripts/ops/verify.sh gvisor v1` passed, and a 5-step GRPO run finished with the trainer configuration (1.5B + LoRA + vLLM colocate on one A10G).
+- On a different cluster setup, Kata + QEMU ran on `g4dn.metal` (`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`), and `scripts/ops/bench.sh 32` measured two GPU pools and three CPU pools.
 - HyperPod B1 and B2 (`ml.g5`) and a `scripts/ops/rollout.sh` version switch during scenario A training were not run on AWS. Verify them with the checks on each hands-on page.
 - `c8i.2xlarge` is 0.37484 USD per hour in us-east-1 and us-west-2 and 0.42336 USD in the Seoul Region. Scenario C, which uses only this node and no GPU, is in [10 CPU-only path on c8i](../handson/10_cpu_only.md).
 

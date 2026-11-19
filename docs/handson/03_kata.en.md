@@ -35,7 +35,7 @@ Kata starts a lightweight VM per pod, so the node needs `/dev/kvm` (QEMU and Clo
     - **`overhead.podFixed`**: a value in the RuntimeClass that tells the scheduler to add the VM's own memory and CPU to the pod's requests.
 
 !!! warning "AWS steps on this page"
-    The smoke pod output and duration of the Kata CPU node step (`scripts/kata/cpu_nodes.sh`) below are from a real run by the author in a practice account (us-west-2, EKS 1.36, CDK scenario C) on 2026-11-14. The Kata GPU path (baking the IOMMU AMI, `scripts/kata/gpu_nodes.sh`, the `g4dn.metal` node group and the `kata-qemu` pool) ran in the practice account (us-west-2, EKS 1.36) on 2026-11-18, and the stage 2 output and durations are what that run showed. That run found the `vfio_iommu_type1` module problem and the AMI builder problem, and the scripts are fixed (stage 2). The combination is still not verified upstream (see "Scope and limits" below), and the experimental CLH GPU VM did not start in that run (stage 3).
+    The Kata CPU path on this page (`scripts/kata/cpu_nodes.sh`, CDK scenario C) and the Kata GPU path (baking the IOMMU AMI, `scripts/kata/gpu_nodes.sh`, the `g4dn.metal` node group and the `kata-qemu` pool) ran in a practice account (EKS 1.36). The smoke pod output, the stage 2 output and the durations below are what those runs showed, and the `vfio_iommu_type1` module problem and the AMI builder problem found there are fixed in the scripts (stage 2). The combination is still not verified upstream (see "Scope and limits" below), and the experimental CLH GPU VM did not start (stage 3). The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## RuntimeClasses
 
@@ -379,10 +379,10 @@ exit
 ## Scope and limits
 
 - **Upstream verification:** NVIDIA's Kata CI covers A100 and H100, not T4, and the OS NVIDIA validated on EKS is Ubuntu, with AL2023 not listed. So this configuration on `g4dn.metal` + AL2023 is not verified upstream.
-- **This repository's run:** the Kata GPU path (`g4dn.metal` + AL2023 + `kata-qemu-nvidia-gpu`) ran in the practice account (us-west-2, EKS 1.36) on 2026-11-18. After the `vfio_iommu_type1` fix the 4 `kata-qemu` pods became Ready and `ops/verify.sh kata-qemu v1` passed. That is one run and does not replace upstream verification.
+- **This repository's run:** the Kata GPU path (`g4dn.metal` + AL2023 + `kata-qemu-nvidia-gpu`) ran in the practice account (EKS 1.36, [run record](../reference/sources.md#aws-run-record)). After the `vfio_iommu_type1` fix the 4 `kata-qemu` pods became Ready and `ops/verify.sh kata-qemu v1` passed. That is one run and does not replace upstream verification.
 - **Third-party report:** one report says that on Ubuntu 24.04 on `g4dn.metal`, `intel_iommu=on iommu=pt` bound all eight T4s to vfio-pci with IOMMU groups usable for passthrough. This repository saw the same binding on AL2023 (8 T4s, 257 IOMMU groups) and has not checked Ubuntu.
 - **Undocumented behavior:** keeping the Kata handlers after a reboot (containerd `imports`) and passing `CpuOptions.NestedVirtualization` on may change, so do not skip the reboot check and the `describe-instances` check in stage 1.
-- **Cloud Hypervisor + GPU:** an experimental path. In the 2026-11-18 run the VM never started even with the artifact paths filled in (`create container timeout`), and no working configuration is known.
+- **Cloud Hypervisor + GPU:** an experimental path. In this repository's run the VM never started even with the artifact paths filled in (`create container timeout`), and no working configuration is known.
 
 ## Time and cost
 

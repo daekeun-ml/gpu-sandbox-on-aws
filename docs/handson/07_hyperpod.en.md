@@ -36,7 +36,7 @@ When a GPU node fails during a days-long on-policy run, someone has to replace t
     - **ENI**: a virtual network interface attached to an instance. The VPC CNI hands out the ENI's IP addresses to pods, so the number of ENIs sets the per-node pod limit.
 
 !!! warning "Validation status"
-    The HyperPod steps on this page (from `scripts/hyperpod/create.sh` on) were not run on AWS, and B1 and B2 with the `ml.g5` defaults are not verified. In the practice account on 2026-11-18, `02_create_cluster.sh --hyperpod-b2` and `CHANGE_SCENARIO=1 scripts/02_create_cluster.sh --hyperpod` ran only as intermediate steps while building the scenario A cluster. The sandbox side of B1, EC2 `g5.xlarge` gVisor nodes, is the same setup that was checked as scenario A in the practice account on 2026-11-18. Compare your actual output with "What to look for". Locally, rendering of every manifest (including the HyperPodPyTorchJob template) and shellcheck of the scripts were checked.
+    The HyperPod steps on this page (from `scripts/hyperpod/create.sh` on) were not run on AWS, and B1 and B2 with the `ml.g5` defaults are not verified. In the practice account, `02_create_cluster.sh --hyperpod-b2` and `CHANGE_SCENARIO=1 scripts/02_create_cluster.sh --hyperpod` ran only as intermediate steps while building the scenario A cluster. The sandbox side of B1, EC2 `g5.xlarge` gVisor nodes, is the same setup that was checked as scenario A in the practice account ([run record](../reference/sources.md#aws-run-record)). Compare your actual output with "What to look for". Locally, rendering of every manifest (including the HyperPodPyTorchJob template) and shellcheck of the scripts were checked.
 
 ## Layout
 

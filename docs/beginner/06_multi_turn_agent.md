@@ -4,7 +4,7 @@
 
 ## 기존 Pain Point
 
-reward 풀은 요청마다 유휴 pod 하나를 선택하고, 그 pod를 다음 채점에도 다시 씁니다. 서버는 요청이 끝나면 그 요청의 작업 디렉터리를 지우고 남은 프로세스를 정리해요. multi-turn 에이전트는 코드를 제출하고 verdict를 읽은 뒤 코드를 고쳐 다시 제출하므로, 한 에피소드의 모든 turn을 같은 샌드박스, 같은 샌드박스 버전에서 채점해야 합니다. GPU 과제라면 수정 전후의 속도도 같은 GPU에서 비교해야 해요. 에피소드마다 샌드박스를 새로 만들면 매번 시작을 기다려야 하고, Kata GPU VM은 처음 Ready가 될 때까지 몇 분이 걸릴 수 있습니다.
+reward 풀은 요청마다 유휴 pod 하나를 선택하고, 그 pod를 다음 채점에도 다시 씁니다. 서버는 요청이 끝나면 그 요청의 작업 디렉터리를 지우고 남은 프로세스를 정리합니다. multi-turn 에이전트는 코드를 제출하고 verdict를 읽은 뒤 코드를 고쳐 다시 제출하므로, 한 에피소드의 모든 turn을 같은 샌드박스, 같은 샌드박스 버전에서 채점해야 합니다. GPU 과제라면 수정 전후의 속도도 같은 GPU에서 비교해야 합니다. 에피소드마다 샌드박스를 새로 만들면 매번 시작을 기다려야 하고, Kata GPU VM은 처음 Ready가 될 때까지 몇 분이 걸릴 수 있습니다.
 
 ![두 패널 그림입니다. a single-turn 채점: GRPO trainer가 completion 1개를 reward 풀에 제출하면, 풀은 요청마다 유휴 pod 하나를 새로 선택해 채점하고 verdict 1개를 반환합니다. 요청이 끝나면 서버가 그 요청의 작업 디렉터리와 남은 프로세스를 정리합니다. b multi-turn 에피소드: SandboxWarmPool에 미리 실행한 샌드박스 하나가 SandboxClaim으로 에피소드에 할당됩니다. 에이전트(모델)는 turn 1 코드를 제출하고, verdict를 피드백으로 읽고, 수정한 turn 2 코드를 제출한 뒤 다시 verdict를 받습니다. 모든 turn은 claim한 샌드박스 하나에서 같은 샌드박스 버전으로 채점되고(GPU 프로필이면 같은 GPU에서), 이 샌드박스는 에피소드가 끝나면 삭제됩니다.](../images/figures/beginner-06_multi_turn_agent.svg)
 
@@ -13,17 +13,17 @@ reward 풀은 요청마다 유휴 pod 하나를 선택하고, 그 pod를 다음 
 
 ## Why
 
-- **기본 채점 풀에서는 다음 제출을 다른 pod가 맡을 수 있습니다.** 에피소드에 샌드박스 하나를 할당하면 고친 코드도 같은 환경에서 채점해요.
+- **기본 채점 풀에서는 다음 제출을 다른 pod가 맡을 수 있습니다.** 에피소드에 샌드박스 하나를 할당하면 고친 코드도 같은 환경에서 채점합니다.
 - **격리는 RuntimeClass가 맡습니다.** Agent Sandbox는 샌드박스를 미리 띄우고, 할당하고, 회수하는 일을 합니다.
 
 **사전 지식:** [04편](04_rl_and_sandbox.md)을 읽었다면 충분합니다. [05편](05_hands_on.md)의 실습은 하지 않아도 됩니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
-    - **single-turn 채점:** completion 하나에 verdict 하나를 쓰는 채점입니다. trainer는 새로 실행해야 할 답안만 샌드박스에 보내요. 이 에셋의 GRPO 학습이 이 방식입니다.
+    - **single-turn 채점:** completion 하나에 verdict 하나를 쓰는 채점입니다. trainer는 새로 실행해야 할 답안만 샌드박스에 보냅니다. 이 에셋의 GRPO 학습이 이 방식입니다.
     - **multi-turn:** 모델이 도구를 호출하거나 코드를 제출하고, 결과를 읽은 뒤 다시 응답하는 과정을 여러 번 반복하는 방식입니다.
     - **turn:** multi-turn 에피소드에서 모델이 한 번 응답하는 단계입니다. 이 에셋의 과제에서는 코드를 한 번 제출하고 verdict를 받는 한 차례입니다.
     - **에피소드(episode):** 모델이 과제 하나를 여러 turn에 걸쳐 푸는 한 번의 시도입니다.
-    - **verdict:** harness가 제출된 코드 하나를 채점해 반환하는 결과입니다. 상태(정답, 오답, 정책 위반 등)와 speedup이 들어 있어요.
+    - **verdict:** harness가 제출된 코드 하나를 채점해 반환하는 결과입니다. 상태(정답, 오답, 정책 위반 등)와 speedup이 들어 있습니다.
     - **CRD (Custom Resource Definition):** Kubernetes에 새 리소스 종류를 추가하는 정의입니다.
     - **warm pool:** 요청이 오기 전에 미리 실행해 둔 샌드박스 묶음입니다.
     - **claim:** warm pool에서 샌드박스 하나를 할당받기 위한 요청입니다.
@@ -32,10 +32,10 @@ reward 풀은 요청마다 유휴 pod 하나를 선택하고, 그 pod를 다음 
 
 ## single-turn 채점: 이 에셋의 reward 풀
 
-GRPO 학습은 completion마다 verdict 하나를 씁니다. 새로 실행할 답안은 풀의 pod 하나에 보내고, 코드가 없거나 사전 정책 검사에서 걸린 답안은 trainer가 샌드박스에 보내지 않고 바로 판정해요. 이 에셋의 reward 풀은 런타임과 버전마다 Deployment 하나로 실행하는 샌드박스 pod 묶음입니다.
+GRPO 학습은 completion마다 verdict 하나를 씁니다. 새로 실행할 답안은 풀의 pod 하나에 보내고, 코드가 없거나 사전 정책 검사에서 걸린 답안은 trainer가 샌드박스에 보내지 않고 바로 판정합니다. 이 에셋의 reward 풀은 런타임과 버전마다 Deployment 하나로 실행하는 샌드박스 pod 묶음입니다.
 
 - **요청마다 유휴 pod 하나가 채점합니다.** pod는 한 번에 평가 하나만 처리하고, 처리 중인 pod는 503을 반환합니다. 그러면 클라이언트가 다른 pod로 요청을 보냅니다.
-- **요청마다 작업 공간을 따로 씁니다.** 서버는 요청마다 작업 디렉터리와 새 프로세스 트리를 만들고, 평가가 끝나면 그 작업 디렉터리를 지우고 남은 프로세스를 정리합니다. pod와 `/work`, `/tmp` 볼륨은 다음 채점에도 그대로 쓰여요. 에피소드 전용 pod에서도 제출할 때마다 같은 정리 절차를 거칩니다.
+- **요청마다 작업 공간을 따로 씁니다.** 서버는 요청마다 작업 디렉터리와 새 프로세스 트리를 만들고, 평가가 끝나면 그 작업 디렉터리를 지우고 남은 프로세스를 정리합니다. pod와 `/work`, `/tmp` 볼륨은 다음 채점에도 그대로 쓰입니다. 에피소드 전용 pod에서도 제출할 때마다 같은 정리 절차를 거칩니다.
 - **GPU 유휴 시간이 줄어듭니다.** 요청마다 비어 있는 pod를 선택하므로, 채점을 기다리는 GPU가 적습니다.
 
 ## multi-turn 에이전트: 에피소드 단위로 채점하기
@@ -46,13 +46,13 @@ multi-turn 에이전트는 한 에피소드 안에서 다음 순서를 반복합
 2. verdict를 피드백으로 읽습니다. 예를 들어 상태, 오류 메시지의 끝부분, speedup을 모델에 돌려줍니다.
 3. 코드를 고쳐 다시 제출합니다(turn 2). 과제가 끝날 때까지 2와 3을 반복합니다.
 
-실제 에이전트는 판정을 읽고 코드를 고칩니다. [11편](../handson/11_multi_turn.md) 실습에서는 모델 대신 미리 준비한 시험용 답안을 정해진 순서로 제출해, 같은 샌드박스에서 매번 판정을 받는지 확인해요. 이 에셋의 예제는 한 에피소드의 모든 제출을 같은 샌드박스로 보냅니다. GPU 프로필이라면 모든 turn이 같은 GPU와 같은 샌드박스 버전에서 채점돼요. CPU 실습에서도 같은 방식으로 샌드박스를 할당합니다. turn마다 GPU나 채점 버전이 바뀌면 turn 1과 turn 2의 verdict를 같은 기준으로 비교할 수 없습니다(추론). reward 풀은 요청마다 유휴 pod를 새로 선택하므로, 같은 에피소드의 turn이 서로 다른 pod와 GPU에서 채점될 수 있습니다.
+실제 에이전트는 판정을 읽고 코드를 고칩니다. [11편](../handson/11_multi_turn.md) 실습에서는 모델 대신 미리 준비한 시험용 답안을 정해진 순서로 제출해, 같은 샌드박스에서 매번 판정을 받는지 확인합니다. 이 에셋의 예제는 한 에피소드의 모든 제출을 같은 샌드박스로 보냅니다. GPU 프로필이라면 모든 turn이 같은 GPU와 같은 샌드박스 버전에서 채점됩니다. CPU 실습에서도 같은 방식으로 샌드박스를 할당합니다. turn마다 GPU나 채점 버전이 바뀌면 turn 1과 turn 2의 verdict를 같은 기준으로 비교할 수 없습니다(추론). reward 풀은 요청마다 유휴 pod를 새로 선택하므로, 같은 에피소드의 turn이 서로 다른 pod와 GPU에서 채점될 수 있습니다.
 
 그렇다고 에피소드마다 샌드박스를 새로 만들면 에피소드가 시작될 때마다 샌드박스가 준비되기를 기다려야 합니다. Kata GPU VM은 guest 메모리 전체를 고정하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready가 될 때까지 몇 분이 걸릴 수 있습니다(deployment 템플릿 주석).
 
 ## Agent Sandbox
 
-Agent Sandbox(kubernetes-sigs/agent-sandbox)는 Kubernetes SIG Apps에서 개발하는 오픈소스 프로젝트입니다. 샌드박스 pod를 미리 실행해 두고, 요청이 오면 하나를 할당하고, 사용이 끝나면 회수합니다. 이 작업은 Kubernetes CRD로 정의한 리소스로 관리해요.
+Agent Sandbox(kubernetes-sigs/agent-sandbox)는 Kubernetes SIG Apps에서 개발하는 오픈소스 프로젝트입니다. 샌드박스 pod를 미리 실행해 두고, 요청이 오면 하나를 할당하고, 사용이 끝나면 회수합니다. 이 작업은 Kubernetes CRD로 정의한 리소스로 관리합니다.
 
 | 리소스 | 하는 일 |
 |---|---|
@@ -60,7 +60,7 @@ Agent Sandbox(kubernetes-sigs/agent-sandbox)는 Kubernetes SIG Apps에서 개발
 | `SandboxWarmPool` | template으로 만든 샌드박스를 몇 개 미리 실행해 둘지 정합니다 |
 | `SandboxClaim` | warm pool에서 샌드박스 하나를 할당받는 요청입니다. 에피소드마다 하나를 만듭니다 |
 
-할당된 샌드박스 하나는 `Sandbox` 리소스이고, pod 하나를 관리합니다. `Sandbox`는 warm pool이 만들므로 직접 만들지 않아요. 네 리소스의 API 버전은 모두 `v1beta1`이고, 최신 릴리스는 v1.0.11입니다.
+할당된 샌드박스 하나는 `Sandbox` 리소스이고, pod 하나를 관리합니다. `Sandbox`는 warm pool이 만들므로 직접 만들지 않습니다. 네 리소스의 API 버전은 모두 `v1beta1`이고, 최신 릴리스는 v1.0.11입니다.
 
 ### 수명 주기: claim, 할당, 반납
 
@@ -99,7 +99,7 @@ awslabs의 [AI on EKS](https://github.com/awslabs/ai-on-eks) 프로젝트에는 
 |---|---|---|
 | 대상 | 모델이 생성한 코드를 실행하는 AI 에이전트. 페이지에 GPU 언급이 없습니다 | GPU 커널 채점 (reward) |
 | 격리 런타임 | 계층 세 가지: `standard`(runc), `gvisor`(Standard EKS만), `isolated-sandbox`(Nitro Sandboxes) | gVisor + nvproxy (`g5.xlarge`, A10G) 또는 Kata + VFIO (`g4dn.metal`, T4) |
-| Agent Sandbox 사용 | Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim(`v1beta1`)으로 수명 주기를 관리하고, KRO로 여러 리소스를 `AgentSandbox` 리소스 하나로 묶습니다 | 선택 확장입니다. multi-turn 에피소드마다 샌드박스 하나를 claim합니다. GPU 과제는 GPU 프로필을 쓰고, 11편의 CPU 실습은 GPU 없이 실행해요. 기본 채점은 Deployment 기반 reward 풀입니다 |
+| Agent Sandbox 사용 | Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim(`v1beta1`)으로 수명 주기를 관리하고, KRO로 여러 리소스를 `AgentSandbox` 리소스 하나로 묶습니다 | 선택 확장입니다. multi-turn 에피소드마다 샌드박스 하나를 claim합니다. GPU 과제는 GPU 프로필을 쓰고, 11편의 CPU 실습은 GPU 없이 실행합니다. 기본 채점은 Deployment 기반 reward 풀입니다 |
 | egress | 허용한 도메인(FQDN)으로만 나가는 트래픽을 허용합니다. Standard EKS는 Cilium, EKS Auto Mode는 `ApplicationNetworkPolicy`를 씁니다 | 모든 egress를 차단합니다(`egress: []`). 샌드박스 API는 `rl-trainer` 네임스페이스에서 클라이언트 라벨(`gpusandbox/client=true`)을 단 pod만 TCP 8000으로 호출할 수 있습니다 |
 | 노드 | Karpenter와 gVisor 전용 NodePool(AL2023 user data로 `runsc` 설치) | CDK 스택의 EKS 관리형 노드 그룹과 Karpenter NodePool |
 

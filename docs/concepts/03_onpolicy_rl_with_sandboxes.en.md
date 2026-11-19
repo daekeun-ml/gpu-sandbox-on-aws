@@ -185,7 +185,7 @@ The v2 example switches to draining after 200 evaluations. Replacing a draining 
 ## Scope and limits
 
 - **Checked by local tests:** pytest checks the routing table reload and `revision` bump, the reward that turns `sandbox_error` into `None`, the golden probe and parity between two CPU pools, and the gateway's group pinning across a routing switch; the TRL path was checked for wiring only, with a one-process dry run.
-- **Run on AWS:** on 2026-11-18 in the practice account, a gVisor v1 pool was deployed and passed `scripts/ops/verify.sh gvisor v1`, and a `g5.2xlarge` trainer finished 5 GRPO steps.
+- **Run on AWS:** in the practice account, a gVisor v1 pool was deployed and passed `scripts/ops/verify.sh gvisor v1`, and a `g5.2xlarge` trainer finished 5 GRPO steps ([run record](../reference/sources.md#aws-run-record)).
 - **Not run on AWS:** a `scripts/ops/rollout.sh` version switch during training. Verify it with the checks in [06 Updating the sandbox during training](../handson/06_sandbox_update.md).
 
 ??? note "References"

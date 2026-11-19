@@ -23,7 +23,7 @@
     "replaces": "pain",
     "alt_ko": "a: 인증 실패(401 응답이 대량으로 발생)가 나면 sandbox_error 샘플이 None으로 제외되고 그 샘플의 advantage는 0이 됩니다. 모든 샘플이 제외되면 학습 신호 없이 step만 진행됩니다. 풀이 줄면 Ready가 아닌 pod가 DNS에서 빠지고 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking은 flag가 verdict에만 기록되고 지표로 집계되지 않아 reward가 오르는 것처럼 보입니다. 세 경우 모두 학습은 멈추지 않습니다. b: 같은 세 고장을 각각 경보에 연결합니다. status.sandbox_error / n으로 sandbox_error 비율 경보(TRL 5% 초과, 3 batch 연속)를, 활성 풀 Deployment별 available과 desired replicas 비교로 Ready pod 부족 경보(available이 desired 미만인 상태 10분)를, flag 개수(저장소에 없는 확장, 점선)로 reward hacking 신호 경보(flag 비율 상승 추세)를 만듭니다.",
     "alt_en": "a: authentication failures (a flood of 401s) drop sandbox_error samples with None, giving those samples an advantage of 0, and when every sample is dropped steps go by with no learning signal; a shrinking pool takes pods that are not Ready out of DNS and loads the remaining pods, so steps just get slower; reward hacking flags live only in verdicts and are not aggregated into metrics, so rewards seem to improve. Training stops in none of the three. b: the same failures map to alarms: status.sandbox_error / n to the sandbox_error rate (TRL over 5%, 3 batches in a row), available versus desired replicas per active pool Deployment to Ready pods short (available below desired for 10 minutes), and flag counts (an extension not in the repository, dashed) to a reward hacking signal (flag rate trending up)",
-    "takeaway_ko": "샌드박스 쪽 고장이 나도 학습은 멈추지 않고, 학습 신호 없이 step만 진행되거나 step이 느려지거나 reward가 실제보다 좋아 보입니다. 고장마다 가장 먼저 변하는 reward 품질 지표에 경보를 걸어야 늦지 않게 알 수 있습니다.",
+    "takeaway_ko": "샌드박스 쪽 고장이 나도 학습은 멈추지 않습니다. 모든 샘플이 채점 불가가 되면 학습 신호 없이 step만 진행되고, 풀이 줄면 step이 느려지며, reward hacking이 일어나면 reward가 실제보다 좋아 보입니다. 세 고장은 각각 `sandbox_error` 비율, Ready pod 수, flag 개수 경보로 잡습니다.",
     "takeaway_en": "Sandbox-side failures do not stop training: steps go by without learning, slow down, or rewards look better. Alarms on the reward quality signal each failure moves first are what catch them in time."
   },
   "production-08_cost": {
@@ -41,7 +41,7 @@
     "replaces": "pain",
     "alt_ko": "a: 여러 스크립트를 순서대로 실행해 단계 1에서 클러스터, 단계 2에서 노드 그룹, 단계 3에서 launch template과 로그 그룹을 만듭니다. 삭제할 때도 단계마다 리소스별로 따로 삭제해야 하고, 하나라도 남으면 비용이 나가거나 다음 생성이 실패합니다. b: cdk/deploy.sh가 같은 리소스를 CDK 스택 하나(CloudFormation)로 배포하고, cdk/destroy.sh가 스택 전체를 삭제합니다. 스택 안의 리소스는 함께 삭제되고, HyperPod 클러스터, AMI, ECR은 따로 삭제합니다.",
     "alt_en": "a: several scripts run in order create the cluster in step 1, node groups in step 2 and launch templates and log groups in step 3, and deletion goes step by step, resource by resource, so one leftover costs money or makes the next creation fail. b: cdk/deploy.sh deploys the same resources as one CDK stack (CloudFormation) and cdk/destroy.sh deletes the whole stack with everything in it, while the HyperPod cluster, AMIs and ECR are deleted separately",
-    "takeaway_ko": "단계마다 만든 리소스는 단계마다 따로 삭제해야 하고, 하나만 놓쳐도 비용이 나가거나 다음 생성이 실패합니다. CDK 스택 하나로 만들면 스택 단위로 삭제할 수 있어 명령 한 번으로 빠짐없이 삭제됩니다.",
+    "takeaway_ko": "단계마다 만든 리소스는 단계마다 따로 삭제해야 하고, 하나만 놓쳐도 비용이 나가거나 다음 생성이 실패합니다. CDK 스택 하나로 만들면 스택에 든 리소스를 스택 단위로 삭제할 수 있습니다.",
     "takeaway_en": "Resources made in each step must be deleted in each step, and missing one costs money or blocks the next creation. With one CDK stack the stack is the unit of deletion, so one command removes everything."
   },
   "reference-faq": {
@@ -50,7 +50,7 @@
     "replaces": "pain",
     "alt_ko": "a: 학습 도중 샌드박스 버전을 rolling update로 교체하면 한 group이 두 규칙으로 채점됩니다. pod 장애 같은 인프라 오류에 reward 0을 주면 장애 때문에 0점을 받은 정답이 억제됩니다. 두 경우 모두 학습은 멈추지 않고 reward만 잘못 계산되므로 오류가 눈에 띄지 않습니다. b: 버전 교체는 blue/green 풀로 하고, 한 reward batch는 한 버전으로만 채점합니다. 인프라 오류는 sandbox_error로 남기고, TRL은 이를 None으로 처리해 baseline에서 제외합니다. 그래서 group 기준 advantage에는 한 버전의 점수와 실제로 채점한 샘플만 들어갑니다.",
     "alt_en": "a: a mid-run sandbox version change done as a rolling update scores one group by two rules, and reward 0 on infrastructure errors such as a pod failure suppresses correct answers that were zeroed; in both cases training does not stop and rewards drift silently. b: version changes switch blue/green pools, and each reward batch is scored by one version only, and infrastructure errors become sandbox_error, which TRL returns as None to leave out of the baseline, so the group-relative advantage holds one version and scored samples only",
-    "takeaway_ko": "버전 교체와 인프라 오류는 학습을 멈추지 않기 때문에, reward가 잘못 계산되어도 눈에 띄지 않습니다. blue/green 풀을 step 경계에서만 전환하고, 채점하지 못한 샘플은 TRL처럼 None으로 제외하면 group 기준 advantage가 올바르게 계산됩니다.",
+    "takeaway_ko": "버전 교체와 인프라 오류는 학습을 멈추지 않기 때문에, reward가 잘못 계산되어도 눈에 띄지 않습니다. blue/green 풀로 버전을 바꾸면서 한 batch는 한 버전으로만 채점하고, 채점하지 못한 샘플은 TRL처럼 None으로 제외하면 group 기준 advantage가 올바르게 계산됩니다.",
     "takeaway_en": "In both cases training keeps running, so nothing looks wrong while the rewards drift. Switching blue/green pools only at step boundaries and dropping unscored samples with None, as TRL does, keeps the group-relative advantage sound."
   }
 }

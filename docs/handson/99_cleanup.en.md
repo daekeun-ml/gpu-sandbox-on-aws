@@ -35,7 +35,7 @@
     More detail is in the [Glossary](../reference/glossary.md).
 
 !!! warning "Validation status and safety"
-    The scenario C CDK stack was deployed and deleted in a practice account on 2026-11-14. On 2026-11-18, `08_cleanup.sh --images` ran on a scenario A cluster (us-west-2); the record does not say whether its AMI step ran. `hyperpod/delete.sh` and `demo/teardown.sh` passed shellcheck only and have not been run end to end on AWS. In a shared or production account, confirm by name, tags and creation time that a resource belongs to this hands-on before deleting it (ideally, run from an account or role dedicated to this hands-on). The check commands below only read.
+    Deleting the scenario C CDK stack and `08_cleanup.sh --images` on a scenario A cluster ran in a practice account; the record does not say whether the AMI step ran ([run record](../reference/sources.md#aws-run-record)). `hyperpod/delete.sh` and `demo/teardown.sh` passed shellcheck only and have not been run end to end on AWS. In a shared or production account, confirm by name, tags and creation time that a resource belongs to this hands-on before deleting it (ideally, run from an account or role dedicated to this hands-on). The check commands below only read.
 
 ## Order
 

@@ -70,7 +70,7 @@ The second and third examples are the same multi-tenant situation with different
 |---|---|---|---|---|---|
 | Isolation boundary | user-space kernel. The GPU goes through an ioctl allowlist, weaker than a VM | VM + IOMMU | VM | VM + IOMMU (unverified upstream) | managed by AWS (see the documentation for details) |
 | GPUs available on AWS | G/P family VMs. This asset uses A10G (`g5`, default) and L4 (`g6`, alternative) | T4 (`g4dn.metal`) only | none | T4 (`g4dn.metal`) | none (at launch) |
-| Installation effort | medium: runsc via user data, containerd handler, RuntimeClass, device plugin `cdi-cri` | high: IOMMU AMI bake, GPU Operator, kata-deploy, `.metal` node | medium: nested-virtualization launch template, kata-deploy | high: the QEMU path plus experimental values. The 4.3.1 values already hold the guest kernel and image paths; check the paths for other versions. In the 2026-11-18 run the VM did not start | low: Kubernetes 1.36 or later |
+| Installation effort | medium: runsc via user data, containerd handler, RuntimeClass, device plugin `cdi-cri` | high: IOMMU AMI bake, GPU Operator, kata-deploy, `.metal` node | medium: nested-virtualization launch template, kata-deploy | high: the QEMU path plus experimental values. The 4.3.1 values already hold the guest kernel and image paths; check the paths for other versions. In this repository's run the VM did not start | low: Kubernetes 1.36 or later |
 | Density (this asset's setup) | one per `g5.xlarge` node | up to 8 VMs per `g4dn.metal`, all guest RAM pinned | 1.25 CPU per pod (request 1 + overhead 250m) and 2 GiB + 130Mi of memory; whichever of the node's allocatable CPU and memory runs out first sets the limit | shares the node with `kata-qemu` | see the documentation |
 | Upstream support | supported (nvproxy documentation) | supported (NVIDIA CI covers A100, H100) | supported | not supported | supported by AWS (launched 2026-11-09) |
 | Driver coupling | the host driver version must match the nvproxy support list exactly | guest driver (kata-deploy, open 615.71.09). The host loads no driver | none | guest driver | none |
@@ -80,7 +80,7 @@ Prices are computed from us-east-1 and us-west-2 list prices. With fewer T4s in 
 
 ## What to check right after choosing
 
-How to run the scripts and sample output are on the matching hands-on page. The gVisor combination (`04_install_gpu_stack.sh`, `scripts/ops/verify.sh gvisor v1`) ran on `g5.xlarge` in the practice account on 2026-11-18. Kata + QEMU (GPU) also ran that day on `g4dn.metal`, where `scripts/ops/verify.sh kata-qemu v1` confirmed the T4 and the golden verdicts. NVIDIA's upstream CI covers A100 and H100. Verify them against the expected results.
+How to run the scripts and sample output are on the matching hands-on page. The gVisor combination (`04_install_gpu_stack.sh`, `scripts/ops/verify.sh gvisor v1`) ran on `g5.xlarge` in the practice account. Kata + QEMU (GPU) also ran on `g4dn.metal`, where `scripts/ops/verify.sh kata-qemu v1` confirmed the T4 and the golden verdicts ([run record](../reference/sources.md#aws-run-record)). NVIDIA's upstream CI covers A100 and H100. Verify them against the expected results.
 
 | Combination | Check script | Expected result | Hands-on |
 |---|---|---|---|

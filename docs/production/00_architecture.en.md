@@ -148,7 +148,7 @@ If a step fails, look the symptom up in [Troubleshooting](../reference/troublesh
 
 - **Verified by local tests:** gateway group pins survive a routing switch, and the client spreads requests over two loopback sandbox servers (`pytest`, CPU, no AWS).
 - **Not covered by tests:** the tests render the Karpenter EC2NodeClass template (`infra/karpenter/`) and check its links to the NodePools, but do not apply it to an API server. The production templates (`k8s/production/*.tpl`) are not rendered, and the static YAML files in `k8s/production/` (`pool-hardening.yaml`, `warm-capacity.yaml`) are checked only for YAML validity and Service exposure.
-- **Not executed on AWS:** what this page adds to the hands-on setup, such as the Karpenter NodePools, the gateway, the jwks-sync CronJob, pool hardening and warm capacity. Steps 1, 4 and 5 use the same scripts as the hands-on and were run in the scenario A exercise on 2026-11-18. Verify the rest with the checks on each page.
+- **Not executed on AWS:** what this page adds to the hands-on setup, such as the Karpenter NodePools, the gateway, the jwks-sync CronJob, pool hardening and warm capacity. Steps 1, 4 and 5 use the same scripts as the hands-on and were run in the scenario A exercise ([run record](../reference/sources.md#aws-run-record)). Verify the rest with the checks on each page.
 - **HyperPod autoscaling and Karpenter:** combining HyperPod's Karpenter-based autoscaling with open source Karpenter is untested; re-verify with the official documentation.
 
 ## ❓ Misconceptions

@@ -31,9 +31,8 @@ gVisor releases, nvproxy driver lists, the drivers shipped in AMIs, prices and q
 | Third-party report | Blogs, issues, public case studies | The `g4dn.metal` warm reboot problem, `reset_method=bus` on T4 |
 | Blog measurement | A value someone else measured in a different environment | About 55 ms for a warm pool claim in part 2 of the AWS Korea tech blog series, about 3 s cold start in the AWS China blog |
 | Inference | A judgment derived from the evidence, unverified | The effect of NodeConfig `imports` on keeping kata-deploy drop-ins |
-| Executed on AWS by the author | Actually run in a practice account, with the output checked | The CDK deploy and deletion of scenario C, the SSM tunnel, the smoke pods of the three runtimes when adding Kata CPU nodes (`kata/cpu_nodes.sh`) (2026-11-14) |
-| Run in the practice account (2026-11-18) | Run in the us-west-2 practice account, with the output checked (the demo site in us-east-1) | In scenario A: `02_create_cluster.sh` (created system-only, then updated with `CHANGE_SCENARIO=1`), `03_build_push_images.sh` (all three images), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1` (1 replica) with `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5` on `g5.2xlarge`, `08_cleanup.sh --images`. On the same day, in another cluster layout (created system-only, then Kata CPU, Kata GPU and gVisor node groups added with `CHANGE_SCENARIO=1`): Kata GPU on `g4dn.metal` (`kata/gpu_nodes.sh`, `kata-qemu` with 4 replicas, `ops/verify.sh kata-qemu v1`), `ops/bench.sh 32` (2 GPU pools and 3 CPU pools, two passes), the demo site (`record` in the recorder pod, `demo/deploy.sh` and an external check). The experimental CLH GPU (`kata-clh`) pool was also tried, but its VM did not start (`create container timeout`), so it was not measured |
-| Not executed on AWS by the author | Designed, with templates written, but not run | `ops/rollout.sh` in scenario A during training, the 60-step default training run, HyperPod B1 and B2 on `ml.g5` (including creating HyperPod) |
+| Executed on AWS by the author | Actually run in a practice account, with the output checked | The gVisor path of scenario A, Kata GPU (`g4dn.metal`), the three CPU runtimes of scenario C, the runtime benchmark, the demo site. The dated record is in [AWS run record](#aws-run-record) |
+| Not executed on AWS by the author | Designed, with templates written, but not run | `ops/rollout.sh` in scenario A during training, the 60-step default training run, HyperPod B1 and B2 on `ml.g5` (including creating HyperPod). The full list is in [AWS run record](#aws-run-record) |
 
 ## What this repository verified
 
@@ -60,7 +59,35 @@ python -m pytest -q
 | `tests/test_demo.py` | The demo CloudFormation template (private bucket, CloudFront access with an `AWS:SourceArn` condition, non-TLS requests denied, HTTPS redirect and security headers), a static site with no external resources or HTML injection, the recording schema and reward consistency |
 | `cdk/tests/test_stack.py` | The synthesized CDK template: private endpoint (public only as a /32 opt-in), no `0.0.0.0/0` inbound rule, IMDSv2 required in every launch template of scenario A synthesized with Kata CPU added (hop limit 1 and EBS encryption are checked only where the template sets them), the node groups per scenario, nested virtualization on c8i, the IOMMU AMI and user data on the Kata GPU node group (IMDSv2 is not checked for that configuration), cdk-nag passing for each scenario |
 
-A TRL 1.18.0 GRPO dry run (SmolLM2-135M, CPU, no vLLM) completed 2 steps, and the shell scripts pass shellcheck (author's record, 2026-11). On AWS the author ran the CDK deploy of scenario C, the tunnel, adding Kata CPU nodes (`kata/cpu_nodes.sh`) and the deletion in a practice account (2026-11-14). The gVisor path of scenario A was run in the practice account on 2026-11-18 (us-west-2, `g5.xlarge` and `g5.2xlarge`, 5 training steps). Kata GPU, the runtime benchmark and the demo site ran on the same day, with the results in [03 Kata sandboxes](../handson/03_kata.md), [08 Runtime benchmark](../handson/08_benchmark.md) and [09 Demo site](../handson/09_demo_site.md); the table above lists the scripts. Verify the rest yourself with the checks on each hands-on page.
+A TRL 1.18.0 GRPO dry run (SmolLM2-135M, CPU, no vLLM) completed 2 steps, and the shell scripts pass shellcheck (author's record, 2026-11).
+
+### AWS run record
+
+All of these ran in the author's practice account.
+
+| Date | Region | Target | What ran | Result |
+|---|---|---|---|---|
+| 2026-11-14 | us-west-2 | Scenario C (EKS 1.36) | `02_create_cluster.sh --cpu-only` (CDK deploy, about 20 minutes), `cdk/tunnel.sh`, `kata/cpu_nodes.sh` (about 14 minutes, mostly the kata-deploy install), stack deletion. Deployed and deleted twice. Part 2 of [05 Try it yourself](../beginner/05_hands_on.md) ran in this order too (including the runc comparison container on the same node) | Succeeded. Checked the cluster and node status, the private endpoint, nested virtualization and `/dev/kvm` on the c8i node, gVisor and the node guard, the tunnel listening only on `127.0.0.1`, the `gvisor-cpu` RuntimeClass, the smoke pods of the three runtimes, and the resources left after deletion |
+| 2026-11-17 | us-west-2 | Scenario C (c8i) | `ops/rollout.sh kata-clh-cpu v1 v2`, with the model-free reward loop `ops/simulate.sh` running alongside (30 batches, about 16 minutes) | Succeeded. All four stages (deploy, verify, parity, switch) passed, and `sandbox_version_switch` was recorded at batch 8. `rollout.sh --finish` was not run. The output is in `demo/site/data/extras.json` |
+| 2026-11-18 | us-west-2 | Scenario A (gVisor) | `02_create_cluster.sh`: the first creation with the GPU node groups rolled back on `InsufficientInstanceCapacity`, so the cluster was created system-only with `--hyperpod-b2`, then updated with `CHANGE_SCENARIO=1` to B1 (gVisor node group added) and then to A (trainer added). Then `03_build_push_images.sh` (all three images), `04_install_gpu_stack.sh` (`g5.xlarge`), `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1` (1 replica), `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5` on `g5.2xlarge`, `08_cleanup.sh --images` | Succeeded. Smoke pod `cuda ok: NVIDIA A10G 2048.0`, driver 580.178.04 (proprietary, GSP off). The pool check passed with 6 golden verdicts PASS, 4 egress targets blocked and the `default` namespace blocked. The GRPO Job reached Complete (about 12 minutes, `train_runtime` about 401 s). The record does not show whether the AMI deletion step of `08_cleanup.sh` ran |
+| 2026-11-18 | us-west-2 | Kata GPU and Kata CPU (another cluster, EKS 1.36) | Created system-only, then Kata CPU, Kata GPU and gVisor node groups added with `CHANGE_SCENARIO=1`. `kata/gpu_nodes.sh` (IOMMU AMI build, GPU Operator), `kata/cpu_nodes.sh`, `06_deploy_sandboxes.sh kata-qemu` (4 replicas), `ops/verify.sh` on `kata-qemu` and the three CPU pools | Succeeded. `pgpu=8`, 4 `kata-qemu` pods Ready (T4), pool checks passed. The run exposed the `vfio_iommu_type1` module problem and an AMI builder problem, and the scripts were fixed ([03 Kata sandboxes](../handson/03_kata.md)) |
+| 2026-11-18 | us-west-2 | Experimental Kata CLH GPU (`kata-clh`) | Deployed the experimental pool with `ENABLE_EXPERIMENTAL_CLH_GPU=1` | Failed. The VM did not start even after the artifact paths were filled in (`create container timeout`). Left out of the benchmark |
+| 2026-11-18 | us-west-2 | Runtime benchmark | `ops/bench.sh 32` on five pools (`gvisor`, `kata-qemu` and the three CPU pools) in the Kata cluster above, once right after deployment and once after a pool restart. The gVisor node in this cluster was one `g5.2xlarge` | Succeeded. All five pools returned 32 of 32 as `ok`. The result table is in [08 Runtime benchmark](../handson/08_benchmark.md) |
+| 2026-11-18 | us-east-1 (cluster in us-west-2) | Demo site | `record` in the recorder pod (gVisor A10G pool, Kata QEMU T4 pool), `extras.json` built from the cluster logs, `demo/deploy.sh`, an external check after deployment | Succeeded. Checked the security headers, allowed methods, bucket settings and log delivery. With the default certificate the endpoint accepted TLS 1.0 and 1.1 handshakes (security design in [09 Demo site](../handson/09_demo_site.md)) |
+
+On 2026-11-14 the author also captured the Service Quotas screens and the HyperPod AMI search in the EC2 AMI Catalog from the ap-south-1 console. These were read-only views, and no script ran there.
+
+**Not executed on AWS:**
+
+- `01_check_prereqs.sh`
+- `ops/rollout.sh` in scenario A during training, and `ops/rollout.sh --finish` (not run in any scenario)
+- The 60-step default training run
+- The HyperPod steps (from `hyperpod/create.sh` on) and B1 and B2 on `ml.g5`. The B1 and B2 CDK stacks were deployed only as intermediate steps while creating the scenario A cluster on 2026-11-18
+- `hyperpod/delete.sh` and `demo/teardown.sh` (shellcheck only)
+- The procedure in [11 Multi-turn episodes](../handson/11_multi_turn.md) (local tests only)
+- What the production guide adds to the hands-on: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity
+
+Verify the rest yourself with the checks on each hands-on page.
 
 ## Re-verify checklist before deploying
 

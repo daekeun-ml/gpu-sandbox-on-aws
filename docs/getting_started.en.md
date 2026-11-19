@@ -326,9 +326,7 @@ If you have not chosen a runtime and instance types yet, read [05 Decision guide
 ## Scope and limits
 
 - The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 105); server tests on a Linux host were not run.
-- The author did not run `scripts/01_check_prereqs.sh` in section 5. On 2026-11-14, the CDK deploy of scenario C, the tunnel, adding Kata CPU nodes (`scripts/kata/cpu_nodes.sh`) and the deletion were run in a practice account (us-west-2).
-- In the practice account on 2026-11-18, `03_build_push_images.sh` (all three images), `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1` (1 replica) with `ops/verify.sh gvisor v1`, `07_run_grpo.sh 5` on `g5.2xlarge` and `08_cleanup.sh --images` were run (us-west-2). This cluster was created as the system-only layout (`02_create_cluster.sh --hyperpod-b2`), then updated with `CHANGE_SCENARIO=1` to B1 (adds the gVisor node group) and to A (adds the trainer).
-- Kata + QEMU GPU (`g4dn.metal`, T4) and `ops/bench.sh` on five pools were also run that day. Not run: `ops/rollout.sh` during training in scenario A, HyperPod B1 and B2. Verify these with the checks on each hands-on page.
+- The author did not run `scripts/01_check_prereqs.sh` in section 5. Of the later steps, the gVisor path of scenario A (`02` to `08`), scenario C, Kata GPU (`g4dn.metal`) and the runtime benchmark ran in a practice account; `ops/rollout.sh` during training in scenario A and HyperPod B1 and B2 were not run. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record). Verify the steps that were not run with the checks on each hands-on page.
 - The dry run shows no training effect; real training runs on a GPU in [05 On-policy GRPO training](handson/05_grpo_training.md).
 
 ## Time and cost
