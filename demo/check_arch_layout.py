@@ -2,7 +2,7 @@
 
 For every pattern, in Korean and in English, and in every step of every flow (bold active labels,
 the flashing blocked text and the status badges as drawn): each arrow starts and ends on the edge
-of an icon (never under a node name or on a box border), runs only horizontally and vertically, and
+of the box drawn around an icon (never inside it, under a node name or on a group border), runs only horizontally and vertically, and
 neither it nor its arrowhead crosses a text, an icon or another line; no label, name or badge
 overlaps another text, an icon or a box border; every id a flow refers to exists; everything stays
 inside the picture.
@@ -39,7 +39,8 @@ CHECK = r"""
   const box = (x1, y1, x2, y2, name) => ({ x1: Math.min(x1, x2), y1: Math.min(y1, y2), x2: Math.max(x1, x2), y2: Math.max(y1, y2), name });
   const grow = (b, d) => ({ ...b, x1: b.x1 - d, y1: b.y1 - d, x2: b.x2 + d, y2: b.y2 + d });
   const hit = (a, b) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
-  const nodeBox = (n) => n.icon === 'doc' ? box(n.x - 60, n.y - 40, n.x + 60, n.y + 40, 'doc:' + n.id) : box(n.x - 36, n.y - 36, n.x + 36, n.y + 36, 'icon:' + n.id);
+  // A node is the box drawn around its icon when it lights up (B in arch.js), or the routing document.
+  const nodeBox = (n) => n.icon === 'doc' ? box(n.x - 60, n.y - 40, n.x + 60, n.y + 40, 'doc:' + n.id) : box(n.x - B, n.y - B, n.x + B, n.y + B, 'box:' + n.id);
   const nodes = Object.fromEntries(p.nodes.map((n) => [n.id, n]));
   const edges = Object.fromEntries(p.edges.map((e) => [e.id, e]));
   let state = 'drawing';
@@ -197,8 +198,8 @@ CHECK = r"""
         if (hit(grow(a, 5), grow(b, 1))) err(`text ${a.name} touches border ${b.name}`);
       }
       for (const ob of obstacles) {
-        if (ob.id === a.owner) continue;                                 // a node's name under its own icon
-        if (hit(grow(a, 4), ob)) err(`text ${a.name} overlaps ${ob.name}`);
+        if (a.cls.startsWith('ap-doc') && ob.id === a.owner) continue;  // the routing document's own text
+        if (hit(grow(a, ob.id === a.owner ? 2 : 4), ob)) err(`text ${a.name} overlaps ${ob.name}`);
       }
     }
     const badge = document.querySelector('#ap-badge rect');
@@ -209,6 +210,7 @@ CHECK = r"""
       for (const h of heads) if (hit(grow(h, 2), bb)) err(`${bb.name} covers ${h.name}`);
       for (const tx of texts) if (!(tx.owner === node && tx.cls === 'ap-sub') && hit(grow(bb, 2), tx)) err(`${bb.name} overlaps ${tx.name}`);
       for (const b of borders) if (hit(grow(bb, 4), b)) err(`${bb.name} touches ${b.name}`);
+      for (const ob of obstacles) if (hit(grow(bb, 2), ob)) err(`${bb.name} overlaps ${ob.name}`);
       if (r.width > 0 && document.querySelector('#ap-badge text').getComputedTextLength() > r.width - 12) err(`${bb.name}: text wider than its pill`);
     }
   };

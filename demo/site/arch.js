@@ -16,27 +16,27 @@ const UI = {
   ko: {
     back: "← 데모로 돌아가기", navPatterns: "패턴별 아키텍처",
     eyebrow: "패턴별 아키텍처",
-    title: "학습기와 샌드박스를 어디에 둘까",
-    lede: "네 가지 패턴 모두 같은 CDK 스택(private EKS API, SSM 터널, KMS 암호화, CloudWatch 로그)을 씁니다. 달라지는 것은 학습기와 샌드박스가 올라가는 위치예요. 패턴을 고르고 흐름을 재생해 보세요. 그림에는 흐름에 필요한 구성 요소만 그렸습니다.",
+    title: "trainer와 샌드박스를 두는 네 가지 방법",
+    lede: "네 패턴 모두 같은 CDK 스택을 쓰고, trainer와 샌드박스가 올라가는 위치만 다릅니다.",
     flows: "흐름", prev: "◀ 이전", next: "다음 ▶", play: "▶ 재생", pause: "❚❚ 일시정지", replay: "↻ 처음부터",
-    train: "학습기 위치", sandbox: "샌드박스 위치", when: "이럴 때 씁니다", status: "AWS 실행",
+    train: "trainer 위치", sandbox: "샌드박스 위치", when: "이럴 때 씁니다", status: "AWS 실행",
     legendReq: "채점 요청", legendRes: "채점 결과", legendCtl: "배포, 설정, 이미지",
     legendSolid: "실선: 바로 호출", legendDashed: "점선: 배포나 설정", legendBlocked: "빨간 ✕: 막힌 연결",
     step: "단계",
-    footer: "AWS 아이콘은 AWS Architecture Icons를 사용했습니다. 그림은 이해를 돕기 위한 단순화로, 노드 수와 세부 리소스는 문서를 보세요.",
+    footer: "아이콘은 AWS Architecture Icons를 썼습니다. 노드 수와 세부 리소스는 가이드북을 보세요.",
     guide: "가이드북", repo: "GitHub 저장소",
   },
   en: {
     back: "← Back to the demo", navPatterns: "Architecture patterns",
     eyebrow: "Architecture patterns",
-    title: "Where to put the trainer and the sandboxes",
-    lede: "All four patterns use the same CDK stack (private EKS API, SSM tunnel, KMS encryption, CloudWatch logs). What changes is where the trainer and the sandboxes run. Pick a pattern and play a flow. The diagrams show only what each flow needs.",
+    title: "Four ways to place the trainer and the sandboxes",
+    lede: "All four patterns use the same CDK stack; only where the trainer and the sandboxes run differs.",
     flows: "Flow", prev: "◀ Back", next: "Next ▶", play: "▶ Play", pause: "❚❚ Pause", replay: "↻ From the start",
     train: "Trainer runs on", sandbox: "Sandboxes run on", when: "Use it when", status: "On AWS",
     legendReq: "scoring request", legendRes: "scoring result", legendCtl: "deploy, config, images",
     legendSolid: "solid: direct call", legendDashed: "dashed: deploy or config", legendBlocked: "red ✕: blocked connection",
     step: "Step",
-    footer: "AWS icons are from the AWS Architecture Icons. The diagrams are simplified; see the guide for node counts and every resource.",
+    footer: "Icons are from the AWS Architecture Icons. See the guidebook for node counts and every resource.",
     guide: "Guidebook", repo: "GitHub repository",
   },
 };
@@ -49,11 +49,13 @@ const E = (id, from, to, pts, opts = {}) => ({ id, from, to, pts, ...opts });
 
 // ---------- layout (viewBox units) ----------
 // Rows and columns are shared by the four patterns, so the common part stays put when the pattern
-// changes. Arrows end on the top, left or right edge of an icon, never under its name, and every
-// label sits where no line or box border runs. Node names take the space below each icon down to
-// y + 92, which is also where a step's status badge appears.
+// changes. Arrows end on the top, left or right edge of the box around an icon (the one that lights
+// up), never under its name, and every label sits where no line or box border runs. Node names
+// take the space below that box down to y + 104, which is also where a step's status badge appears.
 const W = 1540;
 const R = ICON / 2;
+const PAD = 8;                                      // the highlight box reaches PAD beyond the icon
+const B = R + PAD;                                  // lines start and end on that box, never inside it
 const YT = 170, YM = 400, YB = 640;                 // top, main and bottom rows
 const X_OP = 70, X_SSM = 271, X_ACC = 430, X_ECR = 370, X_EKS = 667, X_TR = 927, X_SB = 1197, X_SB2 = 1387;
 const X_HF = 1459;
@@ -75,41 +77,41 @@ const EGRESS_NODES = [
   N("nat", "nat", X_SB, YB, L("NAT 게이트웨이", "NAT gateway"), L("유일한 출구", "the only way out")),
   N("hf", "internet", X_HF, YB, L("Hugging Face", "Hugging Face"), L("모델 저장소", "model hub")),
 ];
-const PULL_TO_V1 = [[X_ECR + 26, YT - R], [X_ECR + 26, BUS], [X_PULL, BUS], [X_PULL, YM - 20], [X_SB + R, YM - 20]];
+const PULL_TO_V1 = [[X_ECR + 26, YT - B], [X_ECR + 26, BUS], [X_PULL, BUS], [X_PULL, YM - 20], [X_SB + B, YM - 20]];
 const COMMON_EDGES = (pull = { to: "v1", pts: PULL_TO_V1 }) => [
-  E("e_tunnel", "operator", "ssm", [[X_OP + R, YM], [X_SSM - R, YM]], { label: L("터널", "tunnel"), lx: 147, ly: YM - 12 }),
-  E("e_fwd", "ssm", "access", [[X_SSM + R, YM], [X_ACC - R, YM]], { label: L("포트 전달", "forward"), lx: 344, ly: YM - 12 }),
-  E("e_api", "access", "eks", [[X_ACC + R, YM], [X_EKS - R, YM]], { label: L("HTTPS\n443", "HTTPS\n443"), lx: 555, ly: YM - 12 }),
-  E("e_push", "operator", "ecr", [[X_OP, YM - R], [X_OP, YT], [X_ECR - R, YT]],
+  E("e_tunnel", "operator", "ssm", [[X_OP + B, YM], [X_SSM - B, YM]], { label: L("터널", "tunnel"), lx: 147, ly: YM - 12 }),
+  E("e_fwd", "ssm", "access", [[X_SSM + B, YM], [X_ACC - B, YM]], { label: L("포트 전달", "forward"), lx: 351, ly: YM - 16 }),
+  E("e_api", "access", "eks", [[X_ACC + B, YM], [X_EKS - B, YM]], { label: L("HTTPS\n443", "HTTPS\n443"), lx: 555, ly: YM - 12 }),
+  E("e_push", "operator", "ecr", [[X_OP, YM - B], [X_OP, YT], [X_ECR - B, YT]],
     { dashed: true, label: L("이미지 올리기", "image push"), lx: 231, ly: YT - 12 }),
-  E("e_job", "eks", "trainer", [[X_EKS + R, YM], [X_TR - R, YM]], { dashed: true, label: L("Job 배포", "deploy\nJob"), lx: C1, ly: YM - 12 }),
-  E("e_cfg", "eks", "routing", [[X_EKS, YM - R], [X_EKS, YT + 40]], { dashed: true }),
-  E("e_route", "routing", "trainer", [[X_EKS + 60, YT + 20], [X_TR - 18, YT + 20], [X_TR - 18, YM - R]],
+  E("e_job", "eks", "trainer", [[X_EKS + B, YM], [X_TR - B, YM]], { dashed: true, label: L("Job 배포", "deploy\nJob"), lx: C1, ly: YM - 12 }),
+  E("e_cfg", "eks", "routing", [[X_EKS, YM - B], [X_EKS, YT + 40]], { dashed: true }),
+  E("e_route", "routing", "trainer", [[X_EKS + 60, YT + 20], [X_TR - 18, YT + 20], [X_TR - 18, YM - B]],
     { dashed: true, label: L("현재 버전", "active\nversion"), lx: C1, ly: YT + 8 }),
   E("e_pull", "ecr", pull.to, pull.pts, { dashed: true, label: L("이미지 받기", "image pull"), lx: 850, ly: BUS - 12 }),
-  E("e_req1", "trainer", "v1", [[X_TR + R, YM], [X_SB - R, YM]], { label: L("채점 요청", "score"), lx: C2, ly: YM - 12 }),
-  E("e_req2", "trainer", "v2", [[X_TR + 18, YM - R], [X_TR + 18, YT], [X_SB - R, YT]], { dashed: true, needs: ["v2"] }),
+  E("e_req1", "trainer", "v1", [[X_TR + B, YM], [X_SB - B, YM]], { label: L("채점 요청", "score"), lx: C2, ly: YM - 12 }),
+  E("e_req2", "trainer", "v2", [[X_TR + 18, YM - B], [X_TR + 18, YT], [X_SB - B, YT]], { dashed: true, needs: ["v2"] }),
 ];
 const EGRESS_EDGES = [
-  E("e_model", "trainer", "nat", [[X_TR + R, YM + 16], [C2, YM + 16], [C2, YB], [X_SB - R, YB]],
+  E("e_model", "trainer", "nat", [[X_TR + B, YM + 16], [C2, YM + 16], [C2, YB], [X_SB - B, YB]],
     { label: L("모델 받기", "model pull"), lx: C2 - 8, ly: 560, anchor: "end" }),
-  E("e_hf", "nat", "hf", [[X_SB + R, YB], [X_HF - R, YB]], { label: L("HTTPS", "HTTPS"), lx: 1326, ly: YB - 12 }),
+  E("e_hf", "nat", "hf", [[X_SB + B, YB], [X_HF - B, YB]], { label: L("HTTPS", "HTTPS"), lx: 1326, ly: YB - 12 }),
 ];
 // HyperPod patterns: lifecycle scripts uploaded to S3 and read when a node boots.
 const S3_NODE = N("s3", "s3", C1, YB, L("S3 시작 스크립트", "S3 lifecycle scripts"), L("비공개 버킷", "private bucket"));
 const S3_EDGES = [
-  E("e_s3up", "operator", "s3", [[X_OP + R, YM + 18], [136, YM + 18], [136, YB], [C1 - R, YB]],
+  E("e_s3up", "operator", "s3", [[X_OP + B, YM + 18], [136, YM + 18], [136, YB], [C1 - B, YB]],
     { dashed: true, label: L("스크립트 올리기", "upload scripts"), lx: 460, ly: YB - 12 }),
-  E("e_boot", "s3", "trainer", [[C1, YB - R], [C1, YM + 20], [X_TR - R, YM + 20]],
+  E("e_boot", "s3", "trainer", [[C1, YB - B], [C1, YM + 20], [X_TR - B, YM + 20]],
     { dashed: true, label: L("부팅 스크립트", "boot scripts"), lx: C1 + 8, ly: 560, anchor: "start" }),
 ];
-const G_SHARED = { x: 290, y: 66, w: 160, h: 204, title: L("공용 서비스", "Shared") };
-const G_ACCESS = { x: 196, y: 296, w: 326, h: 204, title: L("운영자 접속", "Operator access") };
-const G_EKS = { x: 587, y: 66, w: 160, h: 434, title: L("EKS 클러스터", "EKS cluster") };
-const G_EGRESS = { x: 1101, y: 536, w: 180, h: 204, title: L("외부 출구", "Egress") };
-const trainerGroup = (title, sub) => ({ x: 827, y: 66, w: 200, h: 434, title, sub });
-const sandboxGroup = (title, sub) => ({ x: 1101, y: 66, w: 180, h: 434, title, sub });
-const BLOCKED_RIGHT = { line: [[X_SB + R, YM + 20], [1321, YM + 20]], x: 1321, y: YM + 52, top: true,
+const G_SHARED = { x: 290, y: 66, w: 160, h: 216, title: L("공용 서비스", "Shared") };
+const G_ACCESS = { x: 196, y: 296, w: 326, h: 216, title: L("운영자 접속", "Operator access") };
+const G_EKS = { x: 587, y: 66, w: 160, h: 446, title: L("EKS 클러스터", "EKS cluster") };
+const G_EGRESS = { x: 1101, y: 536, w: 180, h: 216, title: L("외부 출구", "Egress") };
+const trainerGroup = (title, sub) => ({ x: 827, y: 66, w: 200, h: 446, title, sub });
+const sandboxGroup = (title, sub) => ({ x: 1101, y: 66, w: 180, h: 446, title, sub });
+const BLOCKED_RIGHT = { line: [[X_SB + B, YM + 20], [1321, YM + 20]], x: 1321, y: YM + 52, top: true,
   text: L("외부 연결\n차단", "egress\nblocked") };
 
 // ---------- flows (texts are per pattern; the motion is shared) ----------
@@ -130,7 +132,7 @@ function scoringFlow(pool, poolEn) {
       S("샌드박스 안에서 코드를 실행하고 정답과 비교합니다. 밖으로 나가는 연결은 모두 막혀 있습니다.",
         "The sandbox runs the code and compares it with the reference. Every outbound connection is blocked.",
         { light: ["v1"], blocked: true, badge: { node: "v1", text: L("채점 중", "scoring") } }),
-      S("채점 결과(정답 여부, 속도)가 학습기로 돌아옵니다.", "The result (correct or not, how fast) comes back to the trainer.",
+      S("채점 결과(정답 여부, 속도)가 trainer로 돌아옵니다.", "The result (correct or not, how fast) comes back to the trainer.",
         { light: ["v1", "trainer"], moves: [{ e: "e_req1", c: "res", n: 3, back: true }] }),
       S("결과를 점수로 바꿔 모델을 업데이트하고, 다음 step으로 넘어갑니다.", "The results become rewards, the model is updated, and the next step starts.",
         { light: ["trainer"], badge: { node: "trainer", text: L("모델 업데이트", "model update") } }),
@@ -150,7 +152,7 @@ function switchFlow(pool, poolEn) {
         { light: ["v1", "v2"], badge: { node: "v2", text: L("결과 비교", "comparing") } }),
       S("결과가 같으면 라우팅 표를 v2로 바꿉니다.", "If they match, the routing table is switched to v2.",
         { light: ["eks", "routing"], routing: "v2", moves: [{ e: "e_cfg", c: "ctl" }] }),
-      S("학습기는 지금 배치를 v1에서 마치고, 다음 배치부터 v2로 보냅니다. 한 배치가 두 버전으로 섞이지 않습니다.",
+      S("trainer는 지금 배치를 v1에서 마치고, 다음 배치부터 v2로 보냅니다. 한 배치가 두 버전으로 섞이지 않습니다.",
         "The trainer finishes the current batch on v1 and sends the next batch to v2. No batch is split across versions.",
         { light: ["trainer", "v2"], moves: [{ e: "e_req2", c: "req", n: 3 }] }),
       S("v1은 0개로 줄여 두었다가, 문제가 생기면 되돌릴 때 씁니다.", "v1 is scaled to zero and kept for a rollback.",
@@ -163,16 +165,16 @@ function switchFlow(pool, poolEn) {
 const PATTERNS = [
   {
     id: "a", key: "A", name: L("EC2 GPU", "EC2 GPU"),
-    oneLine: L("학습기와 샌드박스를 모두 EKS의 EC2 GPU 노드에 둡니다.", "The trainer and the sandboxes both run on EC2 GPU nodes in EKS."),
+    oneLine: L("trainer와 샌드박스를 모두 EKS의 EC2 GPU 노드에 둡니다.", "The trainer and the sandboxes both run on EC2 GPU nodes in EKS."),
     facts: {
       train: L("EC2 g5.2xlarge (A10G 1장)", "EC2 g5.2xlarge (one A10G)"),
       sandbox: L("gVisor 풀, EC2 g5.xlarge 2대", "gVisor pool, two EC2 g5.xlarge"),
       when: L("모든 구성 요소를 직접 관리하고 싶을 때", "You want to manage every part yourself"),
       status: L("2026-11-18 실행 (GRPO 5 step까지)", "Run on 2026-11-18 (up to 5 GRPO steps)"),
     },
-    cloud: { x: 180, w: 1191 }, height: 770,
+    cloud: { x: 180, w: 1191 }, height: 780,
     nodes: [...COMMON_NODES, ...EGRESS_NODES,
-      N("trainer", "container", X_TR, YM, L("GRPO 학습기", "GRPO trainer"), L("Qwen2.5-Coder 1.5B", "Qwen2.5-Coder 1.5B")),
+      N("trainer", "container", X_TR, YM, L("GRPO trainer", "GRPO trainer"), L("Qwen2.5-Coder 1.5B", "Qwen2.5-Coder 1.5B")),
       N("v1", "container", X_SB, YM, L("gVisor 풀 v1", "gVisor pool v1"), L("runsc + nvproxy", "runsc + nvproxy")),
       N("v2", "container", X_SB, YT, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version"))],
     edges: [...COMMON_EDGES(), ...EGRESS_EDGES],
@@ -188,14 +190,14 @@ const PATTERNS = [
           S("운영자가 SSM 터널로 private EKS API에 접속합니다. 인터넷에 열린 접속 경로는 없습니다.",
             "The operator reaches the private EKS API through an SSM tunnel. Nothing is open to the internet.",
             { light: ["operator", "ssm", "access", "eks"], moves: TUNNEL }),
-          S("학습기와 샌드박스 이미지를 만들어 ECR에 올립니다.", "The trainer and sandbox images are built and pushed to ECR.",
+          S("trainer와 샌드박스 이미지를 만들어 ECR에 올립니다.", "The trainer and sandbox images are built and pushed to ECR.",
             { light: ["operator", "ecr"], moves: [{ e: "e_push", c: "ctl" }] }),
           S("샌드박스 노드가 ECR에서 이미지를 받아 gVisor 풀을 띄웁니다.", "The sandbox nodes pull the image from ECR and start the gVisor pool.",
             { light: ["ecr", "v1"], moves: [{ e: "e_pull", c: "ctl" }] }),
-          S("학습 Job을 배포하면 EKS가 학습 노드에 학습기를 띄우고 라우팅 표를 연결합니다.",
+          S("학습 Job을 배포하면 EKS가 학습 노드에 trainer를 띄우고 라우팅 표를 연결합니다.",
             "Deploying the training Job makes EKS start the trainer on its node and mount the routing table.",
             { light: ["eks", "trainer", "routing"], moves: [{ e: "e_job", c: "ctl" }, { e: "e_route", c: "ctl" }] }),
-          S("학습기가 NAT를 거쳐 Hugging Face에서 모델을 받습니다.", "The trainer downloads the model from Hugging Face through the NAT gateway.",
+          S("trainer가 NAT를 거쳐 Hugging Face에서 모델을 받습니다.", "The trainer downloads the model from Hugging Face through the NAT gateway.",
             { light: ["trainer", "nat", "hf"], moves: [{ e: "e_model", c: "ctl" }, { e: "e_hf", c: "ctl" }] }),
         ],
       },
@@ -205,7 +207,7 @@ const PATTERNS = [
   },
   {
     id: "b1", key: "B1", name: L("HyperPod 학습", "HyperPod training"),
-    oneLine: L("학습기만 SageMaker HyperPod로 옮기고, 샌드박스는 A와 같은 EC2 노드에 둡니다.",
+    oneLine: L("trainer만 SageMaker HyperPod로 옮기고, 샌드박스는 A와 같은 EC2 노드에 둡니다.",
       "Only the trainer moves to SageMaker HyperPod; the sandboxes stay on the same EC2 nodes as in A."),
     facts: {
       train: L("HyperPod ml.g5.2xlarge", "HyperPod ml.g5.2xlarge"),
@@ -213,9 +215,9 @@ const PATTERNS = [
       when: L("긴 학습에서 노드 자동 교체와 Job 재시작이 필요할 때", "Long training runs need automatic node replacement and Job restarts"),
       status: L("AWS에서 아직 실행하지 않음", "Not run on AWS yet"),
     },
-    cloud: { x: 180, w: 1191 }, height: 770,
+    cloud: { x: 180, w: 1191 }, height: 780,
     nodes: [...COMMON_NODES, ...EGRESS_NODES, S3_NODE,
-      N("trainer", "sagemaker", X_TR, YM, L("HyperPod 학습기", "HyperPod trainer"), L("HyperPodPyTorchJob", "HyperPodPyTorchJob")),
+      N("trainer", "sagemaker", X_TR, YM, L("HyperPod trainer", "HyperPod trainer"), L("HyperPodPyTorchJob", "HyperPodPyTorchJob")),
       N("v1", "container", X_SB, YM, L("gVisor 풀 v1", "gVisor pool v1"), L("runsc + nvproxy", "runsc + nvproxy")),
       N("v2", "container", X_SB, YT, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version"))],
     edges: [...COMMON_EDGES(), ...EGRESS_EDGES, ...S3_EDGES],
@@ -238,10 +240,10 @@ const PATTERNS = [
             { light: ["s3", "trainer"], moves: [{ e: "e_boot", c: "ctl" }] }),
           S("샌드박스 노드(EC2)가 ECR에서 이미지를 받아 gVisor 풀을 띄웁니다.", "The sandbox nodes (EC2) pull the image from ECR and start the gVisor pool.",
             { light: ["ecr", "v1"], moves: [{ e: "e_pull", c: "ctl" }] }),
-          S("학습 Job(HyperPodPyTorchJob)을 배포하면 HyperPod 노드에 학습기가 뜨고 라우팅 표가 연결됩니다.",
+          S("학습 Job(HyperPodPyTorchJob)을 배포하면 HyperPod 노드에 trainer가 뜨고 라우팅 표가 연결됩니다.",
             "Deploying the HyperPodPyTorchJob starts the trainer on the HyperPod node with the routing table mounted.",
             { light: ["eks", "trainer", "routing"], moves: [{ e: "e_job", c: "ctl" }, { e: "e_route", c: "ctl" }] }),
-          S("학습기가 NAT를 거쳐 Hugging Face에서 모델을 받습니다.", "The trainer downloads the model from Hugging Face through the NAT gateway.",
+          S("trainer가 NAT를 거쳐 Hugging Face에서 모델을 받습니다.", "The trainer downloads the model from Hugging Face through the NAT gateway.",
             { light: ["trainer", "nat", "hf"], moves: [{ e: "e_model", c: "ctl" }, { e: "e_hf", c: "ctl" }] }),
         ],
       },
@@ -251,33 +253,32 @@ const PATTERNS = [
   },
   {
     id: "b2", key: "B2", name: L("HyperPod 학습과 샌드박스", "HyperPod for both"),
-    oneLine: L("학습기와 샌드박스를 모두 HyperPod에 둡니다. 샌드박스 노드는 드라이버를 바꾼 custom AMI로 부팅합니다.",
+    oneLine: L("trainer와 샌드박스를 모두 HyperPod에 둡니다. 샌드박스 노드는 드라이버를 바꾼 custom AMI로 부팅합니다.",
       "The trainer and the sandboxes both run on HyperPod; the sandbox nodes boot from a custom AMI with a different driver."),
     facts: {
       train: L("HyperPod ml.g5.2xlarge", "HyperPod ml.g5.2xlarge"),
       sandbox: L("gVisor 풀, HyperPod ml.g5.xlarge 2대", "gVisor pool, two HyperPod ml.g5.xlarge"),
       when: L("샌드박스 노드에도 HyperPod의 노드 복구가 필요할 때", "The sandbox nodes also need HyperPod node recovery"),
-      status: L("실험 경로, AWS에서 아직 실행하지 않음. 모델 다운로드(NAT)는 A와 같아서 그림에서 뺐습니다.",
-        "Experimental, not run on AWS yet. The model download (NAT) is the same as in A and left out."),
+      status: L("실험 경로, AWS에서 아직 실행하지 않음", "Experimental, not run on AWS yet"),
     },
-    cloud: { x: 180, w: 1320 }, height: 790,
+    cloud: { x: 180, w: 1320 }, height: 800,
     nodes: [...COMMON_NODES, S3_NODE,
-      N("trainer", "sagemaker", X_TR, YM, L("HyperPod 학습기", "HyperPod trainer"), L("HyperPodPyTorchJob", "HyperPodPyTorchJob")),
+      N("trainer", "sagemaker", X_TR, YM, L("HyperPod trainer", "HyperPod trainer"), L("HyperPodPyTorchJob", "HyperPodPyTorchJob")),
       N("v1", "container", X_SB, YM, L("gVisor 풀 v1", "gVisor pool v1"), L("HyperPod 노드", "HyperPod node")),
       N("v2", "container", X_SB, YT, L("gVisor 풀 v2", "gVisor pool v2"), L("다음 버전", "next version")),
       N("amib", "ec2", X_SB, YB, L("AMI 빌더", "AMI builder"), L("m6i.large", "m6i.large")),
       N("ami", "ami", X_SB2, YB, L("custom AMI", "Custom AMI"), L("드라이버 580.178.04", "driver 580.178.04"))],
     edges: [...COMMON_EDGES(), ...S3_EDGES,
-      E("e_boot2", "s3", "v1", [[C1 + R, YB - 18], [C2, YB - 18], [C2, YM + 20], [X_SB - R, YM + 20]], { dashed: true }),
-      E("e_amib", "operator", "amib", [[X_OP - R, YM], [12, YM], [12, 760], [1110, 760], [1110, YB + 18], [X_SB - R, YB + 18]],
-        { label: L("AMI 굽기 시작", "start the bake"), lx: 450, ly: 748 }),
-      E("e_drv", "amib", "ami", [[X_SB + R, YB], [X_SB2 - R, YB]], { label: L("드라이버 교체", "swap driver"), lx: 1286, ly: YB - 12 }),
-      E("e_amiboot", "ami", "v1", [[X_SB2, YB - R], [X_SB2, YM], [X_SB + R, YM]],
+      E("e_boot2", "s3", "v1", [[C1 + B, YB - 18], [C2, YB - 18], [C2, YM + 20], [X_SB - B, YM + 20]], { dashed: true }),
+      E("e_amib", "operator", "amib", [[X_OP - B, YM], [12, YM], [12, 772], [1110, 772], [1110, YB + 18], [X_SB - B, YB + 18]],
+        { label: L("AMI 굽기 시작", "start the bake"), lx: 450, ly: 760 }),
+      E("e_drv", "amib", "ami", [[X_SB + B, YB], [X_SB2 - B, YB]], { label: L("드라이버 교체", "swap driver"), lx: 1292, ly: YB - 16 }),
+      E("e_amiboot", "ami", "v1", [[X_SB2, YB - B], [X_SB2, YM], [X_SB + B, YM]],
         { dashed: true, label: L("이 AMI로 부팅", "boot from it"), lx: X_SB2 + 8, ly: 476, anchor: "start" })],
     groups: [G_SHARED, G_ACCESS, { ...G_EKS, sub: L("system 노드만", "system nodes only") },
       trainerGroup(L("HyperPod 학습", "HyperPod trainer"), L("ml.g5.2xlarge", "ml.g5.2xlarge")),
       sandboxGroup(L("HyperPod 샌드박스", "HyperPod sandbox"), L("ml.g5.xlarge x2", "ml.g5.xlarge x2")),
-      { x: 1124, y: 536, w: 338, h: 204, title: L("AMI 굽기 (한 번)", "AMI bake (once)") }],
+      { x: 1124, y: 536, w: 338, h: 216, title: L("AMI 굽기 (한 번)", "AMI bake (once)") }],
     blocked: BLOCKED_RIGHT,
     flows: [
       {
@@ -294,7 +295,7 @@ const PATTERNS = [
           S("S3의 시작 스크립트가 학습 노드를 준비하고, 샌드박스 노드에서는 드라이버와 runsc 설정을 확인합니다.",
             "The lifecycle scripts in S3 prepare the trainer node, and on the sandbox nodes they check the driver and the runsc setup.",
             { light: ["operator", "s3", "trainer", "v1"], moves: [{ e: "e_s3up", c: "ctl" }, { e: "e_boot", c: "ctl" }, { e: "e_boot2", c: "ctl" }] }),
-          S("이미지를 받고 학습 Job을 배포하면 HyperPod 노드에 학습기가 뜹니다.", "The images are pulled, and deploying the training Job starts the trainer on HyperPod.",
+          S("이미지를 받고 학습 Job을 배포하면 HyperPod 노드에 trainer가 뜹니다.", "The images are pulled, and deploying the training Job starts the trainer on HyperPod.",
             { light: ["ecr", "v1", "eks", "trainer"], moves: [{ e: "e_push", c: "ctl" }, { e: "e_pull", c: "ctl" }, { e: "e_job", c: "ctl" }] }),
         ],
       },
@@ -320,15 +321,15 @@ const PATTERNS = [
       N("v2", "container", X_SB, YT, L("kata-clh-cpu v2", "kata-clh-cpu v2"), L("다음 버전", "next version")),
       N("gv", "container", X_SB2, YT, L("gvisor-cpu", "gvisor-cpu"), L("gVisor", "gVisor")),
       N("kq", "container", X_SB2, YM, L("kata-qemu-cpu", "kata-qemu-cpu"), L("Kata + QEMU", "Kata + QEMU"))],
-    edges: [...COMMON_EDGES({ to: "gv", pts: [[X_ECR + 26, YT - R], [X_ECR + 26, BUS], [X_SB2, BUS], [X_SB2, YT - R]] }),
+    edges: [...COMMON_EDGES({ to: "gv", pts: [[X_ECR + 26, YT - B], [X_ECR + 26, BUS], [X_SB2, BUS], [X_SB2, YT - B]] }),
       // verify.sh and bench.sh: one line that splits between the two sandbox columns.
-      E("e_probe_kq", "trainer", "kq", [[X_TR + R, YM + 16], [C2, YM + 16], [C2, 530], [X_FORK, 530], [X_FORK, YM + 16], [X_SB2 - R, YM + 16]],
+      E("e_probe_kq", "trainer", "kq", [[X_TR + B, YM + 16], [C2, YM + 16], [C2, 530], [X_FORK, 530], [X_FORK, YM + 16], [X_SB2 - B, YM + 16]],
         { dashed: true, label: L("검증, 성능 측정", "verify, benchmark"), lx: 1180, ly: 552, top: true }),
-      E("e_probe_gv", "trainer", "gv", [[X_TR + R, YM + 16], [C2, YM + 16], [C2, 530], [X_FORK, 530], [X_FORK, YT + 16], [X_SB2 - R, YT + 16]],
+      E("e_probe_gv", "trainer", "gv", [[X_TR + B, YM + 16], [C2, YM + 16], [C2, 530], [X_FORK, 530], [X_FORK, YT + 16], [X_SB2 - B, YT + 16]],
         { dashed: true, fork: "e_probe_kq" })],
     groups: [G_SHARED, G_ACCESS, G_EKS,
       trainerGroup(L("system 노드", "System node"), L("m6i.large", "m6i.large")),
-      { x: 1101, y: 66, w: 376, h: 434, title: L("c8i.2xlarge 노드", "c8i.2xlarge node"), sub: L("CPU 샌드박스 4개, nested virt", "four CPU sandboxes, nested virt") }],
+      { x: 1101, y: 66, w: 376, h: 446, title: L("c8i.2xlarge 노드", "c8i.2xlarge node"), sub: L("CPU 샌드박스 4개, nested virt", "four CPU sandboxes, nested virt") }],
     blocked: { x: 1260, y: 600, text: L("✕ 샌드박스에서 밖으로 나가는 연결은 모두 차단", "✕ every outbound connection from a sandbox is blocked") },
     flows: [
       {
@@ -336,8 +337,7 @@ const PATTERNS = [
         steps: [
           S("운영자가 SSM 터널로 private EKS API에 접속합니다.", "The operator reaches the private EKS API through an SSM tunnel.",
             { light: ["operator", "ssm", "access", "eks"], moves: TUNNEL }),
-          S("샌드박스 이미지와 도구 이미지 두 개만 ECR에 올립니다. 학습기 이미지는 필요 없습니다.",
-            "Only the sandbox and tool images go to ECR. No trainer image is needed.",
+          S("샌드박스 이미지와 도구 이미지만 ECR에 올립니다.", "Only the sandbox and tool images go to ECR.",
             { light: ["operator", "ecr"], moves: [{ e: "e_push", c: "ctl" }] }),
           S("c8i 노드가 이미지를 받아 CPU 샌드박스를 띄웁니다. Kata는 VM 안에서 다시 VM을 띄웁니다.",
             "The c8i node pulls the image and starts the CPU sandboxes. Kata starts a VM inside the VM.",
@@ -516,10 +516,10 @@ function renderDiagram() {
       g.append(sv("text", { class: "ap-doc-title", x: n.x, y: n.y - 12, "text-anchor": "middle" }, tr(n.label)));
       g.append(sv("text", { class: "ap-doc-version", id: "ap-routing-version", x: n.x, y: n.y + 26, "text-anchor": "middle" }, "v1"));
     } else {
-      layers.halos.append(sv("rect", { class: "ap-halo", "data-id": n.id, x: n.x - R - 8, y: n.y - R - 8, width: ICON + 16, height: ICON + 16, rx: 12 }));
+      layers.halos.append(sv("rect", { class: "ap-halo", "data-id": n.id, x: n.x - B, y: n.y - B, width: 2 * B, height: 2 * B, rx: 12 }));
       g.append(sv("image", { href: `icons/${n.icon}.svg`, x: n.x - R, y: n.y - R, width: ICON, height: ICON }));
-      g.append(sv("text", { class: "ap-label", x: n.x, y: n.y + R + 26, "text-anchor": "middle" }, tr(n.label)));
-      if (n.sub) g.append(sv("text", { class: "ap-sub", x: n.x, y: n.y + R + 46, "text-anchor": "middle" }, tr(n.sub)));
+      g.append(sv("text", { class: "ap-label", x: n.x, y: n.y + B + 26, "text-anchor": "middle" }, tr(n.label)));
+      if (n.sub) g.append(sv("text", { class: "ap-sub", x: n.x, y: n.y + B + 46, "text-anchor": "middle" }, tr(n.sub)));
     }
     layers.nodes.append(g);
   }
@@ -586,7 +586,7 @@ function drawBadge(badge) {
   const host = document.querySelector(`.ap-node[data-id="${badge.node}"]`);
   if (!n || !host) return;
   host.classList.add("badged");
-  const y = n.y + R + 35;
+  const y = n.y + B + 35;
   const text = sv("text", { x: n.x, y: y + 17, "text-anchor": "middle" }, tr(badge.text));
   const g = sv("g", { id: "ap-badge", class: "ap-badge" }, text);
   host.append(g);
