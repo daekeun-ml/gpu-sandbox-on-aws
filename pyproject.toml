@@ -1,6 +1,6 @@
 [project]
 name = "gpusandbox"
-version = "0.1.0"
+version = "0.1.1"
 description = "GPU reward sandboxes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU) for on-policy RL on Amazon EKS and SageMaker HyperPod"
 readme = "README.md"
 requires-python = ">=3.10"
