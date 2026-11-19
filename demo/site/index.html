@@ -17,7 +17,7 @@
         <a href="#defense" data-i18n="navDefense"></a>
         <a href="#train" data-i18n="navTrain"></a>
         <a href="#bench" data-i18n="navBench"></a>
-        <a id="nav-patterns" class="nav-strong" href="architecture.html" data-i18n="navPatterns"></a>
+        <a id="nav-patterns" class="nav-pill" href="architecture.html" data-i18n="navPatterns"></a>
       </div>
       <button id="lang" type="button" aria-label="language">EN</button>
     </div>
@@ -31,6 +31,7 @@
         <p class="lede" data-i18n="lede"></p>
         <div id="kpis" class="kpis"></div>
         <div class="cta">
+          <a id="hero-patterns" class="btn big patterns" href="architecture.html" data-i18n="ctaPatterns"></a>
           <a class="btn primary" href="#try" data-i18n="ctaTry"></a>
           <a class="btn ghost" href="#defense" data-i18n="ctaDefense"></a>
         </div>
@@ -44,6 +45,16 @@
   </header>
 
   <main class="wrap">
+    <a id="patterns-banner" class="patterns-banner" href="architecture.html">
+      <span class="pb-icons" aria-hidden="true">
+        <img src="icons/eks.svg" alt=""><img src="icons/sagemaker.svg" alt=""><img src="icons/container.svg" alt=""><img src="icons/ec2.svg" alt="">
+      </span>
+      <span class="pb-text">
+        <span class="pb-title" data-i18n="bannerTitle"></span>
+        <span class="pb-desc" data-i18n="bannerDesc"></span>
+      </span>
+      <span class="pb-go" data-i18n="bannerGo"></span>
+    </a>
     <section id="arch">
       <h2><span class="num">1</span><span data-i18n="sArch"></span></h2>
       <p class="hint" data-i18n="sArchHint"></p>
@@ -54,7 +65,7 @@
           </svg>
           <div class="arch-controls">
             <button id="flow-play" type="button" class="btn primary small" data-i18n="flowPlay"></button>
-            <a id="patterns-link" class="btn small" href="architecture.html" data-i18n="patternsLink"></a>
+            <a id="patterns-link" class="btn patterns" href="architecture.html" data-i18n="patternsLink"></a>
             <span id="flow-caption" class="flow-caption" aria-live="polite"></span>
           </div>
         </div>
