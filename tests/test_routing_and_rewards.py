@@ -51,6 +51,17 @@ def test_extract_code_prefers_block_with_model_new():
     assert extract_code("no code here") is None
 
 
+def test_extract_code_skips_blocks_in_other_languages():
+    text = (
+        "Run it with:\n```bash\npython run.py\n```\n"
+        "Output:\n```text\nok\n```\n"
+        "```python\nclass ModelNew(nn.Module):\n    pass\n```"
+    )
+    assert extract_code(text).startswith("class ModelNew")
+    assert extract_code("```bash\nls\n```") is None
+    assert extract_code("```py\nx = 1\n```") == "x = 1\n"
+
+
 def test_speedup_score_is_log_scaled_and_capped():
     assert math.isclose(speedup_score(1.0), 0.5)
     assert math.isclose(speedup_score(2.0), 1.0)
@@ -108,6 +119,85 @@ def test_kernel_rewards_grade_verdicts_and_skip_infra_errors(tmp_path):
     assert spd == [1.0, 0.0, 0.0, None]
     logged = [json.loads(l) for l in (tmp_path / "m.jsonl").read_text().splitlines()]
     assert logged[0]["event"] == "reward_batch" and logged[0]["n"] == 4
+
+
+class SwitchingClient(FakeClient):
+    """Like FakeClient, but the pool that answers can be switched between batches."""
+
+    def __init__(self, verdicts):
+        super().__init__(verdicts)
+        self.version = "v1"
+        self.sent = []
+
+    def evaluate_batch_sync(self, items, runtime=None):
+        self.calls += 1
+        markers = [item["code"].splitlines()[0].strip("# ").strip() for item in items]
+        self.sent.append(markers)
+        results = [{**self.verdicts[m], "sandbox_version": self.version} for m in markers]
+        return FakeSnapshot(self.version), results
+
+
+def _score(rewards, markers):
+    prompts = [[{"role": "user", "content": "p"}]] * len(markers)
+    completions = [_completion(m) for m in markers]
+    task_ids = ["relu_bias"] * len(markers)
+    return [
+        fn(prompts, completions, task_id=task_ids)
+        for fn in (rewards.format_reward, rewards.correctness_reward, rewards.speedup_reward)
+    ]
+
+
+def test_a_batch_after_a_version_switch_is_scored_by_the_new_pool_only(tmp_path):
+    ok = {"status": "ok", "custom_kernel": True, "speedup": 2.0}
+    client = SwitchingClient({"a": ok, "b": ok, "c": ok})
+    rewards = KernelRewards(client, metrics_file=tmp_path / "m.jsonl")
+    _score(rewards, ["a", "b"])
+    client.version = "v2"
+    _score(rewards, ["a", "c"])  # "a" was cached from v1
+
+    # "c" goes to v2 first, then the cached v1 verdict for "a" is scored again on v2; the
+    # second and third reward functions of each batch reuse the cache.
+    assert client.sent == [["a", "b"], ["c"], ["a"]]
+    logged = [json.loads(l) for l in (tmp_path / "m.jsonl").read_text().splitlines()]
+    last = [r for r in logged if r["event"] == "reward_batch"][-1]
+    assert last["version"] == "v2" and last["served_versions"] == {"v2": 2}
+
+
+def test_cached_verdicts_from_two_pools_are_scored_again_together():
+    ok = {"status": "ok", "custom_kernel": True, "speedup": 2.0}
+    client = SwitchingClient({"a": ok, "b": ok})
+    rewards = KernelRewards(client)
+    _score(rewards, ["a"])
+    client.version = "v2"
+    _score(rewards, ["b"])
+    _score(rewards, ["a", "b"])  # both cached, from v1 and v2
+    assert client.sent[-1] == ["a", "b"]
+    _score(rewards, ["a", "b"])  # now both from v2: no round trip
+    assert client.calls == 3
+
+
+class FlappingClient(SwitchingClient):
+    """Answers each call with the next pool in ``versions``: the pool switches mid-batch."""
+
+    def __init__(self, verdicts, versions):
+        super().__init__(verdicts)
+        self.versions = list(versions)
+
+    def evaluate_batch_sync(self, items, runtime=None):
+        self.version = self.versions.pop(0)
+        return super().evaluate_batch_sync(items, runtime)
+
+
+def test_a_batch_stays_on_one_pool_even_if_the_pool_switches_while_it_is_scored():
+    ok = {"status": "ok", "custom_kernel": True, "speedup": 2.0}
+    client = FlappingClient({"a": ok, "b": ok}, ["v1", "v2", "v3", "v4"])
+    rewards = KernelRewards(client)
+    _score(rewards, ["a"])  # "a" cached from v1
+    # The new answer "b" is scored by v2, the re-score of "a" by v3; the last try sends both.
+    _score(rewards, ["a", "b"])
+    assert client.sent == [["a"], ["b"], ["a"], ["a", "b"]]
+    pools = {rewards._cache[k][0] for k in rewards._cache}
+    assert pools == {("gvisor", "v4")}
 
 
 def test_policy_violations_never_reach_the_sandbox():

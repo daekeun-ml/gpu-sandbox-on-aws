@@ -8,7 +8,7 @@
     "OnCreate": "on_create_sandbox.sh"
   },
   "ExecutionRole": "${HYPERPOD_EXECUTION_ROLE_ARN}",
-  "ThreadsPerCore": 1,
+  "ThreadsPerCore": 2,
   "KubernetesConfig": {
     "Labels": {"gpusandbox/role": "sandbox-hyperpod", "gpusandbox/device-plugin": "cdi"},
     "Taints": [{"Key": "gpusandbox/role", "Value": "sandbox-hyperpod", "Effect": "NoSchedule"}]

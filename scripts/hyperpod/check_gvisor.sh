@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Mode B2 preflight: can gVisor sandboxes run on the HyperPod nodes themselves?
 # Prints, for every HyperPod node, the NVIDIA driver version and whether the pinned gVisor
-# release's nvproxy supports it. Read-only apart from short-lived debug pods.
+# release's nvproxy supports it. Creates a debug pod per node (gVisor is downloaded inside it)
+# and, at the end, deletes every pod in the default namespace named node-debugger-*.
 # As of 2026-11 the default HyperPod EKS AMI ships 595.91.07 ("no"); the B2 custom AMI from
 # scripts/hyperpod/build_b2_ami.sh ships 580.178.04 ("yes"). Run it after scripts/hyperpod/create.sh --b2.
 source "$(dirname "$0")/../lib.sh"

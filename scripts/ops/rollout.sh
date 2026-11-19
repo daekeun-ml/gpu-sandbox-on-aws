@@ -5,8 +5,8 @@
 #   1. deploy <to> next to <from>         (no traffic yet)
 #   2. verify <to>                         (isolation + golden verdicts)
 #   3. parity <from> vs <to>               (same verdicts on the golden set, speedups close)
-#   4. switch the routing table to <to>    (the trainer picks it up at its next reward batch;
-#                                           in-flight batches finish on <from>)
+#   4. switch the routing table to <to>    (the trainer reads it on its next sandbox call;
+#                                           each reward batch is still scored by one version)
 #   5. --finish: scale <from> to zero      (keep the Deployment for a fast rollback)
 # Rollback at any point: scripts/ops/rollout.sh <runtime> <to> <from>
 source "$(dirname "$0")/../lib.sh"

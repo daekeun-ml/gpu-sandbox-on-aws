@@ -13,6 +13,9 @@ metadata:
     gpusandbox/version: ${VERSION}
 spec:
   replicas: ${REPLICAS}
+  # Kata GPU pods can take up to 10 minutes of startupProbe plus image pull and VM boot.
+  # Match the 30-minute wait in scripts/06_deploy_sandboxes.sh instead of the 600 s default.
+  progressDeadlineSeconds: 1800
   revisionHistoryLimit: 2
   strategy:
     type: RollingUpdate

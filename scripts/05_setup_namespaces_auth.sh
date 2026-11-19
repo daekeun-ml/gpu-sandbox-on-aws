@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Namespaces (Pod Security), NetworkPolicies, identities, the sandbox auth key set and the
-# routing table. Safe to re-run.
+# routing table. Re-running rewrites the routing table with ACTIVE_RUNTIME/ACTIVE_VERSION
+# (default gvisor/v1) and puts the sandbox NetworkPolicies back to the hands-on rules, which
+# replaces the gateway's allow-clients-to-sandbox-api in production.
 #
 # Authentication: callers present a projected ServiceAccount token with audience
 # ${SANDBOX_AUDIENCE}. Sandbox pods verify it offline against the cluster's ServiceAccount

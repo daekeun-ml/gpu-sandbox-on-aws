@@ -25,6 +25,25 @@ fi
 log "base AMI ${base_ami}"
 subnet="$(aws eks describe-cluster --region "${AWS_REGION}" --name "${CLUSTER_NAME}" \
   --query 'cluster.resourcesVpcConfig.subnetIds[0]' --output text)"
+vpc="$(aws eks describe-cluster --region "${AWS_REGION}" --name "${CLUSTER_NAME}" \
+  --query 'cluster.resourcesVpcConfig.vpcId' --output text)"
+
+# The CDK stack strips every rule from the VPC default security group, so the builder gets its own
+# group that allows outbound HTTPS only (dnf repositories, the NVIDIA installer, gVisor) and no
+# inbound traffic. Security groups do not filter the Amazon DNS server or instance metadata.
+sg="$(aws ec2 create-security-group --region "${AWS_REGION}" --vpc-id "${vpc}" \
+  --group-name "${CLUSTER_NAME}-b2-ami-builder-$(date +%Y%m%d%H%M%S)" \
+  --description "B2 AMI builder: outbound HTTPS only" \
+  --tag-specifications "ResourceType=security-group,Tags=[{Key=project,Value=gpu-sandbox-on-aws}]" \
+  --query GroupId --output text)"
+instance_id=""
+# Delete the group if the script stops before a builder instance uses it.
+trap '[[ -n "${instance_id}" ]] || aws ec2 delete-security-group --region "${AWS_REGION}" --group-id "${sg}" >/dev/null 2>&1 || true' EXIT
+aws ec2 revoke-security-group-egress --region "${AWS_REGION}" --group-id "${sg}" \
+  --ip-permissions '[{"IpProtocol":"-1","IpRanges":[{"CidrIp":"0.0.0.0/0"}]}]' >/dev/null
+aws ec2 authorize-security-group-egress --region "${AWS_REGION}" --group-id "${sg}" \
+  --ip-permissions '[{"IpProtocol":"tcp","FromPort":443,"ToPort":443,"IpRanges":[{"CidrIp":"0.0.0.0/0","Description":"HTTPS downloads"}]}]' >/dev/null
+log "builder security group ${sg} (outbound HTTPS only)"
 
 user_data="$(python3 - "${REPO_ROOT}/infra/hyperpod/ami/customize-b2.sh" "${REPO_ROOT}/infra/gvisor/install-gvisor.sh" \
   "${B2_NVIDIA_DRIVER_VERSION}" "${B2_NVIDIA_RUNFILE_SHA256}" "${GVISOR_RELEASE}" <<'PY'
@@ -43,7 +62,7 @@ PY
 )"
 
 instance_id="$(aws ec2 run-instances --region "${AWS_REGION}" \
-  --image-id "${base_ami}" --instance-type m6i.large --subnet-id "${subnet}" \
+  --image-id "${base_ami}" --instance-type m6i.large --subnet-id "${subnet}" --security-group-ids "${sg}" \
   --metadata-options HttpTokens=required,HttpPutResponseHopLimit=1 \
   --user-data "${user_data}" \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${CLUSTER_NAME}-b2-ami-builder},{Key=project,Value=gpu-sandbox-on-aws}]" \
@@ -56,7 +75,7 @@ for _ in $(seq 1 120); do  # up to 60 minutes
   [[ "${state}" == "stopped" ]] && break
   sleep 30
 done
-[[ "${state}" == "stopped" ]] || die "builder ${instance_id} did not stop within 60 minutes (state ${state}); inspect it, then terminate it"
+[[ "${state}" == "stopped" ]] || die "builder ${instance_id} did not stop within 60 minutes (state ${state}); inspect it, then terminate it and delete its security group: aws ec2 delete-security-group --region ${AWS_REGION} --group-id ${sg}"
 
 # customize-b2.sh prints one result line to the serial console before it powers off.
 console="$(aws ec2 get-console-output --region "${AWS_REGION}" --instance-id "${instance_id}" --latest \
@@ -65,7 +84,7 @@ result="$(grep -o 'GPUSANDBOX-B2-BUILD: [A-Z]*.*' <<<"${console}" | tail -1 || t
 log "${result:-no result line in the console output}"
 # On failure the stopped builder is kept for inspection (EBS charges only).
 [[ "${result}" == "GPUSANDBOX-B2-BUILD: OK"* ]] \
-  || die "customization failed. Inspect: aws ec2 get-console-output --latest --region ${AWS_REGION} --instance-id ${instance_id}; then: aws ec2 terminate-instances --region ${AWS_REGION} --instance-ids ${instance_id}"
+  || die "customization failed. Inspect: aws ec2 get-console-output --latest --region ${AWS_REGION} --instance-id ${instance_id}; then: aws ec2 terminate-instances --region ${AWS_REGION} --instance-ids ${instance_id}, and once it is terminated: aws ec2 delete-security-group --region ${AWS_REGION} --group-id ${sg}"
 
 ami_name="hyperpod-eks-${K8S_VERSION}-gvisor-nv${B2_NVIDIA_DRIVER_VERSION}-$(date +%Y%m%d%H%M%S)"
 ami_id="$(aws ec2 create-image --region "${AWS_REGION}" --instance-id "${instance_id}" \
@@ -80,6 +99,9 @@ aws ec2 wait image-available --region "${AWS_REGION}" --image-ids "${ami_id}" \
 
 log "terminating builder ${instance_id}"
 aws ec2 terminate-instances --region "${AWS_REGION}" --instance-ids "${instance_id}" >/dev/null
+aws ec2 wait instance-terminated --region "${AWS_REGION}" --instance-ids "${instance_id}" \
+  && aws ec2 delete-security-group --region "${AWS_REGION}" --group-id "${sg}" \
+  || warn "could not delete ${sg} yet; delete it once ${instance_id} is terminated"
 
 echo
 echo "Add to scripts/config.env:"

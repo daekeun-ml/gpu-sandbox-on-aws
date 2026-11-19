@@ -32,7 +32,10 @@ from gpusandbox.harness.policy import check_source
 
 log = logging.getLogger(__name__)
 
-_CODE_BLOCK = re.compile(r"```(?:python|py)?[ \t]*\n(.*?)```", re.DOTALL)
+# Any fenced block, paired in order, with its info string. Pairing every fence (not only
+# python ones) keeps a ```bash or ```text block from shifting the pairs of the blocks after it.
+_FENCED_BLOCK = re.compile(r"```([^\n`]*)\n(.*?)```", re.DOTALL)
+_PYTHON_FENCES = {"", "python", "py", "python3"}
 
 CORRECTNESS_BY_STATUS = {
     "policy_violation": 0.0,
@@ -55,8 +58,11 @@ def completion_text(completion: Any) -> str:
 
 
 def extract_code(text: str) -> str | None:
-    """Return the last fenced block that defines ModelNew, else the last fenced block."""
-    blocks = _CODE_BLOCK.findall(text)
+    """Return the last python (or unlabelled) fenced block that defines ModelNew, else the last one."""
+    blocks = [
+        body for info, body in _FENCED_BLOCK.findall(text)
+        if info.strip().split(" ")[0].lower() in _PYTHON_FENCES
+    ]
     if not blocks:
         return None
     for block in reversed(blocks):
@@ -125,7 +131,9 @@ class KernelRewards:
         self.runtime = runtime
         self.metrics_file = Path(metrics_file) if metrics_file else None
         self.cache_size = cache_size
-        self._cache: dict[str, dict[str, Any] | None] = {}
+        # key -> (pool that produced the verdict, verdict). The pool is None for verdicts
+        # decided here without the sandbox (no code, policy violation).
+        self._cache: dict[str, tuple[tuple[str, str] | None, dict[str, Any] | None]] = {}
         self._last_version: tuple[str, str] | None = None
         self.batches = 0
 
@@ -151,32 +159,56 @@ class KernelRewards:
     ) -> list[dict[str, Any] | None]:
         texts = [completion_text(c) for c in completions]
         keys = [self._key(p, t, tid) for p, t, tid in zip(prompts, texts, task_ids)]
-        pending: list[tuple[str, dict[str, Any]]] = []
+        # Every completion that needs the sandbox, new or cached. A cached verdict comes with
+        # the pool that produced it: one batch must be scored by one pool, so a cached verdict
+        # from another pool is scored again on the pool that answers this batch.
+        need: dict[str, dict[str, Any]] = {}
         for key, text, tid in zip(keys, texts, task_ids):
-            if key in self._cache:
+            cached = self._cache.get(key)
+            if key in need or (cached is not None and cached[0] is None):
                 continue
             code = extract_code(text)
-            if code is None:
-                self._cache[key] = {"status": "no_code"}
-                continue
-            report = check_source(code)
-            if not report.ok:
-                # Same verdict the sandbox would return; skip the round trip.
-                self._cache[key] = {"status": "policy_violation", "violations": report.violations}
-                continue
-            pending.append((key, {"task_id": tid, "code": code, "request_id": key[:16]}))
+            if cached is None:
+                if code is None:
+                    self._cache[key] = (None, {"status": "no_code"})
+                    continue
+                report = check_source(code)
+                if not report.ok:
+                    # Same verdict the sandbox would return; skip the round trip.
+                    self._cache[key] = (
+                        None, {"status": "policy_violation", "violations": report.violations}
+                    )
+                    continue
+            need[key] = {"task_id": tid, "code": code, "request_id": key[:16]}
+        to_send = [k for k in need if k not in self._cache]
+        if not to_send and len({self._cache[k][0] for k in need}) > 1:
+            to_send = list(need)  # all cached, but from different pools
 
-        if pending:
-            started = time.monotonic()
+        served: dict[str, dict[str, Any]] = {}
+        info = None
+        started = time.monotonic()
+        for attempt in range(3):
+            if not to_send:
+                break
+            if attempt == 2:
+                # The pool switched again while this batch was being scored. One call is
+                # answered by one pool, so send the whole batch once more in a single call.
+                to_send = list(need)
             info, results = self.client.evaluate_batch_sync(
-                [item for _, item in pending], runtime=self.runtime
+                [need[k] for k in to_send], runtime=self.runtime
             )
-            for (key, _), result in zip(pending, results):
-                self._cache[key] = result
+            pool = (info.runtime, info.version)
+            for key, result in zip(to_send, results):
+                self._cache[key] = (pool, result)
+                served[key] = result
+            if info.version == "unknown":
+                break  # the gateway did not answer; do not re-send good verdicts into it
+            to_send = [k for k in need if self._cache[k][0] != pool]
+        if info is not None:
             step = getattr(trainer_state, "global_step", None)
-            self._log_batch(info, results, time.monotonic() - started, step)
+            self._log_batch(info, list(served.values()), time.monotonic() - started, step)
 
-        out = [self._cache.get(k) for k in keys]
+        out = [self._cache[k][1] if k in self._cache else None for k in keys]
         if len(self._cache) > self.cache_size:
             # Keep only the current batch; older entries are never asked for again.
             self._cache = {k: self._cache[k] for k in keys if k in self._cache}

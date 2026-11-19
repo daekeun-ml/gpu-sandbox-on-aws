@@ -7,7 +7,7 @@ numbered scripts, which reach the private API endpoint through cdk/tunnel.sh.
 Security defaults (each one is asserted in cdk/tests):
   * EKS API endpoint private only; public access is opt-in for a single /32
   * no security group ingress from 0.0.0.0/0; the operator reaches the API through SSM
-  * IMDSv2 only with hop limit 1 on every node and on the access instance
+  * IMDSv2 only with hop limit 1 on every node; IMDSv2 required on the access instance
   * encrypted EBS, KMS-encrypted Kubernetes secrets, control plane audit logs, VPC flow logs
   * nodes in private subnets; public subnets do not map public IPs (they hold only the NAT)
 """

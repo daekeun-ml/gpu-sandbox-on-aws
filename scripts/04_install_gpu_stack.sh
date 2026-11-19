@@ -73,7 +73,11 @@ spec:
       resources:
         limits: {nvidia.com/gpu: "1", cpu: "2", memory: 8Gi}
 EOF
-kubectl wait --for=jsonpath='{.status.phase}'=Succeeded "pod/${pod}" --timeout=15m \
-  || warn "smoke pod did not succeed: kubectl describe pod ${pod}"
-kubectl logs "${pod}"
-kubectl delete pod "${pod}" --wait=false
+# Remove the smoke pod however this script ends, so a failed check does not leave it
+# holding a GPU in the default namespace.
+trap 'kubectl delete pod "${pod}" --wait=false --ignore-not-found >/dev/null 2>&1 || true' EXIT
+if ! kubectl wait --for=jsonpath='{.status.phase}'=Succeeded "pod/${pod}" --timeout=15m; then
+  warn "smoke pod did not succeed; its state and events follow (the pod is deleted when this script exits)"
+  kubectl describe pod "${pod}" | tail -n 25 || true
+fi
+kubectl logs "${pod}" || warn "no logs from ${pod}: the container did not start"

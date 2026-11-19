@@ -11,7 +11,7 @@
         "OnCreate": "on_create.sh"
       },
       "ExecutionRole": "${HYPERPOD_EXECUTION_ROLE_ARN}",
-      "ThreadsPerCore": 1
+      "ThreadsPerCore": 2
     }
   ],
   "VpcConfig": {
