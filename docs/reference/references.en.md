@@ -60,6 +60,16 @@ Core sources used throughout the guide. See [Verified facts and sources](sources
 - Node credentials and pod permissions. [EKS IAM best practices](https://docs.aws.amazon.com/eks/latest/best-practices/identity-and-access-management.html)
 - SandboxClaim and warm pools. [Kubernetes Agent Sandbox](https://github.com/kubernetes-sigs/agent-sandbox)
 
+## AWS technical blogs { #aws-technical-blogs }
+
+This four-part Korean-language series covers EKS-based isolation, a production case study, and how to choose a managed sandbox.
+
+- Isolation architecture and pod and node controls on EKS. [Part 1: EKS and Agent Sandbox fundamentals](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-1/)
+- Experiments with NetworkPolicy, sandbox-router authorization, and warm pools. [Part 2: Network, authorization, and warm pool tests](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/)
+- Operating per-project sandboxes and dedicated NodePools. [Part 3: Ably’s Agent Sandbox deployment on EKS](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-3/)
+- Managed sandbox isolation, lifecycle, and selection criteria. [Part 4: Amazon Bedrock AgentCore Runtime](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-4/)
+- VM-based workload isolation with Kata on EKS. [Enhancing Kubernetes workload isolation and security using Kata Containers](https://aws.amazon.com/blogs/containers/enhancing-kubernetes-workload-isolation-and-security-using-kata-containers/)
+
 <span id="ref-beginner-04-rl-and-sandbox"></span>
 <span id="ref-concepts-03-onpolicy-rl-with-sandboxes"></span>
 <span id="ref-handson-05-grpo-training"></span>

@@ -60,6 +60,16 @@
 - 노드 자격 증명과 pod 권한. [EKS IAM 모범 사례](https://docs.aws.amazon.com/eks/latest/best-practices/identity-and-access-management.html)
 - SandboxClaim과 warm pool. [Kubernetes Agent Sandbox](https://github.com/kubernetes-sigs/agent-sandbox)
 
+## AWS 기술 블로그 { #aws-technical-blogs }
+
+**AWS에서 AI 에이전트 실행 환경 격리하기**는 EKS 기반 구성과 운영 사례에서 관리형 샌드박스 선택까지 이어지는 한국어 시리즈입니다.
+
+- EKS와 Agent Sandbox의 격리 구조, pod와 노드에서 적용할 통제. [1부: EKS와 Agent Sandbox의 개념과 구성](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-1/)
+- NetworkPolicy, sandbox-router 인가, warm pool 동작을 확인한 실험. [2부: 네트워크, 인가, warm pool 검증](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/)
+- 프로젝트별 샌드박스와 전용 NodePool을 운영한 사례. [3부: 에이블리의 EKS 기반 운영 사례](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-3/)
+- 관리형 실행 환경의 격리 방식, 수명 주기, 선택 기준. [4부: Amazon Bedrock AgentCore Runtime](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-4/)
+- EKS에서 Kata로 VM 단위 격리를 적용하는 방법. [Kata Containers를 활용한 워크로드 격리](https://aws.amazon.com/blogs/containers/enhancing-kubernetes-workload-isolation-and-security-using-kata-containers/)
+
 <span id="ref-beginner-04-rl-and-sandbox"></span>
 <span id="ref-concepts-03-onpolicy-rl-with-sandboxes"></span>
 <span id="ref-handson-05-grpo-training"></span>
