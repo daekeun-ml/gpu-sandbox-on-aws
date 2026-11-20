@@ -274,9 +274,7 @@ flowchart LR
 | `ops/verify.sh` | 2번에서 4번 검사를 통과한 뒤 `pool sandbox-<runtime>-<version> verified`. 1번 커널 비교는 스크립트가 판정하지 않으니 출력된 두 값이 다른지 직접 확인 |
 
 !!! warning "검증 상태"
-    시나리오 A의 필수 경로(`02`부터 `08`까지), 시나리오 C, Kata GPU와 Kata CPU, 다섯 개 풀의 `ops/bench.sh`는 실습 계정에서 실행했습니다. 위 표의 `02_create_cluster.sh`(시나리오 C)와 `kata/cpu_nodes.sh` 신호, smoke pod의 `cuda ok: NVIDIA A10G 2048.0`, `ops/verify.sh` 통과는 그 실행의 실제 출력입니다. 학습 중의 `ops/rollout.sh`(시나리오 A)와 HyperPod B1, B2(HyperPod 클러스터 생성부터)는 실행하지 않았고, 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 이 단계의 신호는 스크립트 코드를 보고 적은 것입니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
-
-    로컬(CPU, AWS 없음)에서는 `pytest` 테스트(당시 94개, 현재는 109개, 매니페스트 렌더링과 user data 포함)와 `cdk/tests`의 CDK 테스트 18개를 통과했습니다. AWS 단계는 각 페이지의 "확인할 것"으로 직접 검증하세요.
+    시나리오 A의 필수 경로, 시나리오 C, Kata GPU와 Kata CPU는 실습 계정에서 실행했습니다. 학습 중의 `ops/rollout.sh`(시나리오 A)와 HyperPod B1, B2는 실행하지 않았고, 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 다음 단계
 

@@ -37,7 +37,7 @@
     - **ENI**: 인스턴스에 연결되는 가상 네트워크 인터페이스입니다. VPC CNI는 ENI의 IP 주소를 pod에 할당하므로, ENI 수에 따라 노드당 pod 수 한도가 정해집니다.
 
 !!! warning "검증 상태"
-    이 페이지의 HyperPod 단계(`scripts/hyperpod/create.sh`부터)는 AWS에서 실행하지 않았고, 기본 인스턴스를 `ml.g5`로 바꾼 B1과 B2는 미검증입니다. 실습 계정에서 시나리오 A 클러스터를 만들 때 `02_create_cluster.sh --hyperpod-b2`와 `CHANGE_SCENARIO=1 scripts/02_create_cluster.sh --hyperpod`를 중간 단계로만 실행했습니다. B1의 샌드박스 쪽인 EC2 `g5.xlarge` gVisor 노드는 실습 계정에서 시나리오 A로 확인한 구성과 같습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 실제 출력을 "확인할 것"과 비교하세요. 로컬에서는 HyperPodPyTorchJob 템플릿을 포함한 모든 매니페스트의 렌더링과 스크립트의 shellcheck를 확인했습니다.
+    이 페이지의 HyperPod 단계(`scripts/hyperpod/create.sh`부터)는 AWS에서 실행하지 않았습니다. 실제 출력을 "확인할 것"과 비교하세요. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 구성
 

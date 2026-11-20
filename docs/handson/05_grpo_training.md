@@ -33,7 +33,7 @@ rollout 생성(vLLM)과 policy 학습을 A10G 24 GB 한 장에서 함께 하려�
     - **OOM**: GPU 메모리가 부족해 프로세스가 실패하는 것(out of memory)입니다.
 
 !!! warning "검증 상태"
-    실습 계정에서 trainer `g5.2xlarge`로 5 step run(`scripts/07_run_grpo.sh 5`)을 실행했고, Job이 Complete로 끝났습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 그 출력은 아래 "확인할 것"에 반영했습니다. 기본값인 60 step run은 AWS에서 실행하지 않았습니다. 메모리와 비용 수치는 측정값이 아니라 설정값과 계산값입니다. 로컬에서는 TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)이 2 step까지 실행됐고, reward 함수와 routing은 `pytest`로 확인했습니다.
+    실습 계정에서 5 step run(`scripts/07_run_grpo.sh 5`)을 실행해 Job이 Complete로 끝났습니다. 기본값인 60 step run은 실행하지 않았고, 메모리와 비용 수치는 측정값이 아니라 계산값입니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 시작 전 확인
 

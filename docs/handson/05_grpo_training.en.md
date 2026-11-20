@@ -33,7 +33,7 @@ Generating rollouts (vLLM) and training the policy on one A10G 24 GB means shari
     - **OOM**: a process failure because GPU memory ran out (out of memory).
 
 !!! warning "Validation status"
-    In the practice account, a 5-step run (`scripts/07_run_grpo.sh 5`) with the trainer on `g5.2xlarge` finished and the Job became Complete ([run record](../reference/sources.md#aws-run-record)); its output is reflected in "What to look for" below. The 60-step default was not run on AWS. The memory and cost numbers are settings and calculations, not measurements. Locally, a TRL 1.18.0 GRPO dry run (SmolLM2-135M, CPU, no vLLM) completed 2 steps, and the reward functions and routing were checked with `pytest`.
+    A 5-step run (`scripts/07_run_grpo.sh 5`) ran in the practice account and the Job ended Complete. The default 60-step run was not run, and the memory and cost figures are calculations, not measurements. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Before you begin
 

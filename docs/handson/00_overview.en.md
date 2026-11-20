@@ -274,9 +274,7 @@ When a script shows Job logs on a terminal, it turns the JSON events into short 
 | `ops/verify.sh` | `pool sandbox-<runtime>-<version> verified` after checks 2 to 4 pass. The script does not judge check 1 (kernel comparison), so confirm that the two printed values differ |
 
 !!! warning "Validation status"
-    The required path of scenario A (`02` to `08`), scenario C, Kata GPU and Kata CPU, and `ops/bench.sh` on five pools ran in a practice account. The `02_create_cluster.sh` (scenario C) and `kata/cpu_nodes.sh` signals above, the smoke pod's `cuda ok: NVIDIA A10G 2048.0` and the `ops/verify.sh` pass are real output from those runs. `ops/rollout.sh` during training (scenario A) and HyperPod B1 and B2 (from the HyperPod cluster creation on) were not run, and the experimental Kata CLH GPU did not start its VM. The signals of these steps come from the script code. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
-
-    Locally (CPU, no AWS) the `pytest` tests (94 at the time, 109 now, including manifest rendering and user data) and the 18 CDK tests in `cdk/tests` pass, so verify each step yourself with the "What to look for" checks on each page.
+    The required path of scenario A, scenario C, Kata GPU and Kata CPU ran in the author's practice account. `ops/rollout.sh` during training (scenario A) and HyperPod B1 and B2 were not run, and the experimental Kata CLH GPU VM did not start. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Next step
 

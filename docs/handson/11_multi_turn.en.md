@@ -32,8 +32,8 @@ A reward pool picks a free pod for every request, so the turns of one episode ca
 
     More terms are in the [Glossary](../reference/glossary.md).
 
-!!! warning "Verification status"
-    The multi-turn code passed local tests (pytest), including an end-to-end test that runs two episodes against loopback CPU sandbox servers (`test_multiturn_against_loopback_sandboxes`). `install`, `pool` and `episodes` on this page ran on a scenario C cluster with the `kata-clh-cpu` warm pool (one waiting sandbox), and all five conditions in the step 3 table held. The `gvisor-cpu` warm pool and the GPU section have not run on a cluster. The sample events in step 3 are a shortened local run; the other outputs are the shape the code prints. The code in the veRL section was never run with veRL.
+!!! note "Verification status"
+    `install`, `pool` and `episodes` on this page ran with the `kata-clh-cpu` warm pool on a scenario C cluster, and the five conditions of step 3 held. The `gvisor-cpu` warm pool, the GPU section and the veRL section were not run. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## One episode, step by step
 

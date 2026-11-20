@@ -29,7 +29,7 @@ When the policy finds a gap in the measurement mid-training (an unrealistic spee
     - **Rollback**: going back to the previous version when something goes wrong.
 
 !!! warning "Validation status"
-    This procedure (`ops/rollout.sh`) was not run on AWS in scenario A. The sandbox steps run in scenario A in the practice account were the v1 pool deploy (`06_deploy_sandboxes.sh gvisor v1`, 1 replica, `g5.xlarge`) and `ops/verify.sh gvisor v1`; the same procedure (except `--finish`) ran and passed on the scenario C CPU pool (`kata-clh-cpu`) ([run record](../reference/sources.md#aws-run-record)). Compare each step's output with "What to look for". Local tests checked the client over two loopback sandbox servers, change detection in the routing table, the gateway's group pinning and the parity tool.
+    This procedure was not run in scenario A. The same procedure (without `--finish`) ran and passed on the CPU pool of scenario C (`kata-clh-cpu`). The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## How v1 and v2 differ
 

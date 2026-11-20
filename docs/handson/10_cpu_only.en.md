@@ -31,8 +31,8 @@ Scenario A needs GPU nodes, and many accounts have a `Running On-Demand G and VT
 
     More terms are in the [Glossary](../reference/glossary.md).
 
-!!! warning "Verification status"
-    Cluster creation (`02_create_cluster.sh`, CDK deploy and delete), the Kata CPU node add (`kata/cpu_nodes.sh`), the version swap (`ops/rollout.sh kata-clh-cpu v1 v2`) and the reward loop simulation (`ops/simulate.sh`) ran in a practice account. The node layout and duration in step 2 and the smoke pod output in step 4 are from those runs. The version swap passed its v2 verification and parity check, and the simulation recorded the switch to v2 at batch 8 of 30 (`demo/site/data/extras.json`). The sample output in step 7 is a separate local run (CPU, two loopback servers), shortened, and is also covered by a test (`test_simulate_reports_a_version_switch_between_batches`). The benchmark of the three CPU pools is in [08](08_benchmark.md), and the dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
+!!! note "Verification status"
+    Every step on this page ran in the author's practice account. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Architecture
 
@@ -224,20 +224,19 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 
 ![rollout.sh kata-clh-cpu v1 v2: 1) deploy v2, 2) verify v2 (kernel comparison, blocked egress, four PASS, verified), 3) parity with four PASS and PARITY PASS, 4) the routing switch, and at the end the hint to watch for the SWITCH line](../images/terminal/rollout-kata-clh-cpu.png)
 
-**What to look for:** events like these in the first work terminal (the local run from the verification status, shortened). On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes. If no switch event appears after a minute, check the pool on the `batch` lines (`kata-clh-cpu/v1` or `v2`). For the raw JSON with every field, start the next run as `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`; for a simulation that is already running, use `kubectl -n rl-trainer logs -f job/simulate-<number>`.
+**What to look for:** lines like these in the first work terminal (the switch part of a `simulate.sh 16 15` run in the practice account). On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes. If no switch event appears after a minute, check the pool on the `batch` lines (`kata-clh-cpu/v1` or `v2`). For the raw JSON with every field, start the next run as `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`; for a simulation that is already running, use `kubectl -n rl-trainer logs -f job/simulate-<number>`.
 
 ```text
-[hh:mm:ss] simulate: 4 batches on cpu, no model (golden submissions)
-[hh:mm:ss] batch   2  kata-clh-cpu/v1  ok 1  wrong_answer 2  pass 33%  speedup ...  ...s
-[hh:mm:ss] SWITCH  kata-clh-cpu/v1 -> kata-clh-cpu/v2  (routing rev 2, step 3)
-[hh:mm:ss] batch   3  kata-clh-cpu/v2  ok 1  wrong_answer 2  pass 33%  speedup ...  ...s
+[05:37:05] batch   6  kata-clh-cpu/v1  ok 1  wrong_answer 2  pass 33%  speedup 0.91  17.3s
+[05:37:31] SWITCH  kata-clh-cpu/v1 -> kata-clh-cpu/v2  (routing rev 2, step 7)
+[05:37:31] batch   7  kata-clh-cpu/v2  ok 1  wrong_answer 2  pass 33%  speedup 0.84  11.7s
 ```
 
-- **The `SWITCH` line appears once, at a batch boundary.** Batches up to 2 ran on v1, batches from 3 on v2.
+- **The `SWITCH` line appears once, at a batch boundary.** Batches up to 6 ran on v1, batches from 7 on v2.
 - **No `batch` line shows `MIXED VERSIONS`.** The verdicts of one batch did not mix v1 and v2 (in the raw JSON, `served_versions` holds a single version). In training, a batch whose needed results are all cached from the same pool calls no sandbox and prints no `reward_batch` line; if the cache mixes pools, the batch is scored again on one pool and logs that line. On-policy training needs this to compute one batch's advantages against one standard.
 - **The results are the same before and after.** Both batches have 1 `ok`, 2 `wrong_answer` and pass 33%. Whether each submission got the same verdict on both versions shows in the `PASS` lines of the `ops/rollout.sh` parity output.
 
-Below are the same steps run with `simulate.sh 16 15`: batches 1 to 6 ran on v1, and after the `SWITCH` line batches 7 on ran on v2, every batch with 1 `ok` and 2 `wrong_answer`.
+The whole run looks like this.
 
 ![simulate.sh output: batches 1 to 6 on kata-clh-cpu/v1, at 05:37:31 the line SWITCH kata-clh-cpu/v1 -> kata-clh-cpu/v2, batches 7 to 16 on kata-clh-cpu/v2, every batch ok 1, wrong_answer 2, pass 33%](../images/terminal/simulate-switch.png)
 
@@ -261,21 +260,21 @@ scripts/ops/bench.sh 16
 
 **What to look for:** one `bench` summary line per pool (p50, p95, evaluations per second, speedup); the raw JSON with every field is appended to `bench-<timestamp>.jsonl`. How to read the numbers is in [08 Runtime benchmark](08_benchmark.md).
 
-## Step 9 (optional): Extend to Agent Sandbox
+## Step 9 (optional): Use Agent Sandbox to borrow one sandbox per episode
 
-On the same node you can also try one sandbox per episode. These commands install the controller and create a warm pool from the `kata-clh-cpu` template, then take one claim, print its address and release it.
+The pools in steps 1 to 8 pick any free pod for each request, score once, and are done. In multi-turn training the model submits code, reads the feedback, fixes it and submits again, so it must keep the same sandbox until the episode ends. This step checks only the basic mechanics of that approach: sandboxes are started ahead of time (warm pool), one is borrowed (claim), and it is given back when the work is done.
 
 ```bash
-scripts/extensions/agent_sandbox.sh install
-scripts/extensions/agent_sandbox.sh pool kata-clh-cpu 1
-scripts/extensions/agent_sandbox.sh claim kata-clh-cpu
+scripts/extensions/agent_sandbox.sh install                # once: Agent Sandbox controller and CRDs
+scripts/extensions/agent_sandbox.sh pool kata-clh-cpu 1    # keep one kata-clh-cpu sandbox waiting
+scripts/extensions/agent_sandbox.sh claim kata-clh-cpu     # borrow it, print its address, give it back
 ```
 
-As the last command in the screen below shows, `kubectl -n sandbox get sandboxwarmpool,sandbox` then lists a new sandbox (`...-qnwbh`) that the warm pool started in place of the claimed one (`...-6bdp7`), back to one waiting sandbox.
+**What to look for:** `claim` prints the name and address of the borrowed sandbox (`sandbox: ...  address: ...`) and deletes the claim. A returned sandbox is not reused but deleted, and the warm pool starts a new one to get back to one waiting sandbox. In the last command of the screen below (`kubectl -n sandbox get sandboxwarmpool,sandbox`), a new sandbox (`...-qnwbh`) waits in place of the borrowed one (`...-6bdp7`).
 
 ![agent_sandbox.sh output: install creates the controller, four CRDs and the claim permissions, pool kata-clh-cpu 1 creates the SandboxTemplate and SandboxWarmPool, claim prints the address of sandbox kernel-eval-kata-clh-cpu-6bdp7 and deletes the claim, and the final kubectl get shows the warm pool READY 1 and a new sandbox kernel-eval-kata-clh-cpu-qnwbh True](../images/terminal/agent-sandbox-claim.png)
 
-The concept and the output are in [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
+Running real multi-turn episodes on borrowed sandboxes is in [11 Multi-turn episodes](11_multi_turn.md), and the same warm pool works there (`episodes kata-clh-cpu 2 3`). The concepts are in [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
 
 ## Cleanup (`08_cleanup.sh`)
 

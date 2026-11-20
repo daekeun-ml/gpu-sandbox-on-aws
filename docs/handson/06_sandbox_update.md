@@ -29,7 +29,7 @@
     - **rollback**: 문제가 생겼을 때 이전 버전으로 되돌리는 작업입니다.
 
 !!! warning "검증 상태"
-    시나리오 A에서 이 절차(`ops/rollout.sh`)는 AWS에서 실행하지 않았습니다. 실습 계정에서 실행한 시나리오 A의 샌드박스 단계는 v1 풀 배포(`06_deploy_sandboxes.sh gvisor v1`, replica 1, `g5.xlarge`)와 `ops/verify.sh gvisor v1`이고, 같은 절차(`--finish` 제외)는 시나리오 C의 CPU 풀(`kata-clh-cpu`)에서 실행해 통과했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 각 단계의 출력을 "확인할 것"과 비교하세요. 로컬 테스트로는 loopback 샌드박스 서버 두 개를 쓰는 클라이언트, routing table 변경 감지, gateway의 group 고정, parity 도구를 확인했습니다.
+    시나리오 A에서는 이 절차를 실행하지 않았습니다. 같은 절차(`--finish` 제외)는 시나리오 C의 CPU 풀(`kata-clh-cpu`)에서 실행해 통과했습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## v1과 v2의 차이
 

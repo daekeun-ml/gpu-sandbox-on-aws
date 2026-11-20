@@ -31,8 +31,8 @@
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
-!!! warning "검증 상태"
-    클러스터 생성(`02_create_cluster.sh`, CDK 배포와 삭제), Kata CPU 노드 추가(`kata/cpu_nodes.sh`), 버전 교체(`ops/rollout.sh kata-clh-cpu v1 v2`)와 reward 루프 시뮬레이션(`ops/simulate.sh`)은 실습 계정에서 실행했습니다. 2단계의 노드 구성과 소요 시간, 4단계의 smoke pod 출력이 그 결과입니다. 버전 교체는 v2 검증과 parity 검사를 통과했고, 시뮬레이션 30배치 중 8번째 배치에서 v2 전환이 기록됐습니다(`demo/site/data/extras.json`). 7단계의 예시 출력은 이와 별개로 로컬(CPU, loopback 서버 2개)에서 실행한 결과를 줄인 것이며, 테스트(`test_simulate_reports_a_version_switch_between_batches`)로도 확인했습니다. CPU 풀 세 개의 벤치마크는 [08](08_benchmark.md)에 있고, 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
+!!! note "검증 상태"
+    이 페이지의 모든 단계를 저자의 실습 계정에서 실행했습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 아키텍처
 
@@ -224,20 +224,19 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 
 ![rollout.sh kata-clh-cpu v1 v2 실행 화면: 1) v2 배포, 2) v2 검증(커널 비교, 외부 연결 차단, PASS 4개, verified), 3) parity에서 4개 PASS와 PARITY PASS, 4) routing 전환, 마지막에 SWITCH 줄을 기다리라는 안내](../images/terminal/rollout-kata-clh-cpu.png)
 
-**확인할 것:** 첫 번째 작업 터미널에 아래와 같은 이벤트가 나옵니다(위 검증 상태에서 설명한 로컬 실행 출력을 줄인 것입니다). 클러스터에서는 ConfigMap 변경이 kubelet 동기화와 캐시 전파를 거쳐 pod에 반영되고, 스크립트는 이 시간을 약 1분으로 안내합니다. 클라이언트도 routing 파일을 최대 2초에 한 번 다시 읽습니다. 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다. 1분이 지나도 전환 이벤트가 없으면 `batch` 줄의 풀(`kata-clh-cpu/v1` 또는 `v2`)을 확인하세요. 모든 필드가 담긴 원래 JSON은 다음 실행부터 `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`처럼 붙여 보고, 이미 돌고 있는 시뮬레이션은 `kubectl -n rl-trainer logs -f job/simulate-<번호>`로 봅니다.
+**확인할 것:** 첫 번째 작업 터미널에 아래와 같은 줄이 나옵니다(실습 계정에서 `simulate.sh 16 15`로 실행한 출력 중 전환 부분). 클러스터에서는 ConfigMap 변경이 kubelet 동기화와 캐시 전파를 거쳐 pod에 반영되고, 스크립트는 이 시간을 약 1분으로 안내합니다. 클라이언트도 routing 파일을 최대 2초에 한 번 다시 읽습니다. 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다. 1분이 지나도 전환 이벤트가 없으면 `batch` 줄의 풀(`kata-clh-cpu/v1` 또는 `v2`)을 확인하세요. 모든 필드가 담긴 원래 JSON은 다음 실행부터 `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`처럼 붙여 보고, 이미 돌고 있는 시뮬레이션은 `kubectl -n rl-trainer logs -f job/simulate-<번호>`로 봅니다.
 
 ```text
-[hh:mm:ss] simulate: 4 batches on cpu, no model (golden submissions)
-[hh:mm:ss] batch   2  kata-clh-cpu/v1  ok 1  wrong_answer 2  pass 33%  speedup ...  ...s
-[hh:mm:ss] SWITCH  kata-clh-cpu/v1 -> kata-clh-cpu/v2  (routing rev 2, step 3)
-[hh:mm:ss] batch   3  kata-clh-cpu/v2  ok 1  wrong_answer 2  pass 33%  speedup ...  ...s
+[05:37:05] batch   6  kata-clh-cpu/v1  ok 1  wrong_answer 2  pass 33%  speedup 0.91  17.3s
+[05:37:31] SWITCH  kata-clh-cpu/v1 -> kata-clh-cpu/v2  (routing rev 2, step 7)
+[05:37:31] batch   7  kata-clh-cpu/v2  ok 1  wrong_answer 2  pass 33%  speedup 0.84  11.7s
 ```
 
-- **`SWITCH` 줄이 배치 경계에서 한 번 나옵니다.** 배치 2까지는 v1, 배치 3부터는 v2입니다.
+- **`SWITCH` 줄이 배치 경계에서 한 번 나옵니다.** 배치 6까지는 v1, 배치 7부터는 v2입니다.
 - **`batch` 줄에 `MIXED VERSIONS`가 없습니다.** 한 배치의 verdict에 v1과 v2의 결과가 섞이지 않았다는 뜻입니다(원래 JSON에서는 `served_versions`에 버전이 하나만 있습니다). 학습에서 필요한 결과가 모두 같은 풀의 캐시에 있는 배치는 샌드박스를 부르지 않아 `reward_batch` 줄이 없습니다. 서로 다른 풀의 캐시가 섞이면 한 풀에서 다시 채점하고 그 줄을 남깁니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요합니다.
 - **교체 전후 결과가 같습니다.** 두 배치 모두 `ok` 1건, `wrong_answer` 2건, pass 33%입니다. 제출물마다 두 버전의 판정이 같은지는 `ops/rollout.sh` parity 출력의 `PASS` 줄로 확인합니다.
 
-아래는 같은 과정을 `simulate.sh 16 15`로 실행한 화면입니다. 배치 6까지는 v1, `SWITCH` 줄 뒤 배치 7부터는 v2로 채점됐고, 모든 배치가 `ok` 1건, `wrong_answer` 2건으로 같습니다.
+전체 실행 화면은 아래와 같습니다.
 
 ![simulate.sh 실행 화면: batch 1부터 6까지 kata-clh-cpu/v1, 05:37:31에 SWITCH kata-clh-cpu/v1 -> kata-clh-cpu/v2 줄, batch 7부터 16까지 kata-clh-cpu/v2, 모든 batch가 ok 1, wrong_answer 2, pass 33%](../images/terminal/simulate-switch.png)
 
@@ -261,21 +260,21 @@ scripts/ops/bench.sh 16
 
 **확인할 것:** 풀마다 `bench` 요약 한 줄(p50, p95, 초당 평가 수, speedup)이 나오고, 모든 필드가 담긴 원래 JSON은 `bench-<timestamp>.jsonl`에 추가됩니다. 결과를 해석하는 방법은 [08 런타임 벤치마크](08_benchmark.md)에 있습니다.
 
-## 9단계 (선택): Agent Sandbox로 확장
+## 9단계 (선택): Agent Sandbox를 활용해 에피소드마다 샌드박스 빌려 쓰기
 
-같은 노드에서 에피소드마다 샌드박스를 하나씩 할당받는 방식도 시험할 수 있습니다. 아래 명령은 controller를 설치하고 `kata-clh-cpu` 템플릿으로 warm pool을 만듭니다. 그다음 claim 하나로 샌드박스를 할당받아 주소를 출력하고 반납합니다.
+1~8단계의 풀은 요청이 올 때마다 비어 있는 pod 하나를 골라 한 번 채점하고 끝납니다. multi-turn 학습에서는 모델이 코드를 내고, 피드백을 읽고, 고쳐서 다시 냅니다. 그래서 한 에피소드가 끝날 때까지 같은 샌드박스를 계속 써야 합니다. 이 단계에서는 그 방식의 기본 동작만 확인합니다. 샌드박스를 미리 띄워 두고(warm pool), 하나를 빌렸다가(claim) 다 쓰면 돌려주는 흐름입니다.
 
 ```bash
-scripts/extensions/agent_sandbox.sh install
-scripts/extensions/agent_sandbox.sh pool kata-clh-cpu 1
-scripts/extensions/agent_sandbox.sh claim kata-clh-cpu
+scripts/extensions/agent_sandbox.sh install                # once: Agent Sandbox controller and CRDs
+scripts/extensions/agent_sandbox.sh pool kata-clh-cpu 1    # keep one kata-clh-cpu sandbox waiting
+scripts/extensions/agent_sandbox.sh claim kata-clh-cpu     # borrow it, print its address, give it back
 ```
 
-아래 화면의 마지막 명령처럼 `kubectl -n sandbox get sandboxwarmpool,sandbox`를 실행하면, claim으로 나간 샌드박스(`...-6bdp7`) 대신 warm pool이 새 샌드박스(`...-qnwbh`)를 띄워 대기 수 1을 다시 채운 것을 볼 수 있습니다.
+**확인할 것:** `claim`이 빌린 샌드박스의 이름과 주소(`sandbox: ...  address: ...`)를 출력하고 claim을 지웁니다. 돌려준 샌드박스는 다시 쓰지 않고 지워지며, warm pool이 새 샌드박스를 띄워 대기 수 1을 다시 채웁니다. 아래 화면의 마지막 명령(`kubectl -n sandbox get sandboxwarmpool,sandbox`)에서 빌린 샌드박스(`...-6bdp7`) 대신 새 샌드박스(`...-qnwbh`)가 대기 중인 것을 볼 수 있습니다.
 
 ![agent_sandbox.sh 실행 화면: install이 controller와 CRD 네 개, claim 권한을 만들고, pool kata-clh-cpu 1이 SandboxTemplate과 SandboxWarmPool을 만들고, claim이 샌드박스 kernel-eval-kata-clh-cpu-6bdp7의 주소를 출력한 뒤 claim을 지우고, 마지막 kubectl get에서 warm pool READY 1과 새 샌드박스 kernel-eval-kata-clh-cpu-qnwbh가 True](../images/terminal/agent-sandbox-claim.png)
 
-개념과 출력은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에 있습니다.
+빌린 샌드박스로 실제 multi-turn 에피소드를 돌리는 실습은 [11 multi-turn 에피소드 실습](11_multi_turn.md)에 있습니다. 같은 warm pool을 그대로 쓸 수 있습니다(`episodes kata-clh-cpu 2 3`). 개념은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에 있습니다.
 
 ## 정리 (`08_cleanup.sh`)
 

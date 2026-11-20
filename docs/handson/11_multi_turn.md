@@ -32,8 +32,8 @@ reward 풀은 요청마다 유휴 pod 하나를 선택하므로 한 에피소드
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
-!!! warning "검증 상태"
-    multi-turn 코드는 로컬 테스트(pytest)를 통과했습니다. 여기에는 loopback CPU 샌드박스 서버를 상대로 에피소드 두 개를 실행하는 end-to-end 테스트(`test_multiturn_against_loopback_sandboxes`)가 포함됩니다. 이 페이지의 `install`, `pool`, `episodes`는 시나리오 C 클러스터에서 `kata-clh-cpu` warm pool(대기 1대)로 실행해, 3단계 표의 다섯 조건을 모두 확인했습니다. `gvisor-cpu` warm pool과 GPU 절은 클러스터에서 실행하지 않았습니다. 3단계의 예시 이벤트는 로컬 실행 출력을 줄인 것이고, 나머지 출력은 코드를 기준으로 쓴 예상 형태입니다. veRL 절의 코드는 veRL로 실행한 적이 없습니다.
+!!! note "검증 상태"
+    이 페이지의 `install`, `pool`, `episodes`는 시나리오 C 클러스터의 `kata-clh-cpu` warm pool로 실행해 3단계의 다섯 조건을 확인했습니다. `gvisor-cpu` warm pool, GPU 절, veRL 절은 실행하지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 에피소드 하나의 흐름
 
