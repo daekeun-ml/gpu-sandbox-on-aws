@@ -5,23 +5,25 @@
 
 ## 핸즈온을 확장할 때 생기는 문제
 
-하루 실습용으로 단순하게 짠 핸즈온 구성의 규모만 키우면, 다음 문제가 생깁니다.
-
-- **trainer 프로세스마다 빈 pod를 따로 고름**: 이 구조가 먼저 문제가 됩니다. TRL rank 여러 개와 veRL reward worker 수십 개가 같은 pod에 요청을 보내므로 503 재시도가 늘어납니다.
-- **veRL의 샘플 단위 채점**: veRL은 샘플을 하나씩 채점해 배치 단위 routing 스냅샷이 없으므로, 한 group 안에서 샌드박스 버전이 섞일 수 있습니다.
-- **노드 그룹 desired 값을 수동으로 조정**: GPU 노드가 부하와 상관없이 계속 떠 있거나 늦게 늘어납니다.
-- **`scripts/ops/sync_jwks.sh`를 수동으로 실행**: issuer 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 샌드박스가 새 키로 서명한 토큰을 모두 거부합니다(fail closed).
+핸즈온에서 trainer 하나로는 잘 돌아갔는데, worker를 늘리자 평가 요청이 `503`으로 돌아오고 step이 길어질 수 있습니다. worker마다 빈 pod를 고르면 여러 worker가 같은 곳을 동시에 고릅니다. 그사이 운영자가 채점 버전을 바꾸면, 요청을 따로 보내는 veRL에서는 같은 문제의 답이 다른 버전으로 채점될 수도 있습니다.
 
 ![a: 핸즈온 구성을 그대로 확장하면 네 가지 문제가 생깁니다. trainer 프로세스가 각자 빈 pod를 판단해 요청이 샌드박스 pod A에 몰리고, 503 재시도가 늘어납니다. veRL reward worker는 샘플마다 따로 routing하므로 한 group 안에서 v1과 v2가 섞일 수 있습니다. 노드 그룹 desired 값을 수동으로 조정하면 GPU 노드 수가 부하와 맞지 않습니다(계속 실행되거나 늦게 증설). scripts/ops/sync_jwks.sh를 수동으로 실행하는 방식에서는 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 새 키로 서명한 토큰이 모두 거부됩니다(fail closed). b: Production에서는 trainer가 sandbox gateway만 호출하고, gateway가 pod마다 평가 1건만 보냅니다. 버전은 TRL이 batch 스냅샷으로 batch마다, veRL이 group_key pin으로 group마다 하나씩 씁니다. Karpenter NodePool은 자기가 만든 노드를 0부터 limits 안에서 수요에 맞춰 늘리고 줄입니다(g4dn.metal은 warm 한 대). 핸즈온 CDK가 만든 관리형 노드 그룹은 그대로 남으므로 desired 값을 직접 줄입니다. jwks-sync CronJob은 매시 17분에 ConfigMap을 갱신해 서명 키 회전을 반영합니다.](../images/figures/production-00_architecture.ko.svg)
 
-*그림 요약: 핸즈온 구성을 그대로 확장하면 같은 pod에 요청이 몰리고, group 안에서 버전이 섞일 수 있으며, 노드 수와 서명 키를 수동으로 관리해야 합니다. Production에서는 gateway가 pod 선택과 버전 고정을, Karpenter NodePool이 노드 수 조정을, jwks-sync CronJob이 서명 키 갱신을 맡습니다.*
-
-
 ## 운영 구성에서 달라지는 점
 
-- **스케줄링과 버전 고정을 gateway 한곳에서 처리합니다.** gateway는 pod마다 평가를 한 번에 하나만 보내고, 배치 요청 하나를 routing 스냅샷 하나로 채점합니다. TRL은 rank마다 reward batch 하나를 한 풀의 결과로 맞추고, veRL 샘플은 `group_key` pin이 유효한 동안 같은 버전에 고정합니다.
-- **노드 수가 샌드박스 pod 수에 맞춰 바뀝니다.** Karpenter NodePool이 샌드박스 노드를 0대부터 띄우고, 부팅이 느린 `g4dn.metal`은 warm placeholder로 한 대를 미리 확보해 둡니다.
-- **학습 요청은 gateway를 거쳐서만 샌드박스에 닿습니다.** 운영 구성의 NetworkPolicy는 샌드박스 pod로 들어오는 연결 중 gateway pod만 허용합니다. 검증과 parity를 실행하는 `sandbox-probe` Job은 별도 정책으로 허용해야 합니다([03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)).
+gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니다. 샌드박스가 부족하면 Karpenter가 실행할 노드를 마련합니다. 두 구성 요소를 연결한 뒤에는 먼저 같은 group에 같은 버전이 쓰이는지, 다음으로 요청이 기다리는 시간이 줄었는지 확인합니다. 노드를 늘려도 버전이 섞이는 문제는 그대로 남으므로 두 결과를 따로 봐야 합니다.
+
+??? note "세부 조건과 예외"
+    하루 실습용으로 단순하게 짠 핸즈온 구성의 규모만 키우면, 다음 문제가 생깁니다.
+
+    - **trainer 프로세스마다 빈 pod를 따로 고름**: 이 구조가 먼저 문제가 됩니다. TRL rank 여러 개와 veRL reward worker 수십 개가 같은 pod에 요청을 보내므로 503 재시도가 늘어납니다.
+    - **veRL의 샘플 단위 채점**: veRL은 샘플을 하나씩 채점해 배치 단위 routing 스냅샷이 없으므로, 한 group 안에서 샌드박스 버전이 섞일 수 있습니다.
+    - **노드 그룹 desired 값을 수동으로 조정**: GPU 노드가 부하와 상관없이 계속 떠 있거나 늦게 늘어납니다.
+    - **`scripts/ops/sync_jwks.sh`를 수동으로 실행**: issuer 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 샌드박스가 새 키로 서명한 토큰을 모두 거부합니다(fail closed).
+
+    - **스케줄링과 버전 고정을 gateway 한곳에서 처리합니다.** gateway는 pod마다 평가를 한 번에 하나만 보내고, 배치 요청 하나를 routing 스냅샷 하나로 채점합니다. TRL은 rank마다 reward batch 하나를 한 풀의 결과로 맞추고, veRL 샘플은 `group_key` pin이 유효한 동안 같은 버전에 고정합니다.
+    - **노드 수가 샌드박스 pod 수에 맞춰 바뀝니다.** Karpenter NodePool이 샌드박스 노드를 0대부터 띄우고, 부팅이 느린 `g4dn.metal`은 warm placeholder로 한 대를 미리 확보해 둡니다.
+    - **학습 요청은 gateway를 거쳐서만 샌드박스에 닿습니다.** 운영 구성의 NetworkPolicy는 샌드박스 pod로 들어오는 연결 중 gateway pod만 허용합니다. 검증과 parity를 실행하는 `sandbox-probe` Job은 별도 정책으로 허용해야 합니다([03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)).
 
 **읽기 전에**　이 페이지는 핸즈온 구성과 비교하며 설명하므로 [핸즈온 00 전체 흐름](../handson/00_overview.md), [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md), [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)를 먼저 읽으세요.
 
@@ -37,6 +39,14 @@
     - **warm placeholder**: 부팅이 느린 노드를 미리 확보하려고 실행해 두는, 우선순위가 낮은 빈 pod입니다.
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
+
+## 핸즈온 이후 운영 준비
+
+같은 구성으로 다시 실행할 수 있어야 한다면 [CDK 스택의 관리 범위](09_cdk.md)와 [노드 준비 과정](01_capacity_and_nodes.md)부터 확인하세요. 첫 샌드박스가 늦게 준비되는 이유와, 실습이 끝난 뒤 누가 노드를 회수하는지 알 수 있습니다.
+
+사용자나 worker를 늘리기 전에는 [보안 경계](02_security.md)와 [gateway의 요청 흐름](03_gateway_and_pools.md)을 함께 검토하세요. 응답을 받기 시작하면 [채점 기준](04_reward_integrity.md)과 [로그에서 볼 신호](07_observability_and_operations.md)를 확인해, step이 진행되는 동안 학습에 쓸 점수가 실제로 들어오는지 봅니다.
+
+이미 운영 중인 run을 바꾸는 경우에는 [버전 전환](05_sandbox_updates.md)의 확인과 롤백 절차부터 읽으세요. worker를 늘릴 계획이라면 [veRL 확장](06_scaling_with_verl.md)의 풀 용량과 checkpoint 조건을, 노드를 미리 켜 둘지 고민한다면 [비용](08_cost.md)의 대기 시간 계산을 참고하세요.
 
 ## 전체 구성
 

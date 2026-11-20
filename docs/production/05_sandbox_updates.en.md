@@ -5,22 +5,24 @@
 
 ## When a sandbox needs an update mid-run
 
-Security patches, Triton upgrades and harness setting changes happen mid-run too.
-
-- **When the image changes**: kernel compilation and timing can change, so without a record of when it changed, a shift in the reward curve cannot be explained.
-- **When the sandbox Deployment is replaced by a rolling update**: old and new pods answer side by side. Completions of one GRPO group are then scored by different rules and the group-relative advantage is corrupted.
-- **When you use Karpenter `alias: al2023@latest`**: new nodes silently get the latest AMI. gVisor nvproxy checks the driver version strictly, so on a node with a new driver the sandbox may never become Ready.
+A driver patch or grader change can be urgent during a run you cannot easily stop. Replacing the active pool in place makes it harder to tell which grading standard applied to work already in progress. Deploy a separate pool to compare the two versions while the original keeps serving.
 
 ![a: in a Deployment during a rolling update, the old pod (old scoring rules) and the new pod (new scoring rules) score parts of the 8 completions of one GRPO group, so the group-relative advantage mixes scores of two rules. b: with one pool per (runtime, version), the active sandbox-gvisor-v1 scores the whole group, and sandbox-gvisor-v2 gets no traffic before its checks and takes over from the next batch (TRL) or the next newly pinned group (veRL), so the advantage holds scores of one version within each rank's batch (TRL) or within a valid group_key pin (veRL)](../images/figures/production-05_sandbox_updates.en.svg)
 
-*Takeaway: During the rollout one group is scored by two versions, so the advantage mixes scores from different rules. Start the new version as a separate pool and switch after verification and parity pass: TRL then uses one version within each rank's batch, and veRL one version within each valid `group_key` pin.*
-
-
 ## How to switch versions
 
-- **A change means a new version.** A running pool is never edited; a new (runtime, version) pool starts next to it, and the old one stays for rollback.
-- **Evidence before the switch.** Traffic moves only after `scripts/ops/verify.sh` and `parity` pass.
-- **Switch per batch or per group, and record the version with each scored result.** Each verdict from the sandbox records `sandbox_version` and `harness_version`, and each TRL batch records `version`, `served_versions` and `global_step`, so causes can be traced. Verdicts the trainer decides locally (`no_code`, `policy_violation`) and TRL cache hits carry no freshly scored version.
+Verify the new pool and compare the same reference submissions before changing routing. A changed ConfigMap records the intended target. Verify that the trainer receives valid verdicts from the new version before retiring the old pool. The rollback and retirement steps below use that signal.
+
+??? note "Conditions and exceptions"
+    Security patches, Triton upgrades and harness setting changes happen mid-run too.
+
+    - **When the image changes**: kernel compilation and timing can change, so without a record of when it changed, a shift in the reward curve cannot be explained.
+    - **When the sandbox Deployment is replaced by a rolling update**: old and new pods answer side by side. Completions of one GRPO group are then scored by different rules and the group-relative advantage is corrupted.
+    - **When you use Karpenter `alias: al2023@latest`**: new nodes silently get the latest AMI. gVisor nvproxy checks the driver version strictly, so on a node with a new driver the sandbox may never become Ready.
+
+    - **A change means a new version.** A running pool is never edited; a new (runtime, version) pool starts next to it, and the old one stays for rollback.
+    - **Evidence before the switch.** Traffic moves only after `scripts/ops/verify.sh` and `parity` pass.
+    - **Switch per batch or per group, and record the version with each scored result.** Each verdict from the sandbox records `sandbox_version` and `harness_version`, and each TRL batch records `version`, `served_versions` and `global_step`, so causes can be traced. Verdicts the trainer decides locally (`no_code`, `policy_violation`) and TRL cache hits carry no freshly scored version.
 
 **Before you start:** the problem of mixed versions inside a group is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and the hands-on procedure is in [06 Updating the sandbox during training](../handson/06_sandbox_update.md).
 

@@ -5,22 +5,24 @@
 
 ## 학습 중 업데이트가 필요한 경우
 
-보안 패치, Triton 업그레이드, harness 설정 변경은 학습 도중에도 생깁니다.
-
-- **이미지가 바뀔 때**: 커널 컴파일과 timing이 달라질 수 있어서, 바뀐 시점의 기록이 없으면 reward 곡선의 변화를 설명할 수 없습니다.
-- **샌드박스 Deployment를 rolling update로 교체할 때**: 구버전과 신버전 pod가 동시에 요청을 처리합니다. 그러면 같은 GRPO group의 completion이 서로 다른 채점 규칙으로 점수를 받아 group 기준 advantage가 잘못 계산됩니다.
-- **Karpenter `alias: al2023@latest`를 쓸 때**: 새 노드에 별도 알림 없이 최신 AMI가 적용됩니다. gVisor nvproxy는 드라이버 버전을 엄격히 확인하므로, 드라이버가 바뀐 노드에서는 샌드박스가 Ready가 되지 않을 수 있습니다.
+학습을 멈추기 어려운 날에 드라이버 패치나 채점 코드 수정이 필요할 수 있습니다. 실행 중인 풀을 한꺼번에 바꾸면 전환 순간에 처리 중인 배치가 어느 기준으로 채점됐는지 설명하기 어렵습니다. 기존 풀을 계속 쓰면서 새 버전을 별도의 풀로 준비하면 두 버전의 결과를 비교할 수 있습니다.
 
 ![a: rolling update 중인 Deployment에서는 GRPO group 하나의 completion 8개를 구버전 pod(기존 채점 규칙)와 신버전 pod(새 채점 규칙)가 나눠 채점합니다. 그래서 group 기준 advantage에 두 규칙의 점수가 섞입니다. b: (runtime, version)마다 풀을 하나씩 둡니다. active인 sandbox-gvisor-v1이 group 전체를 채점하고, 롤백용으로 유지됩니다. sandbox-gvisor-v2는 검증과 parity 전에는 트래픽을 받지 않고, 통과하면 다음 batch(TRL)나 새로 고정되는 group(veRL)부터 전환됩니다. advantage에는 TRL이면 rank별 batch 안에서, veRL이면 유효한 group_key pin 안에서 한 버전의 점수만 들어갑니다.](../images/figures/production-05_sandbox_updates.ko.svg)
 
-*그림 요약: rolling update 도중에는 한 group을 두 버전이 나눠 채점하므로, advantage에 서로 다른 규칙의 점수가 섞입니다. 새 버전을 별도 풀로 시작하고 검증과 parity를 통과한 뒤 전환하면, TRL은 rank별 batch 안에서, veRL은 유효한 `group_key` pin 안에서 한 버전을 씁니다.*
-
-
 ## 버전을 바꾸는 절차
 
-- **변경이 있으면 새 버전으로 배포합니다.** 실행 중인 풀은 수정하지 않고 새 (runtime, version) 풀을 따로 띄우며, 구버전 풀은 롤백용으로 유지합니다.
-- **전환 전에 검증을 통과해야 합니다.** `scripts/ops/verify.sh`와 `parity`를 통과해야 트래픽이 신버전으로 전환됩니다.
-- **batch나 group 단위로 전환하고, 채점 결과에 버전을 기록합니다.** 샌드박스가 채점한 verdict마다 `sandbox_version`과 `harness_version`이, TRL batch마다 `version`, `served_versions`, `global_step`이 기록되므로 reward 변화의 원인을 추적할 수 있습니다. trainer가 로컬에서 판정한 `no_code`, `policy_violation`과 TRL의 캐시 적중 결과에는 새로 채점한 버전 정보가 없습니다.
+같은 기준 답안으로 새 풀의 동작과 기존 풀과의 차이를 확인한 뒤 라우팅을 전환합니다. ConfigMap 변경은 목적지가 바뀌었다는 뜻입니다. 실제 학습이 새 풀의 결과를 받았는지는 trainer 로그의 버전과 verdict로 확인하세요. 이전 버전을 정리할 시점과 되돌리는 절차는 그 확인 뒤에 이어집니다.
+
+??? note "세부 조건과 예외"
+    보안 패치, Triton 업그레이드, harness 설정 변경은 학습 도중에도 생깁니다.
+
+    - **이미지가 바뀔 때**: 커널 컴파일과 timing이 달라질 수 있어서, 바뀐 시점의 기록이 없으면 reward 곡선의 변화를 설명할 수 없습니다.
+    - **샌드박스 Deployment를 rolling update로 교체할 때**: 구버전과 신버전 pod가 동시에 요청을 처리합니다. 그러면 같은 GRPO group의 completion이 서로 다른 채점 규칙으로 점수를 받아 group 기준 advantage가 잘못 계산됩니다.
+    - **Karpenter `alias: al2023@latest`를 쓸 때**: 새 노드에 별도 알림 없이 최신 AMI가 적용됩니다. gVisor nvproxy는 드라이버 버전을 엄격히 확인하므로, 드라이버가 바뀐 노드에서는 샌드박스가 Ready가 되지 않을 수 있습니다.
+
+    - **변경이 있으면 새 버전으로 배포합니다.** 실행 중인 풀은 수정하지 않고 새 (runtime, version) 풀을 따로 띄우며, 구버전 풀은 롤백용으로 유지합니다.
+    - **전환 전에 검증을 통과해야 합니다.** `scripts/ops/verify.sh`와 `parity`를 통과해야 트래픽이 신버전으로 전환됩니다.
+    - **batch나 group 단위로 전환하고, 채점 결과에 버전을 기록합니다.** 샌드박스가 채점한 verdict마다 `sandbox_version`과 `harness_version`이, TRL batch마다 `version`, `served_versions`, `global_step`이 기록되므로 reward 변화의 원인을 추적할 수 있습니다. trainer가 로컬에서 판정한 `no_code`, `policy_violation`과 TRL의 캐시 적중 결과에는 새로 채점한 버전 정보가 없습니다.
 
 **읽기 전에**　group 안에서 버전이 섞이는 문제는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 핸즈온 절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)에 있습니다.
 

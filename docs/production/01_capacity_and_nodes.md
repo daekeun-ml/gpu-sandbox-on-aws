@@ -5,23 +5,25 @@
 
 ## GPU 노드를 준비하는 데 걸리는 시간
 
-`g4dn.metal`은 부팅, kata-deploy 설치, GPU의 vfio-pci 바인딩까지 수 분이 걸립니다.
-
-- **수요가 생긴 뒤에 노드를 띄우면**: reward 배치가 그동안 대기합니다.
-- **노드를 미리 띄워 두면**: 사용하지 않는 동안에도 과금됩니다(7.824 USD/시간, us-east-1과 us-west-2 온디맨드 요금).
-- **노드 수를 수동으로 관리하면**: 노드를 종료하는 것을 잊기 쉽습니다.
-- **AMI가 자동으로 바뀌면서 nvproxy가 인식하지 못하는(unknown) NVIDIA 드라이버가 설치되면**: gVisor GPU 샌드박스가 Ready가 되지 않아 풀 용량이 0이 됩니다.
-- **G and VT On-Demand quota**: 문서상 기본값이 0이라, quota를 늘리기 전에는 96 vCPU짜리 `g4dn.metal`을 한 대도 띄우지 못합니다.
+학습을 시작했는데 첫 reward 배치가 몇 분째 기다린다면, 샌드박스 pod가 배치되지 않는지부터 확인하세요. `g4dn.metal`은 인스턴스가 시작된 뒤에도 Kata 설치와 GPU 준비가 끝나야 평가를 받을 수 있습니다. 반대로 gVisor 노드는 생성됐는데 샌드박스가 Ready가 되지 않는다면 AMI의 드라이버와 nvproxy 조합을 먼저 봅니다.
 
 ![a: metal 노드(sandbox-kata-gpu)에서는 reward batch가 도착한 뒤에 g4dn.metal 부팅, kata-deploy, vfio-pci 바인딩이 진행되어 수 분이 걸리고, batch는 그동안 대기합니다. gVisor 노드(sandbox-gvisor)에서는 al2023@latest의 AMI 자동 갱신(drift 교체)으로 nvproxy가 지원하지 않는 드라이버가 설치될 수 있습니다. 그러면 GPU 초기화가 실패해 샌드박스가 Ready가 되지 않고 풀 용량이 0이 됩니다. b: metal에서는 우선순위 -10인 warm placeholder가 선점되어 종료되고, 샌드박스 pod는 이미 실행 중인 노드에 배치됩니다. Karpenter는 새 예비 노드를 추가합니다. gVisor에서는 AMI를 al2023@v20261107로 고정하고, CI에서 nvproxy list-supported-drivers로 지원 여부를 확인해 통과할 때만 AMI와 GVISOR_RELEASE를 함께 승격합니다.](../images/figures/production-01_capacity_and_nodes.ko.svg)
 
-*그림 요약: 부팅이 느린 metal 노드를 수요가 생긴 뒤에 시작하면 batch가 기다려야 하고, AMI 자동 갱신은 gVisor 풀 용량을 0으로 만들 수 있습니다. metal은 warm placeholder로 한 대를 미리 확보하고, AMI와 gVisor 버전은 함께 고정한 뒤 CI 확인을 통과할 때만 올립니다.*
-
-
 ## 런타임별 용량 관리
 
-- **런타임마다 필요한 노드 설정이 다릅니다.** 인스턴스, taint, label, 상한, 회수 정책을 NodePool 단위로 분리하면 한 런타임의 설정이 다른 런타임에 영향을 주지 않습니다.
-- **드라이버와 런타임의 버전 조합을 명시적으로 관리합니다.** nvproxy는 드라이버 버전이 정확히 맞아야 동작하므로, AMI와 gVisor 버전을 같이 고정하고 바꾸기 전에 CI로 확인합니다.
+두 상황의 해결책이 다릅니다. metal 시작 시간이 배치를 지연시키는 경우에는 노드 한 대를 미리 확보하는 비용과 첫 배치 대기 시간을 비교합니다. gVisor의 드라이버 문제는 앞당겨 부팅해도 해결되지 않습니다. AMI와 gVisor 릴리스를 함께 고정하고, 교체 전에 지원 드라이버 목록을 대조합니다.
+
+??? note "세부 조건과 예외"
+    `g4dn.metal`은 부팅, kata-deploy 설치, GPU의 vfio-pci 바인딩까지 수 분이 걸립니다.
+
+    - **수요가 생긴 뒤에 노드를 띄우면**: reward 배치가 그동안 대기합니다.
+    - **노드를 미리 띄워 두면**: 사용하지 않는 동안에도 과금됩니다(7.824 USD/시간, us-east-1과 us-west-2 온디맨드 요금).
+    - **노드 수를 수동으로 관리하면**: 노드를 종료하는 것을 잊기 쉽습니다.
+    - **AMI가 자동으로 바뀌면서 nvproxy가 인식하지 못하는(unknown) NVIDIA 드라이버가 설치되면**: gVisor GPU 샌드박스가 Ready가 되지 않아 풀 용량이 0이 됩니다.
+    - **G and VT On-Demand quota**: 문서상 기본값이 0이라, quota를 늘리기 전에는 96 vCPU짜리 `g4dn.metal`을 한 대도 띄우지 못합니다.
+
+    - **런타임마다 필요한 노드 설정이 다릅니다.** 인스턴스, taint, label, 상한, 회수 정책을 NodePool 단위로 분리하면 한 런타임의 설정이 다른 런타임에 영향을 주지 않습니다.
+    - **드라이버와 런타임의 버전 조합을 명시적으로 관리합니다.** nvproxy는 드라이버 버전이 정확히 맞아야 동작하므로, AMI와 gVisor 버전을 같이 고정하고 바꾸기 전에 CI로 확인합니다.
 
 **읽기 전에**　[00 아키텍처](00_architecture.md)의 NodePool 표, [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)의 인스턴스 선택 이유, [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)의 IOMMU AMI 단계를 먼저 보세요.
 

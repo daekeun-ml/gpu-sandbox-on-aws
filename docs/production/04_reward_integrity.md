@@ -5,23 +5,25 @@
 
 ## 측정값을 reward로 쓸 때
 
-speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측정 방식의 허점을 찾을 수 있습니다.
-
-- **추가 CUDA stream**: CUDA-L1 보고에서는 추가 CUDA stream이 250건 중 82건(32.8%)에서 timing을 속였습니다.
-- **채점 코드와 후보가 같은 Python 프로세스에 있으면**: 후보가 timer, reference 연산, 비교 함수를 바꿔치기할 수 있습니다.
-- **정답 비교를 한 번만 하면**: 정확성 검사 때만 맞고 벤치마크 때 틀리는 출력, 결과 캐싱, 계산을 측정 구간 밖으로 미루는 lazy 출력을 찾아낼 수 없습니다.
-- **반대로 샌드박스 장애를 오답으로 채점하면**: 정답을 낸 completion이 낮은 reward를 받아, policy가 그런 출력을 오히려 덜 만들게 됩니다.
+학습 로그에서 처음으로 speedup이 크게 올랐다면, 실제 계산이 빨라졌는지부터 확인합니다. 출력이 틀리거나 GPU 작업이 끝나기 전에 시간을 기록하면 숫자는 좋아 보여도 그 점수를 학습에 쓰기 어렵습니다. 이 절의 출발점은 reward를 계산하기 전에 어떤 실행 결과를 신뢰할 수 있는지 확인하는 것입니다.
 
 ![a: 후보 코드(ModelNew)가 채점 코드와 같은 Python 프로세스에서 실행되면 harness의 timer와 reference, 비교 함수를 바꿔치기할 수 있습니다. 추가 stream, 캐시, lazy 출력으로 측정 구간을 조작해, 더 빠른 커널 없이 높은 reward를 받습니다. b: 후보 코드는 신뢰하지 않는 자식 프로세스에서만 실행됩니다. timer 교체는 정적 정책의 속성 대입 거부로 막고, reference 출력과 비교는 부모 프로세스가 맡습니다. 자식도 과제 모듈을 불러오지만, 현재 요청의 reference 출력은 자식이 끝난 뒤 부모가 만듭니다. 측정 구간은 synchronize, 새 입력, checksum으로 보호합니다.](../images/figures/production-04_reward_integrity.ko.svg)
 
-*그림 요약: 후보 코드가 채점 코드와 같은 프로세스에서 실행되면, 더 빠른 커널을 쓰지 않고 측정 코드와 비교 코드를 바꿔 reward를 얻을 수 있습니다. 후보 코드를 자식 프로세스로 분리하고 측정 절차를 고정해 이 경로를 차단합니다.*
-
-
 ## 채점기가 결과를 검증하는 방법
 
-- **신뢰 경계를 프로세스 단위로 나눕니다.** 후보 코드가 크래시하거나 CUDA context를 망가뜨려도 reference 계산과 verdict 작성은 다른 프로세스에서 실행됩니다.
-- **측정 절차를 함수 하나로 고정합니다.** 시계, 입력, 출력 검사는 `harness/timing.py`의 `measure_ms`가 정하고, reference와 후보가 같은 함수로 측정됩니다.
-- **verdict를 reward로 바꾸는 규칙도 한 함수에 둡니다.** TRL과 veRL이 같은 `score_verdict`를 쓰므로 두 경로의 점수 규칙이 달라지지 않습니다.
+제출 코드를 실행하는 프로세스와 기준 답을 확인하고 verdict를 만드는 프로세스를 분리합니다. 그다음 입력을 바꾸어 정확성을 확인하고, GPU 작업을 끝까지 기다린 뒤 시간을 기록합니다. 운영 중 갑자기 높은 speedup이 보이면 평균 reward만 보지 말고 같은 평가의 verdict와 측정 관련 flag를 함께 확인하세요.
+
+??? note "세부 조건과 예외"
+    speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측정 방식의 허점을 찾을 수 있습니다.
+
+    - **추가 CUDA stream**: CUDA-L1 보고에서는 추가 CUDA stream이 250건 중 82건(32.8%)에서 timing을 속였습니다.
+    - **채점 코드와 후보가 같은 Python 프로세스에 있으면**: 후보가 timer, reference 연산, 비교 함수를 바꿔치기할 수 있습니다.
+    - **정답 비교를 한 번만 하면**: 정확성 검사 때만 맞고 벤치마크 때 틀리는 출력, 결과 캐싱, 계산을 측정 구간 밖으로 미루는 lazy 출력을 찾아낼 수 없습니다.
+    - **반대로 샌드박스 장애를 오답으로 채점하면**: 정답을 낸 completion이 낮은 reward를 받아, policy가 그런 출력을 오히려 덜 만들게 됩니다.
+
+    - **신뢰 경계를 프로세스 단위로 나눕니다.** 후보 코드가 크래시하거나 CUDA context를 망가뜨려도 reference 계산과 verdict 작성은 다른 프로세스에서 실행됩니다.
+    - **측정 절차를 함수 하나로 고정합니다.** 시계, 입력, 출력 검사는 `harness/timing.py`의 `measure_ms`가 정하고, reference와 후보가 같은 함수로 측정됩니다.
+    - **verdict를 reward로 바꾸는 규칙도 한 함수에 둡니다.** TRL과 veRL이 같은 `score_verdict`를 쓰므로 두 경로의 점수 규칙이 달라지지 않습니다.
 
 **읽기 전에**　과제 계약(`Model`, `ModelNew`)과 reward 3요소는 [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)에, GRPO group, advantage, 인프라 오류를 오답으로 처리하지 않는 이유는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 노드를 보호하는 보안 경계(gVisor, Kata)는 [02 보안](02_security.md)에 있습니다.
 

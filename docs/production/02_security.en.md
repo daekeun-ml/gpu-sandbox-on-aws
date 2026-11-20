@@ -5,21 +5,23 @@
 
 ## Isolation boundaries and access paths
 
-- **A regular container (runc)**: it uses the host kernel and NVIDIA driver directly.
-- **Credentials in the pod**: if a sandbox pod holds a ServiceAccount token or a secret, candidate code can read it.
-- **When NetworkPolicies apply**: in standard mode the VPC CNI applies NetworkPolicies asynchronously after a pod starts.
-- **Node IP exception**: the VPC CNI allows traffic to the pod's own node IP regardless of policy.
-- **Consecutive evaluations in the same pod**: they can inherit leftover processes, caches and GPU state.
+Passing the reference submissions shows that the pool can grade code. Before accepting submissions from outside the team, check what files and services that code can reach. Selecting gVisor or Kata changes the kernel boundary. The deployment also determines which credentials are present and which connections are allowed.
 
 ![a: candidate code in an unhardened runc pod shares the host kernel and NVIDIA driver directly, reads the ServiceAccount token and secrets in the pod, reaches node-local services on its own node IP, which is allowed regardless of NetworkPolicy, and passes leftover processes, caches and GPU state to the next evaluation in the same pod. b: in a sandbox pod (gVisor or Kata) the first three paths are stopped by gVisor Sentry or a Kata VM (gVisor still shares the host driver), no token or secrets mounted, and the node guard, which readiness checks. The path to the next evaluation is only narrowed by process reaping and per-request caches (dashed): v1 turns pod recycling off, and under gVisor a new pod still uses the same host driver and GPU](../images/figures/production-02_security.en.svg)
 
-*Takeaway: Candidate code in an unhardened runc pod can reach the host kernel and driver, the credentials in the pod, its own node and the next evaluation, and in a sandbox pod each layer closes one of these paths. Process reaping and per-request caches narrow the path to the next evaluation, but under gVisor a new pod still uses the same host driver and GPU, and v1 turns pod recycling off.*
-
-
 ## Defense summary
 
-- **Each layer stops a different failure.** The runtime protects the kernel, NetworkPolicy closes the exits, the node guard covers the VPC CNI node-IP exception, and a pod becomes Ready only after it has checked that egress is actually blocked.
-- **What is not there cannot be stolen.** Sandbox pods get no API token and no secrets.
+Trace two paths during verification. Use tokens and ingress policy to check how an approved trainer reaches the API. Use egress controls and the node guard to limit outbound access, then verify the restriction in readiness. The threat model below explains which boundary each control covers.
+
+??? note "Conditions and exceptions"
+    - **A regular container (runc)**: it uses the host kernel and NVIDIA driver directly.
+    - **Credentials in the pod**: if a sandbox pod holds a ServiceAccount token or a secret, candidate code can read it.
+    - **When NetworkPolicies apply**: in standard mode the VPC CNI applies NetworkPolicies asynchronously after a pod starts.
+    - **Node IP exception**: the VPC CNI allows traffic to the pod's own node IP regardless of policy.
+    - **Consecutive evaluations in the same pod**: they can inherit leftover processes, caches and GPU state.
+
+    - **Each layer stops a different failure.** The runtime protects the kernel, NetworkPolicy closes the exits, the node guard covers the VPC CNI node-IP exception, and a pod becomes Ready only after it has checked that egress is actually blocked.
+    - **What is not there cannot be stolen.** Sandbox pods get no API token and no secrets.
 
 **Before you start**: read how gVisor and Kata handle GPUs in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and how pools and tokens are deployed in [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md).
 

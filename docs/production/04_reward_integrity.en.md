@@ -5,23 +5,25 @@
 
 ## When a timing measurement becomes a reward
 
-When speedup is the reward, the policy can look for gaps in the measurement instead of faster kernels.
-
-- **An extra CUDA stream**: in the CUDA-L1 report, an extra CUDA stream fooled the timing in 82 of 250 cases (32.8%).
-- **In the same Python process as the scoring code**: the candidate can replace the timer, the reference operation or the comparison function.
-- **With a single correctness check**: outputs that are right during the correctness check but wrong during the benchmark, cached results, and lazy outputs that move the work outside the timed window are not caught.
-- **Conversely, scoring a sandbox failure as a wrong answer**: it suppresses the behavior that produced a correct answer.
+A sudden jump in speedup is a reason to check the run. An incorrect output or a timer that stops before GPU work finishes can yield a number that looks good and teaches the wrong behavior. Establish which execution results can be trusted before converting them to reward.
 
 ![a: candidate code (ModelNew) in the same Python process as the scoring code replaces the harness timer and the reference and comparison, and games the timed window with an extra stream, caching and lazy outputs, earning a high reward without a faster kernel. b: candidate code runs only in an untrusted child process; the static policy's ban on attribute writes protects the timer, the parent produces the reference outputs and compares (the child also imports the task module, but the parent makes this request's reference outputs only after the child ends), and synchronize, new inputs and checksums protect the timed window](../images/figures/production-04_reward_integrity.en.svg)
 
-*Takeaway: A candidate in the same process as the scoring code can earn reward by changing the measurement and the comparison instead of writing a faster kernel. Moving the candidate into a child process and fixing the measurement closes each path.*
-
-
 ## How the harness checks results
 
-- **The trust boundary is a process boundary.** Even if candidate code crashes or corrupts its CUDA context, the reference computation and the verdict happen in another process.
-- **One function fixes the measurement procedure.** `measure_ms` in `harness/timing.py` defines the clock, the inputs and the output checks, and the reference and the candidate are measured with the same function.
-- **One function also turns verdicts into rewards.** TRL and veRL use the same `score_verdict`, so the scoring rules of the two paths cannot drift apart.
+Run submitted code separately from the process that checks reference outputs and writes the verdict. Check correctness on varying inputs and wait for GPU work to finish before recording time. If speedup jumps during a run, examine the corresponding verdict and measurement flags alongside the mean reward.
+
+??? note "Conditions and exceptions"
+    When speedup is the reward, the policy can look for gaps in the measurement instead of faster kernels.
+
+    - **An extra CUDA stream**: in the CUDA-L1 report, an extra CUDA stream fooled the timing in 82 of 250 cases (32.8%).
+    - **In the same Python process as the scoring code**: the candidate can replace the timer, the reference operation or the comparison function.
+    - **With a single correctness check**: outputs that are right during the correctness check but wrong during the benchmark, cached results, and lazy outputs that move the work outside the timed window are not caught.
+    - **Conversely, scoring a sandbox failure as a wrong answer**: it suppresses the behavior that produced a correct answer.
+
+    - **The trust boundary is a process boundary.** Even if candidate code crashes or corrupts its CUDA context, the reference computation and the verdict happen in another process.
+    - **One function fixes the measurement procedure.** `measure_ms` in `harness/timing.py` defines the clock, the inputs and the output checks, and the reference and the candidate are measured with the same function.
+    - **One function also turns verdicts into rewards.** TRL and veRL use the same `score_verdict`, so the scoring rules of the two paths cannot drift apart.
 
 **Before you start**: the task contract (`Model`, `ModelNew`) and the three reward components are in [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md), GRPO groups, advantages and why infrastructure errors must not become wrong answers are in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and the security boundary that protects the node (gVisor, Kata) is in [02 Security](02_security.md).
 

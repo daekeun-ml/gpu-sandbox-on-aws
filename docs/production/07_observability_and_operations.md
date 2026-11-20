@@ -5,22 +5,24 @@
 
 ## 학습이 계속돼도 채점은 실패할 수 있습니다
 
-샌드박스 쪽에 장애가 생겨도 대개 학습은 중단되지 않습니다.
-
-- **인증 실패(401)가 대량으로 발생해도**: TRL은 `sandbox_error` 샘플을 `None`으로 처리해 제외합니다. 모든 샘플이 제외되면 advantage가 0이 되어 학습 신호 없이 step만 진행됩니다.
-- **풀의 Ready pod가 줄어도**: Ready가 아닌 pod는 headless Service DNS에서 제외될 뿐이므로, 남은 pod로 요청이 몰려 step만 느려집니다.
-- **reward hacking이 일어날 때**: reward 값은 오히려 올라갑니다. 이를 알려 주는 flag(`implausible_speedup`, `timed_output_mismatch` 등)는 verdict에만 기록되고 지표로 집계되지 않습니다.
+step 번호는 계속 올라가는데 학습이 나아지지 않거나 배치 시간이 늘어날 수 있습니다. 이때 `reward_batch`를 먼저 보면 실행 결과가 틀렸는지, 샌드박스가 채점 자체를 못 했는지 구분할 수 있습니다. 후자가 늘어나면 모델보다 평가 경로부터 살펴봅니다.
 
 ![a: 인증 실패(401 응답이 대량으로 발생)가 나면 sandbox_error 샘플이 None으로 제외되고 그 샘플의 advantage는 0이 됩니다. 모든 샘플이 제외되면 학습 신호 없이 step만 진행됩니다. 풀이 줄면 Ready가 아닌 pod가 DNS에서 빠지고 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking은 flag가 verdict에만 기록되고 지표로 집계되지 않아 reward가 오르는 것처럼 보입니다. 세 경우 모두 학습은 멈추지 않습니다. b: 같은 세 고장을 각각 경보에 연결합니다. status.sandbox_error / n으로 sandbox_error 비율 경보(TRL 5% 초과, 3 batch 연속)를, 활성 풀 Deployment별 available과 desired replicas 비교로 Ready pod 부족 경보(available이 desired 미만인 상태 10분)를, flag 개수(저장소에 없는 확장, 점선)로 reward hacking 신호 경보(flag 비율 상승 추세)를 만듭니다.](../images/figures/production-07_observability_and_operations.ko.svg)
 
-*그림 요약: 샌드박스 쪽 고장이 나도 학습은 멈추지 않습니다. 모든 샘플이 채점 불가가 되면 학습 신호 없이 step만 진행되고, 풀이 줄면 step이 느려지며, reward hacking이 일어나면 reward가 실제보다 좋아 보입니다. 세 고장은 각각 `sandbox_error` 비율, Ready pod 수, flag 개수 경보로 잡습니다.*
-
-
 ## 계층별 로그와 지표
 
-- **세 계층을 함께 모니터링합니다.** 샌드박스 pod(평가 하나), gateway(스케줄과 버전 고정), trainer(reward batch와 step)가 각각 다른 범위의 상태를 보고합니다.
-- **지표 엔드포인트도 인증합니다.** `/metrics`도 `/v1/evaluate`와 같은 토큰 검증을 거치며, 인증 없이 호출할 수 있는 경로는 kubelet probe용 `/healthz`, `/readyz`뿐입니다.
-- **reward 품질 신호를 기준으로 경보를 설정합니다.** 학습에 문제가 생기기 시작하면 CPU나 메모리보다 `sandbox_error` 비율, pass rate, flag 같은 reward 품질 신호가 먼저 변합니다.
+`sandbox_error`가 늘면 trainer가 본 오류를 gateway의 상태와 대조하고, 풀에서 준비된 pod가 줄었는지 확인합니다. 반대로 reward가 갑자기 좋아지면 verdict에 남은 측정 flag를 살펴봅니다. 이 flag는 기본 지표로 집계되지 않습니다. 아래 지표와 런북에서 각 신호를 어디서 읽고 어떤 조치를 할지 연결합니다.
+
+??? note "세부 조건과 예외"
+    샌드박스 쪽에 장애가 생겨도 대개 학습은 중단되지 않습니다.
+
+    - **인증 실패(401)가 대량으로 발생해도**: TRL은 `sandbox_error` 샘플을 `None`으로 처리해 제외합니다. 모든 샘플이 제외되면 advantage가 0이 되어 학습 신호 없이 step만 진행됩니다.
+    - **풀의 Ready pod가 줄어도**: Ready가 아닌 pod는 headless Service DNS에서 제외될 뿐이므로, 남은 pod로 요청이 몰려 step만 느려집니다.
+    - **reward hacking이 일어날 때**: reward 값은 오히려 올라갑니다. 이를 알려 주는 flag(`implausible_speedup`, `timed_output_mismatch` 등)는 verdict에만 기록되고 지표로 집계되지 않습니다.
+
+    - **세 계층을 함께 모니터링합니다.** 샌드박스 pod(평가 하나), gateway(스케줄과 버전 고정), trainer(reward batch와 step)가 각각 다른 범위의 상태를 보고합니다.
+    - **지표 엔드포인트도 인증합니다.** `/metrics`도 `/v1/evaluate`와 같은 토큰 검증을 거치며, 인증 없이 호출할 수 있는 경로는 kubelet probe용 `/healthz`, `/readyz`뿐입니다.
+    - **reward 품질 신호를 기준으로 경보를 설정합니다.** 학습에 문제가 생기기 시작하면 CPU나 메모리보다 `sandbox_error` 비율, pass rate, flag 같은 reward 품질 신호가 먼저 변합니다.
 
 **읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 `reward_batch` 로그, [02 보안](02_security.md)의 인증 설계, [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)의 gateway 동작을 먼저 보세요.
 
@@ -44,6 +46,12 @@ flowchart LR
 ```
 
 *그림 요약: 경보는 지표(gateway, 샌드박스)와 로그(trainer) 두 경로에서 오고, 지표 수집기는 audience가 맞는 토큰이 있어야 읽습니다.*
+
+## 증상별 첫 점검
+
+![trainer 로그에서 채점 상태와 지연을 확인해 인증, 풀 용량, 채점 품질 가운데 먼저 볼 곳을 고릅니다.](../images/figures/production-07_observability_and_operations--triage.ko.svg)
+
+먼저 trainer 로그에서 실제 HTTP 오류와 평가 지연을 확인하고, [운영 런북](#운영-런북)에서 원인을 좁히세요. reward 급등만 보이면 해당 평가의 verdict를 확인합니다.
 
 ## 지표
 

@@ -5,22 +5,24 @@
 
 ## From one GPU to multiple nodes
 
-The hands-on trains a 1.5B model with LoRA on one A10G (24 GB).
-
-- **Long steps**: vLLM generates on that GPU, a separate sandbox GPU scores the candidate code, and the trainer then updates the LoRA adapter with the results. The three phases run one after another, so steps get long.
-- **Memory for a 7B model**: `Qwen/Qwen2.5-Coder-7B-Instruct` has about 7.6B parameters, so its bf16 weights alone are about 15 GB, which leaves little headroom when generation and training share one GPU (colocate mode).
-- **Reward calls on many GPUs**: moving to many GPUs also changes how rewards are called. veRL scores samples one at a time, so it cannot score a whole batch with one version as TRL does.
+Moving a working single-GPU GRPO run to multiple GPUs changes how grading requests arrive. Multiple workers can send answers to one prompt as separate, concurrent requests, increasing waiting time at the sandbox pool.
 
 ![a: vLLM generation on one trainer A10G (24 GB), reward scoring on a separate sandbox GPU and the update on the trainer run in turn; each sandbox call takes one routing snapshot, so one batch is scored by one version, and the 7B bf16 weights alone take about 15 of the 24 GB. b: GPU workers (actor, vLLM rollout, reward worker) xN in RayCluster verl send each sample to the sandbox gateway with POST /v1/evaluate and a group_key, and the gateway pins a version per group_key, so one group is scored by one version of the sandbox pools (per runtime, per version)](../images/figures/production-06_scaling_with_verl.en.svg)
 
-*Takeaway: With one trainer GPU, generation, sandbox scoring and the update run in turn, so steps are long, and with 7B weights loaded there is almost no headroom. On many GPUs samples are scored one at a time, so the reward function attaches a group_key and the gateway pins one version per group.*
-
-
 ## Scaling with the same sandbox pools
 
-- **Scale out in the same EKS cluster.** Running Ray through KubeRay reuses the sandbox pools, the gateway, the NetworkPolicies and token authentication.
-- **Keep on-policy consistency with per-sample scoring.** When the reward function attaches a `group_key` to every request, the gateway sends all samples of one group to the same sandbox version.
-- **Keep long runs going.** With checkpoints on a shared PVC and `trainer.resume_mode=auto`, resubmitting the job with the same `CKPT_DIR` after HyperPod replaces a node continues from the last checkpoint.
+Keep the EKS pools and route Ray worker evaluations through the gateway. Assign answers to the same prompt the same `group_key` to pin the grading version. In the first run, check evaluation wait time, `sandbox_error`, and version consistency alongside generation throughput. Save checkpoints on shared storage if a replacement pod must resume the run.
+
+??? note "Conditions and exceptions"
+    The hands-on trains a 1.5B model with LoRA on one A10G (24 GB).
+
+    - **Long steps**: vLLM generates on that GPU, a separate sandbox GPU scores the candidate code, and the trainer then updates the LoRA adapter with the results. The three phases run one after another, so steps get long.
+    - **Memory for a 7B model**: `Qwen/Qwen2.5-Coder-7B-Instruct` has about 7.6B parameters, so its bf16 weights alone are about 15 GB, which leaves little headroom when generation and training share one GPU (colocate mode).
+    - **Reward calls on many GPUs**: moving to many GPUs also changes how rewards are called. veRL scores samples one at a time, so it cannot score a whole batch with one version as TRL does.
+
+    - **Scale out in the same EKS cluster.** Running Ray through KubeRay reuses the sandbox pools, the gateway, the NetworkPolicies and token authentication.
+    - **Keep on-policy consistency with per-sample scoring.** When the reward function attaches a `group_key` to every request, the gateway sends all samples of one group to the same sandbox version.
+    - **Keep long runs going.** With checkpoints on a shared PVC and `trainer.resume_mode=auto`, resubmitting the job with the same `CKPT_DIR` after HyperPod replaces a node continues from the last checkpoint.
 
 **Before you start:** the TRL loop in [05 On-policy GRPO training](../handson/05_grpo_training.md) and the gateway API and group pins in [03 Gateway and pools](03_gateway_and_pools.md) help.
 

@@ -5,21 +5,23 @@
 
 ## Why infrastructure is hard to recreate
 
-- **Creating in several scripts**: creating the cluster, node groups and launch templates in several scripts helps understanding, but when you recreate the environment or hand it to a team, steps get missed.
-- **Deleting a setup created in several scripts**: it means removing each step's resources (launch templates, log groups and so on) one by one, and one leftover costs money or breaks the next creation.
-- **Account security checks**: they flag a public API endpoint, IMDSv1, unencrypted volumes or a wide-open security group right away (for example Security Hub control EKS.1).
-- **eksctl**: it cannot create a cluster with a private-only endpoint (eksctl documentation), so a public endpoint stays, which is why this asset removed the eksctl path.
+When recreating an exercise in another account or cleaning it up, it is easy to lose track of which command owns each resource. A deleted cluster can leave a separately created image repository or AMI behind. Identify resource ownership before repeating the deployment or cleanup.
 
 ![a: several scripts run in order create the cluster in step 1, node groups in step 2 and launch templates and log groups in step 3, and deletion goes step by step, resource by resource, so one leftover costs money or makes the next creation fail. b: cdk/deploy.sh deploys the same resources as one CDK stack (CloudFormation) and cdk/destroy.sh deletes the whole stack with everything in it, while the HyperPod cluster, AMIs and ECR are deleted separately](../images/figures/production-09_cdk.en.svg)
 
-*Takeaway: Resources made in each step must be deleted in each step, and missing one costs money or blocks the next creation. With one CDK stack, the resources in the stack are deleted as one unit.*
-
-
 ## What the CDK stack owns
 
-- **One stack is one unit of deletion.** The VPC, the EKS cluster, the managed node groups and the SSM access instance live in one CloudFormation stack and go with it. The HyperPod cluster, the AMIs and the ECR repositories are outside the stack and must be deleted separately ("Kept outside the stack" in the table below).
-- **Private by default, and security checks block the deploy.** The EKS API endpoint is not opened to the internet (operators connect through SSM Session Manager port forwarding), and cdk-nag (AwsSolutions rules) runs on every synth and fails the deploy on any unacknowledged finding.
-- **The hands-on uses the same stack.** `scripts/02_create_cluster.sh` calls `cdk/deploy.sh`, and both read `scripts/config.env`, so instance types and pinned versions cannot drift.
+The CDK stack creates and removes the VPC, EKS cluster, managed node groups, and SSM access instance together. Other scripts create HyperPod, AMIs, and ECR repositories. After deploying, check the private API through the tunnel. After deleting, check both stack status and separately created resources.
+
+??? note "Conditions and exceptions"
+    - **Creating in several scripts**: creating the cluster, node groups and launch templates in several scripts helps understanding, but when you recreate the environment or hand it to a team, steps get missed.
+    - **Deleting a setup created in several scripts**: it means removing each step's resources (launch templates, log groups and so on) one by one, and one leftover costs money or breaks the next creation.
+    - **Account security checks**: they flag a public API endpoint, IMDSv1, unencrypted volumes or a wide-open security group right away (for example Security Hub control EKS.1).
+    - **eksctl**: it cannot create a cluster with a private-only endpoint (eksctl documentation), so a public endpoint stays, which is why this asset removed the eksctl path.
+
+    - **One stack is one unit of deletion.** The VPC, the EKS cluster, the managed node groups and the SSM access instance live in one CloudFormation stack and go with it. The HyperPod cluster, the AMIs and the ECR repositories are outside the stack and must be deleted separately ("Kept outside the stack" in the table below).
+    - **Private by default, and security checks block the deploy.** The EKS API endpoint is not opened to the internet (operators connect through SSM Session Manager port forwarding), and cdk-nag (AwsSolutions rules) runs on every synth and fails the deploy on any unacknowledged finding.
+    - **The hands-on uses the same stack.** `scripts/02_create_cluster.sh` calls `cdk/deploy.sh`, and both read `scripts/config.env`, so instance types and pinned versions cannot drift.
 
 **Before you start:** read the architecture in [00 Hands-on overview](../handson/00_overview.md) and [00 Architecture](00_architecture.md). For the cheapest trial, create scenario C ([10 CPU-only path on c8i](../handson/10_cpu_only.md)).
 

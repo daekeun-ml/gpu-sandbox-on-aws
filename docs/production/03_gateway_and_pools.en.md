@@ -5,22 +5,24 @@
 
 ## When trainers connect directly to the pool
 
-- **When each trainer process decides alone which pod is free**: several TRL ranks and veRL reward workers send requests to the same pod, get 503 and retry.
-- **veRL scoring samples one at a time**: with no batch snapshot, samples of the same GRPO group can be scored by different versions before and after a routing switch.
-- **If the pinning rules live separately in each trainer's code**: it is also hard to version environments independently of the trainer.
-- **Another case**: INTELLECT-3 reported that `kubectl exec` through the API grew to about 2.5 s per command, and switched to a gateway, headless Service and sidecar design (arXiv 2512.16144).
+Two workers can choose the same idle pod. One request starts, and the other gets `503` and retries. More workers can make that contention visible in batch times. A version switch during the same run can also split a group across grading standards.
 
 ![a: TRL rank 0 and a veRL reward worker each see sandbox pod A as free and send to the same pod, which answers 503 and makes them retry; sample 1 of group 17 is scored by v1 and sample 2, after a routing switch, by v2, so one group spans two versions. b: all four requests pass one sandbox gateway, which counts in-flight requests in one place and sends one at a time to pod A and pod B, and its group_key pin scores both samples with the pinned version v1 (group pin, TTL 900 s)](../images/figures/production-03_gateway_and_pools.en.svg)
 
-*Takeaway: Callers that pick pods on their own collide on the same pod, and scoring samples separately lets one group span two versions. One gateway counts in-flight requests and pins each group to its first sample's version.*
-
-
 ## What the gateway handles
 
-- **In-flight requests are counted in one place.** Normally every request passes through a single gateway process, so it never sends two requests to the same pod at once.
-    - **While the gateway Deployment is being replaced**: the old and new gateway run side by side for a short time and can pick the same pod. The sandbox then answers the second request with 503 (busy), and the gateway sends it to another pod.
-- **Version pinning is centralized.** A batch is bound to one snapshot and samples to a `group_key` pin, and TRL and veRL use the same path through a single `SANDBOX_GATEWAY` without knowing the pinning rules.
-- **Recycling is automatic.** Worn-out pods are deleted and replaced with new ones; under Kata a new pod is a new VM.
+The gateway counts requests in flight, selects a free pod, and pins the scoring version. Batch requests use one routing snapshot. Individual requests use `group_key` to connect answers to the same prompt. Watch both retries and waiting time after adding it. When every ready pod is busy, evaluation capacity is the limiting factor.
+
+??? note "Conditions and exceptions"
+    - **When each trainer process decides alone which pod is free**: several TRL ranks and veRL reward workers send requests to the same pod, get 503 and retry.
+    - **veRL scoring samples one at a time**: with no batch snapshot, samples of the same GRPO group can be scored by different versions before and after a routing switch.
+    - **If the pinning rules live separately in each trainer's code**: it is also hard to version environments independently of the trainer.
+    - **Another case**: INTELLECT-3 reported that `kubectl exec` through the API grew to about 2.5 s per command, and switched to a gateway, headless Service and sidecar design (arXiv 2512.16144).
+
+    - **In-flight requests are counted in one place.** Normally every request passes through a single gateway process, so it never sends two requests to the same pod at once.
+        - **While the gateway Deployment is being replaced**: the old and new gateway run side by side for a short time and can pick the same pod. The sandbox then answers the second request with 503 (busy), and the gateway sends it to another pod.
+    - **Version pinning is centralized.** A batch is bound to one snapshot and samples to a `group_key` pin, and TRL and veRL use the same path through a single `SANDBOX_GATEWAY` without knowing the pinning rules.
+    - **Recycling is automatic.** Worn-out pods are deleted and replaced with new ones; under Kata a new pod is a new VM.
 
 ??? note "Terms"
     - **TokenReview**: a Kubernetes API that asks the API server directly whether a token sent by a caller is valid. The gateway authenticates callers with its result.

@@ -5,22 +5,24 @@
 
 ## trainer가 풀에 직접 연결할 때
 
-- **trainer 프로세스마다 빈 pod를 따로 판단하면**: 여러 TRL rank와 veRL reward worker가 같은 pod에 요청을 보내 503을 받고 재시도합니다.
-- **샘플을 하나씩 채점하는 veRL**: 배치 스냅샷이 없어, 같은 GRPO group의 샘플이 routing 전환 전후로 다른 버전으로 채점될 수 있습니다.
-- **버전 고정 규칙이 trainer 코드마다 따로 있으면**: 샌드박스 환경의 버전을 trainer와 독립적으로 관리하기도 어렵습니다.
-- **다른 사례**: INTELLECT-3는 API를 거친 `kubectl exec`의 지연이 명령당 약 2.5초까지 늘어나자 gateway, headless Service, sidecar 구성으로 바꿨다고 보고했습니다(arXiv 2512.16144).
+worker 두 개가 동시에 같은 pod를 빈 것으로 판단하면, 한 요청은 평가를 받고 다른 요청은 `503`을 받아 다시 시도합니다. worker가 늘수록 이 충돌이 배치 시간을 늘릴 수 있습니다. 여기에 채점 중 버전 전환까지 겹치면, 같은 group이 서로 다른 기준으로 비교될 수 있습니다.
 
 ![a: TRL rank 0과 veRL reward worker가 각자 샌드박스 pod A를 빈 pod로 판단해 같은 pod로 요청을 보내고, 503 응답과 재시도가 발생합니다. group 17의 샘플 1은 v1로, routing 전환 뒤에 보낸 샘플 2는 v2로 채점되어 같은 group이 서로 다른 버전으로 채점됩니다. b: 네 요청이 모두 sandbox gateway 하나를 거칩니다. gateway가 in-flight 요청 수를 한곳에서 집계해 pod A와 pod B에 동시 1건씩 보내고, group_key pin으로 두 샘플을 첫 샘플의 버전인 v1로 채점합니다(group pin, TTL 900초).](../images/figures/production-03_gateway_and_pools.ko.svg)
 
-*그림 요약: 호출자마다 따로 pod를 고르면 같은 pod에 요청이 몰리고, 샘플마다 따로 routing하면 한 group이 두 버전으로 채점됩니다. gateway 하나가 in-flight 요청 수를 집계하고 group을 첫 샘플의 버전에 고정해 두 문제를 해결합니다.*
-
-
 ## Gateway가 맡는 일
 
-- **in-flight 요청 수를 한곳에서 집계합니다.** 평상시에는 모든 요청이 gateway 프로세스 하나를 거치므로 한 pod에 요청 두 개를 동시에 보내지 않습니다.
-    - **gateway Deployment를 교체하는 동안**: 이전 gateway와 새 gateway가 잠시 함께 실행되어 같은 pod를 고를 수 있습니다. 이때 샌드박스는 두 번째 요청에 503(busy)을 반환하고, gateway가 그 요청을 다른 pod로 다시 보냅니다.
-- **버전 고정을 gateway에서 처리합니다.** 배치는 스냅샷 하나로, 샘플은 `group_key` pin으로 같은 버전에 고정합니다. TRL과 veRL은 고정 규칙을 직접 구현하지 않아도 `SANDBOX_GATEWAY` 하나로 같은 호출 경로를 씁니다.
-- **pod 재활용을 자동으로 처리합니다.** gateway가 draining 상태의 pod를 삭제하면 새 pod가 만들어지며, Kata에서는 새 pod마다 새 VM이 만들어집니다.
+gateway는 완료되지 않은 요청을 세고, 빈 pod를 고른 뒤 버전을 고정합니다. 배치 요청은 한 routing 스냅샷을 사용하고 낱개 요청은 `group_key`로 같은 문제의 답을 연결합니다. 도입 후에는 `503` 재시도와 대기 시간을 함께 봅니다. 준비된 pod가 모두 작업 중이라면 gateway만 늘려서는 평가 용량이 늘지 않습니다.
+
+??? note "세부 조건과 예외"
+    - **trainer 프로세스마다 빈 pod를 따로 판단하면**: 여러 TRL rank와 veRL reward worker가 같은 pod에 요청을 보내 503을 받고 재시도합니다.
+    - **샘플을 하나씩 채점하는 veRL**: 배치 스냅샷이 없어, 같은 GRPO group의 샘플이 routing 전환 전후로 다른 버전으로 채점될 수 있습니다.
+    - **버전 고정 규칙이 trainer 코드마다 따로 있으면**: 샌드박스 환경의 버전을 trainer와 독립적으로 관리하기도 어렵습니다.
+    - **다른 사례**: INTELLECT-3는 API를 거친 `kubectl exec`의 지연이 명령당 약 2.5초까지 늘어나자 gateway, headless Service, sidecar 구성으로 바꿨다고 보고했습니다(arXiv 2512.16144).
+
+    - **in-flight 요청 수를 한곳에서 집계합니다.** 평상시에는 모든 요청이 gateway 프로세스 하나를 거치므로 한 pod에 요청 두 개를 동시에 보내지 않습니다.
+        - **gateway Deployment를 교체하는 동안**: 이전 gateway와 새 gateway가 잠시 함께 실행되어 같은 pod를 고를 수 있습니다. 이때 샌드박스는 두 번째 요청에 503(busy)을 반환하고, gateway가 그 요청을 다른 pod로 다시 보냅니다.
+    - **버전 고정을 gateway에서 처리합니다.** 배치는 스냅샷 하나로, 샘플은 `group_key` pin으로 같은 버전에 고정합니다. TRL과 veRL은 고정 규칙을 직접 구현하지 않아도 `SANDBOX_GATEWAY` 하나로 같은 호출 경로를 씁니다.
+    - **pod 재활용을 자동으로 처리합니다.** gateway가 draining 상태의 pod를 삭제하면 새 pod가 만들어지며, Kata에서는 새 pod마다 새 VM이 만들어집니다.
 
 ??? note "용어"
     - **TokenReview**: 호출자가 보낸 토큰이 유효한지 Kubernetes API server에 직접 확인을 요청하는 API입니다. gateway는 이 결과로 호출자를 인증합니다.

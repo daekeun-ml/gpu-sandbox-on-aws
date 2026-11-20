@@ -5,22 +5,24 @@
 
 ## 한 장의 GPU에서 여러 노드로
 
-핸즈온은 1.5B 모델을 LoRA로 A10G 한 장(24 GB)에서 학습합니다.
-
-- **긴 step**: 이 GPU에서 vLLM이 응답을 생성하면 별도 샌드박스 GPU가 후보 코드를 채점하고, 결과를 받은 trainer가 LoRA를 업데이트합니다. 세 단계가 차례로 이어지므로 step이 길어집니다.
-- **7B 모델의 메모리**: `Qwen/Qwen2.5-Coder-7B-Instruct`는 파라미터가 약 7.6B라 bf16 가중치만 약 15 GB입니다. 생성과 학습을 한 GPU에서 실행하는 colocate 방식으로는 메모리 여유가 거의 없습니다.
-- **여러 GPU에서의 reward 호출**: 여러 GPU로 옮기면 reward 호출 방식도 달라집니다. veRL은 샘플을 하나씩 채점해서 TRL처럼 batch 전체를 한 버전으로 채점할 수 없습니다.
+GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 메모리와 step 시간 외에 채점 요청이 도착하는 방식도 달라집니다. worker 여러 개가 동시에 답을 보내면 같은 문제의 답들이 각기 다른 요청으로 들어오고, 샌드박스 풀의 대기도 늘어날 수 있습니다.
 
 ![a: trainer A10G 한 장(24 GB)의 vLLM 생성, 별도 샌드박스 GPU의 reward 채점, trainer의 업데이트가 차례로 이어집니다. 샌드박스를 부를 때마다 routing snapshot 하나를 잡으므로 한 batch는 한 버전으로 채점됩니다. GPU 메모리 24 GB 가운데 7B bf16 가중치만 약 15 GB를 차지합니다. b: RayCluster verl(rl-trainer)의 GPU worker(actor, vLLM rollout, reward worker) ×N이 샘플마다 POST /v1/evaluate 요청에 group_key를 붙여 sandbox gateway로 보냅니다. gateway가 group_key마다 버전을 고정하므로, 같은 group은 같은 버전의 샌드박스 풀(runtime별, version별)에서 채점됩니다.](../images/figures/production-06_scaling_with_verl.ko.svg)
 
-*그림 요약: trainer GPU 한 장으로는 생성, 샌드박스 채점, 업데이트가 차례로 이어져 step이 길고, 7B 가중치를 올리면 메모리 여유가 거의 없습니다. 여러 GPU로 확장하면 샘플마다 채점 요청을 보내므로, reward 함수가 group_key를 붙이고 gateway가 group마다 버전을 고정합니다.*
-
-
 ## 같은 샌드박스 풀로 확장하기
 
-- **같은 EKS 클러스터에서 확장합니다.** KubeRay로 Ray를 배포하면 기존 샌드박스 풀, gateway, NetworkPolicy, 토큰 인증을 그대로 쓸 수 있습니다.
-- **샘플 단위 채점에서도 on-policy 일관성을 유지합니다.** reward 함수가 요청마다 `group_key`를 붙이면 gateway가 같은 group의 샘플을 같은 샌드박스 버전으로 보냅니다.
-- **긴 run을 중단 지점부터 재개합니다.** checkpoint를 공유 PVC에 두고 `trainer.resume_mode=auto`를 쓰면, HyperPod가 노드를 교체한 뒤 같은 `CKPT_DIR`로 job을 다시 제출할 때 마지막 checkpoint부터 이어서 학습합니다.
+기존 EKS 풀을 유지하고 Ray worker가 gateway를 호출하도록 연결합니다. 같은 문제의 답에는 같은 `group_key`를 붙여 버전을 고정합니다. 첫 운영 run에서는 생성 처리량과 함께 채점 대기, `sandbox_error`, 버전 일관성을 확인합니다. 중단 후 재개가 필요하면 새 pod에서도 읽을 수 있는 공유 스토리지에 checkpoint를 저장합니다.
+
+??? note "세부 조건과 예외"
+    핸즈온은 1.5B 모델을 LoRA로 A10G 한 장(24 GB)에서 학습합니다.
+
+    - **긴 step**: 이 GPU에서 vLLM이 응답을 생성하면 별도 샌드박스 GPU가 후보 코드를 채점하고, 결과를 받은 trainer가 LoRA를 업데이트합니다. 세 단계가 차례로 이어지므로 step이 길어집니다.
+    - **7B 모델의 메모리**: `Qwen/Qwen2.5-Coder-7B-Instruct`는 파라미터가 약 7.6B라 bf16 가중치만 약 15 GB입니다. 생성과 학습을 한 GPU에서 실행하는 colocate 방식으로는 메모리 여유가 거의 없습니다.
+    - **여러 GPU에서의 reward 호출**: 여러 GPU로 옮기면 reward 호출 방식도 달라집니다. veRL은 샘플을 하나씩 채점해서 TRL처럼 batch 전체를 한 버전으로 채점할 수 없습니다.
+
+    - **같은 EKS 클러스터에서 확장합니다.** KubeRay로 Ray를 배포하면 기존 샌드박스 풀, gateway, NetworkPolicy, 토큰 인증을 그대로 쓸 수 있습니다.
+    - **샘플 단위 채점에서도 on-policy 일관성을 유지합니다.** reward 함수가 요청마다 `group_key`를 붙이면 gateway가 같은 group의 샘플을 같은 샌드박스 버전으로 보냅니다.
+    - **긴 run을 중단 지점부터 재개합니다.** checkpoint를 공유 PVC에 두고 `trainer.resume_mode=auto`를 쓰면, HyperPod가 노드를 교체한 뒤 같은 `CKPT_DIR`로 job을 다시 제출할 때 마지막 checkpoint부터 이어서 학습합니다.
 
 **읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 TRL 루프와 [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)의 gateway API, group pin을 먼저 보세요.
 

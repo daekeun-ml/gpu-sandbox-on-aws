@@ -5,21 +5,23 @@
 
 ## What idle resources cost
 
-- **A `g4dn.metal` left running after the hands-on**: it costs 7.824 USD per hour, or 375.552 USD over a 48-hour weekend.
-- **A pool fixed at a generous size**: it keeps billing for sandbox GPUs that are busy only during the reward phase and idle during generation and updates.
-- **Using 4 of the 8 T4s on a metal node**: billing is per node, so this doubles the price per T4 used.
-- **Two blue/green gVisor pools that overlap for long**: a gVisor pool uses one node per pod, so sandbox GPUs bill twice for that whole time.
+A sandbox can look idle on the GPU dashboard while the bill stays flat. Requests arrive mostly during scoring, but the node stays allocated during generation and training updates. Compare time spent grading with total node allocation time over a run to see where idle spend comes from.
 
 ![a: through the trainer's generation, reward and update phases the sandbox GPU is busy only during reward but bills per node throughout, and a pool kept after the run leaves g4dn.metal billing 7.824 USD per hour (375.552 USD over a 48-hour weekend). Using only 4 of the 8 T4s costs 1.956 USD/hour per T4 used. b: with the pool sized to the reward phase and replicas 0 after the run, the empty node becomes eligible for release after consolidateAfter 30 min, about 3.912 USD per empty period and billed until the node ends, and with all 8 T4s in use one T4 costs 0.978 USD/hour](../images/figures/production-08_cost.en.svg)
 
-*Takeaway: Sandbox nodes bill per node whether busy or idle, and keep billing when left running after the run. Size the pool to the reward phase, scale it to 0 after the run so empty nodes go back quickly, and fill all 8 T4s of a metal node to halve the price per T4.*
-
-
 ## Where to reduce costs
 
-- **Split the cost into four parts.** Each lever cuts a different part: pool sizing cuts sandbox GPUs, and consolidation cuts the wait of empty metal nodes.
-- **Compute with public list prices only.** With no measured usage, amounts are estimates: price times hours.
-- **When moving the trainer to HyperPod, compare the hourly difference for the same GPU with the node recovery features it buys.**
+Size the pool for bursts, then check how long unused nodes remain between runs. A metal instance is billed as a whole, so the effective rate per T4 depends on how many are used. The amounts below are estimates from public On-Demand rates.
+
+??? note "Conditions and exceptions"
+    - **A `g4dn.metal` left running after the hands-on**: it costs 7.824 USD per hour, or 375.552 USD over a 48-hour weekend.
+    - **A pool fixed at a generous size**: it keeps billing for sandbox GPUs that are busy only during the reward phase and idle during generation and updates.
+    - **Using 4 of the 8 T4s on a metal node**: billing is per node, so this doubles the price per T4 used.
+    - **Two blue/green gVisor pools that overlap for long**: a gVisor pool uses one node per pod, so sandbox GPUs bill twice for that whole time.
+
+    - **Split the cost into four parts.** Each lever cuts a different part: pool sizing cuts sandbox GPUs, and consolidation cuts the wait of empty metal nodes.
+    - **Compute with public list prices only.** With no measured usage, amounts are estimates: price times hours.
+    - **When moving the trainer to HyperPod, compare the hourly difference for the same GPU with the node recovery features it buys.**
 
 **Before you start:** the instance choices in [04 Platforms and instances](../concepts/04_platforms_and_instances.md) and the NodePool settings in [01 Capacity and nodes](01_capacity_and_nodes.md) help.
 

@@ -5,22 +5,24 @@
 
 ## Training can continue while scoring fails
 
-Sandbox-side failures usually do not stop training.
-
-- **Even under a flood of authentication failures (401)**: TRL drops `sandbox_error` samples by returning `None`. When every sample is dropped the advantages are 0, so steps go by without learning.
-- **Even when the pool shrinks**: a pod that is not Ready only disappears from the headless Service DNS, so requests pile onto the remaining pods and steps just get slower.
-- **Under reward hacking**: it even looks like improving rewards, because flags (`implausible_speedup`, `timed_output_mismatch` and others) live only in the verdicts and are not aggregated into metrics.
+Training steps can keep advancing while learning stalls or batches slow down. Start with `reward_batch` to distinguish wrong outputs from submissions the sandbox could not grade. A rise in grading failures points you toward the evaluation path.
 
 ![a: authentication failures (a flood of 401s) drop sandbox_error samples with None, giving those samples an advantage of 0, and when every sample is dropped steps go by with no learning signal; a shrinking pool takes pods that are not Ready out of DNS and loads the remaining pods, so steps just get slower; reward hacking flags live only in verdicts and are not aggregated into metrics, so rewards seem to improve. Training stops in none of the three. b: the same failures map to alarms: status.sandbox_error / n to the sandbox_error rate (TRL over 5%, 3 batches in a row), available versus desired replicas per active pool Deployment to Ready pods short (available below desired for 10 minutes), and flag counts (an extension not in the repository, dashed) to a reward hacking signal (flag rate trending up)](../images/figures/production-07_observability_and_operations.en.svg)
 
-*Takeaway: Sandbox-side failures do not stop training. When every sample becomes unscorable, steps go by without learning; a shrinking pool slows steps down; reward hacking makes rewards look better than they are. The three failures are caught by alarms on the `sandbox_error` rate, the number of Ready pods and the flag count.*
-
-
 ## Which signals to check
 
-- **Watch three layers together.** The sandbox pod (one evaluation), the gateway (scheduling and version pinning) and the trainer (reward batches and steps) each answer a different question.
-- **Metrics endpoints are authenticated too.** `/metrics` goes through the same token verification as `/v1/evaluate`; the only unauthenticated routes are the kubelet probe routes `/healthz` and `/readyz`.
-- **Alarm on training signals.** Reward quality signals such as `sandbox_error` rate, pass rate and flags show the moment training breaks earlier than CPU or memory do.
+Correlate rising `sandbox_error` with the gateway state and the number of ready pods. If rewards suddenly improve, inspect measurement flags in the verdicts. These flags are not collected as metrics by default. The metrics and runbook below connect those signals to the next check.
+
+??? note "Conditions and exceptions"
+    Sandbox-side failures usually do not stop training.
+
+    - **Even under a flood of authentication failures (401)**: TRL drops `sandbox_error` samples by returning `None`. When every sample is dropped the advantages are 0, so steps go by without learning.
+    - **Even when the pool shrinks**: a pod that is not Ready only disappears from the headless Service DNS, so requests pile onto the remaining pods and steps just get slower.
+    - **Under reward hacking**: it even looks like improving rewards, because flags (`implausible_speedup`, `timed_output_mismatch` and others) live only in the verdicts and are not aggregated into metrics.
+
+    - **Watch three layers together.** The sandbox pod (one evaluation), the gateway (scheduling and version pinning) and the trainer (reward batches and steps) each answer a different question.
+    - **Metrics endpoints are authenticated too.** `/metrics` goes through the same token verification as `/v1/evaluate`; the only unauthenticated routes are the kubelet probe routes `/healthz` and `/readyz`.
+    - **Alarm on training signals.** Reward quality signals such as `sandbox_error` rate, pass rate and flags show the moment training breaks earlier than CPU or memory do.
 
 **Before you start:** the `reward_batch` log in [05 On-policy GRPO training](../handson/05_grpo_training.md), the authentication design in [02 Security](02_security.md) and the gateway behavior in [03 Gateway and pools](03_gateway_and_pools.md) help.
 
@@ -44,6 +46,12 @@ flowchart LR
 ```
 
 *Takeaway: alarms come from two sources, metrics (gateway, sandboxes) and logs (trainer), and the metrics collector needs a token with the right audience to read them.*
+
+## First checks by symptom
+
+![Use verdicts and latency in the trainer log to choose between authentication, pool capacity, and score checks.](../images/figures/production-07_observability_and_operations--triage.en.svg)
+
+Check the HTTP error and evaluation latency in the trainer log, then narrow the cause with the [operations runbook](#operations-runbook). If only the reward changes, inspect the matching verdict.
 
 ## Metrics
 

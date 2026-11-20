@@ -5,23 +5,25 @@
 
 ## Why GPU nodes take time to provision
 
-A `g4dn.metal` takes minutes to boot, install kata-deploy and bind its GPUs to vfio-pci.
-
-- **Started on demand**: it makes reward batches wait that long.
-- **Started early**: it bills while idle (7.824 USD/hour, us-east-1 and us-west-2 On-Demand).
-- **With node counts managed by hand**: it is easy to forget to turn it off.
-- **When an automatic AMI update brings an NVIDIA driver nvproxy does not know (unknown)**: gVisor GPU sandboxes never become Ready and pool capacity drops to zero.
-- **The G and VT On-Demand quota**: it has a documented default of 0, so until it is raised you cannot launch a single 96-vCPU `g4dn.metal`.
+If the first reward batch waits for minutes, start by checking whether its sandbox pod has a node. A `g4dn.metal` instance still needs Kata setup and GPU preparation after boot. If a gVisor node exists but its sandbox never becomes Ready, inspect the AMI driver and nvproxy release together.
 
 ![a: on the metal node (sandbox-kata-gpu) a reward batch arrives, the g4dn.metal then spends minutes booting, installing kata-deploy and binding vfio-pci, and the batch waits; on the gVisor node (sandbox-gvisor) an automatic AMI update through al2023@latest brings a driver unknown to nvproxy, GPU initialization fails, sandboxes never become Ready and pool capacity drops to 0. b: on metal a warm placeholder with priority -10 is preempted and steps aside, the sandbox pods run on a node that is already up and Karpenter adds a new spare; on gVisor the AMI is pinned to al2023@v20261107, CI checks support with nvproxy list-supported-drivers, and the AMI and GVISOR_RELEASE are raised together only when it passes](../images/figures/production-01_capacity_and_nodes.en.svg)
 
-*Takeaway: Slow metal started on demand makes batches wait, and an automatic AMI update can drop the gVisor pool to zero capacity. A warm placeholder keeps one metal node ready, and the AMI and gVisor are pinned together and raised only after CI confirms support.*
-
-
 ## Capacity by runtime
 
-- **Each runtime needs a different kind of node.** Instances, taints, labels, caps and disruption policy are split per NodePool so that one setting never leaks into another.
-- **The coupling between driver and runtime stays visible.** nvproxy needs an exact driver match, so the AMI and gVisor are pinned together and checked in CI before a change.
+Compare the cost of keeping a metal node warm with the first-batch delay it avoids. For gVisor driver compatibility, pin the AMI and release together and check the supported driver list before rolling out a change.
+
+??? note "Conditions and exceptions"
+    A `g4dn.metal` takes minutes to boot, install kata-deploy and bind its GPUs to vfio-pci.
+
+    - **Started on demand**: it makes reward batches wait that long.
+    - **Started early**: it bills while idle (7.824 USD/hour, us-east-1 and us-west-2 On-Demand).
+    - **With node counts managed by hand**: it is easy to forget to turn it off.
+    - **When an automatic AMI update brings an NVIDIA driver nvproxy does not know (unknown)**: gVisor GPU sandboxes never become Ready and pool capacity drops to zero.
+    - **The G and VT On-Demand quota**: it has a documented default of 0, so until it is raised you cannot launch a single 96-vCPU `g4dn.metal`.
+
+    - **Each runtime needs a different kind of node.** Instances, taints, labels, caps and disruption policy are split per NodePool so that one setting never leaks into another.
+    - **The coupling between driver and runtime stays visible.** nvproxy needs an exact driver match, so the AMI and gVisor are pinned together and checked in CI before a change.
 
 **Before you start**: read the NodePool table in [00 Architecture](00_architecture.md), the instance choices in [04 Platforms and instances](../concepts/04_platforms_and_instances.md) and the IOMMU AMI step in [03 Kata sandboxes (CLH, QEMU)](../handson/03_kata.md) first.
 

@@ -5,23 +5,25 @@
 
 ## What changes beyond the hands-on setup
 
-Scaled up as is, the hands-on setup, kept simple for a one-day exercise, runs into these problems.
-
-- **Each trainer process picks a free pod alone**: this breaks first. Several TRL ranks and dozens of veRL reward workers pile onto the same pods and 503 retries grow.
-- **veRL scores per sample**: veRL scores samples one at a time and has no batch routing snapshot, so versions can mix inside a group.
-- **Node group sizes handled by hand**: GPU nodes sit idle regardless of load or grow too late.
-- **`scripts/ops/sync_jwks.sh` run by hand**: when the issuer signing key changes, sandboxes reject every token signed with the new key (fail closed) until the new public key is synced.
+One trainer ran the exercise successfully. After adding workers, more evaluations can return `503` and training steps can take longer. Independent workers can choose the same supposedly idle pod. If routing changes at the same time, separate veRL requests for answers to the same prompt can also land on different grader versions.
 
 ![a: scaled up as is, the hands-on setup lets every trainer process pick a free pod alone, so requests pile onto sandbox pod A (more 503 retries); the veRL reward worker routes each sample separately, so v1 and v2 can mix inside one group; node group desired values set by hand leave GPU nodes idle or growing too late; and scripts/ops/sync_jwks.sh run by hand means tokens signed with a new key are all rejected until the new public key is synced. b: in production the trainers call only the sandbox gateway, which sends one evaluation per pod and versions stay one per batch for TRL (batch snapshot) and one per group for veRL (group_key pins); Karpenter NodePools grow and shrink their own nodes from zero with demand (one warm g4dn.metal), while the managed node groups from the hands-on CDK stay until you lower their desired value by hand; and the jwks-sync CronJob patches the ConfigMap hourly at :17 to follow key rotation](../images/figures/production-00_architecture.en.svg)
 
-*Takeaway: Every caller picks pods on its own, so requests pile onto the same pod, per-sample scoring does not pin the version, and nodes and signing keys handled by hand do not follow load or key rotation. Production hands these to the gateway, Karpenter NodePools and the jwks-sync CronJob.*
-
-
 ## The production design
 
-- **Scheduling and version pinning happen in one place, the gateway.** It sends one evaluation per pod and scores each batch request with one routing snapshot. TRL brings each rank's reward batch to the results of one pool, and veRL samples stay on one version per `group_key` while the pin is valid.
-- **Nodes follow the number of sandbox pods.** Karpenter NodePools start sandbox nodes from zero, and a warm placeholder keeps one slow-booting `g4dn.metal` ready.
-- **Training requests reach sandboxes only through the gateway.** The production NetworkPolicy admits only the gateway pod into sandbox pods. The `sandbox-probe` Jobs that run verification and parity need a separate policy ([03 Gateway and pools](03_gateway_and_pools.md)).
+The gateway selects an available pod and remembers the grading version. Karpenter provides nodes when there is pending sandbox capacity to schedule. After connecting them, confirm that a group uses one version and then check whether requests spend less time waiting. More nodes can reduce contention while leaving version consistency unresolved.
+
+??? note "Conditions and exceptions"
+    Scaled up as is, the hands-on setup, kept simple for a one-day exercise, runs into these problems.
+
+    - **Each trainer process picks a free pod alone**: this breaks first. Several TRL ranks and dozens of veRL reward workers pile onto the same pods and 503 retries grow.
+    - **veRL scores per sample**: veRL scores samples one at a time and has no batch routing snapshot, so versions can mix inside a group.
+    - **Node group sizes handled by hand**: GPU nodes sit idle regardless of load or grow too late.
+    - **`scripts/ops/sync_jwks.sh` run by hand**: when the issuer signing key changes, sandboxes reject every token signed with the new key (fail closed) until the new public key is synced.
+
+    - **Scheduling and version pinning happen in one place, the gateway.** It sends one evaluation per pod and scores each batch request with one routing snapshot. TRL brings each rank's reward batch to the results of one pool, and veRL samples stay on one version per `group_key` while the pin is valid.
+    - **Nodes follow the number of sandbox pods.** Karpenter NodePools start sandbox nodes from zero, and a warm placeholder keeps one slow-booting `g4dn.metal` ready.
+    - **Training requests reach sandboxes only through the gateway.** The production NetworkPolicy admits only the gateway pod into sandbox pods. The `sandbox-probe` Jobs that run verification and parity need a separate policy ([03 Gateway and pools](03_gateway_and_pools.md)).
 
 **Before you start**: this page compares against the hands-on setup, so read [Hands-on 00 Overview](../handson/00_overview.md), [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md) and [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md) first.
 
@@ -37,6 +39,14 @@ Scaled up as is, the hands-on setup, kept simple for a one-day exercise, runs in
     - **warm placeholder**: a low-priority empty pod that keeps a slow-booting node ready.
 
     More terms are in the [Glossary](../reference/glossary.md).
+
+## Preparing for production after the exercise
+
+If you need a repeatable deployment, start with [CDK stack ownership](09_cdk.md) and [node provisioning](01_capacity_and_nodes.md). Check what delays the first sandbox and what removes idle nodes after a run.
+
+Before increasing the number of users or workers, review [isolation boundaries](02_security.md) alongside the [gateway request path](03_gateway_and_pools.md). Once requests succeed, use the [scoring rules](04_reward_integrity.md) and [log signals](07_observability_and_operations.md) to confirm that advancing steps receive usable scores.
+
+For a change to a running workload, start with the verification and rollback steps in [version switching](05_sandbox_updates.md). For more workers, check pool capacity and checkpoint requirements in [scaling with veRL](06_scaling_with_verl.md). To decide whether to keep a node warm, compare the wait time and [idle cost](08_cost.md).
 
 ## Overall layout
 
