@@ -249,7 +249,7 @@ gVisor 문서는 nvproxy를 NVIDIA open 드라이버 기준으로 설명하고, 
 - `ops/verify.sh gvisor v1`이 통과했습니다. golden verdict 6개가 PASS(`vector_add_triton`, `relu_bias_triton` 포함)였고, egress 대상 4개가 차단됐으며, NetworkPolicy가 `default` 네임스페이스에서 들어오는 연결을 막았습니다.
 - trainer를 `g5.2xlarge`에 둔 5 step GRPO 학습이 끝났습니다.
 
-이 조합은 이 저장소가 실습 계정에서 검증한 것이므로, 인스턴스 타입, 드라이버, AMI, gVisor 버전을 바꾼 뒤에는 `04_install_gpu_stack.sh`의 smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요. 기본 풀(`sandbox-gvisor-v1`, replica 2)이 두 노드의 GPU를 모두 쓰고 있으면 smoke pod가 GPU를 받지 못해 `Pending`으로 남습니다. 스크립트는 15분 기다린 뒤 경고를 출력하고, 이어지는 `kubectl logs`가 실패해 pod를 지우지 않은 채 끝납니다. 그러니 다시 검사하기 전에 `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=1`로 GPU 하나를 비우세요. 이미 시간 초과가 났다면 `kubectl get pods -n default`로 남은 `gvisor-smoke-<n>` pod를 찾아 `kubectl delete pod gvisor-smoke-<n>`로 지운 뒤 smoke test를 실행하고, `cuda ok:`를 확인하면 replica를 2로 되돌린 다음 `verify.sh`를 실행합니다.
+이 조합은 이 저장소가 실습 계정에서 검증한 것이므로, 인스턴스 타입, 드라이버, AMI, gVisor 버전을 바꾼 뒤에는 `04_install_gpu_stack.sh`의 smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요. 기본 풀(`sandbox-gvisor-v1`, replica 2)이 두 노드의 GPU를 모두 쓰고 있으면 smoke pod가 GPU를 받을 수 없습니다. 이때 스크립트는 smoke pod를 띄우기 전에 `every GPU on the sandbox-gvisor nodes is in use`로 멈추고 풀을 줄이는 명령을 안내합니다. `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=1`로 GPU 하나를 비운 뒤 다시 실행하세요. `cuda ok:`를 확인하면 `scripts/06_deploy_sandboxes.sh gvisor v1`로 replica를 2로 되돌리고 `verify.sh`를 실행합니다.
 
 `g6`는 지원하는 대안입니다. open 드라이버라 gVisor 문서가 다루는 조합이고, 요금도 더 낮습니다(`g6.xlarge` 0.8048, `g6.2xlarge` 0.9776). 쓰려면 `scripts/config.env`의 `GVISOR_INSTANCE_TYPE`과 `TRAINER_INSTANCE_TYPE`(HyperPod는 `HYPERPOD_*`)을 바꾸세요.
 

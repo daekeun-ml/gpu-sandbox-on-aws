@@ -9,7 +9,7 @@
 # Part 2 is skipped when the CDK stack runs scenario B2 or C, which have no EC2 gVisor GPU nodes:
 # B2 registers gvisor-hyperpod in scripts/hyperpod/create.sh --b2, C uses scripts/kata/cpu_nodes.sh.
 source "$(dirname "$0")/lib.sh"
-require_tools aws helm kubectl
+require_tools aws helm kubectl python3
 require_vars AWS_REGION CLUSTER_NAME NVIDIA_DEVICE_PLUGIN_VERSION
 
 # The scenario the stack was deployed with (the output cdk/deploy.sh checks too). Empty without
@@ -49,6 +49,32 @@ fi
 
 kubectl apply -f "${REPO_ROOT}/k8s/runtimes/runtimeclass-gvisor.yaml"
 kubectl get runtimeclass gvisor
+
+# The smoke pod needs one free GPU on a sandbox-gvisor node. When a sandbox pool (06) already
+# holds them all, the pod would sit Pending for the whole 15-minute wait; stop here instead.
+nodes_json="$(mktemp)" pods_json="$(mktemp)"
+kubectl get nodes -l gpusandbox/role=sandbox-gvisor -o json > "${nodes_json}"
+kubectl get pods -A --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json > "${pods_json}"
+free_gpus="$(python3 - "${nodes_json}" "${pods_json}" <<'PY'
+import json, sys
+nodes = {n["metadata"]["name"]: int(n["status"].get("capacity", {}).get("nvidia.com/gpu") or 1)
+         for n in json.load(open(sys.argv[1]))["items"]}
+used = 0
+for pod in json.load(open(sys.argv[2]))["items"]:
+    if pod["spec"].get("nodeName") in nodes:
+        for c in pod["spec"]["containers"]:
+            res = c.get("resources", {})
+            used += int((res.get("limits") or res.get("requests") or {}).get("nvidia.com/gpu", 0))
+print(sum(nodes.values()) - used)
+PY
+)"
+rm -f "${nodes_json}" "${pods_json}"
+if (( free_gpus <= 0 )); then
+  kubectl get pods -A -o wide --field-selector=status.phase=Running | grep -E "NAME|sandbox-gvisor" || true
+  die "every GPU on the sandbox-gvisor nodes is in use, so the smoke pod cannot start. Free one with
+  kubectl -n sandbox scale deployment -l gpusandbox/runtime=gvisor --replicas=0
+then run this script again; scripts/06_deploy_sandboxes.sh gvisor v1 brings the pool back."
+fi
 
 pod="gvisor-smoke-$RANDOM"
 cat <<EOF | kubectl apply -f -

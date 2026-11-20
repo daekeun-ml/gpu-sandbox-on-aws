@@ -54,6 +54,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 - **smoke pod에 `cuda ok:` 줄 대신 PyTorch 오류가 나오거나, 샌드박스 로그에 `torch.cuda.is_available() is False`**: 샌드박스 안에서 GPU 동작 확인에 실패했습니다. 노드의 `nvidia.com/gpu` 수와 NVIDIA device plugin pod 상태를 확인하세요. GPU 수가 보이면 device plugin 설정이 `deviceListStrategy: cdi-cri`인지와 PyTorch 오류 문구를 함께 확인하세요.
 - **GPU pod가 `StartError`로 끝나고 이벤트에 `reading mounts file:`**: NVIDIA toolkit의 CDI hook 하나가 gVisor와 맞지 않아 생기는 문제입니다. `04_install_gpu_stack.sh`가 이 hook을 끕니다. device plugin DaemonSet의 `CDI_DISABLE_HOOKS` 값이 `disable-device-node-modification`인지 확인하세요.
+- **`04_install_gpu_stack.sh`가 `every GPU on the sandbox-gvisor nodes is in use`로 멈춤**: 이미 배포한 샌드박스 풀이 gVisor 노드의 GPU를 모두 쓰고 있어서 smoke pod가 GPU를 받을 수 없습니다. 출력된 명령으로 풀을 0으로 줄이고 다시 실행한 뒤, `scripts/06_deploy_sandboxes.sh gvisor v1`로 풀을 되돌리세요.
 - **노드 로그에 `NVIDIA driver ... is not supported by gVisor`**: 노드의 드라이버 버전이 고정한 gVisor 버전의 지원 목록에 없습니다. 지원 드라이버가 들어 있는 AMI를 쓰거나, 그 드라이버를 지원하는 버전으로 `GVISOR_RELEASE`를 바꾸세요. CDK로 만든 EC2 노드 그룹은 새 노드가 처음 부팅할 때 gVisor를 설치합니다. 이 노드 그룹에서 `GVISOR_RELEASE`를 바꿨다면 같은 시나리오로 `scripts/02_create_cluster.sh`를 다시 실행하세요.
 
 자세히: [gVisor](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#gvisor)
