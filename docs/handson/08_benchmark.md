@@ -72,10 +72,10 @@ scripts/ops/bench.sh 64     # more requests per pool
   sandbox-gvisor-v1-<hash>: <N>s
   sandbox-gvisor-v1-<hash>: <N>s
 [hh:mm:ss] gvisor: 32 evaluations of relu_bias_triton
-{"address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000", "golden": "relu_bias_triton", "runtime": "gvisor", "requests": 32, "ok": 32, ...}
+[hh:mm:ss] bench  gvisor  ok 32/32  p50 ...s  p95 ...s  ... eval/s  speedup ...
 ```
 
-마지막 줄은 `results: <저장소 경로>/bench-<YYYYmmdd-HHMMSS>.jsonl`입니다. JSON 줄의 `ok`가 `requests`와 같아야 정상입니다.
+마지막 줄은 `[hh:mm:ss] results: <저장소 경로>/bench-<YYYYmmdd-HHMMSS>.jsonl`입니다. `bench` 줄의 `ok 32/32`처럼 두 수가 같아야 정상입니다. 터미널에는 요약이 보이고, JSONL 파일에는 모든 필드가 담긴 원래 JSON이 저장됩니다.
 
 cold start 값은 터미널에만 출력되고 JSONL에는 저장되지 않으니 따로 기록해 두세요. 스크립트는 v1 풀만 측정합니다. v2는 seed 수(5개)가 달라 평가 시간이 다를 수 있으므로 같은 버전끼리 비교하세요.
 
@@ -249,7 +249,7 @@ PY
 ## 확인 방법
 
 1. 풀마다 `<runtime>: cold start (creationTimestamp -> Ready)` 다음에 `  <pod>: <N>s` 줄이 pod 수만큼 나옵니다.
-2. 이어서 bench JSON 한 줄이 나오고, `ok`가 `requests`와 같습니다.
+2. 이어서 `bench` 요약 한 줄이 나오고, `ok 32/32`처럼 두 수가 같습니다.
 3. 마지막에 `results: <repo>/bench-<timestamp>.jsonl`이 출력되고, 파일에 측정한 풀마다 JSON 한 줄이 있습니다.
 4. 스크립트는 배포하지 않은 풀을 별도 메시지 없이 건너뜁니다. 결과에 빠진 풀이 있으면 "시작 전 확인"의 `kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version`으로 v1 pod가 있는지 확인하세요.
 

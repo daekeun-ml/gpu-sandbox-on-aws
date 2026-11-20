@@ -54,7 +54,7 @@ scripts/07_run_grpo.sh 20     # or: a shorter run
 | 1 | sets `RUN_ID` (default `date +%Y%m%d-%H%M%S`), `MAX_STEPS` (first argument, default 60) and `MODEL_ID` (default `Qwen/Qwen2.5-Coder-1.5B-Instruct`). |
 | 2 | renders `k8s/trainer/job-grpo.yaml.tpl` and creates the Job `grpo-${RUN_ID}` in the `rl-trainer` namespace. |
 | 3 | waits up to 30 minutes for the pod to become Ready. |
-| 4 | follows the logs filtered by `"event"`, `loss`, `Error` and `Traceback`. Ctrl-C stops following the logs, not the training. |
+| 4 | follows the logs filtered by `"event"`, `loss`, `Error` and `Traceback`. In a terminal, JSON events and TRL dicts are shown as one-line summaries. Ctrl-C stops following the logs, not the training. |
 
 **What to look for:** lines in the order below (example shape; values differ per run). The image pull and model download can leave a few minutes without output after the first lines.
 
@@ -62,14 +62,16 @@ scripts/07_run_grpo.sh 20     # or: a shorter run
 job.batch/grpo-20261113-101500 created
 [hh:mm:ss] job grpo-20261113-101500 submitted; following logs (Ctrl-C stops following, not training)
 pod/grpo-20261113-101500-xxxxx condition met
-{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
-{"event": "reward_batch", "batch": 1, "global_step": 0, "runtime": "gvisor", "version": "v1", ...}
-{'loss': ..., 'reward': ..., 'rewards/format_reward/mean': ..., ...}
+[hh:mm:ss] routing  mode direct  runtime gvisor  version v1  address sandbox-gvisor-v1.sandbox.svc.cluster.local:8000
+[hh:mm:ss] batch   1  gvisor/v1  ...
+[hh:mm:ss] train  loss ...  reward ...
 ...
-{'train_runtime': ..., ...}
-{"event": "done", "output": "/outputs/grpo/final", "reward_batches": <int>}
+[hh:mm:ss] train done  train_runtime ...  train_loss ...  epoch ...
+[hh:mm:ss] done  output /outputs/grpo/final  reward_batches <int>
 CUDA Error: invalid argument at /workspace/csrc/cumem_allocator.cpp:249
 ```
+
+The fields each summary keeps are listed under [Reading the logs](#reading-the-logs) below. To see every field from the start, run `GPUSANDBOX_LOG=json scripts/07_run_grpo.sh`. For a run that has already started, read the raw log with the `kubectl logs` command right below.
 
 In the 5-step run in the practice account on 2026-11-18 (`MAX_STEPS=5`, `g5.2xlarge`), every step printed one `reward_batch` whose `status` mixed `ok`, `wrong_answer`, `compile_error` and `runtime_error`, each step took 63.15 to 95.59 seconds, and `train_runtime` was about 401 seconds. After `done`, vLLM printed the `CUDA Error` of the last line while shutting down, yet the Job still ended Complete (exit 0). If you see that line, judge success by the Job status.
 
@@ -83,7 +85,7 @@ To follow the logs again, use the Job name the script printed (full, unfiltered 
 kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 ```
 
-**What to look for:** the same JSON events and TRL dict lines as above, plus model loading and vLLM initialization logs.
+**What to look for:** the raw JSON events and TRL dict lines instead of the summaries, plus model loading and vLLM initialization logs.
 
 ## What to look at in the Job manifest
 
@@ -213,7 +215,9 @@ The log mixes two kinds of lines. The first is the Python dict TRL prints every 
 | `entropy`, `clip_ratio/*`, `sampling/importance_sampling_ratio/*` | policy entropy, clipping ratio, vLLM correction ratio |
 | `loss`, `grad_norm`, `learning_rate` | the usual training metrics. With `beta` 0, `kl` is not recorded |
 
-The second is the JSON events this repository's code prints to stdout. Only `reward_batch` and, on a version change, `sandbox_version_switch` are also written to `/outputs/grpo/sandbox_metrics.jsonl`. To keep `routing` at the start and `done` at the end as well, save the Job log (see "Keeping the training results" above).
+The `train` line of the terminal summary shows only `loss`, `reward`, `reward_std`, `grad_norm`, `learning_rate` and `epoch` from these. Read the other metrics in the raw dict (the pod log or `GPUSANDBOX_LOG=json`).
+
+The second is the JSON events this repository's code prints to stdout. Only `reward_batch` and, on a version change, `sandbox_version_switch` are also written to `/outputs/grpo/sandbox_metrics.jsonl`. To keep `routing` at the start and `done` at the end as well, save the Job log (see "Keeping the training results" above). Below is the raw JSON shape you see in the pod log and with `GPUSANDBOX_LOG=json`.
 
 ```text
 {"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
@@ -234,6 +238,8 @@ The second is the JSON events this repository's code prints to stdout. Only `rew
 | `pass_rate`, `custom_kernel_rate` | fraction of `n` that is `ok`, and fraction with `custom_kernel` true (including Triton code whose launches could not be counted) |
 | `mean_speedup` | mean speedup of the `ok` answers (with or without a kernel), null if none |
 | `eval_p50_s`, `eval_p95_s`, `batch_wall_s` | p50/p95 of the evaluation time measured by the sandbox server (`duration_s`), and the time the trainer waited for the whole batch. With no measured time at all (for example every call failed) both p50 and p95 are null; with only one, p95 is null |
+
+The `reward_batch` line of the terminal summary shows only `batch`, `runtime/version`, `status`, `pass_rate`, `mean_speedup` and `batch_wall_s` from these. When `served_versions` has more than one version, `MIXED VERSIONS {...}` is appended. Whether the results came from the requested version (`version`) shows in the raw JSON, as the key of `served_versions`.
 
 A step that sent no answer to a sandbox prints no `reward_batch` line. The `sandbox_version_switch` event of a version switch is covered in [06](06_sandbox_update.md).
 
@@ -315,14 +321,14 @@ The EKS control plane, NAT gateway and EBS are billed separately. If a `g4dn.met
 ## How to verify
 
 1. `kubectl -n rl-trainer get pods -l job-name=grpo-<RUN_ID>` shows the pod Running.
-2. The first JSON line is `{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", ...}`.
-3. Every step prints a TRL dict line. Steps with new completions to score also print a `reward_batch` line, `served_versions` has a single key equal to `version`, and most of `status` is not `sandbox_error`. A step whose completions all lack a code block, all fail the trainer-side policy check or are all cached from one pool passes without `reward_batch`.
-4. At the end `{"event": "done", "output": "/outputs/grpo/final", ...}` appears and the Job becomes Complete. The vLLM shutdown error that follows (`cumem_allocator.cpp:249`) also appeared in the 5-step run in the practice account, and that Job was Complete too.
+2. The first event line is `routing  mode direct  runtime gvisor  version v1  ...`.
+3. Every step prints a TRL dict line. Steps with new completions to score also print a `batch` line (`reward_batch`) without `MIXED VERSIONS`, and most of the counts per status are not `sandbox_error`. A step whose completions all lack a code block, all fail the trainer-side policy check or are all cached from one pool passes without `reward_batch`.
+4. At the end `done  output /outputs/grpo/final  ...` appears and the Job becomes Complete. The vLLM shutdown error that follows (`cumem_allocator.cpp:249`) also appeared in the 5-step run in the practice account, and that Job was Complete too.
 
 | Symptom | Possible cause | Check |
 |---|---|---|
 | `status` is mostly `sandbox_error` | NetworkPolicy label, token audience, pool Ready state | `scripts/ops/verify.sh gvisor`, the "training" and "401 and 403 responses" sections of [Troubleshooting](../reference/troubleshooting.md) |
-| Few `reward_batch` lines | most answers have no code block or fail the trainer-side policy, so none go to a sandbox | `rewards/format_reward/mean`, `completions/clipped_ratio` |
+| Few `reward_batch` lines | most answers have no code block or fail the trainer-side policy, so none go to a sandbox | `rewards/format_reward/mean`, `completions/clipped_ratio` in the raw TRL dict |
 | CUDA OOM | memory budget exceeded | reduce in the order of the memory section above |
 | Pod Pending | no trainer node, or the GPU is not registered | `kubectl get nodes -L gpusandbox/role`, the output of `scripts/04_install_gpu_stack.sh` |
 
@@ -330,7 +336,7 @@ The EKS control plane, NAT gateway and EBS are billed separately. If a `g4dn.met
     For `sandbox_error` all three components are None. TRL 1.18.0 leaves such completions out of the group baseline and sets their advantage to 0, so the policy is not punished for infrastructure failures. Many of them do shrink the learning signal, so watch `status` in `reward_batch`.
 
 !!! question "❓ Misconception: if the reward does not rise, the pipeline is broken"
-    With a 1.5B model and 60 steps, a reward that barely moves is not unusual. Suspect the pipeline when `status` is mostly `sandbox_error`, when `served_versions` differs from `version`, or when no `reward_batch` line appears during the whole run. With no `reward_batch`, first check the format metric and `completions/clipped_ratio` for cut-off code. Confirm that training finished with the `done` event and the Job's Complete status.
+    With a 1.5B model and 60 steps, a reward that barely moves is not unusual. Suspect the pipeline when `status` is mostly `sandbox_error`, when a `batch` line carries `MIXED VERSIONS`, when the key of `served_versions` in the raw JSON differs from `version`, or when no `reward_batch` line appears during the whole run. With no `reward_batch`, first check the format metric and `completions/clipped_ratio` for cut-off code. Confirm that training finished with the `done` event and the Job's Complete status.
 
 !!! question "❓ Misconception: strictly on-policy means generation and training distributions are identical"
     Strictly on-policy only means a generated batch is used for one optimizer step. Per the TRL documentation, numerical differences between vLLM generation and the training model add an off-policy component, which TRL 1.18.0 corrects with importance sampling by default (the `sampling/importance_sampling_ratio/*` metrics).

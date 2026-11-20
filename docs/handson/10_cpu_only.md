@@ -217,20 +217,20 @@ scripts/ops/simulate.sh 30 20
 scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
-**확인할 것:** 첫 번째 작업 터미널에 아래와 같은 이벤트가 나옵니다(위 검증 상태에서 설명한 로컬 실행 출력을 줄인 것입니다). 클러스터에서는 ConfigMap 변경이 kubelet 동기화와 캐시 전파를 거쳐 pod에 반영되고, 스크립트는 이 시간을 약 1분으로 안내합니다. 클라이언트도 routing 파일을 최대 2초에 한 번 다시 읽습니다. 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다. 1분이 지나도 전환 이벤트가 없으면 시뮬레이터의 `reward_batch`에서 `version`을 확인하세요.
+**확인할 것:** 첫 번째 작업 터미널에 아래와 같은 이벤트가 나옵니다(위 검증 상태에서 설명한 로컬 실행 출력을 줄인 것입니다). 클러스터에서는 ConfigMap 변경이 kubelet 동기화와 캐시 전파를 거쳐 pod에 반영되고, 스크립트는 이 시간을 약 1분으로 안내합니다. 클라이언트도 routing 파일을 최대 2초에 한 번 다시 읽습니다. 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다. 1분이 지나도 전환 이벤트가 없으면 `batch` 줄의 풀(`kata-clh-cpu/v1` 또는 `v2`)을 확인하세요. 모든 필드가 담긴 원래 JSON은 다음 실행부터 `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`처럼 붙여 보고, 이미 돌고 있는 시뮬레이션은 `kubectl -n rl-trainer logs -f job/simulate-<번호>`로 봅니다.
 
 ```text
-{"event": "simulate", "steps": 4, "device": "cpu", "note": "golden submissions stand in for model completions; this is not training"}
-{"event": "reward_batch", "batch": 2, "global_step": 2, "runtime": "kata-clh-cpu", "version": "v1", "served_versions": {"v1": 3}, "routing_revision": 1, "n": 3, "status": {"ok": 1, "wrong_answer": 2}, "pass_rate": 0.3333, ...}
-{"event": "sandbox_version_switch", "from": "kata-clh-cpu/v1", "to": "kata-clh-cpu/v2", "routing_revision": 2, "global_step": 3, ...}
-{"event": "reward_batch", "batch": 3, "global_step": 3, "runtime": "kata-clh-cpu", "version": "v2", "served_versions": {"v2": 3}, "routing_revision": 2, "n": 3, "status": {"ok": 1, "wrong_answer": 2}, "pass_rate": 0.3333, ...}
+[hh:mm:ss] simulate: 4 batches on cpu, no model (golden submissions)
+[hh:mm:ss] batch   2  kata-clh-cpu/v1  ok 1  wrong_answer 2  pass 33%  speedup ...  ...s
+[hh:mm:ss] SWITCH  kata-clh-cpu/v1 -> kata-clh-cpu/v2  (routing rev 2, step 3)
+[hh:mm:ss] batch   3  kata-clh-cpu/v2  ok 1  wrong_answer 2  pass 33%  speedup ...  ...s
 ```
 
-- **`sandbox_version_switch`가 배치 경계에서 한 번 나옵니다.** 배치 2까지는 v1, 배치 3부터는 v2입니다.
-- **`served_versions`에 버전이 하나만 있습니다.** 한 배치의 verdict에 v1과 v2의 결과가 섞이지 않았다는 뜻입니다. 학습에서 필요한 결과가 모두 같은 풀의 캐시에 있는 배치는 샌드박스를 부르지 않아 `reward_batch` 줄이 없습니다. 서로 다른 풀의 캐시가 섞이면 한 풀에서 다시 채점하고 그 줄을 남깁니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요합니다.
-- **`status`와 `pass_rate`가 교체 전후로 같습니다.** 두 배치 모두 `ok` 1건과 `wrong_answer` 2건입니다. 이 값은 상태별 건수라서, 각 golden이 두 버전에서 같은 verdict를 받았는지는 `ops/rollout.sh` parity 출력의 제출물별 `PASS` 줄로 확인합니다.
+- **`SWITCH` 줄이 배치 경계에서 한 번 나옵니다.** 배치 2까지는 v1, 배치 3부터는 v2입니다.
+- **`batch` 줄에 `MIXED VERSIONS`가 없습니다.** 한 배치의 verdict에 v1과 v2의 결과가 섞이지 않았다는 뜻입니다(원래 JSON에서는 `served_versions`에 버전이 하나만 있습니다). 학습에서 필요한 결과가 모두 같은 풀의 캐시에 있는 배치는 샌드박스를 부르지 않아 `reward_batch` 줄이 없습니다. 서로 다른 풀의 캐시가 섞이면 한 풀에서 다시 채점하고 그 줄을 남깁니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요합니다.
+- **교체 전후 결과가 같습니다.** 두 배치 모두 `ok` 1건, `wrong_answer` 2건, pass 33%입니다. 제출물마다 두 버전의 판정이 같은지는 `ops/rollout.sh` parity 출력의 `PASS` 줄로 확인합니다.
 
-`n`이 4가 아니라 3인 이유는 trainer 쪽 AST 검사가 정책 위반 답안(호스트 파일 읽기)을 샌드박스에 보내기 전에 걸러 내기 때문입니다. `mean_speedup`은 CPU 측정 노이즈 때문에 배치마다 달라지므로(로컬 실행에서 0.66에서 1.65 사이) 런타임 비교에 쓰지 마세요.
+제출물은 4개인데 3건만 채점된 것은, 호스트 파일을 읽는 제출물을 trainer 쪽 AST 검사가 샌드박스에 보내기 전에 걸러 내기 때문입니다(원래 JSON의 `n`이 3). speedup(`mean_speedup`)은 CPU 측정 노이즈 때문에 배치마다 달라지므로(로컬 실행에서 0.66에서 1.65 사이) 런타임 비교에 쓰지 마세요.
 
 v2 전환을 확인했으면 v1을 0으로 줄입니다. v1 Deployment는 남지만 replica가 0이라 요청을 받지 못합니다. 되돌릴 때는 `scripts/ops/rollout.sh kata-clh-cpu v2 v1`이 v1 pod를 다시 띄우고 검증과 parity를 마친 뒤 routing을 바꿉니다. 8단계에서 세 런타임을 비교하려면 이 명령은 벤치마크를 마친 뒤에 실행하세요.
 

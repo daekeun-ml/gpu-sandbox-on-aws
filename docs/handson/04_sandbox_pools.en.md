@@ -261,8 +261,8 @@ The golden submissions are two Triton kernels (`ok`, custom kernel, GPU only), a
   node kubelet                     <node IP>:10250  blocked (TimeoutError)
   internet (S3 endpoint)           <S3 IP>:443    blocked (TimeoutError)
 [hh:mm:ss] 3) golden verdicts via the authenticated API
-{"endpoint": "<pod IP>:8000", "pod": "sandbox-gvisor-v1-...", "runtime": "gvisor", "version": "v1", "kernel_release": "4.19.0-gvisor", "gpu": "NVIDIA A10G", "egress_blocked": true}
-{"endpoint": "<pod IP>:8000", "pod": "sandbox-gvisor-v1-...", "runtime": "gvisor", "version": "v1", "kernel_release": "4.19.0-gvisor", "gpu": "NVIDIA A10G", "egress_blocked": true}
+[hh:mm:ss] pod sandbox-gvisor-v1-...  gvisor/v1  kernel 4.19.0-gvisor  NVIDIA A10G  egress blocked
+[hh:mm:ss] pod sandbox-gvisor-v1-...  gvisor/v1  kernel 4.19.0-gvisor  NVIDIA A10G  egress blocked
 PASS vector_add_triton            status=ok                speedup=<measured value>
 PASS relu_bias_triton             status=ok                speedup=<measured value>
 PASS relu_bias_torch_only         status=ok                speedup=<measured value>
@@ -274,7 +274,9 @@ PASS read_host_file               status=policy_violation  speedup=None
 [hh:mm:ss] pool sandbox-gvisor-v1 verified
 ```
 
-- In Kata pools `kernel_release` is the guest kernel version, and `gpu` for `kata-qemu` is `Tesla T4`. CPU pools (`*-cpu`) show `gpu` as `null` and skip the two Triton goldens.
+- Check 3 prints one `pod` line per endpoint with the pool, kernel, GPU and whether egress is blocked. An endpoint that is not blocked shows `EGRESS OPEN`.
+- In Kata pools the `kernel` value is the guest kernel version, and the GPU slot for `kata-qemu` shows `Tesla T4`. CPU pools (`*-cpu`) show `no GPU` in the GPU slot and skip the two Triton goldens.
+- Prefix the script with `GPUSANDBOX_LOG=json` (`GPUSANDBOX_LOG=json scripts/ops/verify.sh gvisor`) to see the raw JSON lines with every field (`endpoint`, `kernel_release`, `gpu`, `egress_blocked` and so on) instead of the `pod` lines. The raw JSON also stays in the log of the `probe-...` Job that ran in the `rl-trainer` namespace.
 - Depending on the runtime and path, a blocked connection can show another `OSError` subclass instead of `TimeoutError`.
 
 **If it fails:** find the cause from the stop message; fixes are in [Troubleshooting](../reference/troubleshooting.md).
@@ -282,7 +284,7 @@ PASS read_host_file               status=policy_violation  speedup=None
 | Stop message | Meaning | Section to read |
 |---|---|---|
 | `a denial check failed: see docs/reference/troubleshooting.md` | if check 2 shows `REACHABLE` or `REACHABLE (refused)`, packets reached the target. Without such a line, `kubectl exec` or the check command itself failed | `REACHABLE`: "NetworkPolicy", "sandbox pools and readiness". No line: the error from the `kubectl exec` just above |
-| `probe reported failures` | the probe Job of check 3 failed. Tell the causes apart by which of these appeared: a `FAIL` line, `"egress_blocked": false`, `no ready endpoints behind ...`, or the warning `job ... did not start` | for `FAIL` and `egress_blocked`: "sandbox pools and readiness", "401 and 403 responses". For `did not start`: `kubectl -n rl-trainer describe pod -l job-name=<job name>` |
+| `probe reported failures` | the probe Job of check 3 failed. Tell the causes apart by which of these appeared: a `FAIL` line, `EGRESS OPEN` (`"egress_blocked": false` in the raw JSON), `no ready endpoints behind ...`, or the warning `job ... did not start` | for `FAIL` and `EGRESS OPEN`: "sandbox pools and readiness", "401 and 403 responses". For `did not start`: `kubectl -n rl-trainer describe pod -l job-name=<job name>` |
 | `NetworkPolicy did not block an outside caller` | if check 4 printed `connect from default ns: REACHABLE`, the connection succeeded. Without that line, the temporary pod did not start or the check command failed | `REACHABLE`: "NetworkPolicy". No line: the errors from the `kubectl run` and the check command just above (image pull and so on) |
 | `no pods for gpusandbox/runtime=...` | that pool is not deployed | run `06_deploy_sandboxes.sh` first |
 

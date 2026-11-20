@@ -147,11 +147,13 @@ The default allowed subjects include `system:serviceaccount:rl-trainer:sandbox-e
 
 ## Step 3: Run multi-turn episodes (`extensions/agent_sandbox.sh episodes`)
 
-Run 2 episodes with up to 3 turns each.
+Run 2 episodes with up to 3 turns each. This step compares event fields (`claim`, `address`, `feedback`, `released` and others) directly, so run it with `GPUSANDBOX_LOG=json` to get the raw JSON instead of the terminal summary.
 
 ```bash
-scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
+GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
 ```
+
+To follow progress only, leave out `GPUSANDBOX_LOG=json`. You then get a line for each episode start, turn (`episode 1 turn 2  wrong_answer ...`) and episode end, followed by the overall summary.
 
 The script runs in this order.
 
@@ -220,7 +222,7 @@ The CLI exits with 1 if a turn's verdict differs from what its golden expects (r
 Run the same warm pool again with `max_turns` set to 1. The sandboxes claimed in step 3 were deleted, so wait until `readyReplicas` is back at the warm count (2 by default, 1 if you ran `pool gvisor-cpu 1`).
 
 ```bash
-scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1
+GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1
 ```
 
 **What to look for:** each episode has one turn, and the score of the first submission (a policy violation) becomes the episode reward. Below is the shape expected from the code and the tests.
@@ -262,7 +264,7 @@ kubectl -n sandbox get sandboxwarmpool kernel-eval-gvisor -o jsonpath='{.status.
 Then run the episodes.
 
 ```bash
-scripts/extensions/agent_sandbox.sh episodes gvisor 2 3
+GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor 2 3
 ```
 
 - **The device is `cuda`.** The scripted policy submits `read_host_file`, `relu_bias_wrong` and `relu_bias_triton` in that order, and a solved kernel needs a custom Triton kernel (`require_triton`).

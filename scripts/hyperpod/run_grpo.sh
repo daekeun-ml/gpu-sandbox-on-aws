@@ -13,4 +13,4 @@ export MODEL_ID="${MODEL_ID:-Qwen/Qwen2.5-Coder-1.5B-Instruct}"
 render k8s/trainer/hyperpod-job-grpo.yaml.tpl | kubectl apply -f -
 log "HyperPodPyTorchJob grpo-${RUN_ID} submitted"
 kubectl -n rl-trainer get hyperpodpytorchjob "grpo-${RUN_ID}"
-log "follow: kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '\"event\"'"
+log "follow: kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '\"event\"' | python3 scripts/logview.py"

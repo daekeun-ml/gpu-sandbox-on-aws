@@ -14,9 +14,21 @@ else
   exit 1
 fi
 
-log() { printf '\033[1;34m[%s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*"; }
-warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*" >&2; }
-die() { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
+# Colors only on a terminal, and never with NO_COLOR set (https://no-color.org).
+_on_tty() { [[ -t "$1" && -z "${NO_COLOR+x}" ]]; }
+log() {
+  if _on_tty 1; then printf '\033[1;34m[%s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*"
+  else printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; fi
+}
+warn() {
+  if _on_tty 2; then printf '\033[1;33m[warn]\033[0m %s\n' "$*" >&2; else printf '[warn] %s\n' "$*" >&2; fi
+}
+die() {
+  if _on_tty 2; then printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; else printf '[error] %s\n' "$*" >&2; fi
+  exit 1
+}
+# Short colored lines for JSON events on a terminal; raw JSON when piped (scripts/logview.py).
+logview() { python3 "${REPO_ROOT}/scripts/logview.py"; }
 
 require_vars() {
   local name

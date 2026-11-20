@@ -72,10 +72,10 @@ scripts/ops/bench.sh 64     # more requests per pool
   sandbox-gvisor-v1-<hash>: <N>s
   sandbox-gvisor-v1-<hash>: <N>s
 [hh:mm:ss] gvisor: 32 evaluations of relu_bias_triton
-{"address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000", "golden": "relu_bias_triton", "runtime": "gvisor", "requests": 32, "ok": 32, ...}
+[hh:mm:ss] bench  gvisor  ok 32/32  p50 ...s  p95 ...s  ... eval/s  speedup ...
 ```
 
-The last line is `results: <repository path>/bench-<YYYYmmdd-HHMMSS>.jsonl`. In each JSON line, `ok` should equal `requests`.
+The last line is `[hh:mm:ss] results: <repository path>/bench-<YYYYmmdd-HHMMSS>.jsonl`. On each `bench` line the two numbers of `ok 32/32` should match. The terminal shows the summary, and the JSONL file keeps the raw JSON with every field.
 
 The cold start values go only to the terminal, not to the JSONL, so write them down. The script measures only v1 pools; v2 uses a different number of seeds (5), so its evaluation time can differ; compare within one version.
 
@@ -249,7 +249,7 @@ The benchmark is one Job per pool. In pass 2 on 2026-11-18 the evaluation window
 ## How to verify
 
 1. For every pool, `<runtime>: cold start (creationTimestamp -> Ready)` is followed by one `  <pod>: <N>s` line per pod.
-2. A bench JSON line follows, and `ok` equals `requests`.
+2. A `bench` summary line follows, and its two numbers match, as in `ok 32/32`.
 3. At the end, `results: <repo>/bench-<timestamp>.jsonl` is printed, and the file has one JSON line per measured pool.
 4. Pools that are not deployed are skipped silently, so if a pool is missing, check for v1 pods with `kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version` from "Before you begin".
 

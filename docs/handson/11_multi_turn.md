@@ -147,11 +147,13 @@ scripts/extensions/agent_sandbox.sh pool gvisor-cpu 2
 
 ## 3단계: multi-turn 에피소드 실행 (`extensions/agent_sandbox.sh episodes`)
 
-에피소드 2개를 실행하고, 에피소드마다 최대 3 turn까지 제출합니다.
+에피소드 2개를 실행하고, 에피소드마다 최대 3 turn까지 제출합니다. 이 단계는 이벤트의 필드(`claim`, `address`, `feedback`, `released` 등)를 직접 대조하므로, 터미널 요약 대신 원래 JSON이 나오도록 `GPUSANDBOX_LOG=json`을 붙여 실행합니다.
 
 ```bash
-scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
+GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
 ```
+
+진행만 볼 때는 `GPUSANDBOX_LOG=json`을 빼고 실행하세요. 에피소드 시작, turn(`episode 1 turn 2  wrong_answer ...`), 에피소드 끝이 한 줄씩 나오고 마지막에 전체 요약이 나옵니다.
 
 스크립트는 다음 순서로 실행됩니다.
 
@@ -220,7 +222,7 @@ CLI는 어느 turn의 verdict가 golden의 기대값과 다르거나(`unexpected
 같은 warm pool에서 `max_turns`만 1로 바꿔 실행합니다. 3단계에서 claim된 샌드박스는 삭제되었으므로, `readyReplicas`가 다시 대기 수(기본 2, `pool gvisor-cpu 1`로 줄였다면 1)가 된 뒤 실행하세요.
 
 ```bash
-scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1
+GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1
 ```
 
 **확인할 것:** 에피소드마다 turn이 하나이고, 첫 제출(정책 위반)의 점수가 그대로 episode reward가 됩니다. 아래는 코드와 테스트를 기준으로 쓴 예상 형태입니다.
@@ -262,7 +264,7 @@ kubectl -n sandbox get sandboxwarmpool kernel-eval-gvisor -o jsonpath='{.status.
 그다음 에피소드를 실행합니다.
 
 ```bash
-scripts/extensions/agent_sandbox.sh episodes gvisor 2 3
+GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor 2 3
 ```
 
 - **device는 `cuda`입니다.** scripted policy는 `read_host_file`, `relu_bias_wrong`, `relu_bias_triton` 순서로 제출하고, 정답 판정(`solved`)에는 custom Triton kernel이 필요합니다(`require_triton`).

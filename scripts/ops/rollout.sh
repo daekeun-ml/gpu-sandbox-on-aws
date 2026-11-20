@@ -50,7 +50,7 @@ rm -f "${REPO_ROOT}/.routing.json"
 cat <<EOF
 
 The ConfigMap reaches mounted pods within about a minute (kubelet sync). Watch the trainer for
-  {"event": "sandbox_version_switch", "from": "${runtime}/${from}", "to": "${runtime}/${to}", ...}
-then retire the old pool:
+  SWITCH  ${runtime}/${from} -> ${runtime}/${to}   (raw JSON: "event": "sandbox_version_switch")
+and a later batch line on ${runtime}/${to} with verdicts other than sandbox_error, then retire the old pool:
   scripts/ops/rollout.sh ${runtime} ${from} ${to} --finish
 EOF

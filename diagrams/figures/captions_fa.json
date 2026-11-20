@@ -30,8 +30,8 @@
     "page": "docs/getting_started.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 105개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.",
-    "alt_en": "a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 105 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing",
+    "alt_ko": "a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 109개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.",
+    "alt_en": "a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 109 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing",
     "takeaway_ko": "(a)는 GPU 노드부터 띄우는 순서이고, (b)는 로컬 CPU에서 pytest와 dry run을 마치고 설정 파일을 채운 뒤 경로를 고르는 순서입니다. AWS 노드는 그다음에 띄우고, 시나리오 C에서는 GPU 노드 없이 CPU 샌드박스를 실행합니다.",
     "takeaway_en": "Starting GPU nodes before checking the plumbing turns every fix and rerun into node charges. Checking the plumbing on a local CPU first, with the tests and the dry run, leaves node charges for the time after the GPU nodes start."
   },

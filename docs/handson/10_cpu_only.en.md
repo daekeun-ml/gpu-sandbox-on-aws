@@ -217,20 +217,20 @@ A few batches in, swap `kata-clh-cpu` from v1 to v2 in the second work terminal.
 scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
-**What to look for:** events like these in the first work terminal (the local run from the verification status, shortened). On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes. If no switch event appears after a minute, check `version` in the simulator's `reward_batch` lines.
+**What to look for:** events like these in the first work terminal (the local run from the verification status, shortened). On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes. If no switch event appears after a minute, check the pool on the `batch` lines (`kata-clh-cpu/v1` or `v2`). For the raw JSON with every field, start the next run as `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`; for a simulation that is already running, use `kubectl -n rl-trainer logs -f job/simulate-<number>`.
 
 ```text
-{"event": "simulate", "steps": 4, "device": "cpu", "note": "golden submissions stand in for model completions; this is not training"}
-{"event": "reward_batch", "batch": 2, "global_step": 2, "runtime": "kata-clh-cpu", "version": "v1", "served_versions": {"v1": 3}, "routing_revision": 1, "n": 3, "status": {"ok": 1, "wrong_answer": 2}, "pass_rate": 0.3333, ...}
-{"event": "sandbox_version_switch", "from": "kata-clh-cpu/v1", "to": "kata-clh-cpu/v2", "routing_revision": 2, "global_step": 3, ...}
-{"event": "reward_batch", "batch": 3, "global_step": 3, "runtime": "kata-clh-cpu", "version": "v2", "served_versions": {"v2": 3}, "routing_revision": 2, "n": 3, "status": {"ok": 1, "wrong_answer": 2}, "pass_rate": 0.3333, ...}
+[hh:mm:ss] simulate: 4 batches on cpu, no model (golden submissions)
+[hh:mm:ss] batch   2  kata-clh-cpu/v1  ok 1  wrong_answer 2  pass 33%  speedup ...  ...s
+[hh:mm:ss] SWITCH  kata-clh-cpu/v1 -> kata-clh-cpu/v2  (routing rev 2, step 3)
+[hh:mm:ss] batch   3  kata-clh-cpu/v2  ok 1  wrong_answer 2  pass 33%  speedup ...  ...s
 ```
 
-- **`sandbox_version_switch` appears once, at a batch boundary.** Batches up to 2 ran on v1, batches from 3 on v2.
-- **`served_versions` holds a single version.** The verdicts of one batch did not mix v1 and v2 (in training, a batch whose needed results are all cached from the same pool calls no sandbox and prints no `reward_batch` line; if the cache mixes pools, the batch is scored again on one pool and logs that line), which on-policy training needs to compute one batch's advantages against one standard.
-- **`status` and `pass_rate` are the same before and after.** Both batches have 1 `ok` and 2 `wrong_answer`. These are counts per status, so whether each golden got the same verdict on both versions is shown by the per-submission `PASS` lines in the parity output of `ops/rollout.sh`.
+- **The `SWITCH` line appears once, at a batch boundary.** Batches up to 2 ran on v1, batches from 3 on v2.
+- **No `batch` line shows `MIXED VERSIONS`.** The verdicts of one batch did not mix v1 and v2 (in the raw JSON, `served_versions` holds a single version). In training, a batch whose needed results are all cached from the same pool calls no sandbox and prints no `reward_batch` line; if the cache mixes pools, the batch is scored again on one pool and logs that line. On-policy training needs this to compute one batch's advantages against one standard.
+- **The results are the same before and after.** Both batches have 1 `ok`, 2 `wrong_answer` and pass 33%. Whether each submission got the same verdict on both versions shows in the `PASS` lines of the `ops/rollout.sh` parity output.
 
-`n` is 3, not 4, because the trainer-side AST check rejects the policy-violating answer (reading a host file) before it reaches a sandbox. `mean_speedup` moves from batch to batch with CPU timing noise (between 0.66 and 1.65 in the local run), so do not compare runtimes with it.
+There are 4 submissions but only 3 are scored, because the trainer-side AST check rejects the one that reads a host file before it reaches a sandbox (`n` is 3 in the raw JSON). The speedup (`mean_speedup`) moves from batch to batch with CPU timing noise (between 0.66 and 1.65 in the local run), so do not compare runtimes with it.
 
 Once v2 is active, scale v1 to zero. The v1 Deployment stays, but with 0 replicas it cannot take requests. To go back, `scripts/ops/rollout.sh kata-clh-cpu v2 v1` brings the v1 pods back, runs the verification and parity, and then switches the routing. To compare the three runtimes in step 8, run this command after the benchmark.
 

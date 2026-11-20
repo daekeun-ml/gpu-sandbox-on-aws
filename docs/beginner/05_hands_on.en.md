@@ -51,7 +51,7 @@ uv pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-**What to check:** The final summary line shows only `passed`, with no `failed` or `error` (105 tests as of 2026-11-19). The screenshot below was taken when the suite had 74 tests.
+**What to check:** The final summary line shows only `passed`, with no `failed` or `error` (109 tests as of 2026-11-20). The screenshot below was taken when the suite had 74 tests.
 
 ![Local terminal: result of python -m pytest -q, 74 passed](../images/learning/local-pytest.png)
 

@@ -29,6 +29,6 @@ for p in json.load(sys.stdin)["items"]:
   log "${runtime}: ${requests} evaluations of ${golden}"
   run_tool_job "bench-${runtime}" bench \
     --address "sandbox-${runtime}-v1.sandbox.svc.cluster.local:8000" \
-    --requests "${requests}" --golden "${golden}" | tee -a "${out}"
+    --requests "${requests}" --golden "${golden}" | tee -a "${out}" | logview
 done
 log "results: ${out}"

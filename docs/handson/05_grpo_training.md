@@ -54,7 +54,7 @@ scripts/07_run_grpo.sh 20     # or: a shorter run
 | 1 | `RUN_ID`(기본 `date +%Y%m%d-%H%M%S`), `MAX_STEPS`(첫 번째 인자, 기본 60), `MODEL_ID`(기본 `Qwen/Qwen2.5-Coder-1.5B-Instruct`)를 정합니다. |
 | 2 | `k8s/trainer/job-grpo.yaml.tpl`을 렌더링해 `rl-trainer` namespace에 Job `grpo-${RUN_ID}`를 만듭니다. |
 | 3 | pod가 Ready가 될 때까지 최대 30분 기다립니다. |
-| 4 | 로그에서 `"event"`, `loss`, `Error`, `Traceback`이 들어간 줄만 걸러 실시간으로 출력합니다. Ctrl-C는 로그 출력만 멈추고 학습은 계속됩니다. |
+| 4 | 로그에서 `"event"`, `loss`, `Error`, `Traceback`이 들어간 줄만 걸러 실시간으로 출력합니다. 터미널에서는 JSON 이벤트와 TRL dict를 한 줄 요약으로 바꿔 보여 줍니다. Ctrl-C는 로그 출력만 멈추고 학습은 계속됩니다. |
 
 **확인할 것:** 아래 순서로 줄이 나옵니다(예시 형태, 값은 실행마다 다름). 이미지 pull과 모델 다운로드 때문에 첫 줄 뒤 몇 분 동안 출력이 없을 수 있습니다.
 
@@ -62,14 +62,16 @@ scripts/07_run_grpo.sh 20     # or: a shorter run
 job.batch/grpo-20261113-101500 created
 [hh:mm:ss] job grpo-20261113-101500 submitted; following logs (Ctrl-C stops following, not training)
 pod/grpo-20261113-101500-xxxxx condition met
-{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
-{"event": "reward_batch", "batch": 1, "global_step": 0, "runtime": "gvisor", "version": "v1", ...}
-{'loss': ..., 'reward': ..., 'rewards/format_reward/mean': ..., ...}
+[hh:mm:ss] routing  mode direct  runtime gvisor  version v1  address sandbox-gvisor-v1.sandbox.svc.cluster.local:8000
+[hh:mm:ss] batch   1  gvisor/v1  ...
+[hh:mm:ss] train  loss ...  reward ...
 ...
-{'train_runtime': ..., ...}
-{"event": "done", "output": "/outputs/grpo/final", "reward_batches": <int>}
+[hh:mm:ss] train done  train_runtime ...  train_loss ...  epoch ...
+[hh:mm:ss] done  output /outputs/grpo/final  reward_batches <int>
 CUDA Error: invalid argument at /workspace/csrc/cumem_allocator.cpp:249
 ```
+
+요약에 담기는 필드는 아래 [로그 읽는 법](#로그-읽는-법)에 있습니다. 모든 필드를 처음부터 보려면 `GPUSANDBOX_LOG=json scripts/07_run_grpo.sh`로 실행하세요. 이미 시작한 학습은 바로 아래 `kubectl logs` 명령으로 원래 로그를 봅니다.
 
 실습 계정에서 2026-11-18에 실행한 5 step run(`MAX_STEPS=5`, `g5.2xlarge`)에서는 step마다 `reward_batch`가 하나씩 나왔고, `status`에 `ok`, `wrong_answer`, `compile_error`, `runtime_error`가 섞여 있었습니다. step마다 63.15초에서 95.59초가 걸렸고, `train_runtime`은 약 401초였습니다. `done` 뒤에 vLLM이 종료하면서 마지막 줄의 `CUDA Error`를 출력했지만, Job은 그대로 Complete(exit 0)로 끝났습니다. 그러니 이 줄이 보이면 Job 상태로 성공 여부를 판단하세요.
 
@@ -83,7 +85,7 @@ CUDA Error: invalid argument at /workspace/csrc/cumem_allocator.cpp:249
 kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 ```
 
-**확인할 것:** 위와 같은 JSON 이벤트와 TRL dict 줄 외에 모델 로딩과 vLLM 초기화 로그도 출력됩니다.
+**확인할 것:** 요약이 아닌 원래 JSON 이벤트와 TRL dict 줄이 나오고, 모델 로딩과 vLLM 초기화 로그도 출력됩니다.
 
 ## Job manifest에서 볼 부분
 
@@ -213,7 +215,9 @@ TRL은 세 reward 함수를 따로 호출합니다. `KernelRewards`가 task, pro
 | `entropy`, `clip_ratio/*`, `sampling/importance_sampling_ratio/*` | policy 엔트로피, clipping 비율, vLLM 보정 비율 |
 | `loss`, `grad_norm`, `learning_rate` | 일반 학습 지표. `beta`가 0이라 `kl`은 기록되지 않습니다 |
 
-둘째는 이 저장소 코드가 stdout에 출력하는 JSON 이벤트입니다. 그중 `reward_batch`와 버전이 바뀔 때의 `sandbox_version_switch`만 `/outputs/grpo/sandbox_metrics.jsonl`에도 기록됩니다. 시작 시점의 `routing`과 종료 시점의 `done`까지 보관하려면 Job 로그를 저장하세요(위 "학습 결과 보존").
+터미널 요약의 `train` 줄에는 이 중 `loss`, `reward`, `reward_std`, `grad_norm`, `learning_rate`와 `epoch`만 나옵니다. 나머지 지표는 원래 dict(pod 로그 또는 `GPUSANDBOX_LOG=json`)에서 보세요.
+
+둘째는 이 저장소 코드가 stdout에 출력하는 JSON 이벤트입니다. 그중 `reward_batch`와 버전이 바뀔 때의 `sandbox_version_switch`만 `/outputs/grpo/sandbox_metrics.jsonl`에도 기록됩니다. 시작 시점의 `routing`과 종료 시점의 `done`까지 보관하려면 Job 로그를 저장하세요(위 "학습 결과 보존"). 아래는 pod 로그와 `GPUSANDBOX_LOG=json`에서 보이는 원래 JSON 형태입니다.
 
 ```text
 {"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
@@ -234,6 +238,8 @@ TRL은 세 reward 함수를 따로 호출합니다. `KernelRewards`가 task, pro
 | `pass_rate`, `custom_kernel_rate` | `n` 중 `ok` 비율, `custom_kernel`이 참인 비율(launch 수를 세지 못한 Triton 코드 포함) |
 | `mean_speedup` | `ok`인 completion(커널 여부 무관)의 speedup 평균, 없으면 null |
 | `eval_p50_s`, `eval_p95_s`, `batch_wall_s` | 샌드박스 서버가 측정한 평가 시간(`duration_s`)의 p50/p95, trainer가 batch 전체를 기다린 시간. 측정 시간이 하나도 없으면(모두 통신 실패 등) p50과 p95가 모두 null, 하나뿐이면 p95만 null입니다 |
+
+터미널 요약의 `reward_batch` 줄은 이 중 `batch`, `runtime/version`, `status`, `pass_rate`, `mean_speedup`, `batch_wall_s`만 보여 줍니다. `served_versions`에 버전이 둘 이상이면 `MIXED VERSIONS {...}`가 붙습니다. 결과의 버전이 요청한 버전(`version`)과 같은지는 원래 JSON에서 `served_versions`의 키로 확인합니다.
 
 샌드박스로 보낸 completion이 없는 step에는 `reward_batch` 줄이 없습니다. 버전 전환 때의 `sandbox_version_switch` 이벤트는 [06](06_sandbox_update.md)에서 다룹니다.
 
@@ -315,14 +321,14 @@ EKS control plane, NAT gateway, EBS 요금은 별도입니다. `g4dn.metal` 노�
 ## 확인 방법
 
 1. `kubectl -n rl-trainer get pods -l job-name=grpo-<RUN_ID>`의 출력에서 pod 상태가 Running입니다.
-2. 첫 JSON 줄이 `{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", ...}`입니다.
-3. step마다 TRL dict 줄이 나옵니다. 새로 채점할 completion이 있는 step에서는 `reward_batch` 줄도 나오고, `served_versions`의 key가 `version` 하나뿐이며, `status`의 대부분이 `sandbox_error`가 아닙니다. 코드 블록이 없거나 trainer 쪽 정책 검사에서 모두 탈락하거나 모두 한 풀의 캐시에 있는 step은 `reward_batch` 없이 지나갑니다.
-4. 학습이 끝나면 `{"event": "done", "output": "/outputs/grpo/final", ...}`이 나오고 Job이 Complete가 됩니다. 그 뒤에 나오는 vLLM 종료 오류(`cumem_allocator.cpp:249`)는 실습 계정의 5 step run에서도 나왔고, 그때도 Job은 Complete였습니다.
+2. 첫 이벤트 줄이 `routing  mode direct  runtime gvisor  version v1  ...`입니다.
+3. step마다 TRL dict 줄이 나옵니다. 새로 채점할 completion이 있는 step에서는 `batch` 줄(`reward_batch`)도 나오고, 그 줄에 `MIXED VERSIONS`가 없으며, status별 개수의 대부분이 `sandbox_error`가 아닙니다. 코드 블록이 없거나 trainer 쪽 정책 검사에서 모두 탈락하거나 모두 한 풀의 캐시에 있는 step은 `reward_batch` 없이 지나갑니다.
+4. 학습이 끝나면 `done  output /outputs/grpo/final  ...`이 나오고 Job이 Complete가 됩니다. 그 뒤에 나오는 vLLM 종료 오류(`cumem_allocator.cpp:249`)는 실습 계정의 5 step run에서도 나왔고, 그때도 Job은 Complete였습니다.
 
 | 증상 | 가능한 원인 | 확인 |
 |---|---|---|
 | `status`가 대부분 `sandbox_error` | NetworkPolicy label, token audience, 풀 Ready 상태 | `scripts/ops/verify.sh gvisor`, [문제 해결](../reference/troubleshooting.md)의 "학습"과 "401, 403 응답" 항목 |
-| `reward_batch` 줄이 드묾 | 대부분의 completion이 코드 블록 없음이나 trainer 쪽 정책 위반이라 샌드박스로 보낸 completion이 없음 | `rewards/format_reward/mean`, `completions/clipped_ratio` |
+| `reward_batch` 줄이 드묾 | 대부분의 completion이 코드 블록 없음이나 trainer 쪽 정책 위반이라 샌드박스로 보낸 completion이 없음 | 원래 TRL dict의 `rewards/format_reward/mean`, `completions/clipped_ratio` |
 | CUDA OOM | 메모리 예산 초과 | 위 메모리 절의 순서대로 줄이기 |
 | pod가 Pending | trainer 노드가 없거나 GPU가 등록되지 않음 | `kubectl get nodes -L gpusandbox/role`, `scripts/04_install_gpu_stack.sh` 출력 |
 
@@ -330,7 +336,7 @@ EKS control plane, NAT gateway, EBS 요금은 별도입니다. `g4dn.metal` 노�
     `sandbox_error`는 세 component가 모두 None입니다. TRL 1.18.0은 이런 completion을 group baseline에서 빼고 advantage를 0으로 두므로, policy가 인프라 장애 때문에 낮은 reward를 받지 않습니다. 다만 `sandbox_error`가 많으면 학습 신호가 줄어드니 `reward_batch`의 `status`를 확인하세요.
 
 !!! question "❓ 오해: reward가 오르지 않으면 파이프라인이 고장 난 것이다"
-    1.5B 모델로 60 step만 학습하면 reward가 거의 변하지 않아도 이상하지 않습니다. 파이프라인을 의심할 경우는 `sandbox_error`가 대부분이거나, `served_versions`가 `version`과 다르거나, 학습 내내 `reward_batch` 줄이 하나도 없을 때입니다. `reward_batch`가 없으면 먼저 format 지표와 `completions/clipped_ratio`로 코드가 잘리지 않았는지 보세요. 학습 완료는 `done` 이벤트와 Job의 Complete로 확인합니다.
+    1.5B 모델로 60 step만 학습하면 reward가 거의 변하지 않아도 이상하지 않습니다. 파이프라인을 의심할 경우는 `sandbox_error`가 대부분이거나, `batch` 줄에 `MIXED VERSIONS`가 붙거나, 원래 JSON에서 `served_versions`의 키가 `version`과 다르거나, 학습 내내 `reward_batch` 줄이 하나도 없을 때입니다. `reward_batch`가 없으면 먼저 format 지표와 `completions/clipped_ratio`로 코드가 잘리지 않았는지 보세요. 학습 완료는 `done` 이벤트와 Job의 Complete로 확인합니다.
 
 !!! question "❓ 오해: strictly on-policy면 생성 분포와 학습 분포가 완전히 같다"
     strictly on-policy는 생성한 batch를 optimizer step 한 번에만 쓴다는 뜻입니다. TRL 문서에 따르면 vLLM 생성과 학습 모델의 수치 차이로 off-policy 성분이 생기고, TRL 1.18.0은 기본 설정으로 이 차이를 importance sampling으로 보정합니다(`sampling/importance_sampling_ratio/*` 지표).

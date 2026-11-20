@@ -152,8 +152,9 @@ Shared files that the scripts source or call.
 
 | File | What it does | Cost and caution |
 |---|---|---|
-| `lib.sh` | Loads `config.env`; `require_vars`, `require_tools`, `render`, `confirm`, `oidc_issuer`, `wait_for_pods`. | |
-| `lib_jobs.sh` | `run_tool_job`: runs `gpusandbox.tools` from the control image as a one-shot Job in `rl-trainer` and streams its logs. `run_job_template` does the same for another Job template (`job-multiturn.yaml.tpl`). | |
+| `lib.sh` | Loads `config.env`; `require_vars`, `require_tools`, `render`, `confirm`, `oidc_issuer`, `wait_for_pods`. `log`, `warn` and `die` use colors only on a terminal, and none with `NO_COLOR` set. | |
+| `lib_jobs.sh` | `run_tool_job`: runs `gpusandbox.tools` from the control image as a one-shot Job in `rl-trainer` and streams its logs. `run_job_template` does the same for another Job template (`job-multiturn.yaml.tpl`). Logs go through `logview.py`. | |
+| `logview.py` | Shows JSON event lines (`reward_batch`, `sandbox_version_switch`, `parity`, episode events and others) as short colored lines on a terminal. When the output is a pipe or a file, or `GPUSANDBOX_LOG=json` is set, every line passes through unchanged. Standard library only, so it runs with the plain `python3` outside the virtualenv. | |
 | `render.py` | Renders `${VAR}` templates (undefined variables are errors, empty values become empty strings, `$$` becomes `$`) and inserts `@@include path@@` files. | |
 | `config.env.example` | Template for `scripts/config.env`. The values are explained in [Configuration](configuration.md). | |
 
@@ -255,6 +256,7 @@ The Python CDK app that creates the infrastructure (VPC, cluster, node groups). 
 | `tests/test_manifests.py` | Rendered output of every profile and version combination (RuntimeClass, token automount off, non-root, read-only root, dropped capabilities, egress probe targets, headless Service), no LoadBalancer or NodePort in static manifests, node user data (the three node kinds of `infra/eks/userdata.py`, including the node guard), the Karpenter EC2NodeClasses and NodePools, rendering of the Agent Sandbox template, the multi-turn Job (`sandbox-episode` account and API token, hardening kept) and the subjects of the claim RoleBinding. It does not render `k8s/production/*.tpl`. |
 | `tests/test_agent_sandbox.py` | `EpisodeSandbox` against a fake API: the claim targets the warm pool and has a `shutdownTime`, no address before Ready and `serviceFQDN` preferred, the claim is released at the end, and released even when it never becomes Ready. |
 | `tests/test_multiturn.py` | Multi-turn episodes with a fake claim API and the golden verdicts: every turn of an episode is evaluated in its one claimed sandbox, stop conditions (solved, max_turns, sandbox_error), the claim is released when the policy fails, the CLI arguments match the `episodes` subcommand, the veRL tool (checked without veRL) keeps one sandbox per trajectory and releases it, the tool config matches the tool, and episodes run against loopback sandbox servers. Details: [11 Multi-turn episodes](../handson/11_multi_turn.md) |
+| `tests/test_logview.py` | `scripts/logview.py`: piped output is the raw input, one summary line per event, `MIXED VERSIONS` for a batch scored by more than one version, trainer metrics (numeric strings too) and pod info, plain text kept as it is, colors off. |
 | `tests/test_demo.py` | Demo site: the bucket is private and readable only by its CloudFront distribution, recording schema and reward consistency, nothing external is loaded and no HTML is injected, HTTPS and security headers. |
 | `tests/conftest.py` | Loopback server thread, CPU settings, candidate code fixtures, and an autouse fixture that turns off the server's reaper (`reap_strays`) during tests. |
 

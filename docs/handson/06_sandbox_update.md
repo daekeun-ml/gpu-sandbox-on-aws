@@ -94,8 +94,8 @@ scripts/ops/rollout.sh gvisor v1 v2 --finish
 
 ```text
 The ConfigMap reaches mounted pods within about a minute (kubelet sync). Watch the trainer for
-  {"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", ...}
-then retire the old pool:
+  SWITCH  gvisor/v1 -> gvisor/v2   (raw JSON: "event": "sandbox_version_switch")
+and a later batch line on gvisor/v2 with verdicts other than sandbox_error, then retire the old pool:
   scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
 
@@ -125,7 +125,7 @@ parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 풀에 동시에
 3. baseline과 candidate의 status가 같습니다.
 4. 둘 다 `ok`이고 speedup이 있으면 `|candidate / baseline - 1| <= 0.35`입니다(스크립트가 쓰는 `--speedup-tolerance` 기본값).
 
-golden마다 `PASS` 또는 `FAIL` 줄이 나오고, 마지막에 parity 이벤트가 출력됩니다(예시 형태).
+golden마다 `PASS` 또는 `FAIL` 줄이 나오고, 마지막에 parity 결과 줄이 출력됩니다(예시 형태). 결과 줄은 터미널에서 `PARITY PASS` 또는 `PARITY FAIL`로 보이고, `GPUSANDBOX_LOG=json`을 붙여 실행하면 원래 JSON(`"event": "parity"`)으로 보입니다.
 
 ```text
 PASS vector_add_triton            v1=ok v2=ok
@@ -134,7 +134,7 @@ PASS relu_bias_torch_only         v1=ok v2=ok
 PASS relu_bias_wrong              v1=wrong_answer v2=wrong_answer
 PASS relu_bias_benchmark_cheat    v1=wrong_answer v2=wrong_answer
 PASS read_host_file               v1=policy_violation v2=policy_violation
-{"event": "parity", "baseline": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000", "candidate": "sandbox-gvisor-v2.sandbox.svc.cluster.local:8000", "passed": true}
+[hh:mm:ss] PARITY PASS  sandbox-gvisor-v1.sandbox.svc.cluster.local:8000 -> sandbox-gvisor-v2.sandbox.svc.cluster.local:8000
 ```
 
 speedup은 같은 GPU 종류에서도 pod마다 달라지므로, 이 검사는 허용 범위를 넉넉히 두고 verdict 변화와 큰 timing 변화만 검출합니다.
@@ -174,13 +174,14 @@ sequenceDiagram
 2. `RoutingTable`은 파일을 최대 2초에 한 번 다시 읽고, 내용이 바뀌면 `revision`을 1 올립니다. 파일을 쓰는 도중이라 읽지 못하면 마지막으로 정상적으로 읽은 table을 계속 씁니다.
 3. `KernelRewards`는 한 batch의 결과를 한 풀의 버전으로 맞춥니다. 클라이언트는 호출될 때마다 그 시점의 snapshot으로 풀을 정합니다. 기본 batch는 2 group, completion 16개이며, 이 중 샌드박스 평가가 필요한 completion만 보냅니다. 같은 풀의 캐시에 결과가 있거나, 코드가 없거나, trainer 쪽 정책 검사에서 걸린 completion은 보내지 않습니다. 다른 풀로 캐시된 completion은 이번 batch를 채점한 풀로 다시 보내므로, 한 batch에서 클라이언트를 두 번 이상 부를 수 있습니다. 채점 중에 풀이 다시 바뀌면 세 번째 호출에서 batch 전체를 한 요청으로 보내므로, 한 batch는 항상 한 버전으로 끝납니다. 필요한 결과가 모두 한 풀의 캐시에 있으면 샌드박스를 부르지 않고 `reward_batch` 줄도 나오지 않습니다. 샌드박스로 보낸 서로 다른 completion 수는 `reward_batch`의 `n`입니다.
 4. v1 snapshot으로 보낸 요청은 v1이 채점합니다. 처음 전환할 때는 캐시에 v1 결과만 있으므로, 전환 전에 v1으로 보낸 batch는 v1에서 끝납니다. 다른 풀로 캐시된 결과가 있어 한 번 더 호출하는 사이 routing이 바뀌면, 마지막 호출의 풀로 batch 전체를 다시 채점합니다. 어느 경우든 `--finish`는 v1으로 보낸 batch가 끝난 뒤에 실행합니다.
-5. 새 snapshot을 처음 쓰는 batch의 결과를 받은 뒤, 그 batch의 `reward_batch` 바로 앞에 다음 이벤트가 한 번 나옵니다.
+5. 새 snapshot을 처음 쓰는 batch의 결과를 받은 뒤, 그 batch의 `reward_batch` 바로 앞에 전환 이벤트가 한 번 나옵니다. `07_run_grpo.sh` 터미널에서는 첫 줄처럼, pod 로그와 `GPUSANDBOX_LOG=json`에서는 둘째 줄처럼 보입니다.
 
 ```text
+[hh:mm:ss] SWITCH  gvisor/v1 -> gvisor/v2  (routing rev <int>, step <int>)
 {"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", "routing_revision": <int>, "global_step": <int>, "ts": <float>}
 ```
 
-그 뒤 `reward_batch` 줄의 `version`이 `v2`가 되고 `served_versions`가 `{"v2": <int>}`로 바뀝니다. `global_step`으로 학습 곡선에 전환 시점을 표시하세요.
+그 뒤 `batch` 줄의 풀이 `gvisor/v2`가 됩니다. 원래 JSON에서는 `reward_batch`의 `version`이 `v2`, `served_versions`가 `{"v2": <int>}`입니다. 요약 줄에 `MIXED VERSIONS`가 붙으면 한 batch를 두 버전이 채점한 것입니다. `global_step`(요약의 `step`)으로 학습 곡선에 전환 시점을 표시하세요.
 
 ## v2 pod 재활용 (SANDBOX_MAX_EVALS=200)
 
@@ -238,7 +239,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 ## 확인 방법
 
-1. rollout 스크립트 출력에 `1) deploying`부터 `4) switching`까지 순서대로 나오고, parity 줄이 모두 `PASS`이며 `"passed": true`가 보입니다.
+1. rollout 스크립트 출력에 `1) deploying`부터 `4) switching`까지 순서대로 나옵니다. `3) parity`에서는 제출물마다 `PASS`가 나오고 마지막에 `PARITY PASS`(원래 JSON에서는 `"passed": true`)가 보인 뒤 `4) switching`으로 넘어갑니다.
 2. ConfigMap의 active가 v2입니다(routing.json의 앞 세 줄).
 
     ```bash

@@ -258,6 +258,8 @@ The table below is an **estimate** from On-Demand list prices, not a measured bi
 
 The detailed output is under "What to look for" on each page; when something fails, see the matching section of [Troubleshooting](../reference/troubleshooting.md) (config and scripts, cluster and nodes, gVisor, Kata, sandbox pools and readiness).
 
+When a script shows Job logs on a terminal, it turns the JSON events into short colored lines (`scripts/logview.py`). To get the raw JSON with every field from the start, put `GPUSANDBOX_LOG=json` in front of the command. For a Job that is already running, read the raw log with `kubectl -n rl-trainer logs -f job/<Job name>`. When output goes to a pipe or a file, the filter passes every line it receives through unchanged. Set `NO_COLOR` to turn colors off.
+
 | Script | Success signal |
 |---|---|
 | `01_check_prereqs.sh` | quota values, `nested-virtualization` support and AZ lists are printed, and the last log line is `Done. Request quota increases before 02_create_cluster.sh ...` |
@@ -273,7 +275,7 @@ The detailed output is under "What to look for" on each page; when something fai
 !!! warning "Validation status"
     The required path of scenario A (`02` to `08`), scenario C, Kata GPU and Kata CPU, and `ops/bench.sh` on five pools ran in a practice account. The `02_create_cluster.sh` (scenario C) and `kata/cpu_nodes.sh` signals above, the smoke pod's `cuda ok: NVIDIA A10G 2048.0` and the `ops/verify.sh` pass are real output from those runs. `ops/rollout.sh` during training (scenario A) and HyperPod B1 and B2 (from the HyperPod cluster creation on) were not run, and the experimental Kata CLH GPU did not start its VM. The signals of these steps come from the script code. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
-    Locally (CPU, no AWS) the `pytest` tests (94 at the time, 105 now, including manifest rendering and user data) and the 18 CDK tests in `cdk/tests` pass, so verify each step yourself with the "What to look for" checks on each page.
+    Locally (CPU, no AWS) the `pytest` tests (94 at the time, 109 now, including manifest rendering and user data) and the 18 CDK tests in `cdk/tests` pass, so verify each step yourself with the "What to look for" checks on each page.
 
 ## Next step
 

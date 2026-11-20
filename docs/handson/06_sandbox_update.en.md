@@ -94,8 +94,8 @@ The first argument is also the active runtime, so pass the runtime training uses
 
 ```text
 The ConfigMap reaches mounted pods within about a minute (kubelet sync). Watch the trainer for
-  {"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", ...}
-then retire the old pool:
+  SWITCH  gvisor/v1 -> gvisor/v2   (raw JSON: "event": "sandbox_version_switch")
+and a later batch line on gvisor/v2 with verdicts other than sandbox_error, then retire the old pool:
   scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
 
@@ -125,7 +125,7 @@ There are four pass conditions.
 3. Baseline and candidate return the same status.
 4. If both are `ok` and have speedups, `|candidate / baseline - 1| <= 0.35` (the script uses the `--speedup-tolerance` default).
 
-Each golden prints a `PASS` or `FAIL` line, and a parity event comes last (example shape).
+Each golden prints a `PASS` or `FAIL` line, and a parity result line comes last (example shape). On a terminal the result line reads `PARITY PASS` or `PARITY FAIL`; with `GPUSANDBOX_LOG=json` it is the raw JSON (`"event": "parity"`).
 
 ```text
 PASS vector_add_triton            v1=ok v2=ok
@@ -134,7 +134,7 @@ PASS relu_bias_torch_only         v1=ok v2=ok
 PASS relu_bias_wrong              v1=wrong_answer v2=wrong_answer
 PASS relu_bias_benchmark_cheat    v1=wrong_answer v2=wrong_answer
 PASS read_host_file               v1=policy_violation v2=policy_violation
-{"event": "parity", "baseline": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000", "candidate": "sandbox-gvisor-v2.sandbox.svc.cluster.local:8000", "passed": true}
+[hh:mm:ss] PARITY PASS  sandbox-gvisor-v1.sandbox.svc.cluster.local:8000 -> sandbox-gvisor-v2.sandbox.svc.cluster.local:8000
 ```
 
 Speedups wobble between pods even on the same GPU type, so this check leaves room and catches only verdict changes and large timing changes.
@@ -174,13 +174,14 @@ sequenceDiagram
 2. `RoutingTable` rereads the file at most every 2 seconds and bumps `revision` by 1 when the content changes. If the file is mid-write and unreadable, it keeps the last good table.
 3. `KernelRewards` keeps the results of one batch on one pool version. Each client call picks the pool from the snapshot at that moment. The default batch is 2 groups, 16 completions, and only the completions that need a sandbox evaluation are sent. Cache hits from the same pool, answers with no code and answers caught by the trainer-side policy check are not sent. Answers cached from another pool are sent again to the pool that scored this batch, so one batch can call the client more than once. If the pool switches again during scoring, the third call sends the whole batch in one request, so a batch always ends on one version. When every result the batch needs is cached from one pool, no sandbox is called and no `reward_batch` line is printed. The number of distinct completions sent to the sandbox is `n` in `reward_batch`.
 4. Requests sent with the v1 snapshot are scored by v1. On the first switch the cache holds only v1 verdicts, so a batch sent to v1 before the switch ends on v1. If cached verdicts from another pool force another call and the routing changes in between, the whole batch is scored again on the pool of the last call. Either way, run `--finish` after the batches sent to v1 are done.
-5. After the results of the first batch on the new snapshot come back, this event is printed once, right before that batch's `reward_batch`.
+5. After the results of the first batch on the new snapshot come back, the switch event is printed once, right before that batch's `reward_batch`. The `07_run_grpo.sh` terminal shows it like the first line; the pod log and `GPUSANDBOX_LOG=json` show it like the second.
 
 ```text
+[hh:mm:ss] SWITCH  gvisor/v1 -> gvisor/v2  (routing rev <int>, step <int>)
 {"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", "routing_revision": <int>, "global_step": <int>, "ts": <float>}
 ```
 
-After that, `version` in the `reward_batch` lines becomes `v2` and `served_versions` becomes `{"v2": <int>}`. Use `global_step` to mark the switch point on the learning curve.
+After that, the pool on the `batch` lines becomes `gvisor/v2`. In the raw JSON, `version` in `reward_batch` is `v2` and `served_versions` is `{"v2": <int>}`. `MIXED VERSIONS` on a summary line means two versions scored one batch. Use `global_step` (`step` in the summary) to mark the switch point on the learning curve.
 
 ## Recycling v2 pods (SANDBOX_MAX_EVALS=200)
 
@@ -238,7 +239,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 ## How to verify
 
-1. The rollout script prints `1) deploying` through `4) switching` in order, every parity line is `PASS`, and `"passed": true` appears.
+1. The rollout script prints `1) deploying` through `4) switching` in order. Under `3) parity`, every submission shows `PASS` and `PARITY PASS` (`"passed": true` in the raw JSON) comes last, before `4) switching` starts.
 2. The ConfigMap's active version is v2 (first three lines of routing.json).
 
     ```bash

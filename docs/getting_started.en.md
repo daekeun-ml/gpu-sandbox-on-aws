@@ -6,7 +6,7 @@
 
 If an import error or a missing setting shows up only after the GPU nodes are running, the nodes keep billing while you fix it. Some of the values the scripts read (image URIs, AMI IDs) only exist after an earlier step has finished. EC2 only, HyperPod attached, or the production setup also each runs a different set of scripts.
 
-![a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 105 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing](images/figures/getting_started.svg)
+![a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 109 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing](images/figures/getting_started.svg)
 
 *Takeaway: (a) starts the GPU nodes first. (b) runs pytest and the dry run on a local CPU, fills in the settings file and picks a path. The AWS nodes start after that, and scenario C runs CPU sandboxes with no GPU node.*
 
@@ -14,7 +14,7 @@ If an import error or a missing setting shows up only after the GPU nodes are ru
 ## Why
 
 - **Check the plumbing before paying for AWS.** The sandbox server, the two-process harness, authentication, routing and the reward functions run the same code on CPU.
-- **Reproduce what the author verified with the same commands.** The pytest suite and the 2-step GRPO dry run were run and checked on macOS (CPU only), when the suite had 94 tests (it now has 105).
+- **Reproduce what the author verified with the same commands.** The pytest suite and the 2-step GRPO dry run were run and checked on macOS (CPU only), when the suite had 94 tests (it now has 109).
 - **Keep settings in one file.** Every script reads `scripts/config.env` through `scripts/lib.sh` and stops right away when a required value is empty or still `__SET_ME__`.
 
 **Before you start:** a terminal, `git` and Python virtual environments are enough, and the local steps (sections 1 to 4) need no Kubernetes or AWS knowledge. The starting point is in [Choose a learning path](learning_paths.md), the overall picture in "What you build" on [Home](index.md), and the reason for GPU sandboxes in [01 When the sandbox needs a GPU](concepts/01_why_gpu_sandbox.md).
@@ -117,9 +117,9 @@ Run the whole test suite of the repository.
 python -m pytest -q
 ```
 
-**What to look for:** the last line starts with `105 passed` (the duration after it depends on your machine).
+**What to look for:** the last line starts with `109 passed` (the duration after it depends on your machine).
 
-The 105 tests are 64 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbox.md) and [multi-turn episode](handson/11_multi_turn.md) and 11 [demo site](handson/09_demo_site.md) tests. They cover the AST policy, the two-process harness on CPU (correct, wrong, crash, timeout, benchmark cheat, monkeypatch), fail-closed authentication, readiness after egress denial is verified, the client, the gateway's per-group version pinning, the operator tools, rendering of the manifest, node user data (`infra/eks/userdata.py`) and Karpenter templates, and the demo site's security properties. Per-file coverage is in [Repository map](reference/repository_map.md#tests). The 18 CDK stack tests live separately in `cdk/tests`; after the CDK preparation in section 5, run them with `cd cdk && python -m pytest -q tests`.
+The 109 tests are 68 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbox.md) and [multi-turn episode](handson/11_multi_turn.md) and 11 [demo site](handson/09_demo_site.md) tests. They cover the AST policy, the two-process harness on CPU (correct, wrong, crash, timeout, benchmark cheat, monkeypatch), fail-closed authentication, readiness after egress denial is verified, the client, the gateway's per-group version pinning, the operator tools, rendering of the manifest, node user data (`infra/eks/userdata.py`) and Karpenter templates, and the demo site's security properties. Per-file coverage is in [Repository map](reference/repository_map.md#tests). The 18 CDK stack tests live separately in `cdk/tests`; after the CDK preparation in section 5, run them with `cd cdk && python -m pytest -q tests`.
 
 **If it fails:** a `ModuleNotFoundError` usually means the virtual environment is not active or section 2 was skipped; run `source .venv/bin/activate` again and repeat section 2.
 
@@ -135,7 +135,7 @@ The 105 tests are 64 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbo
     python -m pytest -q -m "not slow"
     ```
 
-    **What to look for:** `87 passed, 18 deselected`.
+    **What to look for:** `91 passed, 18 deselected`.
 
 ## 4. Loopback smoke run (macOS)
 
@@ -325,7 +325,7 @@ If you have not chosen a runtime and instance types yet, read [05 Decision guide
 
 ## Scope and limits
 
-- The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 105); server tests on a Linux host were not run.
+- The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 109); server tests on a Linux host were not run.
 - The author did not run `scripts/01_check_prereqs.sh` in section 5. Of the later steps, the gVisor path of scenario A (`02` to `08`), scenario C, Kata GPU (`g4dn.metal`) and the runtime benchmark ran in a practice account; `ops/rollout.sh` during training in scenario A and HyperPod B1 and B2 were not run. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record). Verify the steps that were not run with the checks on each hands-on page.
 - The dry run shows no training effect; real training runs on a GPU in [05 On-policy GRPO training](handson/05_grpo_training.md).
 

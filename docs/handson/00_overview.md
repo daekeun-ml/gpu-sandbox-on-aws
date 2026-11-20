@@ -258,6 +258,8 @@ flowchart LR
 
 자세한 출력은 각 페이지의 "확인할 것"에 있습니다. 단계가 실패하면 [문제 해결](../reference/troubleshooting.md)의 해당 항목(설정과 스크립트, 클러스터와 노드, gVisor, Kata, 샌드박스 풀과 readiness)을 보세요.
 
+스크립트가 Job 로그를 터미널에 보여 줄 때는 JSON 이벤트를 색을 입힌 한 줄 요약으로 바꿔 보여 줍니다(`scripts/logview.py`). 모든 필드가 담긴 원본 JSON을 처음부터 보려면 명령 앞에 `GPUSANDBOX_LOG=json`을 붙이세요. 이미 실행 중인 Job은 `kubectl -n rl-trainer logs -f job/<Job 이름>`으로 원본 로그를 봅니다. 출력을 파이프나 파일로 보내면 필터는 받은 줄을 바꾸지 않고 넘깁니다. `NO_COLOR`를 설정하면 색을 끕니다.
+
 | 스크립트 | 성공 신호 |
 |---|---|
 | `01_check_prereqs.sh` | 쿼터 값, `nested-virtualization` 지원, AZ 목록이 출력되고 마지막 로그가 `Done. Request quota increases before 02_create_cluster.sh ...` |
@@ -273,7 +275,7 @@ flowchart LR
 !!! warning "검증 상태"
     시나리오 A의 필수 경로(`02`부터 `08`까지), 시나리오 C, Kata GPU와 Kata CPU, 다섯 개 풀의 `ops/bench.sh`는 실습 계정에서 실행했습니다. 위 표의 `02_create_cluster.sh`(시나리오 C)와 `kata/cpu_nodes.sh` 신호, smoke pod의 `cuda ok: NVIDIA A10G 2048.0`, `ops/verify.sh` 통과는 그 실행의 실제 출력입니다. 학습 중의 `ops/rollout.sh`(시나리오 A)와 HyperPod B1, B2(HyperPod 클러스터 생성부터)는 실행하지 않았고, 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 이 단계의 신호는 스크립트 코드를 보고 적은 것입니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
-    로컬(CPU, AWS 없음)에서는 `pytest` 테스트(당시 94개, 현재는 105개, 매니페스트 렌더링과 user data 포함)와 `cdk/tests`의 CDK 테스트 18개를 통과했습니다. AWS 단계는 각 페이지의 "확인할 것"으로 직접 검증하세요.
+    로컬(CPU, AWS 없음)에서는 `pytest` 테스트(당시 94개, 현재는 109개, 매니페스트 렌더링과 user data 포함)와 `cdk/tests`의 CDK 테스트 18개를 통과했습니다. AWS 단계는 각 페이지의 "확인할 것"으로 직접 검증하세요.
 
 ## 다음 단계
 

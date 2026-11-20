@@ -13,4 +13,4 @@ export MODEL_ID="${MODEL_ID:-Qwen/Qwen2.5-Coder-1.5B-Instruct}"
 render k8s/trainer/job-grpo.yaml.tpl | kubectl apply -f -
 log "job grpo-${RUN_ID} submitted; following logs (Ctrl-C stops following, not training)"
 kubectl -n rl-trainer wait --for=condition=Ready pod -l "job-name=grpo-${RUN_ID}" --timeout=30m
-kubectl -n rl-trainer logs -f "job/grpo-${RUN_ID}" | grep --line-buffered -E '"event"|loss|Error|Traceback'
+kubectl -n rl-trainer logs -f "job/grpo-${RUN_ID}" | grep --line-buffered -E '"event"|loss|Error|Traceback' | logview

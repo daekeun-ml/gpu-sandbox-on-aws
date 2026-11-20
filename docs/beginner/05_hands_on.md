@@ -51,7 +51,7 @@ uv pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-**확인할 것:** 마지막 요약 줄에 `failed`나 `error` 없이 `passed`만 나오면 됩니다(2026-11-19 기준 테스트 105개). 아래 화면은 테스트가 74개이던 시점에 찍은 것입니다.
+**확인할 것:** 마지막 요약 줄에 `failed`나 `error` 없이 `passed`만 나오면 됩니다(2026-11-20 기준 테스트 109개). 아래 화면은 테스트가 74개이던 시점에 찍은 것입니다.
 
 ![로컬 터미널: python -m pytest -q 결과, 74 passed](../images/learning/local-pytest.png)
 

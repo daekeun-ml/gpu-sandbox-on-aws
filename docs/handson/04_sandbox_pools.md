@@ -261,8 +261,8 @@ golden 제출물은 Triton 커널 둘(`ok`, custom kernel, GPU 전용), PyTorch�
   node kubelet                     <node IP>:10250  blocked (TimeoutError)
   internet (S3 endpoint)           <S3 IP>:443    blocked (TimeoutError)
 [hh:mm:ss] 3) golden verdicts via the authenticated API
-{"endpoint": "<pod IP>:8000", "pod": "sandbox-gvisor-v1-...", "runtime": "gvisor", "version": "v1", "kernel_release": "4.19.0-gvisor", "gpu": "NVIDIA A10G", "egress_blocked": true}
-{"endpoint": "<pod IP>:8000", "pod": "sandbox-gvisor-v1-...", "runtime": "gvisor", "version": "v1", "kernel_release": "4.19.0-gvisor", "gpu": "NVIDIA A10G", "egress_blocked": true}
+[hh:mm:ss] pod sandbox-gvisor-v1-...  gvisor/v1  kernel 4.19.0-gvisor  NVIDIA A10G  egress blocked
+[hh:mm:ss] pod sandbox-gvisor-v1-...  gvisor/v1  kernel 4.19.0-gvisor  NVIDIA A10G  egress blocked
 PASS vector_add_triton            status=ok                speedup=<측정값>
 PASS relu_bias_triton             status=ok                speedup=<측정값>
 PASS relu_bias_torch_only         status=ok                speedup=<측정값>
@@ -274,7 +274,9 @@ PASS read_host_file               status=policy_violation  speedup=None
 [hh:mm:ss] pool sandbox-gvisor-v1 verified
 ```
 
-- Kata 풀에서는 `kernel_release`가 guest 커널 버전이고, `kata-qemu`의 `gpu`는 `Tesla T4`입니다. CPU 풀(`*-cpu`)은 `gpu`가 `null`이고 Triton golden 둘을 건너뜁니다.
+- 3번의 `pod` 줄은 endpoint마다 하나씩 나오며, 풀, 커널, GPU, egress 차단 여부를 보여 줍니다. 차단되지 않은 endpoint는 `EGRESS OPEN`으로 표시됩니다.
+- Kata 풀에서는 `kernel` 값이 guest 커널 버전이고, `kata-qemu`의 GPU 자리는 `Tesla T4`입니다. CPU 풀(`*-cpu`)은 GPU 자리에 `no GPU`가 나오고 Triton golden 둘을 건너뜁니다.
+- 스크립트 앞에 `GPUSANDBOX_LOG=json`을 붙이면(`GPUSANDBOX_LOG=json scripts/ops/verify.sh gvisor`) `pod` 줄 대신 모든 필드가 들어 있는 원래 JSON 줄(`endpoint`, `kernel_release`, `gpu`, `egress_blocked` 등)이 나옵니다. 원래 JSON은 `rl-trainer` namespace에서 실행된 `probe-...` Job의 로그에도 남습니다.
 - 차단된 연결의 예외 이름은 런타임과 경로에 따라 `TimeoutError` 대신 다른 `OSError` 계열일 수 있습니다.
 
 **문제가 생기면:** 스크립트가 멈추면서 출력한 메시지로 원인을 찾고, 해결 방법은 [문제 해결](../reference/troubleshooting.md)에서 확인하세요.
@@ -282,7 +284,7 @@ PASS read_host_file               status=policy_violation  speedup=None
 | 멈춘 메시지 | 뜻 | 볼 항목 |
 |---|---|---|
 | `a denial check failed: see docs/reference/troubleshooting.md` | 2번에서 `REACHABLE` 또는 `REACHABLE (refused)`가 보이면 패킷이 대상까지 도달한 것. 그런 줄이 없으면 `kubectl exec`이나 검사 명령 자체가 실패한 것 | `REACHABLE`이면 "NetworkPolicy", "샌드박스 풀과 readiness". 줄이 없으면 바로 위 `kubectl exec`의 오류 |
-| `probe reported failures` | 3번의 probe Job이 실패함. `FAIL` 줄, `"egress_blocked": false`, `no ready endpoints behind ...`, `job ... did not start` 경고 중 무엇이 나왔는지로 원인을 나눔 | `FAIL`과 `egress_blocked`는 "샌드박스 풀과 readiness", "401, 403 응답". `did not start`는 `kubectl -n rl-trainer describe pod -l job-name=<Job 이름>` |
+| `probe reported failures` | 3번의 probe Job이 실패함. `FAIL` 줄, `EGRESS OPEN`(원래 JSON에서는 `"egress_blocked": false`), `no ready endpoints behind ...`, `job ... did not start` 경고 중 무엇이 나왔는지로 원인을 나눔 | `FAIL`과 `EGRESS OPEN`은 "샌드박스 풀과 readiness", "401, 403 응답". `did not start`는 `kubectl -n rl-trainer describe pod -l job-name=<Job 이름>` |
 | `NetworkPolicy did not block an outside caller` | 4번에서 `connect from default ns: REACHABLE`이 나왔으면 연결에 성공한 것. 그 줄이 없으면 임시 pod가 시작되지 못했거나 검사 명령이 실패한 것 | `REACHABLE`이면 "NetworkPolicy". 줄이 없으면 바로 위 `kubectl run`과 검사 명령의 오류(이미지 pull 등) |
 | `no pods for gpusandbox/runtime=...` | 그 풀이 배포되지 않음 | `06_deploy_sandboxes.sh`를 먼저 실행 |
 

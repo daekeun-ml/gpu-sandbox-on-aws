@@ -152,8 +152,9 @@ flowchart TB
 
 | 파일 | 하는 일 | 과금과 주의 |
 |---|---|---|
-| `lib.sh` | `config.env` 로드, `require_vars`, `require_tools`, `render`, `confirm`, `oidc_issuer`, `wait_for_pods`. | |
-| `lib_jobs.sh` | `run_tool_job`: control 이미지로 `gpusandbox.tools`를 `rl-trainer`의 one-shot Job으로 실행하고 로그를 보여 줍니다. `run_job_template`은 같은 방식으로 다른 Job 템플릿(`job-multiturn.yaml.tpl`)을 실행합니다. | |
+| `lib.sh` | `config.env` 로드, `require_vars`, `require_tools`, `render`, `confirm`, `oidc_issuer`, `wait_for_pods`. `log`, `warn`, `die`는 터미널일 때만 색을 쓰고 `NO_COLOR`가 있으면 색을 끕니다. | |
+| `lib_jobs.sh` | `run_tool_job`: control 이미지로 `gpusandbox.tools`를 `rl-trainer`의 one-shot Job으로 실행하고 로그를 보여 줍니다. `run_job_template`은 같은 방식으로 다른 Job 템플릿(`job-multiturn.yaml.tpl`)을 실행합니다. 로그는 `logview.py`를 거쳐 보여 줍니다. | |
+| `logview.py` | JSON 이벤트 줄(`reward_batch`, `sandbox_version_switch`, `parity`, 에피소드 이벤트 등)을 터미널에서 색을 입힌 한 줄 요약으로 보여 줍니다. 출력이 파이프나 파일이거나 `GPUSANDBOX_LOG=json`이면 원본을 그대로 넘깁니다. 표준 라이브러리만 써서 가상 환경 밖의 `python3`로도 실행됩니다. | |
 | `render.py` | `${VAR}` 템플릿 렌더링(정의되지 않은 변수는 오류, 빈 값은 빈 문자열, `$$`는 `$`)과 `@@include path@@` 삽입. | |
 | `config.env.example` | `scripts/config.env`의 원본. 값 설명은 [설정 값](configuration.md)에 있습니다. | |
 
@@ -255,6 +256,7 @@ flowchart TB
 | `tests/test_manifests.py` | 모든 profile과 버전 조합의 렌더링 결과(RuntimeClass, 토큰 마운트 끔, non-root, 읽기 전용 루트, capability 제거, egress 점검 대상, headless Service), 정적 매니페스트에 LoadBalancer와 NodePort 없음, 노드 user data(`infra/eks/userdata.py`의 세 노드 종류, node guard 포함), Karpenter EC2NodeClass와 NodePool, Agent Sandbox 템플릿 렌더링, multi-turn Job(`sandbox-episode` 계정과 API 토큰, 보안 설정 유지)과 claim RoleBinding의 subject. `k8s/production/*.tpl` 템플릿은 렌더링하지 않습니다. |
 | `tests/test_agent_sandbox.py` | fake API로 `EpisodeSandbox` 확인: claim에 warm pool 참조와 `shutdownTime`이 있음, Ready 전에는 주소가 없고 주소는 `serviceFQDN`을 우선함, 끝나면 claim 반납, Ready가 되지 않아도 claim 반납. |
 | `tests/test_multiturn.py` | fake claim API와 golden verdict로 multi-turn 에피소드 확인: 한 에피소드의 모든 turn을 claim한 샌드박스 하나에서 평가함, 중단 조건(solved, max_turns, sandbox_error), policy가 실패해도 claim 반납, CLI 인자와 `episodes` 하위 명령의 일치, veRL 없이 확인한 veRL 도구의 trajectory별 샌드박스와 반납, tool config와 도구의 일치, loopback 샌드박스 서버에서 실행한 에피소드. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md) |
+| `tests/test_logview.py` | `scripts/logview.py`: 파이프로 내보낼 때 원본을 그대로 넘김, 이벤트별 요약 줄, 버전이 섞인 batch의 `MIXED VERSIONS` 표시, trainer 지표(숫자 문자열 포함)와 pod 정보 요약, 일반 텍스트는 내용을 바꾸지 않음, 색 끄기. |
 | `tests/test_demo.py` | 데모 사이트: bucket이 비공개이고 해당 CloudFront 배포만 읽음, 녹화 스키마와 reward 일관성, 외부 리소스를 불러오지 않고 HTML을 주입하지 않음, HTTPS와 보안 헤더. |
 | `tests/conftest.py` | loopback 서버 스레드, CPU 설정, 후보 코드 fixture, 테스트 중 서버의 reaper(`reap_strays`)를 끄는 autouse fixture. |
 

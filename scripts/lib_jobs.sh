@@ -22,7 +22,7 @@ run_job_template() {
   done
   [[ -n "${phase}" && "${phase}" != "Pending" ]] || { warn "job ${name} did not start"; return 1; }
 
-  kubectl -n rl-trainer logs -f "job/${name}"
+  kubectl -n rl-trainer logs -f "job/${name}" | logview
   kubectl -n rl-trainer wait --for=condition=Complete "job/${name}" --timeout=30s >/dev/null 2>&1
 }
 
