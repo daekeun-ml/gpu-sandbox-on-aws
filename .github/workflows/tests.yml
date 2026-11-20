@@ -28,6 +28,8 @@ jobs:
           uv run --no-sync cfn-lint demo/infra/site.yaml
           node --check demo/site/app.js
           node --check demo/site/arch.js
+      - name: Root SCRIPTS.md matches the guidebook script reference
+        run: python3 tools/sync_scripts_md.py --check
 
   cdk:
     runs-on: ubuntu-latest

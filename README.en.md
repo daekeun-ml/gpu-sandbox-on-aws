@@ -9,7 +9,7 @@
 
 If you are new, pick a path that fits your goal and budget in [Choose a learning path](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/learning_paths/) (the free reading and local run paths come first).
 
-**Jump to:** [Architecture](#architecture) | [Scenarios and runtimes](#scenarios-and-runtimes) | [Getting started](#getting-started) | [Key pages of the guidebook](#key-pages-of-the-guidebook) | [Troubleshooting](TROUBLESHOOTING.en.md)
+**Jump to:** [Architecture](#architecture) | [Scenarios and runtimes](#scenarios-and-runtimes) | [Getting started](#getting-started) | [Key pages of the guidebook](#key-pages-of-the-guidebook) | [Scripts](SCRIPTS.en.md) | [Troubleshooting](TROUBLESHOOTING.en.md)
 
 ## Architecture
 
@@ -118,6 +118,8 @@ python -m pytest -q
 
 Pick one scenario and run its commands from top to bottom. If this is your first time, start with **scenario C**. It needs no GPU and takes you from cluster creation to cleanup for about 0.57 USD per hour. What to check at each step is in [Hands-on 00 Overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/00_overview/).
 
+**What each script does, whether it is safe to run again, and its success signal are in [SCRIPTS.en.md](SCRIPTS.en.md), in run order.**
+
 #### Common setup (once)
 
 1. Create the configuration file. Every script reads it and stops where a value it needs is empty.
@@ -163,7 +165,7 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2          # another terminal, while sim
 scripts/08_cleanup.sh                              # delete everything
 ```
 
-Step-by-step explanations are in [Hands-on 10 c8i-only low-cost path](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/10_cpu_only/).
+Each script above is explained in [SCRIPTS.en.md](SCRIPTS.en.md). Step-by-step explanations are in [Hands-on 10 c8i-only low-cost path](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/10_cpu_only/).
 
 #### Scenario A: EC2 GPU (default)
 
@@ -182,7 +184,7 @@ scripts/07_run_grpo.sh                             # GRPO training Job (60 steps
 scripts/08_cleanup.sh                              # delete everything
 ```
 
-To switch the sandbox version during training (`scripts/ops/rollout.sh`), first scale the nodes to 4. The procedure is in [Hands-on 06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/06_sandbox_update/).
+Each script above is explained in [SCRIPTS.en.md](SCRIPTS.en.md). To switch the sandbox version during training (`scripts/ops/rollout.sh`), first scale the nodes to 4. The procedure is in [Hands-on 06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/06_sandbox_update/).
 
 **Adding Kata runtimes (optional):** run these between 04 and 05.
 
@@ -245,7 +247,7 @@ scripts/08_cleanup.sh
 
 #### Script folders
 
-The usage, behavior on a second run and success signal of each script are in the guidebook's [Script reference](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/scripts/).
+What each script does and how it behaves on a second run are in [SCRIPTS.en.md](SCRIPTS.en.md) (the same content as the guidebook's [Script reference](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/scripts/)).
 
 | Location | Purpose |
 |---|---|
@@ -255,48 +257,6 @@ The usage, behavior on a second run and success signal of each script are in the
 | `scripts/hyperpod/` | HyperPod cluster creation, training, deletion |
 | `scripts/extensions/` | Agent Sandbox extension |
 | `cdk/` | The CDK app that creates the infrastructure (VPC, EKS, node groups) and the tunnel |
-
-<details>
-<summary><b>What each script does (expand)</b></summary>
-
-| Script | What it does |
-|---|---|
-| `scripts/01_check_prereqs.sh` | Checks local tools, the AWS identity, quotas, nested virtualization support and per-AZ availability of the GPU instance types. Read-only; it creates nothing. |
-| `scripts/02_create_cluster.sh` | Creates the VPC, the private EKS cluster, the scenario's node groups and the SSM access instance with CDK. Running it again with changed settings adds or changes node groups. |
-| `cdk/tunnel.sh` | The connection you keep open in a second terminal. Keep it running while you use kubectl and helm after the cluster exists. |
-| `scripts/03_build_push_images.sh` | Builds the sandbox, trainer and control images for `linux/amd64`, pushes them to ECR, and prints the image addresses as `export` lines. `--no-trainer` skips the trainer; `HYPERPOD=1` adds `hyperpodrun` to the trainer image. |
-| `scripts/04_install_gpu_stack.sh` | Installs the NVIDIA device plugin (CDI mode), then registers the `gvisor` RuntimeClass and runs a smoke pod to confirm that GPU work runs inside gVisor. In B2 and C it installs only the device plugin and skips the rest. |
-| `scripts/05_setup_namespaces_auth.sh` | Creates the namespaces, NetworkPolicies, ServiceAccounts and the routing ConfigMap, and copies the cluster's token signing public keys (JWKS) into the `sandbox` namespace. `ACTIVE_RUNTIME` sets the first runtime to use. |
-| `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]` | Deploys one sandbox pool (Deployment and headless Service) and waits until all pods are Ready. |
-| `scripts/07_run_grpo.sh [max_steps]` | Submits the GRPO training Job (60 steps by default) and follows its logs. Ctrl-C stops following, not training. |
-| `scripts/08_cleanup.sh [--images]` | After you confirm by typing the cluster name, deletes the Jobs, pools and the CDK stack in order. It asks separately about each AMI in the config, and `--images` also deletes the ECR repositories. |
-| `cdk/deploy.sh`, `cdk/destroy.sh` | Deploy and delete the CDK stack. `02_create_cluster.sh` and `08_cleanup.sh` call them. |
-| `scripts/kata/cpu_nodes.sh` | Installs kata-deploy on the c8i node, registers the `gvisor-cpu` RuntimeClass, and runs smoke pods for the three runtimes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU). |
-| `scripts/kata/gpu_nodes.sh` | The first run builds an AMI with the IOMMU on and stops. Once the `g4dn.metal` node exists, the next run installs the GPU Operator and kata-deploy and checks GPU passthrough (`nvidia.com/pgpu`). |
-| `scripts/ops/verify.sh <runtime> [version]` | Verifies one pool: it checks that IMDS, the API server and the internet are blocked, that the prepared test code gets the expected results, and that callers from other namespaces are blocked. |
-| `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | Switches the sandbox version during training (blue/green). It starts the new version, verifies it, checks that it gives the same results as the old one, then switches the routing. |
-| `scripts/ops/simulate.sh [steps] [interval_s]` | In scenario C, scores prepared test code batch by batch without a model, and shows from which batch the new version is used. It does not train. |
-| `scripts/ops/bench.sh [requests]` | Measures cold start, evaluation latency, throughput and speedup for every deployed v1 pool. |
-| `scripts/ops/sync_jwks.sh` | Copies the cluster's token signing public keys into the sandbox namespace again. Run it when the API server keys change and you get 401 `unknown signing key`. |
-| `scripts/hyperpod/create.sh [--b2]` | Creates the HyperPod cluster (trainer group) and attaches it to the EKS cluster. `--b2` adds the sandbox group. |
-| `scripts/hyperpod/build_b2_ami.sh` | Builds the custom AMI for the B2 sandbox group (an NVIDIA driver that gVisor supports, plus gVisor). Run it before `create.sh --b2`. |
-| `scripts/hyperpod/check_gvisor.sh` | Starts a debug pod on each HyperPod node and prints its NVIDIA driver version and whether gVisor supports it. At the end it deletes every pod whose name starts with `node-debugger-` in the `default` namespace. |
-| `scripts/hyperpod/run_grpo.sh [max_steps]` | In scenario B, runs GRPO training on the HyperPod node instead of `07_run_grpo.sh`. |
-| `scripts/hyperpod/delete.sh` | Deletes the HyperPod cluster, its execution role and the lifecycle bucket. Run it before `08_cleanup.sh`. |
-| `scripts/extensions/agent_sandbox.sh` | The Agent Sandbox extension. `install` installs the controller and `pool` creates a warm pool. |
-| `demo/deploy.sh`, `demo/teardown.sh` | Deploy the demo site to a private S3 bucket behind CloudFront (us-east-1), and remove it. |
-| `scripts/logview.py` | Shows the JSON events of Job logs as short colored lines on a terminal. `07_run_grpo.sh`, the check and measurement scripts in `ops/` and `agent_sandbox.sh episodes` go through it. |
-| `scripts/lib.sh`, `scripts/lib_jobs.sh` | Shared functions that the other scripts load. You do not run them directly. |
-
-- **Scenario choice in `02_create_cluster.sh`**: no option uses `SCENARIO` from `scripts/config.env` (default A), `--hyperpod` B1, `--hyperpod-b2` B2, `--cpu-only` C.
-- **What `cdk/tunnel.sh` does**: it forwards `127.0.0.1:8443` on your PC to the private EKS API through SSM port forwarding, and creates the kubectl context `<CLUSTER_NAME>-tunnel`.
-- **Kernel output of `verify.sh`**: it also prints the kernel inside the sandbox and the node's kernel; check yourself that they differ (isolation).
-- **`--finish` of `rollout.sh`**: after the switch, once a `batch` line on the new version shows verdicts other than `sandbox_error`, run the same command with `--finish` to scale the old version to zero.
-- **`claim` and `episodes` of `agent_sandbox.sh`**: `claim` borrows one sandbox, prints its address and returns it, and `episodes` runs multi-turn episodes without a model.
-- **Logs of HyperPod's `run_grpo.sh`**: `run_grpo.sh` prints a command for following the logs; run that command yourself.
-- **For the raw JSON**: put `GPUSANDBOX_LOG=json` in front of the command.
-
-</details>
 
 If something fails, check [TROUBLESHOOTING.en.md](TROUBLESHOOTING.en.md) for common problems per step. The full list is in the guidebook's [Troubleshooting](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/).
 

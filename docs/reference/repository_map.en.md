@@ -45,8 +45,9 @@ gpu-sandbox-on-aws/
 ├── diagrams/              # scenario architecture diagrams: .drawio sources, briefs, arrow-by-arrow guides
 ├── tests/                 # pytest suite (CPU only, no AWS)
 ├── docs/ + mkdocs.yml     # this guidebook (Korean default, English .en.md)
+├── tools/                 # sync_scripts_md.py: builds SCRIPTS.md from docs/reference/scripts.md
 ├── .github/workflows/     # CI: tests and docs build
-└── pyproject.toml, LICENSE, README.md
+└── pyproject.toml, LICENSE, README.md, TROUBLESHOOTING.md, SCRIPTS.md (and .en.md)
 ```
 
 !!! note "Local files you should not commit"
@@ -347,6 +348,7 @@ The CDK stack tests live separately in `cdk/tests` (see the cdk section above). 
 | `.github/workflows/tests.yml` | `pytest` with CPU torch, shellcheck on the shell scripts in `scripts/`, `infra/` and `cdk/`. A separate job installs the CDK libraries and runs `cdk/tests` (offline synth, cdk-nag). |
 | `.github/workflows/docs.yml` | Builds the Korean and English site with `mkdocs build --strict` and deploys it to GitHub Pages. |
 | `mkdocs.yml`, `docs/` | This guidebook. Korean is the default (`page.md`), English is `page.en.md`. |
+| `SCRIPTS.md`, `SCRIPTS.en.md`, `tools/sync_scripts_md.py` | Script descriptions read directly on GitHub. Built from `docs/reference/scripts.md` (and `.en.md`); CI checks with `--check` that they match. After editing the guidebook page, run `python3 tools/sync_scripts_md.py`. |
 
 !!! note "Upstream sources kept for reference"
     `go_create.go` and `go_sandbox.go` at the repository root are copies of upstream Kata Containers Go runtime sources (Apache-2.0 headers). No build, test, script or image references them.

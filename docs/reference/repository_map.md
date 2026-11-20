@@ -45,8 +45,9 @@ gpu-sandbox-on-aws/
 ├── diagrams/              # scenario architecture diagrams: .drawio sources, briefs, arrow-by-arrow guides
 ├── tests/                 # pytest suite (CPU only, no AWS)
 ├── docs/ + mkdocs.yml     # this guidebook (Korean default, English .en.md)
+├── tools/                 # sync_scripts_md.py: builds SCRIPTS.md from docs/reference/scripts.md
 ├── .github/workflows/     # CI: tests and docs build
-└── pyproject.toml, LICENSE, README.md
+└── pyproject.toml, LICENSE, README.md, TROUBLESHOOTING.md, SCRIPTS.md (and .en.md)
 ```
 
 !!! note "커밋하지 않아야 하는 로컬 파일"
@@ -347,6 +348,7 @@ CDK 스택 테스트는 `cdk/tests`에 따로 있습니다(위 cdk 절). 로컬 
 | `.github/workflows/tests.yml` | CPU torch로 `pytest`, `scripts/`, `infra/`, `cdk/`의 셸 스크립트에 shellcheck. 별도 job에서 CDK 라이브러리를 설치하고 `cdk/tests`(오프라인 synth, cdk-nag)를 실행합니다. |
 | `.github/workflows/docs.yml` | `mkdocs build --strict`로 한국어와 영어 사이트를 빌드하고 GitHub Pages에 배포합니다. |
 | `mkdocs.yml`, `docs/` | 이 가이드북. 한국어가 기본(`page.md`), 영어는 `page.en.md`. |
+| `SCRIPTS.md`, `SCRIPTS.en.md`, `tools/sync_scripts_md.py` | GitHub에서 바로 보는 스크립트 설명. `docs/reference/scripts.md`(와 `.en.md`)에서 만들며, CI가 `--check`로 두 내용이 같은지 확인합니다. 가이드북 페이지를 고친 뒤 `python3 tools/sync_scripts_md.py`를 실행하세요. |
 
 !!! note "참고용 업스트림 소스"
     저장소 루트의 `go_create.go`, `go_sandbox.go`는 Kata Containers Go 런타임의 업스트림 소스 사본입니다(파일 머리에 Apache-2.0 표기). 빌드, 테스트, 스크립트, 이미지 어디에서도 참조하지 않습니다.
