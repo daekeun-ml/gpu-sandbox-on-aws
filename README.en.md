@@ -287,14 +287,14 @@ GPU instances are billed for as long as they run. The amounts below are estimate
 - The minimal gVisor path of scenario A: about 3.42 USD per hour
 - `g4dn.metal` for Kata GPU: 7.824 USD per hour per node
 - Items such as the EKS control plane, the NAT gateway, EBS and ECR are not included above.
-- Scale node groups to zero while you take a break. For example, the Kata GPU nodes:
+- Scale node groups to zero while you take a break, and when you finish, delete everything with `scripts/08_cleanup.sh`.
 
-    ```bash
-    aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu \
-      --scaling-config minSize=0,maxSize=1,desiredSize=0
-    ```
+For example, this scales the Kata GPU nodes to zero:
 
-- When you finish, delete everything with `scripts/08_cleanup.sh`.
+```bash
+aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu \
+  --scaling-config minSize=0,maxSize=1,desiredSize=0
+```
 
 ## Security
 

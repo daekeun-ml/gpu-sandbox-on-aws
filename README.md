@@ -287,14 +287,14 @@ GPU 인스턴스는 켜져 있는 동안 계속 과금됩니다. 아래 금액�
 - 시나리오 A의 gVisor 최소 경로: 시간당 약 3.42 USD
 - Kata GPU용 `g4dn.metal`: 한 대에 시간당 7.824 USD
 - EKS 컨트롤 플레인, NAT gateway, EBS, ECR 같은 항목은 위 금액에 들어 있지 않습니다.
-- 쉬는 동안에는 노드 그룹을 0으로 줄이세요. 예를 들어 Kata GPU 노드는 다음과 같이 줄입니다.
+- 쉬는 동안에는 노드 그룹을 0으로 줄이고, 실습이 끝나면 `scripts/08_cleanup.sh`로 모두 지우세요.
 
-    ```bash
-    aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu \
-      --scaling-config minSize=0,maxSize=1,desiredSize=0
-    ```
+Kata GPU 노드를 0으로 줄이는 예시입니다.
 
-- 실습이 끝나면 `scripts/08_cleanup.sh`로 모두 지우세요.
+```bash
+aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu \
+  --scaling-config minSize=0,maxSize=1,desiredSize=0
+```
 
 ## 보안
 
