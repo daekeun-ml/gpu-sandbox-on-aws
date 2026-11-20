@@ -14,6 +14,7 @@
 # --require-approval broadening stops for review before any IAM or security group change.
 source "$(dirname "$0")/../scripts/lib.sh"
 require_tools aws cdk python3
+require_cdk_lib
 require_vars CLUSTER_NAME AWS_REGION K8S_VERSION GVISOR_RELEASE
 
 export SCENARIO="${1:-${SCENARIO:-A}}"

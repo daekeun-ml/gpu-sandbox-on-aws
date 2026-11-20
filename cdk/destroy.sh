@@ -4,7 +4,8 @@
 # node groups, VPC, access instance, log groups). The secrets KMS key enters its 7-day
 # deletion window. ECR repositories from scripts/03_build_push_images.sh are not part of the stack.
 source "$(dirname "$0")/../scripts/lib.sh"
-require_tools aws cdk
+require_tools aws cdk python3
+require_cdk_lib
 require_vars CLUSTER_NAME AWS_REGION
 
 [[ "${1:-}" == "--yes" ]] \

@@ -125,7 +125,8 @@ Pick one scenario and run its commands from top to bottom. If this is your first
     cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
     ```
 
-3. Two rules apply to the commands below.
+3. Three rules apply to the commands below.
+    - **Run `source .venv/bin/activate` first in every new work terminal.** The CDK app that creates and deletes the cluster (`02`, `08`) uses the CDK library in the virtualenv.
     - **Keep `cdk/tunnel.sh` running in a second terminal.** The cluster API is private, so kubectl and helm connect only through this tunnel.
     - **Paste the `export` lines that `03_build_push_images.sh` prints at the end into `scripts/config.env`.** Without the image addresses the next steps stop.
 

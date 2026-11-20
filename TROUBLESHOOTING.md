@@ -34,6 +34,7 @@ kubectl get events -A --sort-by=.lastTimestamp | tail -30
 ## CDK, 터널, 클러스터
 
 - **`SSM parameter /cdk-bootstrap/hnb659fds/version not found`**: 그 계정과 리전에서 CDK bootstrap을 하지 않았습니다. README의 「공통 준비」에 있는 `cdk bootstrap` 명령을 한 번 실행하세요.
+- **`python3 cannot import aws_cdk` 또는 `ModuleNotFoundError: No module named 'aws_cdk'`**: 가상 환경이 활성화되지 않은 터미널입니다. `source .venv/bin/activate`를 실행한 뒤 다시 실행하세요. 가상 환경이 없으면 README의 「공통 준비」대로 `uv pip install -r cdk/requirements.txt`를 먼저 실행합니다.
 - **`Cloud assembly schema version mismatch`**: CDK CLI가 오래됐습니다. `npm install -g aws-cdk`로 2.1148.1 이상으로 올리세요.
 - **`ADMIN_PRINCIPAL_ARN must list IAM role or user ARNs, not sts assumed-role ARNs`**: 넣은 값 중에 IAM 역할이나 사용자 ARN 형식이 아닌 것이 있습니다. STS 세션 ARN(`arn:aws:sts::...:assumed-role/...`)을 넣었다면 그 역할의 ARN으로 바꾸거나 값을 비워 두세요.
 - **`cdk/tunnel.sh`가 `TargetNotConnected`로 끝남**: 배포 직후에는 접속 인스턴스가 아직 준비되지 않았을 수 있습니다. 몇 분 뒤 다시 실행하세요.

@@ -163,6 +163,7 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 |---|---|---|
 | `cdk deploy`가 `SSM parameter /cdk-bootstrap/hnb659fds/version not found. Has the environment been bootstrapped?`로 실패 | 그 계정과 리전에 CDK bootstrap을 하지 않음 | `cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"`를 한 번 실행 |
 | synth 중 cdk-nag `AwsSolutions-...` 지적과 함께 `ValidationFailed`로 배포가 멈춤 | 예외 처리되지 않은 cdk-nag 지적이 있음(스택 코드나 cdk-nag 버전이 바뀜) | 출력의 규칙 ID와 리소스를 보고 고칩니다. 의도적으로 따르지 않는 규칙이라면 `cdk/gpusandbox_cdk/stack.py`의 `_suppress`에 이유를 적어 예외 처리하고, 이유 없이 예외 처리하지 않기 |
+| `python3 cannot import aws_cdk` 또는 `ModuleNotFoundError: No module named 'aws_cdk'` | 가상 환경이 활성화되지 않은 터미널에서 CDK 앱(`python3 app.py`)을 실행함 | `source .venv/bin/activate` 후 다시 실행. 가상 환경이 없으면 `uv pip install -r cdk/requirements.txt`. `08_cleanup.sh`는 아무것도 지우기 전에 이 조건을 확인함 |
 | `Cloud assembly schema version mismatch` | CDK CLI가 `cdk/requirements.txt`의 `aws-cdk-lib`보다 오래됨 | `npm install -g aws-cdk`로 CLI를 2.1148.1 이상으로 올리기. 이 저장소는 CLI 2.1148.2가 필요한 `aws-cdk-lib` 2.277.0 대신 2.276.0에 고정(2026-11-14 기준) |
 | `ADMIN_PRINCIPAL_ARN must list IAM role or user ARNs, not sts assumed-role ARNs` | STS 세션 ARN(`arn:aws:sts::...:assumed-role/...`)을 넣음 | `aws iam get-role --role-name <역할> --query Role.Arn --output text`로 얻은 역할 ARN을 넣거나 비워 두기 |
 | `EKS_PUBLIC_ACCESS_CIDR must be a single IPv4 address in /32 form` | `0.0.0.0/0`이나 /24 같은 범위를 넣음 | 비워 두거나(private만) 작업 PC 주소 하나를 `/32`로 |

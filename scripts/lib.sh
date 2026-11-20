@@ -57,6 +57,12 @@ confirm() {
   [[ "${answer}" == "${expected}" ]] || die "aborted"
 }
 
+# The CDK app runs as "python3 app.py" (cdk/cdk.json), so python3 must see aws-cdk-lib.
+require_cdk_lib() {
+  python3 -c 'import aws_cdk' 2>/dev/null \
+    || die "python3 cannot import aws_cdk: activate the virtualenv (source .venv/bin/activate) or run uv pip install -r cdk/requirements.txt"
+}
+
 account_id() { aws sts get-caller-identity --query Account --output text; }
 
 ecr_registry() { echo "$(account_id).dkr.ecr.${AWS_REGION}.amazonaws.com"; }

@@ -7,6 +7,7 @@ source "$(dirname "$0")/lib.sh"
 require_tools aws cdk kubectl
 require_vars CLUSTER_NAME AWS_REGION
 
+require_cdk_lib   # check before anything is deleted; cdk/destroy.sh needs it
 confirm "${CLUSTER_NAME}" "This deletes EKS cluster ${CLUSTER_NAME} in ${AWS_REGION} and its node groups."
 
 # Sandbox pools, jobs, the CDK stack (cluster, node groups, VPC, access instance) and the

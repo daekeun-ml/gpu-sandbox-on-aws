@@ -125,7 +125,8 @@ python -m pytest -q
     cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
     ```
 
-3. 아래 명령을 실행할 때 두 가지를 꼭 지키세요.
+3. 아래 명령을 실행할 때 세 가지를 꼭 지키세요.
+    - **새 작업 터미널을 열면 먼저 `source .venv/bin/activate`를 실행합니다.** 클러스터를 만들고 지우는 CDK 앱(`02`, `08`)이 가상 환경의 CDK 라이브러리를 씁니다.
     - **`cdk/tunnel.sh`는 두 번째 터미널에서 계속 켜 둡니다.** 클러스터 API가 비공개라서 kubectl과 helm은 이 터널로만 접속합니다.
     - **`03_build_push_images.sh`가 마지막에 출력하는 `export` 줄은 `scripts/config.env`에 붙여 넣습니다.** 이미지 주소가 없으면 다음 단계가 멈춥니다.
 

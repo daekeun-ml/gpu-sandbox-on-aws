@@ -34,6 +34,7 @@ More: [Configuration and scripts](https://daekeun-ml.github.io/gpu-sandbox-on-aw
 ## CDK, tunnel and cluster
 
 - **`SSM parameter /cdk-bootstrap/hnb659fds/version not found`**: CDK is not bootstrapped in that account and Region. Run the `cdk bootstrap` command from "Common setup" in the README once.
+- **`python3 cannot import aws_cdk` or `ModuleNotFoundError: No module named 'aws_cdk'`**: the virtualenv is not active in this terminal. Run `source .venv/bin/activate` and try again. If there is no virtualenv yet, run `uv pip install -r cdk/requirements.txt` first, as in "Common setup" in the README.
 - **`Cloud assembly schema version mismatch`**: the CDK CLI is too old. Upgrade it to 2.1148.1 or later with `npm install -g aws-cdk`.
 - **`ADMIN_PRINCIPAL_ARN must list IAM role or user ARNs, not sts assumed-role ARNs`**: one of the values is not in IAM role or user ARN form. If you set an STS session ARN (`arn:aws:sts::...:assumed-role/...`), replace it with the ARN of that role, or leave the value empty.
 - **`cdk/tunnel.sh` ends with `TargetNotConnected`**: right after deployment the access instance may not be ready yet. Run it again in a few minutes.
