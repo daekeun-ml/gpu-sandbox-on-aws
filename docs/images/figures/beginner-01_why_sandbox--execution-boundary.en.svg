@@ -18,9 +18,11 @@
       <rect x="46" y="86" width="178" height="104" rx="9"/>
       <rect x="536" y="86" width="178" height="104" rx="9"/>
     </g>
+    <g transform="translate(123.5 96) scale(0.958333)" fill="none" stroke="#3765a8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7l6-3 6 3v10l-6 3-6-3zM6 7l6 3 6-3M12 10v10"/></g>
+    <g transform="translate(613.5 96) scale(0.958333)" fill="none" stroke="#3765a8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6zM9 12l2 2 4-4"/></g>
     <g font-size="19">
-      <text x="135" y="145">Trainer</text>
-      <text x="625" y="145">Run submission</text>
+      <text x="135" y="153">Trainer</text>
+      <text x="625" y="153">Run submission</text>
     </g>
     <g stroke="#1d4e9e" stroke-width="2" marker-end="url(#arrow)">
       <path d="M 224 118 H 532"/>

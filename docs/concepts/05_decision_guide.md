@@ -9,20 +9,7 @@
 2. **생성한 코드를 어떤 GPU에서 돌릴 건가요?** 속도가 점수라면 목표 GPU에서 측정하세요. 이 저장소의 기본 gVisor GPU 실습은 A10G를 씁니다.
 3. **pod마다 별도 VM이 필요한가요?** 이 저장소의 Kata GPU 경로는 `g4dn.metal`의 T4를 사용합니다. VM 경계와 목표 GPU를 둘 다 만족하는 구성을 먼저 확인하세요.
 
-```mermaid
-flowchart TD
-    GPU{"채점에 GPU 필요"}
-    CPU["CPU 실습"]
-    TARGET["측정할 GPU와 입력 결정"]
-    VM{"별도 VM 경계 필요"}
-    GVISOR["gVisor 후보: 드라이버 지원 확인"]
-    KATA["Kata 후보: 목표 GPU와 passthrough 지원 확인"]
-    GPU -->|아니요| CPU
-    GPU -->|예| TARGET
-    TARGET --> VM
-    VM -->|아니요| GVISOR
-    VM -->|예| KATA
-```
+![채점에 필요한 GPU, 측정할 장치, VM 격리 경계를 차례로 정하는 흐름.](../images/figures/concepts-05_decision_guide--exercise-path.ko.svg)
 
 예를 들어 L4에서 서비스할 코드를 속도로 채점한다면, T4에서 얻은 순위가 L4에서도 같다고 가정할 수 없습니다. 측정할 GPU가 정해졌다면 후보 런타임이 그 GPU를 지원하는지 확인한 뒤, 필요한 격리 경계와 운영 비용을 비교하세요.
 

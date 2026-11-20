@@ -9,20 +9,7 @@
 2. **Target GPU.** Measure performance on the GPU that will execute the deployed code. The default gVisor exercise uses A10G.
 3. **Isolation requirement.** Kata uses a separate VM per pod. The GPU exercise uses T4 on `g4dn.metal`.
 
-```mermaid
-flowchart TD
-    GPU{"GPU required for grading"}
-    CPU["CPU exercise"]
-    TARGET["Choose target GPU and inputs"]
-    VM{"Separate VM required"}
-    GVISOR["gVisor: check driver support"]
-    KATA["Kata: check GPU and passthrough support"]
-    GPU -->|No| CPU
-    GPU -->|Yes| TARGET
-    TARGET --> VM
-    VM -->|No| GVISOR
-    VM -->|Yes| KATA
-```
+![Choose whether grading needs a GPU, choose a measurement device, then check whether a separate VM is required.](../images/figures/concepts-05_decision_guide--exercise-path.en.svg)
 
 ## Competing requirements
 
