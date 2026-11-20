@@ -1,7 +1,7 @@
 # GPU Sandbox on AWS
 
 !!! info "TL;DR"
-    모델이 쓴 GPU 코드를 격리된 GPU 샌드박스에서 실행해 reward를 매기는 on-policy RL post-training 환경을 구축하는 가이드입니다. Amazon EKS와 SageMaker HyperPod에서 세 가지 격리 런타임으로 구성하는 핸즈온과 Production 설계를 다룹니다.
+    AWS에서 GPU 샌드박스를 구축하는 가이드입니다. EKS의 EC2 노드에서 직접 운영하는 구성과 HyperPod를 쓰는 구성을 살펴보고, gVisor와 Kata의 실행 조건을 비교합니다. GRPO 실습에서는 모델이 쓴 코드의 채점 결과를 reward로 연결합니다.
 
 <div class="grid cards" markdown>
 
@@ -9,7 +9,7 @@
 
     ---
 
-    샌드박스, 격리 런타임, 강화학습을 처음 접하는 분을 위한 가이드입니다. 각 개념이 무엇이고 왜 필요한지 그림으로 먼저 설명하고, 실제 화면을 보며 샌드박스를 직접 띄워 봅니다.
+    샌드박스, 격리 런타임, 강화학습을 처음 접하는 분을 위한 가이드입니다. 짧은 예시로 개념을 익히고 내 PC에서 CPU 채점을 확인합니다.
 
     [:octicons-arrow-right-24: 초심자 가이드로 시작](beginner/index.md)
 
@@ -23,7 +23,7 @@
 
 </div>
 
-## 기존 Pain Point
+## GPU 샌드박스가 필요한 이유
 
 코드를 실행해 채점하는 RL(RLVR)은 대부분 CPU 샌드박스로 충분하지만, **reward 자체를 GPU에서 측정하는 과제**(CUDA나 Triton 커널이 얼마나 빨라졌는지를 보상으로 삼는 경우)는 샌드박스 안에 GPU가 필요합니다. 이 경우 policy(학습 중인 모델)가 쓴 신뢰할 수 없는 코드가 GPU 드라이버를 호출합니다.
 
@@ -37,7 +37,7 @@
 *그림 요약: (a) 일반 컨테이너에서는 모델이 쓴 코드가 host 커널과 드라이버를 공유합니다. 이와 별개로, 학습 중 버전을 바꾸면 런타임과 관계없이 두 버전의 reward가 한 group에 섞일 수 있습니다. (b) RuntimeClass로 고른 gVisor나 Kata가 코드와 host 커널 사이에 들어가고, trainer는 배치(또는 group)마다 한 버전의 풀로 채점합니다.*
 
 
-## Why
+## 이 프로젝트가 다루는 것
 
 - **세 런타임을 같은 이미지, 같은 API로 비교합니다.** 런타임 프로필 하나가 `RuntimeClass`와 노드, GPU 요청을 함께 정해 gVisor(nvproxy), Kata + QEMU(VFIO GPU passthrough), Kata + Cloud Hypervisor(기본은 CPU)를 선택합니다. Kata + GPU에 `g4dn.metal`이 필요한 이유, `.metal` 없이 nested virtualization으로 실행할 수 있는 범위, HyperPod 노드의 custom AMI는 표로 정리했습니다.
 - **on-policy 학습을 멈추지 않고 샌드박스를 업데이트합니다.** blue/green 풀, golden 제출물 parity 검사, 배치(또는 group) 단위 버전 고정으로 reward 일관성을 유지합니다.
@@ -134,4 +134,4 @@
 
 ## License
 
-코드와 문서는 [MIT](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/LICENSE)이고, 모델 라이선스는 별개입니다. 기본 모델 `Qwen/Qwen2.5-Coder-1.5B-Instruct`와 Production 예시의 `Qwen/Qwen2.5-Coder-7B-Instruct`는 Apache-2.0이고, `Qwen2.5-Coder-3B-Instruct`는 비상업 라이선스라 이 에셋에서 쓰지 않습니다.
+코드와 문서는 [MIT](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/LICENSE)이고, 모델 라이선스는 별개입니다. 기본 모델 `Qwen/Qwen2.5-Coder-1.5B-Instruct`와 Production 예시의 `Qwen/Qwen2.5-Coder-7B-Instruct`는 Apache-2.0이고, `Qwen2.5-Coder-3B-Instruct`는 비상업 라이선스라 이 저장소에서 쓰지 않습니다.

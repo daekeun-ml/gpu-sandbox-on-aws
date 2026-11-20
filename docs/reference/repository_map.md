@@ -1,32 +1,17 @@
 # 저장소 구조
 
 !!! info "TL;DR"
-    저장소의 파일마다 하는 일과, 문서 페이지마다 해당하는 코드 파일의 대응표입니다.
+    어느 파일을 열어야 할지 모를 때 사용하세요. 실행할 명령을 찾는다면 [스크립트 레퍼런스](scripts.md)가 빠릅니다.
 
-## 기존 Pain Point
+| 찾는 코드 | 위치 |
+|---|---|
+| 샌드박스 서버, 채점, 클라이언트 | [`src/gpusandbox`](#srcgpusandbox) |
+| 모델 학습과 보상 연결 | [`rl`](#rl) |
+| 실습 실행 명령 | [`scripts`](#scripts) |
+| AWS 인프라와 노드 부팅 | [`cdk`](#cdk), [`infra`](#infra) |
+| Kubernetes 배포 템플릿 | [`k8s`](#k8s) |
 
-저장소에서 값과 파일을 따라가기 어려운 지점은 다음과 같습니다.
-
-- **값이 여러 파일에서 합쳐짐**: 샌드박스 풀 하나를 배포하면 `scripts/config.env`, 런타임 profile, 버전 파일, Deployment 템플릿의 값이 합쳐지므로, 어떤 값이 어느 파일에서 왔는지 역으로 추적하기 어렵습니다.
-- **템플릿은 그대로 적용할 수 없음**: `.tpl` 파일은 `scripts/render.py`로 렌더링해야 하고, Karpenter EC2NodeClass 템플릿에는 `@@include@@`로 셸 스크립트가 삽입됩니다.
-- **노드 그룹의 user data**: `infra/eks/userdata.py`가 따로 만듭니다.
-- **이미지 이름이 디렉터리 이름과 다름**: `gateway/Dockerfile`이 만드는 이미지는 ECR에서 `control`이고, gateway뿐 아니라 probe, parity, bench, JWKS 동기화도 이 이미지로 실행됩니다.
-
-## Why
-
-- **NVIDIA 커널 드라이버는 어떤 컨테이너 이미지에도 들어 있지 않습니다.** gVisor는 호스트 드라이버를, Kata는 게스트 VM 안의 드라이버를 씁니다.
-- **풀 하나의 설정은 `scripts/06_deploy_sandboxes.sh`에서 합쳐집니다.** 이 스크립트가 런타임 profile과 버전 파일을 읽고 Deployment 템플릿을 렌더링합니다.
-
-**사전 지식:** 따로 없습니다. [시작하기](../getting_started.md)로 저장소를 받아 두면 파일을 열어 보며 읽을 수 있습니다.
-
-??? note "용어"
-    - **템플릿(`.tpl`), 렌더링**: `${VAR}` 자리표시자가 있는 매니페스트 원본과, 그 자리를 실제 값으로 채워 적용 가능한 YAML을 만드는 일입니다. 이 저장소에서는 `scripts/render.py`가 렌더링합니다.
-    - **profile, 버전 파일**: profile(`k8s/sandbox/profiles/*.env`)은 런타임별 값(RuntimeClass, 노드, 가속기)이고, 버전 파일(`k8s/sandbox/versions/*.env`)은 샌드박스 버전별 harness 설정입니다.
-    - **harness**: 후보 코드를 실행하고 정답 여부와 속도를 측정해서 verdict를 내는 평가 코드입니다(`src/gpusandbox/harness/`).
-    - **control 이미지**: torch 없이 HTTP와 Kubernetes 클라이언트만 포함한 이미지입니다. gateway와 운영 도구가 이 이미지로 실행됩니다.
-    - **golden 제출물**: verdict를 미리 아는 후보 코드입니다. 샌드박스가 정상인지 확인하는 기준으로 씁니다.
-
-    더 많은 용어는 [용어 사전](glossary.md)에 있습니다.
+풀 배포에서 프로필과 버전 파일이 합쳐지는 지점은 [값과 템플릿이 합쳐지는 흐름](#값과-템플릿이-합쳐지는-흐름)에 있습니다.
 
 ## 최상위 구조
 

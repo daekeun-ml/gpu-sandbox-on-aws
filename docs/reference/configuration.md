@@ -1,33 +1,16 @@
 # 설정 값
 
 !!! info "TL;DR"
-    이 저장소의 설정 값마다 코드 기본값과, 매니페스트가 클러스터에서 실제로 넣는 값을 나란히 정리한 레퍼런스입니다.
+    값을 바꿀 파일을 먼저 찾으세요. 배포된 pod는 매니페스트가 넘긴 값을 쓰고, 지정하지 않은 값은 코드 기본값을 씁니다.
 
-## 기존 Pain Point
+| 바꾸려는 것 | 수정할 곳 |
+|---|---|
+| AWS 리전, 클러스터 이름, 이미지 URI, 모델 | [`scripts/config.env`](#1-scriptsconfigenv) |
+| RuntimeClass, GPU 종류, pod의 CPU와 메모리 | [런타임 프로필](#8-런타임-profile-k8ssandboxprofiles) |
+| 정확성 검사 횟수, 측정 옵션 | [버전 파일](#9-버전-파일-k8ssandboxversions) |
+| trainer가 평가를 보낼 풀 | [라우팅 설정](#10-routingjson) |
 
-코드 기본값(`127.0.0.1` bind, egress 자기 점검 꺼짐, 인증 미설정)은 로컬 테스트용이고, 클러스터에서는 매니페스트가 다른 값을 넣습니다.
-
-- **전달 단계가 많음**: 값은 `config.env`, 스크립트, `render.py`, 매니페스트의 `env`나 실행 인자, 프로세스 순서로 전달되므로 중간 단계 하나를 놓치면 원인을 찾기 어렵습니다.
-- **이름은 같고 뜻이 다른 변수**: `SANDBOX_RUNTIME`, `SANDBOX_VERSION`처럼 서버와 클라이언트에서 뜻과 기본값이 다른 이름도 있습니다.
-- **변수마다 다른 해석 규칙**: `SANDBOX_AUTH_TEST_BYPASS`는 정확히 `1`일 때만 켜지고, `HARNESS_ALLOW_CUDA_CPP`는 `1`, `true`, `yes`를 모두 받습니다.
-
-## Why
-
-- **문서와 코드가 다르면 코드가 기준입니다.** 기본값의 출처는 `Settings.from_env`, `AuthConfig.from_env`, argparse 정의, gateway `create_app`입니다.
-- **클러스터에서는 매니페스트 값이 쓰입니다.** 매니페스트가 지정하지 않은 값은 클러스터에서도 코드 기본값을 씁니다. 예를 들어 `HARNESS_WARMUP`은 어느 매니페스트에도 없어서 서버가 기본값 `3`을 씁니다.
-- **값마다 바꾸는 파일이 다릅니다.** 풀의 CPU와 메모리는 런타임 프로필에서, 정확성 검사 seed 수는 버전 파일에서, 학습할 모델은 `scripts/config.env`에서 바꿉니다.
-
-**사전 지식:** [저장소 구조](repository_map.md)의 "값과 템플릿이 합쳐지는 흐름"을 먼저 읽으면 이 페이지의 각 표가 어느 단계의 값인지 알 수 있습니다. 로컬 명령을 따라 하려면 [시작하기](../getting_started.md)의 설치를 마쳐 두세요.
-
-??? note "용어"
-    - **환경 변수(env)**: 프로세스가 시작할 때 받는 이름과 값의 쌍입니다. 이 저장소의 서버, gateway, trainer는 설정을 대부분 환경 변수로 받습니다.
-    - **코드 기본값, 매니페스트 값**: 코드 기본값은 환경 변수가 없을 때 코드가 쓰는 값이고, 매니페스트 값은 Kubernetes Deployment나 Job이 실제로 넣어 주는 값입니다. 클러스터에서는 매니페스트 값이 쓰입니다.
-    - **downward API**: pod 자신의 이름, 노드 이름, 노드 IP 같은 정보를 Kubernetes가 환경 변수로 넣어 주는 기능입니다.
-    - **projected ServiceAccount token**: kubelet이 pod 안에 파일로 넣어 주는 토큰입니다. audience와 만료 시간을 정할 수 있고, kubelet이 같은 경로에서 주기적으로 교체합니다.
-    - **fail closed**: 설정이 빠지거나 확인할 수 없을 때 허용하지 않고 거부하는 동작입니다.
-    - **Guaranteed QoS**: requests와 limits가 같은 pod에 Kubernetes가 주는 가장 높은 자원 보장 등급입니다.
-
-    더 많은 용어는 [용어 사전](glossary.md)에 있습니다.
+수정한 값이 적용되지 않으면 [값이 전달되는 경로](#값이-전달되는-경로)에서 설정 파일과 실행 중인 프로세스 사이를 확인하세요.
 
 ## 값이 전달되는 경로
 
@@ -45,7 +28,7 @@ flowchart LR
 
 *그림: 클러스터에서 프로세스가 읽는 값은 매니페스트의 `env`나 실행 인자(`args`)를 거쳐 옵니다. trainer의 모델과 학습 step 수는 실행 인자로 전달되므로, 값이 이상하면 pod의 env와 실행 인자를 함께 확인합니다.*
 
-스크립트는 `scripts/config.env`를 source 한 셸에서 실행되기 때문에, config.env에 `export`로 적은 값은 템플릿의 `${VAR}`에 그대로 쓰입니다.
+`scripts/config.env`를 source 한 셸에서 스크립트를 실행하므로 config.env에 `export`로 적은 값은 템플릿의 `${VAR}`에 그대로 쓰입니다.
 
 - **config.env에 없는 변수**: `ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh`처럼 명령 앞에 붙여 한 번만 바꿀 수 있습니다.
 - **config.env에 `export`로 적은 변수**: 스크립트가 그 파일을 나중에 읽어 명령 앞의 값을 덮어쓰므로, 파일의 값을 고칩니다.

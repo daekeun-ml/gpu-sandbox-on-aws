@@ -1,18 +1,9 @@
 # 용어 사전
 
 !!! info "TL;DR"
-    이 가이드북에 나오는 격리 런타임, Kubernetes와 AWS 인프라, RL 용어를 한두 문장으로 정의하고, 그 용어를 자세히 다루는 페이지를 링크합니다.
+    영문 용어의 알파벳순입니다. 항목 끝의 “쓰는 곳”에서 실제 사용 예를 볼 수 있습니다.
 
-## 기존 Pain Point
-
-격리 런타임(gVisor, Kata), Kubernetes와 AWS 인프라, on-policy RL 용어가 한 페이지 안에 섞여 나옵니다. "rollout"과 "warm"처럼 문맥마다 뜻이 다른 단어도 있습니다(아래 ❓ 오해 노트). 정의는 용어를 처음 설명한 페이지에 흩어져 있어서, 뜻을 알려면 그 페이지를 찾아가야 합니다.
-
-## Why
-
-- **rollout은 문맥에 따라 뜻이 다릅니다.** RL에서는 policy가 completion을 생성하는 단계이고, Kubernetes에서는 Deployment를 새 버전으로 바꾸는 일입니다.
-- **warm도 두 가지입니다.** Production의 warm placeholder는 GPU를 요청하지 않고, Agent Sandbox의 SandboxWarmPool은 GPU 프로필로 만들면 대기 중에도 GPU를 점유합니다.
-
-**사전 지식:** 없습니다. 항목은 영어 용어의 알파벳순이고, 항목 끝의 "쓰는 곳"이 그 용어를 자세히 다루는 페이지입니다.
+**같은 단어가 문맥에 따라 달라지는 경우**　RL의 rollout은 모델이 답을 생성하는 과정이고, Kubernetes의 rollout은 배포를 갱신하는 과정입니다. warm pool과 warm placeholder가 GPU를 언제 점유하는지는 [W 항목](#w)에서 확인할 수 있습니다.
 
 ## A
 
@@ -273,7 +264,7 @@
 ## T
 
 **T4**
-:   NVIDIA의 GPU 모델입니다. EC2에서는 `g4dn` 인스턴스에 들어 있고, `g4dn.metal`에는 8개가 있습니다. EC2에서 VM에 직접 할당할 수 있는 x86 NVIDIA GPU는 이 T4뿐이라, 이 에셋의 Kata GPU 샌드박스는 T4에서 reward를 측정합니다. 쓰는 곳: [상황별 선택 가이드](../concepts/05_decision_guide.md), [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)
+:   NVIDIA의 GPU 모델입니다. EC2에서는 `g4dn` 인스턴스에 들어 있고, `g4dn.metal`에는 8개가 있습니다. EC2에서 VM에 직접 할당할 수 있는 x86 NVIDIA GPU는 이 T4뿐이라, 이 저장소의 Kata GPU 샌드박스는 T4에서 reward를 측정합니다. 쓰는 곳: [상황별 선택 가이드](../concepts/05_decision_guide.md), [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)
 
 **Taint, toleration**
 :   taint는 노드에 붙여 그 taint를 허용하지 않는 pod가 스케줄되지 못하게 하는 표시이고, toleration은 pod가 특정 taint가 있는 노드에도 스케줄될 수 있게 하는 설정입니다. 이 저장소는 `gpusandbox/role=<역할>:NoSchedule` taint로 샌드박스 노드를 전용 노드로 지정합니다. 쓰는 곳: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)

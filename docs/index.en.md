@@ -37,7 +37,7 @@ For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, b
 *Takeaway: (a) In a plain container the model's code shares the host kernel and driver. Separately, changing the version during training can mix rewards from two versions in one group, whatever the runtime. (b) gVisor or Kata, chosen by RuntimeClass, sits between the code and the host kernel, and the trainer scores each batch (or group) on a pool of one version.*
 
 
-## Why
+## What this project covers
 
 - **Compare three runtimes with the same image and the same API.** One runtime profile sets the `RuntimeClass`, the nodes and the GPU request together to select gVisor (nvproxy), Kata + QEMU (VFIO GPU passthrough) or Kata + Cloud Hypervisor (CPU by default), and tables show why Kata + GPU needs `g4dn.metal`, how far nested virtualization takes Kata without `.metal`, and the custom AMI for HyperPod nodes.
 - **Update the sandbox without stopping on-policy training.** Blue/green pools, parity checks with golden submissions, and version pinning per batch (or per group) keep rewards consistent.

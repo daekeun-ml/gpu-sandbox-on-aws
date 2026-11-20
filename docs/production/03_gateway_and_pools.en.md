@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     The sandbox gateway is a single scheduler in front of every trainer process: it authenticates callers, pins the sandbox version per batch or per GRPO group, sends one evaluation at a time to each pod and replaces draining pods with new ones.
 
-## Pain point
+## When trainers connect directly to the pool
 
 - **When each trainer process decides alone which pod is free**: several TRL ranks and veRL reward workers send requests to the same pod, get 503 and retry.
 - **veRL scoring samples one at a time**: with no batch snapshot, samples of the same GRPO group can be scored by different versions before and after a routing switch.
@@ -15,7 +15,7 @@
 *Takeaway: Callers that pick pods on their own collide on the same pod, and scoring samples separately lets one group span two versions. One gateway counts in-flight requests and pins each group to its first sample's version.*
 
 
-## Why
+## What the gateway handles
 
 - **In-flight requests are counted in one place.** Normally every request passes through a single gateway process, so it never sends two requests to the same pod at once.
     - **While the gateway Deployment is being replaced**: the old and new gateway run side by side for a short time and can pick the same pod. The sandbox then answers the second request with 503 (busy), and the gateway sends it to another pod.

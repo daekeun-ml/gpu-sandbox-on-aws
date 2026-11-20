@@ -2,25 +2,34 @@
 
 # 문제 해결
 
-초보자가 자주 막히는 문제를 단계별로 모았습니다. 다른 증상과 자세한 진단 명령은 가이드북의 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)에 있습니다.
+화면에 나온 증상으로 찾아보세요. 로그를 더 확인해야 한다면 가이드북의 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)을 참고하세요.
+
+| 증상 | 먼저 볼 곳 |
+|---|---|
+| `set ... in scripts/config.env`, `missing tool` | [설정과 스크립트](#설정과-스크립트) |
+| `kubectl` 연결 실패, 노드가 나타나지 않음 | [CDK, 터널, 클러스터](#cdk-터널-클러스터) |
+| GPU smoke test 실패 | [gVisor](#gvisor), [Kata](#kata) |
+| `Pending`, `ContainerCreating`, `Running`인데 `0/1` | [샌드박스 풀](#샌드박스-풀) |
+| 인증 요청이 `401` 또는 `403`으로 실패 | [인증 오류별 진단](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답) |
+| `CUDA out of memory`, `sandbox_error` 반복 | [학습](#학습) |
+| `hyperpodrun` 누락, HyperPod 생성 실패 | [HyperPod](#hyperpod) |
+| 새 풀로 전환했는데 이전 버전으로 채점됨 | [버전 전환](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing) |
+| 정리 후에도 리소스나 요금이 남음 | [정리와 비용](#정리와-비용) |
 
 ## 먼저 확인할 것
 
-- **`kubectl`이 접속하지 못하면 터널부터 확인하세요.** 기본 설정에서는 클러스터 API가 비공개라서 터널로만 접속합니다. 두 번째 터미널에서 `cdk/tunnel.sh`를 다시 실행하고, `kubectl config current-context`가 `<CLUSTER_NAME>-tunnel`인지 확인하세요.
-- **pod가 Running이어도 READY가 `0/1`이면 새 평가 요청을 받지 않습니다.** 샌드박스는 장치 확인(GPU 풀이면 GPU 사용 가능 여부)과 외부 연결 차단 확인을 통과해야 Ready가 됩니다. pod 로그의 `device probe ok=` 줄과 `egress is open` 줄부터 보세요.
-- **샌드박스에 오류가 나도 학습은 멈추지 않습니다.** TRL은 trainer 로그의 `reward_batch` 줄에서 `sandbox_error` 수를, veRL은 `reward_extra_info`의 `sandbox_error`를 확인하세요.
-
-pod 상태와 최근 이벤트는 다음 명령으로 봅니다.
+1. `kubectl`이 연결되지 않으면 별도 터미널에서 `cdk/tunnel.sh`를 확인하세요. `kubectl config current-context`에는 `<CLUSTER_NAME>-tunnel`이 나와야 합니다.
+2. 연결되면 아래 명령으로 pod 상태를 봅니다. `<pod>`에는 첫 명령에 나온 이름을 넣으세요.
 
 ```bash
-source scripts/config.env      # CLUSTER_NAME and AWS_REGION
 kubectl -n sandbox get pods -o wide -L gpusandbox/runtime,gpusandbox/version
-kubectl -n sandbox describe pod <pod>          # Events: scheduling, RuntimeClass, probe failures
-kubectl -n sandbox logs <pod>                  # "device probe ok=..." and "egress is open, refusing work: ..."
-kubectl get events -A --sort-by=.lastTimestamp | tail -30
+kubectl -n sandbox describe pod <pod>
+kubectl -n sandbox logs <pod>
 ```
 
-자세히: [진단 도구](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#진단-도구)
+- `Pending`이나 `ContainerCreating`이면 `describe`의 `Events`에서 스케줄링과 시작 실패 사유를 확인하세요.
+- `Running`인데 `0/1`이면 로그의 `device probe ok=`와 `egress is open`을 확인하세요. Ready가 되기 전에는 새 평가 요청을 받지 않습니다.
+- 학습이 진행 중이어도 채점이 실패할 수 있습니다. TRL은 `reward_batch`, veRL은 `reward_extra_info`에서 `sandbox_error`가 반복되는지 확인하세요.
 
 ## 설정과 스크립트
 
@@ -110,6 +119,8 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 자세히: [HyperPod](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#hyperpod)
 
 ## 정리와 비용
+
+리전을 확인하거나 아래 AWS CLI 명령을 쓰기 전에 저장소 루트에서 `source scripts/config.env`를 실행하세요.
 
 - **`08_cleanup.sh`를 실행했는데 과금이 남음**: 실행한 리전이 맞는지, AMI와 스냅샷이 남았는지 확인하세요.
     - **HyperPod를 만들었다면**: `08_cleanup.sh`는 HyperPod를 지우지 않습니다. `scripts/08_cleanup.sh`보다 먼저 `scripts/hyperpod/delete.sh`를 실행해야 합니다.

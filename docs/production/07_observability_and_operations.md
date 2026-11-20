@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     샌드박스와 gateway의 Prometheus 지표와 trainer의 JSON 이벤트를 함께 모니터링하고, reward 품질 신호에 경보를 설정합니다. 경보가 발생하면 증상별 런북으로 대응합니다.
 
-## 기존 Pain Point
+## 학습이 계속돼도 채점은 실패할 수 있습니다
 
 샌드박스 쪽에 장애가 생겨도 대개 학습은 중단되지 않습니다.
 
@@ -16,13 +16,13 @@
 *그림 요약: 샌드박스 쪽 고장이 나도 학습은 멈추지 않습니다. 모든 샘플이 채점 불가가 되면 학습 신호 없이 step만 진행되고, 풀이 줄면 step이 느려지며, reward hacking이 일어나면 reward가 실제보다 좋아 보입니다. 세 고장은 각각 `sandbox_error` 비율, Ready pod 수, flag 개수 경보로 잡습니다.*
 
 
-## Why
+## 어느 로그에서 무엇을 볼까요?
 
 - **세 계층을 함께 모니터링합니다.** 샌드박스 pod(평가 하나), gateway(스케줄과 버전 고정), trainer(reward batch와 step)가 각각 다른 범위의 상태를 보고합니다.
 - **지표 엔드포인트도 인증합니다.** `/metrics`도 `/v1/evaluate`와 같은 토큰 검증을 거치며, 인증 없이 호출할 수 있는 경로는 kubelet probe용 `/healthz`, `/readyz`뿐입니다.
 - **reward 품질 신호를 기준으로 경보를 설정합니다.** 학습에 문제가 생기기 시작하면 CPU나 메모리보다 `sandbox_error` 비율, pass rate, flag 같은 reward 품질 신호가 먼저 변합니다.
 
-**사전 지식:** [05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 `reward_batch` 로그, [02 보안](02_security.md)의 인증 설계, [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)의 gateway 동작을 먼저 보세요.
+**읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 `reward_batch` 로그, [02 보안](02_security.md)의 인증 설계, [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)의 gateway 동작을 먼저 보세요.
 
 ??? note "용어"
     - **Counter, Gauge, Histogram**: Prometheus 지표 종류입니다. Counter는 계속 늘기만 하는 누적 값, Gauge는 오르내리는 현재 값, Histogram은 값을 구간(bucket)별로 집계해 분위수(p95 등)를 계산할 수 있게 하는 지표입니다.

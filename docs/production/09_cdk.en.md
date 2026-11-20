@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     This CDK app, called by the hands-on cluster creation script (`02_create_cluster.sh`), creates the VPC, EKS (private API endpoint only), the node groups of the scenario and an SSM access instance as one stack and deletes it with one command. cdk-nag checks the security rules on every synth; the template tests (`cdk/tests`) run separately.
 
-## Pain points
+## Why infrastructure is hard to recreate
 
 - **Creating in several scripts**: creating the cluster, node groups and launch templates in several scripts helps understanding, but when you recreate the environment or hand it to a team, steps get missed.
 - **Deleting a setup created in several scripts**: it means removing each step's resources (launch templates, log groups and so on) one by one, and one leftover costs money or breaks the next creation.
@@ -15,7 +15,7 @@
 *Takeaway: Resources made in each step must be deleted in each step, and missing one costs money or blocks the next creation. With one CDK stack, the resources in the stack are deleted as one unit.*
 
 
-## Why
+## What the CDK stack owns
 
 - **One stack is one unit of deletion.** The VPC, the EKS cluster, the managed node groups and the SSM access instance live in one CloudFormation stack and go with it. The HyperPod cluster, the AMIs and the ECR repositories are outside the stack and must be deleted separately ("Kept outside the stack" in the table below).
 - **Private by default, and security checks block the deploy.** The EKS API endpoint is not opened to the internet (operators connect through SSM Session Manager port forwarding), and cdk-nag (AwsSolutions rules) runs on every synth and fails the deploy on any unacknowledged finding.

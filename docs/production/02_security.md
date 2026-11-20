@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     모델이 만든 코드는 신뢰할 수 없는 입력으로 취급하고, 런타임 격리(gVisor 또는 Kata)와 함께 pod, 네트워크, 노드, 토큰, 프로세스 통제를 여러 계층으로 적용합니다. gVisor의 호스트 드라이버 공유처럼 이 통제로 막지 못하는 위험도 남습니다.
 
-## 기존 Pain Point
+## 격리 경계와 접근 경로
 
 - **일반 컨테이너(runc)**: 호스트 커널과 NVIDIA 드라이버를 그대로 사용합니다.
 - **pod 안의 자격 증명**: 샌드박스 pod에 ServiceAccount token이나 시크릿이 있으면 후보 코드가 이를 읽을 수 있습니다.
@@ -16,12 +16,12 @@
 *그림 요약: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 드라이버, pod 안의 자격 증명, 자기 노드, 다음 평가에 모두 접근할 수 있습니다. 샌드박스 pod에서는 계층마다 이 중 한 경로를 막습니다. 다음 평가로 가는 경로는 프로세스 정리와 요청별 캐시로 줄이지만, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 계속 쓰고 v1은 pod 재활용을 끕니다.*
 
 
-## Why
+## 계층별 통제
 
 - **계층마다 다른 위험을 차단합니다.** 런타임은 커널 접근을, NetworkPolicy는 egress를, 노드 가드는 VPC CNI의 노드 IP 예외를 담당합니다. pod는 egress가 실제로 차단됐는지 확인한 뒤에만 Ready가 됩니다.
 - **pod에 없는 자격 증명은 탈취할 수 없습니다.** 샌드박스 pod에는 API token도 시크릿도 넣지 않습니다.
 
-**사전 지식**: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md)에서 풀과 토큰 배포 절차를 먼저 보세요.
+**읽기 전에**　[02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md)에서 풀과 토큰 배포 절차를 먼저 보세요.
 
 ??? note "용어"
     - **runc, gVisor, Kata**: runc는 호스트 커널을 공유합니다. gVisor에서는 사용자 공간 커널(Sentry)이 system call을 먼저 받아 처리하고, Kata는 pod마다 별도의 VM(guest 커널)을 실행합니다.
@@ -128,7 +128,7 @@ SANDBOX_ALLOWED_SUBJECTS="system:serviceaccount:sandbox-gateway:gateway,system:s
   scripts/06_deploy_sandboxes.sh gvisor v1 "$replicas"
 ```
 
-확인할 것: pod template의 env가 바뀌므로 pod가 하나씩 다시 생성되고(Kata라면 새 VM), rollout이 끝나면 READY가 다시 `1/1`이 됩니다. 실제로 적용된 값은 아래 명령으로 확인합니다.
+pod template의 env가 바뀌면 pod가 하나씩 다시 생성됩니다(Kata라면 새 VM). rollout이 끝나면 READY가 다시 `1/1`이 됩니다. 실제로 적용된 값은 아래 명령으로 확인합니다.
 
 ```bash
 pod="$(kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v1 -o jsonpath='{.items[0].metadata.name}')"

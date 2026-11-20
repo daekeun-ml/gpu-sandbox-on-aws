@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     Cost splits into trainer GPUs, sandbox GPUs, the wait of empty bare-metal nodes, and the EKS control plane plus NAT gateway; the main levers are sizing the sandbox pool to the reward phase and returning empty nodes quickly (amounts are estimates from On-Demand list prices).
 
-## Pain point
+## What idle resources cost
 
 - **A `g4dn.metal` left running after the hands-on**: it costs 7.824 USD per hour, or 375.552 USD over a 48-hour weekend.
 - **A pool fixed at a generous size**: it keeps billing for sandbox GPUs that are busy only during the reward phase and idle during generation and updates.
@@ -15,7 +15,7 @@
 *Takeaway: Sandbox nodes bill per node whether busy or idle, and keep billing when left running after the run. Size the pool to the reward phase, scale it to 0 after the run so empty nodes go back quickly, and fill all 8 T4s of a metal node to halve the price per T4.*
 
 
-## Why
+## Where to reduce costs
 
 - **Split the cost into four parts.** Each lever cuts a different part: pool sizing cuts sandbox GPUs, and consolidation cuts the wait of empty metal nodes.
 - **Compute with public list prices only.** With no measured usage, amounts are estimates: price times hours.

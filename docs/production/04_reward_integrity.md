@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     후보 코드는 신뢰하지 않는 자식 프로세스에서만 실행합니다. 자식은 후보의 실행 시간과 출력 checksum을 기록하고, 신뢰하는 부모 프로세스가 같은 입력으로 reference를 측정해 정답 비교, speedup 계산, verdict 결정을 맡습니다.
 
-## 기존 Pain Point
+## 측정값을 reward로 쓸 때
 
 speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측정 방식의 허점을 찾을 수 있습니다.
 
@@ -17,13 +17,13 @@ speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측�
 *그림 요약: 후보 코드가 채점 코드와 같은 프로세스에서 실행되면, 더 빠른 커널을 쓰지 않고 측정 코드와 비교 코드를 바꿔 reward를 얻을 수 있습니다. 후보 코드를 자식 프로세스로 분리하고 측정 절차를 고정해 이 경로를 차단합니다.*
 
 
-## Why
+## 채점기가 결과를 검증하는 방법
 
 - **신뢰 경계를 프로세스 단위로 나눕니다.** 후보 코드가 크래시하거나 CUDA context를 망가뜨려도 reference 계산과 verdict 작성은 다른 프로세스에서 실행됩니다.
 - **측정 절차를 함수 하나로 고정합니다.** 시계, 입력, 출력 검사는 `harness/timing.py`의 `measure_ms`가 정하고, reference와 후보가 같은 함수로 측정됩니다.
 - **verdict를 reward로 바꾸는 규칙도 한 함수에 둡니다.** TRL과 veRL이 같은 `score_verdict`를 쓰므로 두 경로의 점수 규칙이 달라지지 않습니다.
 
-**사전 지식**: 과제 계약(`Model`, `ModelNew`)과 reward 3요소는 [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)에, GRPO group, advantage, 인프라 오류를 오답으로 처리하지 않는 이유는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 노드를 보호하는 보안 경계(gVisor, Kata)는 [02 보안](02_security.md)에 있습니다.
+**읽기 전에**　과제 계약(`Model`, `ModelNew`)과 reward 3요소는 [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)에, GRPO group, advantage, 인프라 오류를 오답으로 처리하지 않는 이유는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 노드를 보호하는 보안 경계(gVisor, Kata)는 [02 보안](02_security.md)에 있습니다.
 
 ??? note "용어"
     - **reward hacking**: policy가 과제를 실제로 풀지 않고 채점 방식의 허점을 이용해 높은 reward를 받는 현상입니다.

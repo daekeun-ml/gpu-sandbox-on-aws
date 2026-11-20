@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     Candidate code runs only in an untrusted child process. The child records the candidate's timings and output checksums; the trusted parent process times the reference on the same inputs and owns the correctness check, the speedup and the verdict.
 
-## Pain point
+## When a timing measurement becomes a reward
 
 When speedup is the reward, the policy can look for gaps in the measurement instead of faster kernels.
 
@@ -17,7 +17,7 @@ When speedup is the reward, the policy can look for gaps in the measurement inst
 *Takeaway: A candidate in the same process as the scoring code can earn reward by changing the measurement and the comparison instead of writing a faster kernel. Moving the candidate into a child process and fixing the measurement closes each path.*
 
 
-## Why
+## How the harness checks results
 
 - **The trust boundary is a process boundary.** Even if candidate code crashes or corrupts its CUDA context, the reference computation and the verdict happen in another process.
 - **One function fixes the measurement procedure.** `measure_ms` in `harness/timing.py` defines the clock, the inputs and the output checks, and the reference and the candidate are measured with the same function.

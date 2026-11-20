@@ -1,9 +1,13 @@
 # 참고 자료 모음
 
-!!! info "TL;DR"
-    페이지별 전체 참고 링크가 왼쪽 메뉴 순서로 있습니다. 각 페이지 끝의 접힌 "참고 자료" 상자에는 핵심 링크만 있습니다.
+문서별 원문 링크입니다. **어떤 결과를 직접 확인했는지** 찾으려면 [검증된 사실과 출처](sources.md)를 먼저 보세요.
 
-어떤 사실을 어느 출처가 뒷받침하는지는 [검증된 사실과 출처](sources.md)에 정리되어 있습니다.
+| 읽던 문서 | 원문 링크 시작 위치 |
+|---|---|
+| 초심자 가이드 | [코드를 격리하는 이유](#ref-beginner-01-why-sandbox) |
+| 개념 | [GPU 샌드박스가 필요한 경우](#ref-concepts-01-why-gpu-sandbox) |
+| 핸즈온 | [전체 흐름](#ref-handson-00-overview) |
+| 운영 | [레퍼런스 아키텍처](#ref-production-00-architecture) |
 
 ## 01 AI가 만든 코드를 격리하는 이유 { #ref-beginner-01-why-sandbox }
 
@@ -85,27 +89,6 @@
 | AWS 문서 | Amazon EC2 온디맨드 요금 | https://aws.amazon.com/ec2/pricing/on-demand/ |
 | GitHub | 이 저장소의 Agent Sandbox 확장 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/k8s/extensions/agent-sandbox |
 
-## 시작하기 { #ref-getting-started }
-
-페이지: [시작하기](../getting_started.md)
-
-| 주제 | 링크 |
-|---|---|
-| AWS CLI v2 설치 | https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html |
-| EC2 instance type quotas | https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-quotas.html |
-| EKS Kubernetes 버전 | https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html |
-| HyperPod (EKS) 사전 요구 사항 | https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html |
-| EC2 On-Demand 가격 | https://aws.amazon.com/ec2/pricing/on-demand/ |
-| AWS CDK v2 개발자 가이드, bootstrapping | https://docs.aws.amazon.com/cdk/v2/guide/home.html , https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html |
-| Session Manager plugin 설치 | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html |
-| eksctl 클러스터 접근 (private 전용 생성 미지원) | https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html |
-| Kubernetes version skew policy | https://kubernetes.io/releases/version-skew-policy/ |
-| TRL 문서, GitHub | https://huggingface.co/docs/trl , https://github.com/huggingface/trl |
-| uv | https://github.com/astral-sh/uv |
-| 테스트 워크플로 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/.github/workflows/tests.yml |
-| 샌드박스 서버, 인증, reaper | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/auth.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py |
-| GRPO trainer, 설정 예시 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/trl/train_grpo.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example |
-
 ## GPU 샌드박스가 필요한 경우 { #ref-concepts-01-why-gpu-sandbox }
 
 페이지: [GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
@@ -146,7 +129,7 @@
 | Cloud Hypervisor, Firecracker | https://github.com/cloud-hypervisor/cloud-hypervisor , https://github.com/firecracker-microvm/firecracker |
 | Karpenter | https://karpenter.sh/docs/ , https://github.com/aws/karpenter-provider-aws |
 | Agent Sandbox | https://github.com/kubernetes-sigs/agent-sandbox |
-| 이 에셋의 런타임 설정 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml |
+| 이 저장소의 런타임 설정 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml |
 
 ## On-policy RL과 샌드박스 { #ref-concepts-03-onpolicy-rl-with-sandboxes }
 
@@ -185,7 +168,7 @@
 | EKS AL2023 AMI v20261107 | https://github.com/awslabs/amazon-eks-ami/releases/tag/v20261107 |
 | gVisor GPU 지원, GitHub | https://gvisor.dev/docs/user_guide/gpu/ , https://github.com/google/gvisor |
 | awsome-distributed-ai (veRL on HyperPod) | https://github.com/awslabs/awsome-distributed-ai |
-| 이 에셋의 HyperPod 템플릿과 점검 스크립트 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/cluster.json.tpl , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/trainer/hyperpod-job-grpo.yaml.tpl , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/check_gvisor.sh |
+| 이 저장소의 HyperPod 템플릿과 점검 스크립트 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/cluster.json.tpl , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/trainer/hyperpod-job-grpo.yaml.tpl , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/check_gvisor.sh |
 
 ## 상황별 선택 가이드 { #ref-concepts-05-decision-guide }
 
@@ -204,7 +187,7 @@
 | Cloud Hypervisor | https://github.com/cloud-hypervisor/cloud-hypervisor |
 | Agent Sandbox | https://github.com/kubernetes-sigs/agent-sandbox |
 | Modal Sandboxes (서드파티) | https://modal.com/docs/guide/sandbox |
-| 이 에셋의 런타임 프로필 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/profiles/gvisor.env , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/profiles/kata-qemu.env , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/profiles/kata-clh-cpu.env |
+| 이 저장소의 런타임 프로필 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/profiles/gvisor.env , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/profiles/kata-qemu.env , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/profiles/kata-clh-cpu.env |
 
 ## 06 Agent Sandbox로 확장 { #ref-concepts-06-agent-sandbox }
 
@@ -240,6 +223,27 @@
 - [rl/verl/sandbox_tool.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool.py), [rl/verl/sandbox_tool_config.yaml](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool_config.yaml)
 - [tests/test_agent_sandbox.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/tests/test_agent_sandbox.py), [tests/test_multiturn.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/tests/test_multiturn.py), [tests/test_manifests.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/tests/test_manifests.py)
 - [k8s/base/networkpolicies.yaml](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/networkpolicies.yaml), [infra/karpenter/nodepools.yaml](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodepools.yaml)
+
+## 시작하기 { #ref-getting-started }
+
+페이지: [시작하기](../getting_started.md)
+
+| 주제 | 링크 |
+|---|---|
+| AWS CLI v2 설치 | https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html |
+| EC2 instance type quotas | https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-quotas.html |
+| EKS Kubernetes 버전 | https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html |
+| HyperPod (EKS) 사전 요구 사항 | https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html |
+| EC2 On-Demand 가격 | https://aws.amazon.com/ec2/pricing/on-demand/ |
+| AWS CDK v2 개발자 가이드, bootstrapping | https://docs.aws.amazon.com/cdk/v2/guide/home.html , https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html |
+| Session Manager plugin 설치 | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html |
+| eksctl 클러스터 접근 (private 전용 생성 미지원) | https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html |
+| Kubernetes version skew policy | https://kubernetes.io/releases/version-skew-policy/ |
+| TRL 문서, GitHub | https://huggingface.co/docs/trl , https://github.com/huggingface/trl |
+| uv | https://github.com/astral-sh/uv |
+| 테스트 워크플로 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/.github/workflows/tests.yml |
+| 샌드박스 서버, 인증, reaper | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/auth.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py |
+| GRPO trainer, 설정 예시 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/trl/train_grpo.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example |
 
 ## 00 핸즈온 전체 흐름 { #ref-handson-00-overview }
 

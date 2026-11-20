@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     In production the trainer calls only one sandbox gateway, and each sandbox pool is one Deployment per (runtime, version) whose nodes a Karpenter NodePool adds from zero as pods need room.
 
-## Pain point
+## What changes beyond the hands-on setup
 
 Scaled up as is, the hands-on setup, kept simple for a one-day exercise, runs into these problems.
 
@@ -17,7 +17,7 @@ Scaled up as is, the hands-on setup, kept simple for a one-day exercise, runs in
 *Takeaway: Every caller picks pods on its own, so requests pile onto the same pod, per-sample scoring does not pin the version, and nodes and signing keys handled by hand do not follow load or key rotation. Production hands these to the gateway, Karpenter NodePools and the jwks-sync CronJob.*
 
 
-## Why
+## The production design
 
 - **Scheduling and version pinning happen in one place, the gateway.** It sends one evaluation per pod and scores each batch request with one routing snapshot. TRL brings each rank's reward batch to the results of one pool, and veRL samples stay on one version per `group_key` while the pin is valid.
 - **Nodes follow the number of sandbox pods.** Karpenter NodePools start sandbox nodes from zero, and a warm placeholder keeps one slow-booting `g4dn.metal` ready.

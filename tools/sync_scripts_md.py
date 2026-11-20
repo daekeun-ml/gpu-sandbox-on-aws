@@ -62,6 +62,9 @@ def convert(target: str) -> str:
     text = re.sub(r'^!!! info "TL;DR"\n((?:    .*\n?)+)',
                   lambda m: "> [!NOTE]\n> **TL;DR** " + " ".join(l.strip() for l in m.group(1).splitlines()) + "\n",
                   text, count=1, flags=re.M)
+    # GitHub does not interpret MkDocs heading attributes.
+    text = re.sub(r"^(#{1,6} .*?) \{ #([\w-]+) \}$",
+                  r'<a name="\2"></a>\n\n\1', text, flags=re.M)
     lang = "en" if target.endswith(".en.md") else "ko"
     text = IMAGE.sub(lambda m: f"![{m.group(1)}](" + repo_image(m.group(2), lang) + ")", text)
     text = LINK.sub(lambda m: f"[{m.group(1)}](" + site_url(m.group(2), prefix) + ")", text)

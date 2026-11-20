@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     Model-generated code is treated as untrusted input: pod, network, node, token and process controls are layered on top of runtime isolation (gVisor or Kata), and some risks remain that these layers do not stop, such as gVisor sharing the host driver.
 
-## Pain point
+## Isolation boundaries and access paths
 
 - **A regular container (runc)**: it uses the host kernel and NVIDIA driver directly.
 - **Credentials in the pod**: if a sandbox pod holds a ServiceAccount token or a secret, candidate code can read it.
@@ -16,7 +16,7 @@
 *Takeaway: Candidate code in an unhardened runc pod can reach the host kernel and driver, the credentials in the pod, its own node and the next evaluation, and in a sandbox pod each layer closes one of these paths. Process reaping and per-request caches narrow the path to the next evaluation, but under gVisor a new pod still uses the same host driver and GPU, and v1 turns pod recycling off.*
 
 
-## Why
+## Controls at each boundary
 
 - **Each layer stops a different failure.** The runtime protects the kernel, NetworkPolicy closes the exits, the node guard covers the VPC CNI node-IP exception, and a pod becomes Ready only after it has checked that egress is actually blocked.
 - **What is not there cannot be stolen.** Sandbox pods get no API token and no secrets.

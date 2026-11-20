@@ -12,7 +12,7 @@ If an import error or a missing setting shows up only after the GPU nodes are ru
 *Takeaway: (a) starts the GPU nodes first. (b) runs pytest and the dry run on a local CPU, fills in the settings file and picks a path. The AWS nodes start after that, and scenario C runs CPU sandboxes with no GPU node.*
 
 
-## Why
+## What you can verify locally
 
 - **Check the plumbing before paying for AWS.** The sandbox server, the two-process harness, authentication, routing and the reward functions run the same code on CPU.
 - **Reproduce what the author verified with the same commands.** The pytest suite and the 2-step GRPO dry run were run and checked on macOS (CPU only), when the suite had 94 tests (it now has 109).

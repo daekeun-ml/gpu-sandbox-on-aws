@@ -1,27 +1,11 @@
 # 검증된 사실과 출처
 
 !!! info "TL;DR"
-    이 가이드가 근거로 삼는 출처마다 뒷받침하는 사실을 한 줄로 적고, 배포 전에 다시 확인할 값의 체크리스트를 붙였습니다.
+    실습 계정에서 실행한 결과와 공식 문서와 외부 사례에서 가져온 수치를 확인할 수 있습니다.
 
-## 기존 Pain Point
-
-gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, 가격, quota는 몇 주 단위로 바뀝니다. 같은 사실을 여러 페이지가 인용하면 어느 문서가 근거인지 찾기 어렵습니다. 블로그의 측정값이나 upstream CI 수치를 이 저장소의 측정으로 오해하기도 쉽습니다.
-
-## Why
-
-- **warm pool의 약 55 ms는 AWS 블로그의 측정값입니다.** 이 저장소가 측정한 풀 지연은 2026-11-18 실행 기록([08 런타임 벤치마크](../handson/08_benchmark.md))에 있습니다.
-- **근거 수준은 로컬 테스트, 공식 문서, 제3자 보고, 블로그 측정값, 추론, AWS 실행 기록으로 나뉩니다.**
-- **가격과 quota는 배포할 계정과 리전에서 다시 확인하세요.** 바뀌었을 가능성이 큰 값과 확인 방법은 아래 체크리스트에 있습니다.
-
-**사전 지식:** [홈](../index.md)의 "검증 상태"와 [자주 하는 오해](faq.md)를 먼저 보면 좋습니다.
-
-??? note "용어"
-    - **What's New**: AWS가 새 기능과 출시를 알리는 공지 페이지입니다.
-    - **제3자 보고**: 블로그, 이슈, 사례처럼 다른 사람이 관찰해 공개한 내용입니다.
-    - **추론**: 근거에서 이끌어 낸 판단으로, 직접 확인하지 않은 것입니다.
-    - **quota**: 계정과 리전마다 정해진 리소스 사용 한도입니다.
-
-    더 많은 용어는 [용어 사전](glossary.md)에 있습니다.
+- **직접 실행한 범위**는 [AWS 실행 기록](#aws-실행-기록)에서 확인하세요.
+- **비용, quota, 드라이버 호환성**은 [배포 전 재확인 체크리스트](#배포-전-재확인-체크리스트)로 확인하세요.
+- **원문 링크**는 [참고 자료 모음](references.md)에 있습니다.
 
 ## 근거 수준 읽는 법
 
@@ -210,7 +194,7 @@ scripts/01_check_prereqs.sh
 | [awslabs/amazon-eks-ami v20261107](https://github.com/awslabs/amazon-eks-ami/releases/tag/v20261107) | AL2023 NVIDIA AMI: 드라이버 580.178.04 기본(595.91.07은 g7 전용), toolkit 1.20.1, containerd 2.3.7, device plugin 없음, kubelet 1.32 이상에서 CDI, user data는 nodeadm-config와 nodeadm-run 사이에 실행 |
 | [aws/aws-network-policy-agent](https://github.com/aws/aws-network-policy-agent) | 노드 IP는 ingress와 egress 맵 모두에서 허용("ensures kubelet liveness/readiness probes are never blocked") |
 | [Karpenter 문서](https://karpenter.sh/docs/), [aws/karpenter-provider-aws](https://github.com/aws/karpenter-provider-aws) | v1.15.2(LTS v1.14.3), `karpenter.sh/v1`, `karpenter.k8s.aws/v1`, IMDS hop limit 1 기본, user MIME part 병합, EC2NodeClass `spec.cpuOptions.nestedVirtualization` |
-| [eksctl 문서: Cluster Access](https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html) | "EKS does allow creating a configuration that allows only private access to be enabled, but eksctl doesn't support it during cluster creation": private endpoint만 있는 클러스터는 eksctl로 만들 수 없어서, 이 에셋은 인프라를 CDK로 만듦 |
+| [eksctl 문서: Cluster Access](https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html) | "EKS does allow creating a configuration that allows only private access to be enabled, but eksctl doesn't support it during cluster creation": private endpoint만 있는 클러스터는 eksctl로 만들 수 없어서, 이 저장소은 인프라를 CDK로 만듦 |
 | [aws/aws-cdk](https://github.com/aws/aws-cdk), [cdklabs/cdk-nag](https://github.com/cdklabs/cdk-nag) | `aws-cdk-lib` 2.276.0과 cdk-nag 3.0.2 고정. 2.276.0은 CDK CLI 2.1148.1과 호환되고, `aws-cdk-lib` 2.277.0으로 올리려면 CLI 2.1148.2 이상이 필요(저장소 `cdk/requirements.txt` 주석 기준) |
 | [aws/sagemaker-hyperpod-cli](https://github.com/aws/sagemaker-hyperpod-cli) | HyperPod 의존성 Helm chart(`helm_chart/HyperPodHelmChart`): health monitoring agent, deep health check RBAC, job-auto-restart, MPI operator, device plugin, Kueue |
 | [awslabs/awsome-distributed-ai veRL 예제](https://github.com/awslabs/awsome-distributed-ai/tree/main/examples/training/verl/hyperpod-eks/rlvr) | HyperPod EKS의 veRL RLVR 예제, veRL v0.6.1 고정(이전 키), 이전 aws-samples/awsome-distributed-training에서 이동 |
@@ -219,7 +203,7 @@ scripts/01_check_prereqs.sh
 | [verl-project/verl](https://github.com/verl-project/verl) | veRL 0.9.1, `reward.*` 키, `compute_score` 시그니처와 반환 형식, sandbox 실행에는 async 권장, Parquet 열 |
 | [kuberay-project/kuberay](https://github.com/kuberay-project/kuberay) | KubeRay v1.7.2, API `ray.io/v1` |
 | [Qwen2.5-Coder-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct), [7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct) | apache-2.0, gate 없음 |
-| [Qwen2.5-Coder-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct) | qwen-research(비상업) 라이선스, 이 에셋에서 쓰지 않음 |
+| [Qwen2.5-Coder-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct) | qwen-research(비상업) 라이선스, 이 저장소에서 쓰지 않음 |
 | [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) | v1.0.11(2026-11-12), CRD v1beta1(Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim), RuntimeClass로 격리를 런타임에 맡김, Kata 예시와 GKE gVisor + L4 GPU 예시, SDK(Python `k8s-agent-sandbox`, Go, TypeScript), sandbox-router |
 | [agent-sandbox v1.0.11 설치 매니페스트](https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.11/sandbox-with-extensions.yaml) | controller와 extension을 한 번에 설치하는 매니페스트 |
 | [AI on EKS: Agent Sandbox on EKS](https://awslabs.github.io/ai-on-eks/ko/docs/infra/agents/agent-sandbox), [awslabs/ai-on-eks](https://github.com/awslabs/ai-on-eks) | gVisor 커널 격리, agent-sandbox CRD(Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim, v1beta1)로 수명 주기 관리, GPU 언급 없음(2026-11 확인). 나머지는 표 아래 목록 |

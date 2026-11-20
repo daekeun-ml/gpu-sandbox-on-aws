@@ -322,7 +322,7 @@ scripts/extensions/agent_sandbox.sh claim kata-clh-cpu     # borrow it, print it
 
 ![agent_sandbox.sh 실행 화면: install이 controller와 CRD 네 개, claim 권한을 만들고, pool kata-clh-cpu 1이 SandboxTemplate과 SandboxWarmPool을 만들고, claim이 샌드박스 kernel-eval-kata-clh-cpu-6bdp7의 주소를 출력한 뒤 claim을 지우고, 마지막 kubectl get에서 warm pool READY 1과 새 샌드박스 kernel-eval-kata-clh-cpu-qnwbh가 True](../images/terminal/agent-sandbox-claim.png)
 
-빌린 샌드박스로 실제 multi-turn 에피소드를 돌리는 실습은 [11 multi-turn 에피소드 실습](11_multi_turn.md)에 있습니다. 같은 warm pool을 그대로 쓸 수 있습니다(`episodes kata-clh-cpu 2 3`). 개념은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에 있습니다.
+빌린 샌드박스로 실제 multi-turn 에피소드를 돌리는 실습은 [11 multi-turn 에피소드 실습](11_multi_turn.md)에 있습니다. 같은 warm pool을 쓸 수 있습니다(`episodes kata-clh-cpu 2 3`). 개념 설명은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)을 참고하세요.
 
 ## 정리 (`08_cleanup.sh`)
 

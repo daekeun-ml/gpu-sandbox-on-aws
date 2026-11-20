@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     When the reward path changes, start a new sandbox version and change the routing table only after verification and parity pass. TRL uses the new version from the first reward batch (= optimizer step) it sends to the sandbox after reading the new routing, veRL from each newly pinned group. If an entire TRL batch hits the cache of one old pool, that batch keeps the cached results and logs no `reward_batch` line. Every result the sandbox scores records the version that scored it.
 
-## Pain point
+## When a sandbox needs an update mid-run
 
 Security patches, Triton upgrades and harness setting changes happen mid-run too.
 
@@ -16,7 +16,7 @@ Security patches, Triton upgrades and harness setting changes happen mid-run too
 *Takeaway: During the rollout one group is scored by two versions, so the advantage mixes scores from different rules. Start the new version as a separate pool and switch after verification and parity pass: TRL then uses one version within each rank's batch, and veRL one version within each valid `group_key` pin.*
 
 
-## Why
+## How to switch versions
 
 - **A change means a new version.** A running pool is never edited; a new (runtime, version) pool starts next to it, and the old one stays for rollback.
 - **Evidence before the switch.** Traffic moves only after `scripts/ops/verify.sh` and `parity` pass.

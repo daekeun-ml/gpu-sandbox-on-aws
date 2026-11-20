@@ -2,8 +2,11 @@
 
 # GPU Sandbox on AWS
 
-> [!NOTE]
-> **TL;DR** GPU kernels written by the model are scored in isolated GPU sandboxes, and the score is the reward for on-policy RL post-training. This repository holds the code and guidebook that build this setup on Amazon EKS (self-managed EC2) and SageMaker HyperPod with gVisor, Kata + QEMU and Kata + Cloud Hypervisor.
+GPU Sandbox on AWS helps teams run AI-generated code on a GPU in an environment isolated from the training server. It includes example code and hands-on guides for deploying that environment on AWS.
+
+Run training and sandboxes on EC2 nodes in Amazon EKS, or explore training on SageMaker HyperPod. Compare gVisor and Kata to see how they isolate workloads and which nodes they require.
+
+The GRPO exercise uses sandbox results as the reward for model updates. You can also try the scoring workflow locally without a GPU.
 
 **Guidebook:** https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/ (Korean: https://daekeun-ml.github.io/gpu-sandbox-on-aws/)
 

@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     sandbox gateway는 모든 trainer 프로세스의 요청을 받아 호출자를 인증하고, 배치나 GRPO group 단위로 샌드박스 버전을 고정하는 단일 스케줄러입니다. pod마다 평가를 한 번에 하나만 보내고, draining pod는 새 pod로 교체합니다.
 
-## 기존 Pain Point
+## trainer가 풀에 직접 연결할 때
 
 - **trainer 프로세스마다 빈 pod를 따로 판단하면**: 여러 TRL rank와 veRL reward worker가 같은 pod에 요청을 보내 503을 받고 재시도합니다.
 - **샘플을 하나씩 채점하는 veRL**: 배치 스냅샷이 없어, 같은 GRPO group의 샘플이 routing 전환 전후로 다른 버전으로 채점될 수 있습니다.
@@ -15,7 +15,7 @@
 *그림 요약: 호출자마다 따로 pod를 고르면 같은 pod에 요청이 몰리고, 샘플마다 따로 routing하면 한 group이 두 버전으로 채점됩니다. gateway 하나가 in-flight 요청 수를 집계하고 group을 첫 샘플의 버전에 고정해 두 문제를 해결합니다.*
 
 
-## Why
+## Gateway가 맡는 일
 
 - **in-flight 요청 수를 한곳에서 집계합니다.** 평상시에는 모든 요청이 gateway 프로세스 하나를 거치므로 한 pod에 요청 두 개를 동시에 보내지 않습니다.
     - **gateway Deployment를 교체하는 동안**: 이전 gateway와 새 gateway가 잠시 함께 실행되어 같은 pod를 고를 수 있습니다. 이때 샌드박스는 두 번째 요청에 503(busy)을 반환하고, gateway가 그 요청을 다른 pod로 다시 보냅니다.
@@ -104,7 +104,7 @@ sequenceDiagram
 - 4xx는 인증이나 요청 자체의 문제라 다른 pod로 보내도 결과가 같으므로 재시도하지 않습니다.
 - 샌드박스 호출 하나의 timeout은 300초이고, 샌드박스 안 harness 전체에 걸리는 제한 시간은 `SANDBOX_EVAL_TIMEOUT_S`(기본 90초) × 2 + 30초 = 210초입니다.
 
-GPU 타이밍 측정이 다른 평가의 영향을 받지 않도록 pod당 요청을 하나로 제한해, 평가 하나가 GPU 하나를 독점하게 합니다. 따라서 동시 평가 수는 Ready 샌드박스 pod 수와 같고, 배치 하나에 걸리는 시간은 대략 ⌈항목 수 / pod 수⌉ × 평가 시간입니다.
+GPU 타이밍 측정이 다른 평가의 영향을 받지 않도록 pod당 요청을 하나로 제한합니다. 평가 하나가 GPU 하나를 독점하므로 동시 평가 수는 Ready 샌드박스 pod 수와 같습니다. 배치 하나에 걸리는 시간은 대략 ⌈항목 수 / pod 수⌉ × 평가 시간입니다.
 
 [08 런타임 벤치마크](../handson/08_benchmark.md)의 AWS 측정값은 gateway 없이 샌드박스 풀을 직접 호출한 결과입니다. gateway를 거친 배치 시간은 측정하지 않았으니 직접 측정하세요.
 

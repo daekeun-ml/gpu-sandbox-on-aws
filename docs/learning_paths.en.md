@@ -12,7 +12,7 @@ There are 46 pages and four scenarios (A, B1, B2, C), so it is hard to decide wh
 *Takeaway: Picking a GPU path without knowing where to start adds cost for every hour the nodes stay up. Do the free paths 1 and 2 first, and choose a paid path after checking its quota and hourly cost.*
 
 
-## Why
+## What each path requires
 
 - **Each path needs a different account, quota and hourly cost.** Check them in the table below before you start.
 - **Three paths cost nothing.** Reading and a local run (paths 1 and 2) already show the core (isolation, scoring, version swaps), and path 7 (Production design) is also a free reading path.

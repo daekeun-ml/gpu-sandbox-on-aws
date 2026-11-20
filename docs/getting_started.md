@@ -3,32 +3,32 @@
 !!! info "TL;DR"
     AWS 없이 로컬 CPU에서 파이프라인을 먼저 확인한 다음, `scripts/config.env`를 채우고 시나리오를 고릅니다.
 
-## 기존 Pain Point
+## GPU 노드를 띄우기 전에
 
-GPU 노드를 띄운 뒤에야 import 오류나 설정 누락을 발견하면, 고치는 동안에도 노드 비용이 나갑니다. 스크립트가 읽는 값 중에는 이미지 URI나 AMI ID처럼 앞 단계가 끝나야 생기는 값도 있습니다. EC2만 쓸지, HyperPod를 함께 쓸지, Production 구성으로 갈지에 따라 실행할 스크립트도 달라집니다.
+로컬 CPU 테스트로 설치와 채점을 먼저 확인하세요. 그다음 AWS 실습 경로를 고릅니다. 이미지 URI와 AMI ID는 앞 단계에서 만든 값을 사용합니다.
 
 ![a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 109개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.](images/figures/getting_started.svg)
 
 *그림 요약: (a)는 GPU 노드부터 띄우는 순서이고, (b)는 로컬 CPU에서 pytest와 dry run을 마치고 설정 파일을 채운 뒤 경로를 고르는 순서입니다. AWS 노드는 그다음에 띄우고, 시나리오 C에서는 GPU 노드 없이 CPU 샌드박스를 실행합니다.*
 
 
-## Why
+## 로컬에서 확인할 수 있는 것
 
 - **AWS 비용 없이 파이프라인부터 확인합니다.** 샌드박스 서버, 2-프로세스 harness, 인증, 라우팅, reward 함수는 CPU에서도 같은 코드로 실행됩니다.
 - **저자가 확인한 범위를 같은 명령으로 재현합니다.** pytest와 GRPO dry run 2 step은 macOS(CPU 전용)에서 실행해 확인했습니다(당시 테스트 94개, 현재는 109개).
 - **설정은 한 파일에 모읍니다.** 모든 스크립트가 `scripts/lib.sh`를 거쳐 `scripts/config.env`를 읽습니다. 필요한 값이 비어 있거나 `__SET_ME__` 그대로이면 스크립트가 그 자리에서 멈춥니다.
 
-**사전 지식:** 터미널, `git`, Python 가상 환경을 다룰 수 있으면 충분하고, 로컬 단계(1~4장)에는 Kubernetes와 AWS 지식이 필요 없습니다. 시작할 코스는 [학습 코스 고르기](learning_paths.md), 전체 구성은 [홈](index.md)의 "만드는 것", GPU 샌드박스가 필요한 이유는 [01 GPU 샌드박스가 필요한 경우](concepts/01_why_gpu_sandbox.md)에 있습니다.
+**읽기 전에**　터미널, `git`, Python 가상 환경을 다룰 수 있으면 충분하고, 로컬 단계(1~4장)에는 Kubernetes와 AWS 지식이 필요 없습니다. 시작할 코스는 [학습 코스 고르기](learning_paths.md), 전체 구성은 [홈](index.md)의 "만드는 것", GPU 샌드박스가 필요한 이유는 [01 GPU 샌드박스가 필요한 경우](concepts/01_why_gpu_sandbox.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
-    - **샌드박스(sandbox)**: 신뢰할 수 없는 코드를 격리해서 실행하는 환경입니다. 이 에셋에서는 모델이 쓴 커널 코드를 실행해 채점하는 HTTP 서버를 말합니다.
+    - **샌드박스(sandbox)**: 신뢰할 수 없는 코드를 격리해서 실행하는 환경입니다. 이 저장소에서는 모델이 쓴 커널 코드를 실행해 채점하는 HTTP 서버를 말합니다.
     - **harness**: 후보 코드를 실행하고 정확성과 속도를 측정해 verdict(채점 결과)를 내리는 채점 프로그램입니다.
     - **golden**: 기대 verdict가 미리 정해진 시험용 제출물입니다. 서버가 올바르게 채점하는지 확인할 때 씁니다.
     - **loopback**: 자기 컴퓨터 안에서만 접속할 수 있는 주소(`127.0.0.1`)입니다. 다른 컴퓨터에서는 이 주소로 접속할 수 없습니다.
     - **smoke run**: 본 실행 전에 파이프라인이 제대로 연결됐는지만 짧게 확인하는 실행입니다.
     - **GRPO**: 같은 prompt에 completion(모델이 생성한 답)을 여러 개 생성하고, 그 group 안에서 평균보다 나은 completion을 강화하는 RL 알고리즘입니다.
     - **dry run**: 실제 학습 대신 아주 짧게(여기서는 2 step) 학습해 연결만 확인하는 실행입니다.
-    - **reward**: RL에서 completion 하나에 주는 점수입니다. 이 에셋에서는 형식, 정확성, speedup 세 요소의 가중 합입니다.
+    - **reward**: RL에서 completion 하나에 주는 점수입니다. 이 저장소에서는 형식, 정확성, speedup 세 요소의 가중 합입니다.
     - **quota**: AWS 계정에서 동시에 쓸 수 있는 자원의 상한입니다. EC2 GPU quota는 인스턴스 수가 아니라 vCPU 수로 셉니다.
     - **fail closed**: 설정이 빠졌거나 검증할 수 없을 때 허용하지 않고 거부하는 동작입니다.
 
@@ -250,7 +250,7 @@ CPU에서는 Triton 커널이 필요한 golden을 제외하고 아래 4개만 �
 | `relu_bias_benchmark_cheat` | `wrong_answer` (벤치마크가 시작되면 틀린 결과를 내는 코드) |
 | `read_host_file` | `policy_violation` |
 
-로컬에서 `egress_blocked`가 `true`로 나오는 이유는 self-test 대상(`SANDBOX_EGRESS_PROBE_TARGETS`)이 비어 있기 때문입니다. 클러스터에서는 샌드박스 서버가 IMDS(노드 자격 증명을 제공하는 EC2 인스턴스 메타데이터 서비스), API server, 노드 kubelet으로 가는 연결이 차단됐는지 확인한 뒤에만 Ready 상태가 됩니다.
+로컬에서 `egress_blocked`가 `true`로 나오는 이유는 self-test 대상(`SANDBOX_EGRESS_PROBE_TARGETS`)이 비어 있기 때문입니다. 클러스터에서는 샌드박스 서버가 IMDS, API server, 노드 kubelet으로 가는 연결이 차단됐는지 확인한 뒤에만 Ready 상태가 됩니다. IMDS는 노드 자격 증명을 제공하는 EC2 인스턴스 메타데이터 서비스입니다.
 
 **문제가 생기면:**
 

@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     reward를 계산하는 경로가 바뀌면 새 샌드박스 버전으로 배포하고, 검증과 parity를 통과한 뒤 routing 표를 바꿉니다. TRL은 새 routing을 읽은 뒤 샌드박스에 보내는 reward batch(= optimizer step)부터, veRL은 새로 고정되는 group부터 새 버전을 씁니다. TRL batch 전체가 한 구버전 풀의 캐시에 적중하면 그 batch는 기존 결과를 쓰고 `reward_batch` 줄도 남기지 않습니다. 샌드박스가 채점한 결과에는 채점한 버전이 기록됩니다.
 
-## 기존 Pain Point
+## 학습 중 업데이트가 필요한 경우
 
 보안 패치, Triton 업그레이드, harness 설정 변경은 학습 도중에도 생깁니다.
 
@@ -16,13 +16,13 @@
 *그림 요약: rolling update 도중에는 한 group을 두 버전이 나눠 채점하므로, advantage에 서로 다른 규칙의 점수가 섞입니다. 새 버전을 별도 풀로 시작하고 검증과 parity를 통과한 뒤 전환하면, TRL은 rank별 batch 안에서, veRL은 유효한 `group_key` pin 안에서 한 버전을 씁니다.*
 
 
-## Why
+## 버전을 바꾸는 절차
 
 - **변경이 있으면 새 버전으로 배포합니다.** 실행 중인 풀은 수정하지 않고 새 (runtime, version) 풀을 따로 띄우며, 구버전 풀은 롤백용으로 유지합니다.
 - **전환 전에 검증을 통과해야 합니다.** `scripts/ops/verify.sh`와 `parity`를 통과해야 트래픽이 신버전으로 전환됩니다.
 - **batch나 group 단위로 전환하고, 채점 결과에 버전을 기록합니다.** 샌드박스가 채점한 verdict마다 `sandbox_version`과 `harness_version`이, TRL batch마다 `version`, `served_versions`, `global_step`이 기록되므로 reward 변화의 원인을 추적할 수 있습니다. trainer가 로컬에서 판정한 `no_code`, `policy_violation`과 TRL의 캐시 적중 결과에는 새로 채점한 버전 정보가 없습니다.
 
-**사전 지식:** group 안에서 버전이 섞이는 문제는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 핸즈온 절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)에 있습니다.
+**읽기 전에**　group 안에서 버전이 섞이는 문제는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 핸즈온 절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)에 있습니다.
 
 ??? note "용어"
     - **blue/green**: 기존 버전(blue)을 그대로 둔 채 새 버전(green)을 따로 띄우고, 검증이 끝나면 트래픽만 한 번에 전환하는 배포 방식입니다. 문제가 생기면 트래픽을 되돌립니다.
@@ -66,7 +66,7 @@ export SANDBOX_MAX_EVALS="200"
 - **저장소를 스크립트 밖에서 만들었다면**: tag immutability 설정을 확인하세요.
 - **실행 중인 trainer**: 스크립트가 sandbox, trainer, control 이미지를 같은 `IMAGE_TAG`로 빌드해도 실행 중인 trainer는 기존 이미지를 그대로 씁니다.
 
-routing 표에도 새 버전의 주소가 있어야 합니다. 항목이 없으면 parity를 통과해도 전환 직후 direct 모드 trainer가 다음 reward batch에서 `RoutingError`로 중단됩니다. `k8s/base/routing.json.tpl`의 `pools`에 항목을 추가하고, 전환 전에 저장소 루트에서 `v3`를 active로 렌더링해 주소가 출력되는지 확인하세요.
+routing 표에도 새 버전의 주소가 있어야 합니다. 항목이 없으면 parity를 통과해도 전환 직후 direct 모드 trainer가 다음 reward batch에서 `RoutingError`로 중단됩니다. `k8s/base/routing.json.tpl`의 `pools`에 항목을 추가하고 전환 전에 저장소 루트에서 `v3`를 active로 렌더링해 주소가 출력되는지 확인하세요.
 
 ```bash
 # Prints the pool address, or fails with KeyError if routing.json.tpl lacks the entry

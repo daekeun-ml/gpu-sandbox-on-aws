@@ -25,7 +25,7 @@
 
 | 목표 | 시작할 곳 | 첫 성공 신호 |
 |---|---|---|
-| GPU에서 생성·채점·학습 연결 | [01 클러스터와 이미지](01_cluster_and_images.md)부터 05까지 | trainer에 `reward_batch`가 나오고 학습 step이 진행됩니다. |
+| GPU에서 생성, 채점, 학습 연결 | [01 클러스터와 이미지](01_cluster_and_images.md)부터 05까지 | trainer에 `reward_batch`가 나오고 학습 step이 진행됩니다. |
 | HyperPod trainer에서 학습 | [07 HyperPod](07_hyperpod.md)의 B1 또는 B2 | HyperPod 노드에서 trainer pod가 실행되고 채점 로그가 나옵니다. |
 | GPU 없이 채점과 풀 교체 연습 | [10 CPU 경로](10_cpu_only.md) | 시뮬레이터 로그의 채점 버전이 v1에서 v2로 바뀝니다. |
 
@@ -110,7 +110,7 @@ flowchart LR
 | G and VT vCPU (시나리오 A) | 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2), 버전 교체 중 24 (`g5.xlarge` 4대) | 112 (16 + `g4dn.metal` 96), 버전 교체 중 120 |
 | 이런 경우에 | 처음 해 볼 때, gVisor의 격리 수준으로 충분할 때 | VM 경계 격리를 비교하거나 Kata + GPU가 필요할 때 |
 
-런타임이 달라도 샌드박스 이미지, `/v1/evaluate` API, 검증 스크립트(`ops/verify.sh`)는 같습니다. 09 데모 사이트는 클러스터와 독립된 선택 단계라, 저장소에 포함된 녹화 기록(노트북의 CPU 풀로 만든 것)으로 바로 배포할 수 있습니다.
+런타임이 달라도 샌드박스 이미지, `/v1/evaluate` API, 검증 스크립트(`ops/verify.sh`)는 같습니다. 09 데모 사이트는 클러스터와 독립된 선택 단계입니다. 저장소에 포함된 녹화 기록으로 바로 배포할 수 있습니다. 이 기록은 노트북의 CPU 풀로 만들었습니다.
 
 ## 아키텍처
 

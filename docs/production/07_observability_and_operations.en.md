@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     Watch the Prometheus metrics of the sandboxes and the gateway together with the trainer's JSON events, alarm on reward quality signals, and respond with a symptom-based runbook.
 
-## Pain point
+## Training can continue while scoring fails
 
 Sandbox-side failures usually do not stop training.
 
@@ -16,7 +16,7 @@ Sandbox-side failures usually do not stop training.
 *Takeaway: Sandbox-side failures do not stop training. When every sample becomes unscorable, steps go by without learning; a shrinking pool slows steps down; reward hacking makes rewards look better than they are. The three failures are caught by alarms on the `sandbox_error` rate, the number of Ready pods and the flag count.*
 
 
-## Why
+## Which signals to check
 
 - **Watch three layers together.** The sandbox pod (one evaluation), the gateway (scheduling and version pinning) and the trainer (reward batches and steps) each answer a different question.
 - **Metrics endpoints are authenticated too.** `/metrics` goes through the same token verification as `/v1/evaluate`; the only unauthenticated routes are the kubelet probe routes `/healthz` and `/readyz`.

@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     샌드박스 노드는 Karpenter NodePool이 0대부터 늘리고 줄이며, 부팅이 느린 `g4dn.metal`만 warm placeholder로 한 대를 미리 띄워 둡니다. gVisor 노드의 AMI와 gVisor 릴리스는 CI에서 nvproxy 드라이버 호환성을 확인한 뒤 함께 업그레이드합니다.
 
-## 기존 Pain Point
+## GPU 노드를 준비하는 데 걸리는 시간
 
 `g4dn.metal`은 부팅, kata-deploy 설치, GPU의 vfio-pci 바인딩까지 수 분이 걸립니다.
 
@@ -18,12 +18,12 @@
 *그림 요약: 부팅이 느린 metal 노드를 수요가 생긴 뒤에 시작하면 batch가 기다려야 하고, AMI 자동 갱신은 gVisor 풀 용량을 0으로 만들 수 있습니다. metal은 warm placeholder로 한 대를 미리 확보하고, AMI와 gVisor 버전은 함께 고정한 뒤 CI 확인을 통과할 때만 올립니다.*
 
 
-## Why
+## 런타임별 용량 관리
 
 - **런타임마다 필요한 노드 설정이 다릅니다.** 인스턴스, taint, label, 상한, 회수 정책을 NodePool 단위로 분리하면 한 런타임의 설정이 다른 런타임에 영향을 주지 않습니다.
 - **드라이버와 런타임의 버전 조합을 명시적으로 관리합니다.** nvproxy는 드라이버 버전이 정확히 맞아야 동작하므로, AMI와 gVisor 버전을 같이 고정하고 바꾸기 전에 CI로 확인합니다.
 
-**사전 지식**: [00 아키텍처](00_architecture.md)의 NodePool 표, [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)의 인스턴스 선택 이유, [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)의 IOMMU AMI 단계를 먼저 보세요.
+**읽기 전에**　[00 아키텍처](00_architecture.md)의 NodePool 표, [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)의 인스턴스 선택 이유, [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)의 IOMMU AMI 단계를 먼저 보세요.
 
 ??? note "용어"
     - **NodePool, EC2NodeClass**: NodePool은 Karpenter가 띄울 노드의 조건(인스턴스, taint, 상한, 회수 정책)입니다. EC2NodeClass는 그 노드의 AWS 쪽 실행 설정(AMI, 디스크, subnet, user data)입니다.
@@ -328,7 +328,7 @@ EC2 On-Demand quota는 인스턴스 수가 아니라 vCPU 기준입니다. 아�
 | Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 5 | `sandbox-kata-cpu`(on-demand), system 노드, SSM 접속 인스턴스 | CPU NodePool 상한 256 vCPU에 system 노드(기본 `m6i.large` 2대)와 SSM 접속 인스턴스(`t4g.nano`) 사용량 추가 |
 | All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests | 5 | `sandbox-kata-cpu`(spot) | 최대 256 vCPU |
 
-`g4dn.metal`은 리전과 AZ에 따라 용량을 확보하기 어려울 수 있습니다. 필요한 기간이 분명하면 특정 AZ에 인스턴스 타입 용량을 예약하는 On-Demand Capacity Reservation을 검토하세요.
+`g4dn.metal`은 리전과 AZ에 따라 용량을 확보하기 어려울 수 있습니다. 필요한 기간이 분명하면 On-Demand Capacity Reservation을 검토하세요. 특정 AZ에서 필요한 인스턴스 타입의 용량을 미리 예약할 수 있습니다.
 
 - **즉시 시작하는 예약**: 약정이 없지만, 취소하기 전까지 과금되고 On-Demand quota 사용량에도 포함됩니다.
 - **미래 날짜 예약**: C, G, I, M, R, T, U, X 계열에서 최소 32 vCPU부터 가능합니다.

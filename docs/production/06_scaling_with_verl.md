@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     단일 GPU TRL 루프를 veRL 0.9.1을 써서 여러 GPU로 확장하려면 전용 이미지, parquet 데이터, gateway의 `group_key` 고정을 쓰는 async reward 함수, KubeRay `RayCluster`, 공유 스토리지 기반 재개가 필요합니다.
 
-## 기존 Pain Point
+## 한 장의 GPU에서 여러 노드로
 
 핸즈온은 1.5B 모델을 LoRA로 A10G 한 장(24 GB)에서 학습합니다.
 
@@ -16,13 +16,13 @@
 *그림 요약: trainer GPU 한 장으로는 생성, 샌드박스 채점, 업데이트가 차례로 이어져 step이 길고, 7B 가중치를 올리면 메모리 여유가 거의 없습니다. 여러 GPU로 확장하면 샘플마다 채점 요청을 보내므로, reward 함수가 group_key를 붙이고 gateway가 group마다 버전을 고정합니다.*
 
 
-## Why
+## 같은 샌드박스 풀로 확장하기
 
 - **같은 EKS 클러스터에서 확장합니다.** KubeRay로 Ray를 배포하면 기존 샌드박스 풀, gateway, NetworkPolicy, 토큰 인증을 그대로 쓸 수 있습니다.
 - **샘플 단위 채점에서도 on-policy 일관성을 유지합니다.** reward 함수가 요청마다 `group_key`를 붙이면 gateway가 같은 group의 샘플을 같은 샌드박스 버전으로 보냅니다.
 - **긴 run을 중단 지점부터 재개합니다.** checkpoint를 공유 PVC에 두고 `trainer.resume_mode=auto`를 쓰면, HyperPod가 노드를 교체한 뒤 같은 `CKPT_DIR`로 job을 다시 제출할 때 마지막 checkpoint부터 이어서 학습합니다.
 
-**사전 지식:** [05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 TRL 루프와 [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)의 gateway API, group pin을 먼저 보세요.
+**읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 TRL 루프와 [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)의 gateway API, group pin을 먼저 보세요.
 
 ??? note "용어"
     - **veRL**: 여러 GPU와 노드에 걸쳐 RL post-training을 실행하는 오픈소스 프레임워크입니다. 이 페이지는 0.9.1을 기준으로 합니다.

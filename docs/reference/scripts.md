@@ -1,5 +1,8 @@
 # 스크립트 레퍼런스
 
+!!! info "TL;DR"
+    아래 표에서 작업을 고르세요. 각 스크립트 항목에서 실행 방법, 성공 출력, 재실행 시 동작을 확인할 수 있습니다.
+
 저장소 루트에서 실행하세요. `kubectl`이나 Helm을 쓰는 단계에서는 다른 터미널에 `cdk/tunnel.sh`를 열어 둡니다. 처음부터 실습한다면 [핸즈온 전체 흐름](../handson/00_overview.md)에서 시나리오를 고르세요.
 
 | 하려는 작업 | 스크립트 |
@@ -7,7 +10,7 @@
 | AWS 설정 확인, EKS 생성, 이미지 준비 | [01~03과 터널](#기본-순서) |
 | 런타임 설치와 채점 풀 배포 | [04~06](#scripts04_install_gpu_stacksh), [Kata](#kata) |
 | EKS에서 GRPO 실행 (A) | [07_run_grpo.sh](#scripts07_run_grposh) |
-| HyperPod에서 GRPO 실행 (B1·B2) | [hyperpod/run_grpo.sh](#scriptshyperpodrun_grposh) |
+| HyperPod에서 GRPO 실행 (B1과 B2) | [hyperpod/run_grpo.sh](#scriptshyperpodrun_grposh) |
 | 풀 검증, GPU 없는 시뮬레이션 (C), 버전 전환, 지연 측정 | [검증과 운영](#검증과-운영) |
 | 에피소드마다 샌드박스 할당 | [Agent Sandbox 확장](#확장) |
 | 평가 기록을 웹에 공개 | [데모 사이트](#데모-사이트) |

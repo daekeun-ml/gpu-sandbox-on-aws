@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     Spreading the single-GPU TRL loop over many GPUs with veRL 0.9.1 takes a separate image, parquet data, an async reward function that relies on the gateway's `group_key` pinning, a KubeRay `RayCluster`, and resumption from shared storage.
 
-## Pain point
+## From one GPU to multiple nodes
 
 The hands-on trains a 1.5B model with LoRA on one A10G (24 GB).
 
@@ -16,7 +16,7 @@ The hands-on trains a 1.5B model with LoRA on one A10G (24 GB).
 *Takeaway: With one trainer GPU, generation, sandbox scoring and the update run in turn, so steps are long, and with 7B weights loaded there is almost no headroom. On many GPUs samples are scored one at a time, so the reward function attaches a group_key and the gateway pins one version per group.*
 
 
-## Why
+## Scaling with the same sandbox pools
 
 - **Scale out in the same EKS cluster.** Running Ray through KubeRay reuses the sandbox pools, the gateway, the NetworkPolicies and token authentication.
 - **Keep on-policy consistency with per-sample scoring.** When the reward function attaches a `group_key` to every request, the gateway sends all samples of one group to the same sandbox version.

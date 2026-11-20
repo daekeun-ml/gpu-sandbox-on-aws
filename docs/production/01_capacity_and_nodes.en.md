@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     Sandbox nodes scale from zero on Karpenter NodePools, a warm placeholder keeps only the slow `g4dn.metal` ready, and the gVisor node AMI and gVisor release go up together after CI confirms nvproxy driver support.
 
-## Pain point
+## Why GPU nodes take time to provision
 
 A `g4dn.metal` takes minutes to boot, install kata-deploy and bind its GPUs to vfio-pci.
 
@@ -18,7 +18,7 @@ A `g4dn.metal` takes minutes to boot, install kata-deploy and bind its GPUs to v
 *Takeaway: Slow metal started on demand makes batches wait, and an automatic AMI update can drop the gVisor pool to zero capacity. A warm placeholder keeps one metal node ready, and the AMI and gVisor are pinned together and raised only after CI confirms support.*
 
 
-## Why
+## Capacity by runtime
 
 - **Each runtime needs a different kind of node.** Instances, taints, labels, caps and disruption policy are split per NodePool so that one setting never leaks into another.
 - **The coupling between driver and runtime stays visible.** nvproxy needs an exact driver match, so the AMI and gVisor are pinned together and checked in CI before a change.

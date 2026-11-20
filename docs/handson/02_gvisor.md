@@ -37,7 +37,7 @@ scripts/04_install_gpu_stack.sh
 
 ## NVIDIA device plugin (CDI 모드)
 
-device plugin은 노드의 GPU를 `nvidia.com/gpu`로 등록하고, 할당한 GPU를 CDI로 런타임에 전달합니다. gVisor와 CDI의 관계는 [런타임 비교](../concepts/02_isolation_runtimes.md)에서 볼 수 있습니다.
+device plugin은 노드의 GPU를 `nvidia.com/gpu`로 등록하고 할당한 GPU를 CDI로 런타임에 전달합니다. gVisor와 CDI의 관계는 [런타임 비교](../concepts/02_isolation_runtimes.md)에서 볼 수 있습니다.
 
 ??? note "상세 설명"
     `04_install_gpu_stack.sh`는 다음 순서로 동작합니다. 2번의 `kubectl` 명령은 스크립트가 실행하므로 직접 실행하지 않습니다.

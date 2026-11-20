@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     운영 환경에서는 trainer가 sandbox gateway 하나만 호출합니다. 샌드박스 풀은 (runtime, version)마다 Deployment 하나로 배포하고, 풀이 쓰는 노드는 Karpenter NodePool이 0대부터, 배치할 pod 수에 맞춰 늘리고 줄입니다.
 
-## 기존 Pain Point
+## 핸즈온을 확장할 때 생기는 문제
 
 하루 실습용으로 단순하게 짠 핸즈온 구성의 규모만 키우면, 다음 문제가 생깁니다.
 
@@ -17,13 +17,13 @@
 *그림 요약: 핸즈온 구성을 그대로 확장하면 같은 pod에 요청이 몰리고, group 안에서 버전이 섞일 수 있으며, 노드 수와 서명 키를 수동으로 관리해야 합니다. Production에서는 gateway가 pod 선택과 버전 고정을, Karpenter NodePool이 노드 수 조정을, jwks-sync CronJob이 서명 키 갱신을 맡습니다.*
 
 
-## Why
+## 운영 구성에서 달라지는 점
 
 - **스케줄링과 버전 고정을 gateway 한곳에서 처리합니다.** gateway는 pod마다 평가를 한 번에 하나만 보내고, 배치 요청 하나를 routing 스냅샷 하나로 채점합니다. TRL은 rank마다 reward batch 하나를 한 풀의 결과로 맞추고, veRL 샘플은 `group_key` pin이 유효한 동안 같은 버전에 고정합니다.
 - **노드 수가 샌드박스 pod 수에 맞춰 바뀝니다.** Karpenter NodePool이 샌드박스 노드를 0대부터 띄우고, 부팅이 느린 `g4dn.metal`은 warm placeholder로 한 대를 미리 확보해 둡니다.
 - **학습 요청은 gateway를 거쳐서만 샌드박스에 닿습니다.** 운영 구성의 NetworkPolicy는 샌드박스 pod로 들어오는 연결 중 gateway pod만 허용합니다. 검증과 parity를 실행하는 `sandbox-probe` Job은 별도 정책으로 허용해야 합니다([03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)).
 
-**사전 지식**: 이 페이지는 핸즈온 구성과 비교하며 설명하므로 [핸즈온 00 전체 흐름](../handson/00_overview.md), [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md), [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)를 먼저 읽으세요.
+**읽기 전에**　이 페이지는 핸즈온 구성과 비교하며 설명하므로 [핸즈온 00 전체 흐름](../handson/00_overview.md), [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md), [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)를 먼저 읽으세요.
 
 ??? note "용어"
     - **sandbox gateway**: trainer와 샌드박스 pod 사이에 있는 HTTP 서비스입니다. 호출자를 인증하고, 요청을 보낼 pod를 고르고, 샌드박스 버전을 고정합니다.

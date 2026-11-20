@@ -3,25 +3,25 @@
 !!! info "TL;DR"
     핸즈온의 클러스터 생성 단계(`02_create_cluster.sh`)에서 실행하는 이 CDK 앱은 VPC, EKS(API endpoint는 private 전용), 시나리오별 노드 그룹, SSM 접속 인스턴스를 스택 하나로 만들고 명령 한 번으로 삭제합니다. synth할 때마다 cdk-nag가 보안 규칙을 검사하고, 템플릿 테스트(`cdk/tests`)는 따로 실행합니다.
 
-## 기존 Pain Point
+## 인프라를 다시 만들기 어려운 이유
 
 - **여러 스크립트로 나눠 만들 때**: 클러스터, 노드 그룹, launch template을 여러 스크립트로 나눠 만들면 이해하기는 쉽지만, 환경을 다시 만들거나 팀에 공유할 때 순서를 놓치기 쉽습니다.
 - **여러 스크립트로 나눠 만든 구성을 삭제할 때**: 단계별 리소스(launch template, 로그 그룹 등)를 따로 삭제해야 하고, 하나라도 남으면 비용이 계속 발생하거나 다음 생성이 실패합니다.
 - **계정 보안 점검**: 공개된 API endpoint, IMDSv1, 암호화하지 않은 볼륨, 넓게 열린 security group은 계정 보안 점검에서 바로 지적됩니다(예: Security Hub 컨트롤 EKS.1).
-- **eksctl**: private endpoint만 활성화한 클러스터를 처음부터 만들 수 없어(eksctl 문서) public endpoint가 활성화된 상태로 남습니다. 그래서 이 에셋은 eksctl을 쓰는 방법을 제거했습니다.
+- **eksctl**: private endpoint만 활성화한 클러스터를 처음부터 만들 수 없어(eksctl 문서) public endpoint가 활성화된 상태로 남습니다. 그래서 이 저장소은 eksctl을 쓰는 방법을 제거했습니다.
 
 ![a: 여러 스크립트를 순서대로 실행해 단계 1에서 클러스터, 단계 2에서 노드 그룹, 단계 3에서 launch template과 로그 그룹을 만듭니다. 삭제할 때도 단계마다 리소스별로 따로 삭제해야 하고, 하나라도 남으면 비용이 나가거나 다음 생성이 실패합니다. b: cdk/deploy.sh가 같은 리소스를 CDK 스택 하나(CloudFormation)로 배포하고, cdk/destroy.sh가 스택 전체를 삭제합니다. 스택 안의 리소스는 함께 삭제되고, HyperPod 클러스터, AMI, ECR은 따로 삭제합니다.](../images/figures/production-09_cdk.svg)
 
 *그림 요약: 단계마다 만든 리소스는 단계마다 따로 삭제해야 하고, 하나만 놓쳐도 비용이 나가거나 다음 생성이 실패합니다. CDK 스택 하나로 만들면 스택에 든 리소스를 스택 단위로 삭제할 수 있습니다.*
 
 
-## Why
+## CDK 스택으로 관리하는 범위
 
 - **스택 하나를 삭제 단위로 씁니다.** VPC, EKS 클러스터, 관리형 노드 그룹, SSM 접속 인스턴스가 CloudFormation 스택 하나에 있어 스택과 함께 삭제됩니다. HyperPod 클러스터, AMI, ECR 저장소는 스택 밖에 있으니 따로 지워야 합니다(아래 표의 "스택 밖에서 만드는 것").
 - **기본값이 private이고, 보안 검사를 통과해야 배포됩니다.** EKS API endpoint는 인터넷에 노출하지 않습니다(접속은 SSM Session Manager 포트 포워딩). synth할 때마다 실행되는 cdk-nag(AwsSolutions 규칙)가 예외 처리하지 않은 지적을 발견하면 배포가 중단됩니다.
 - **핸즈온도 같은 스택을 씁니다.** `scripts/02_create_cluster.sh`가 `cdk/deploy.sh`를 호출하고 둘 다 `scripts/config.env`를 읽으므로, 인스턴스 유형과 고정 버전이 서로 달라지지 않습니다.
 
-**사전 지식:** [00 핸즈온 전체 흐름](../handson/00_overview.md)의 아키텍처와 [00 아키텍처](00_architecture.md)를 먼저 보세요. 가장 적은 비용으로 시험하려면 시나리오 C([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md))로 배포하세요.
+**읽기 전에**　[00 핸즈온 전체 흐름](../handson/00_overview.md)의 아키텍처와 [00 아키텍처](00_architecture.md)를 먼저 보세요. 가장 적은 비용으로 시험하려면 시나리오 C([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md))로 배포하세요.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **AWS CDK**: 코드(여기서는 Python)로 AWS 인프라를 정의하고 CloudFormation으로 배포하는 도구입니다.
@@ -161,7 +161,7 @@ cdk/tunnel.sh
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 ```
 
-시나리오 C라면 `system` 두 대와 `sandbox-kata` 한 대가 출력됩니다. 실습 화면의 EKS 콘솔에는 노드 3, 노드 그룹 2, add-on 4, access entry 4(운영자 2개와 EKS가 만든 2개)가 표시됐습니다. 운영자 entry는 `ADMIN_PRINCIPAL_ARN`에 적은 역할이나 사용자마다 하나씩 생기니, 자신의 클러스터에서는 그 수와 맞는지 확인하세요.
+시나리오 C라면 `system` 두 대와 `sandbox-kata` 한 대가 출력됩니다. 실습 화면의 EKS 콘솔에는 노드 3, 노드 그룹 2, add-on 4, access entry 4(운영자 2개와 EKS가 만든 2개)가 표시됐습니다. 운영자 entry는 `ADMIN_PRINCIPAL_ARN`에 적은 역할이나 사용자마다 하나씩 생깁니다. 자신의 클러스터에서 그 수와 맞는지 확인하세요.
 
 ![EKS 클러스터 개요: Kubernetes 1.36, standard support until August 2, 2027, 노드 3, 노드 그룹 2, add-on 4, access entry 4](../images/console/eks-cluster.png)
 

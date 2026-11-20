@@ -1,22 +1,23 @@
 # 문제 해결
 
 !!! info "TL;DR"
-    설치와 운영 중에 자주 생기는 문제를 단계별 "증상, 원인, 해결" 표로 정리하고, 단계마다 바로 실행할 수 있는 진단 명령을 붙였습니다.
+    가장 먼저 보인 증상이나 실패한 단계를 고르세요. 진단 명령에서는 예시 이름을 실제 pod나 노드 이름으로 바꿉니다.
 
-## 기존 Pain Point
+| 증상 | 먼저 볼 곳 |
+|---|---|
+| `kubectl`로 연결할 수 없음 | [CDK와 터널](#cdk와-터널) |
+| 노드가 없거나 pod가 `Pending` | [클러스터와 노드](#클러스터와-노드), [pod 이벤트 확인](#pod-상태-이벤트-로그) |
+| GPU smoke test가 실패 | [gVisor](#gvisor), [Kata](#kata) |
+| 풀 배포가 Ready에서 멈춤 | [샌드박스 풀과 readiness](#샌드박스-풀과-readiness) |
+| `401` 또는 `403` 응답 | [인증 진단](#401-403-응답) |
+| 학습 로그가 멈추거나 `sandbox_error` 반복 | [학습](#학습), [HyperPod](#hyperpod) |
+| 새 버전이 채점에 반영되지 않음 | [버전 전환](#버전-전환-routing) |
+| claim을 만들었는데 샌드박스가 할당되지 않음 | [Agent Sandbox](#agent-sandbox와-multi-turn-에피소드) |
+| 실습을 끝냈는데 리소스가 남아 있음 | [정리와 비용](#정리와-비용) |
 
-증상은 원인이 생긴 단계보다 한참 뒤에 나타나는 경우가 많습니다. 예를 들어 노드 user data 오류가 몇 단계 뒤에 "pod Pending"이나 "GPU 없음"으로 나타납니다.
+증상이 불분명하면 `kubectl describe pod`의 이벤트부터 보세요. 노드에서 확인할 항목과 pod에서 확인할 항목은 [진단 도구](#진단-도구)에 있습니다.
 
-- **노드와 pod 안의 차이**: gVisor와 Kata pod 안에서 보이는 커널, 장치, 네트워크는 노드와 다릅니다. 노드에서 확인할 것과 pod 안에서 확인할 것을 구분해야 합니다.
-- **학습을 멈추지 않는 오류**: 인증 실패나 NetworkPolicy 차단은 그 샘플을 `sandbox_error`로 만들 뿐 학습을 멈추지 않습니다.
-- **학습 로그에 남는 모양**: TRL은 세 reward를 모두 `None`으로 반환해 group baseline에서 빼고, veRL은 format 점수 0.1과 `sandbox_error: 1`을 기록합니다. 그래서 학습 로그에는 `sandbox_error` 개수로만 나타납니다.
-
-## Why
-
-- **진단 명령의 namespace, 라벨, 경로는 저장소 스크립트가 만드는 이름 그대로입니다.**
-- **"(추정)"으로 표시한 원인은 코드나 문서로 확인하지 못한 것입니다.** pod 이벤트와 노드 로그로 직접 확인하세요.
-
-!!! warning "이 페이지의 근거"
+??? note "이 페이지의 근거"
     - **실습 계정에서 실행한 것**: 시나리오 C, 시나리오 A(`g5`), Kata GPU(`g4dn.metal`), 런타임 벤치마크, 데모 사이트.
     - **시나리오 A 클러스터**: GPU 노드 그룹 없이 만든 뒤 update로 추가했습니다(아래 "GPU 용량이 없을 때").
     - **Kata GPU 실행에서 나온 행**: 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행.
@@ -24,16 +25,6 @@
     - **실험용 CLH GPU**: 풀을 배포했지만 VM이 시작되지 않았습니다.
     - **날짜별 실행 기록**: [검증된 사실과 출처](sources.md#aws-실행-기록)에 있습니다.
     - **증상과 원인의 출처**: 스크립트 오류 메시지, 코드 동작, 공식 문서입니다. 에러 문구는 도구 버전마다 다를 수 있습니다.
-
-??? note "용어"
-    - **readiness**: kubelet이 pod가 요청을 받을 준비가 됐는지 확인하는 검사입니다. 이 저장소에서는 GPU probe와 egress 차단 확인이 모두 통과해야 Ready가 됩니다.
-    - **`kubectl debug node`**: 노드에 특권 디버그 pod를 실행해, 노드의 파일 시스템(`/host`)과 프로세스를 볼 수 있게 해 주는 명령입니다.
-    - **user data, cloud-init**: user data는 EC2 인스턴스가 처음 부팅할 때 실행하는 스크립트이고, cloud-init은 그 스크립트를 실행하는 도구입니다. 출력은 `/var/log/cloud-init-output.log`에 기록됩니다.
-    - **nodeadm, NodeConfig**: EKS AL2023 노드를 클러스터에 등록하는 부트스트랩 도구와 그 설정입니다. containerd 런타임 설정도 NodeConfig를 통해 병합됩니다.
-    - **EndpointSlice**: Service에 연결된 pod 주소와 각 주소의 Ready 여부를 담은 목록입니다. headless Service의 DNS는 Ready인 주소만 반환합니다.
-    - **SSM Session Manager**: SSH 없이 IAM 권한으로 인스턴스 셸을 여는 AWS Systems Manager 기능입니다.
-
-    더 많은 용어는 [용어 사전](glossary.md)에 있습니다.
 
 ## 진단 도구
 
@@ -50,7 +41,7 @@ kubectl -n sandbox logs <pod> --previous       # after a restart (for example a 
 kubectl get events -A --sort-by=.lastTimestamp | tail -30
 ```
 
-readiness 문제는 서버 로그의 두 줄로 대부분 분류할 수 있습니다. 샌드박스 서버는 시작할 때 `device probe ok=<True|False> info=<...>`를 남기고, egress 대상에 연결되면 `egress is open, refusing work: <대상 목록>`을 ERROR 로그로 남깁니다.
+readiness 문제는 서버 로그의 두 줄로 대부분 분류할 수 있습니다. 샌드박스 서버는 시작할 때 `device probe ok=<True|False> info=<...>`를 남깁니다. egress 대상에 연결되면 `egress is open, refusing work: <대상 목록>`을 ERROR 로그로 남깁니다.
 
 ### 샌드박스 안에서 확인 (kubectl exec)
 

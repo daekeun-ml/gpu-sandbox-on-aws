@@ -77,7 +77,7 @@ plugins:
             04 플랫폼과 인스턴스 선택: 04 Platforms and instances
             05 상황별 선택 가이드: 05 Decision guide
             06 Agent Sandbox로 확장: 06 Extending with Agent Sandbox
-            "핸즈온 (Getting Started)": "Hands-on (Getting started)"
+            핸즈온: Hands-on
             00 전체 흐름: 00 Overview
             01 클러스터와 이미지: 01 Cluster and images
             02 gVisor GPU 샌드박스: 02 gVisor GPU sandboxes
@@ -152,7 +152,6 @@ nav:
       - 05 직접 해 보기: beginner/05_hands_on.md
       - 06 multi-turn 에이전트와 Agent Sandbox: beginner/06_multi_turn_agent.md
   - 학습 코스 고르기: learning_paths.md
-  - 시작하기: getting_started.md
   - 개념:
       - 01 GPU 샌드박스가 필요한 경우: concepts/01_why_gpu_sandbox.md
       - 02 격리 런타임 비교: concepts/02_isolation_runtimes.md
@@ -160,8 +159,9 @@ nav:
       - 04 플랫폼과 인스턴스 선택: concepts/04_platforms_and_instances.md
       - 05 상황별 선택 가이드: concepts/05_decision_guide.md
       - 06 Agent Sandbox로 확장: concepts/06_agent_sandbox.md
-  - "핸즈온 (Getting Started)":
+  - 핸즈온:
       - 00 전체 흐름: handson/00_overview.md
+      - 시작하기: getting_started.md
       - 01 클러스터와 이미지: handson/01_cluster_and_images.md
       - 02 gVisor GPU 샌드박스: handson/02_gvisor.md
       - 03 Kata 샌드박스 (CLH, QEMU): handson/03_kata.md
@@ -187,11 +187,11 @@ nav:
       - 09 CDK로 프로비저닝: production/09_cdk.md
   - 참고:
       - 스크립트 레퍼런스: reference/scripts.md
-      - 용어 사전: reference/glossary.md
-      - 저장소 구조: reference/repository_map.md
       - 설정 값: reference/configuration.md
       - 문제 해결: reference/troubleshooting.md
       - 자주 하는 오해: reference/faq.md
+      - 용어 사전: reference/glossary.md
+      - 저장소 구조: reference/repository_map.md
       - 검증된 사실과 출처: reference/sources.md
       - 참고 자료 모음: reference/references.md
 
