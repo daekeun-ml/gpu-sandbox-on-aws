@@ -1,8 +1,9 @@
 # 03 Kata 샌드박스 (CLH, QEMU)
 
-Kata는 pod마다 작은 VM을 띄웁니다. 먼저 c8i에서 CPU로 Cloud Hypervisor와 QEMU를 확인하고, GPU passthrough가 필요하면 별도로 metal 노드를 추가합니다. GPU 경로에서는 IOMMU를 켠 `g4dn.metal`에서 VM에 T4를 한 장씩 할당합니다.
+!!! info "TL;DR"
+    Kata는 pod마다 작은 VM을 띄웁니다. 먼저 c8i에서 CPU로 Cloud Hypervisor와 QEMU를 확인하고, GPU passthrough가 필요하면 별도로 metal 노드를 추가합니다. GPU 경로에서는 IOMMU를 켠 `g4dn.metal`에서 VM에 T4를 한 장씩 할당합니다.
 
-**완료 기준**　CPU smoke test와 GPU smoke test는 각각 VM 부팅과 GPU 연결을 확인합니다. CPU 실습만 하려면 1단계까지 진행하세요.
+    **완료 기준** CPU smoke test와 GPU smoke test는 각각 VM 부팅과 GPU 연결을 확인합니다. CPU 실습만 하려면 1단계까지 진행하세요.
 
 **시작 전에** [01 클러스터와 이미지](01_cluster_and_images.md)를 먼저 마쳐야 합니다. Kata가 GPU를 다루는 방식은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)의 "Kata + VFIO passthrough" 절에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 

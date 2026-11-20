@@ -1,8 +1,9 @@
 # 01 클러스터와 이미지
 
-CDK로 EKS와 노드 그룹을 만들고, 샌드박스와 trainer가 쓸 이미지를 ECR에 올립니다. 다음 장의 GPU smoke test는 여기서 올린 샌드박스 이미지를 사용합니다. CDK는 private EKS를 만들고, 터널은 작업 PC를 EKS API에 연결합니다.
+!!! info "TL;DR"
+    CDK로 EKS와 노드 그룹을 만들고, 샌드박스와 trainer가 쓸 이미지를 ECR에 올립니다. 다음 장의 GPU smoke test는 여기서 올린 샌드박스 이미지를 사용합니다. CDK는 private EKS를 만들고, 터널은 작업 PC를 EKS API에 연결합니다.
 
-**완료 기준**　터널을 연 뒤 `kubectl get nodes`에서 필요한 노드가 `Ready`인지 확인하세요. 이미지를 빌드하면 URI가 출력됩니다. 다음 스크립트에서 읽을 수 있도록 이 URI를 `scripts/config.env`에 저장합니다.
+    **완료 기준** 터널을 연 뒤 `kubectl get nodes`에서 필요한 노드가 `Ready`인지 확인하세요. 이미지를 빌드하면 URI가 출력됩니다. 다음 스크립트에서 읽을 수 있도록 이 URI를 `scripts/config.env`에 저장합니다.
 
 **시작 전에** [00 전체 흐름](00_overview.md)의 단계 표와 [시작하기](../getting_started.md)의 로컬 Python 환경을 먼저 보세요. CDK 스택의 보안 기본값 전체는 [Production 09 CDK](../production/09_cdk.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 

@@ -1,8 +1,9 @@
 # 05 On-policy GRPO 학습
 
-모델이 만든 Triton 코드를 샌드박스에서 채점하고, 그 점수로 GRPO 업데이트를 한 번씩 진행합니다. 작은 모델로 생성 → 채점 → 학습이 이어지는지 살펴봅니다.
+!!! info "TL;DR"
+    모델이 만든 Triton 코드를 샌드박스에서 채점하고, 그 점수로 GRPO 업데이트를 한 번씩 진행합니다. 작은 모델로 생성 → 채점 → 학습이 이어지는지 살펴봅니다.
 
-**완료 기준**　`routing` 로그가 나오면 사용할 풀을 읽은 상태입니다. `reward_batch`에는 샌드박스에 채점을 요청한 배치의 결과가 나옵니다. 학습 step도 함께 진행되는지 보세요.
+    **완료 기준** `routing` 로그가 나오면 사용할 풀을 읽은 상태입니다. `reward_batch`에는 샌드박스에 채점을 요청한 배치의 결과가 나옵니다. 학습 step도 함께 진행되는지 보세요.
 
 **시작 전에** [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)을 마쳐야 합니다. GRPO와 버전 고정은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, reward 설계는 [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 

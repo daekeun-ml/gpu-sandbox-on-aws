@@ -1,8 +1,9 @@
 # 99 정리
 
-실습에서 만든 리소스를 의존성이 있는 순서대로 지웁니다. HyperPod를 사용했다면 HyperPod부터 삭제한 뒤 EKS 스택을 정리하세요.
+!!! info "TL;DR"
+    실습에서 만든 리소스를 의존성이 있는 순서대로 지웁니다. HyperPod를 사용했다면 HyperPod부터 삭제한 뒤 EKS 스택을 정리하세요.
 
-**완료 기준**　삭제 명령이 끝나면 AWS에서 스택, 인스턴스, 별도로 만든 리소스가 남아 있는지 확인합니다.
+    **완료 기준** 삭제 명령이 끝나면 AWS에서 스택, 인스턴스, 별도로 만든 리소스가 남아 있는지 확인합니다.
 
 **시작 전에** 무엇을 만들었는지 확인하세요. 클러스터와 이미지는 [01 클러스터와 이미지](01_cluster_and_images.md), HyperPod는 [07 HyperPod 시나리오](07_hyperpod.md), 데모 사이트는 [09 데모 사이트 (CloudFront)](09_demo_site.md), Agent Sandbox 확장은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 만들었습니다.
 

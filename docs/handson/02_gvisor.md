@@ -1,8 +1,9 @@
 # 02 gVisor GPU 샌드박스
 
-gVisor에서 작은 GPU 작업을 실행합니다. 샌드박스 풀을 만들기 전에 GPU 할당과 런타임 설정이 함께 동작하는지 확인하는 단계입니다.
+!!! info "TL;DR"
+    gVisor에서 작은 GPU 작업을 실행합니다. 샌드박스 풀을 만들기 전에 GPU 할당과 런타임 설정이 함께 동작하는지 확인하는 단계입니다.
 
-**완료 기준**　smoke pod가 완료되면 해당 노드에서 gVisor를 통해 GPU 작업을 실행할 수 있다는 뜻입니다.
+    **완료 기준** smoke pod가 완료되면 해당 노드에서 gVisor를 통해 GPU 작업을 실행할 수 있다는 뜻입니다.
 
 **시작 전에** [01 클러스터와 이미지](01_cluster_and_images.md)를 마쳐 gVisor 노드 두 대와 `SANDBOX_IMAGE_URI`를 준비하세요. kubectl과 helm 명령은 두 번째 터미널에서 `cdk/tunnel.sh`로 터널을 열어 둔 상태에서 실행합니다. 개념은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에 있습니다.
 

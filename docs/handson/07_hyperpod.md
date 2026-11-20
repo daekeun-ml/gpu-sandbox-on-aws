@@ -1,8 +1,9 @@
 # 07 HyperPod 시나리오
 
-HyperPod에서 GRPO를 실행합니다. B1은 trainer를 HyperPod에 두고 샌드박스는 EC2에서 실행합니다. B2는 샌드박스도 별도 HyperPod 인스턴스 그룹에 배치하는 실험 경로입니다.
+!!! info "TL;DR"
+    HyperPod에서 GRPO를 실행합니다. B1은 trainer를 HyperPod에 두고 샌드박스는 EC2에서 실행합니다. B2는 샌드박스도 별도 HyperPod 인스턴스 그룹에 배치하는 실험 경로입니다.
 
-**완료 기준**　Job 제출 후 trainer pod가 HyperPod 노드에 잡혔는지, `routing`과 `reward_batch` 로그가 나오는지 차례로 확인합니다.
+    **완료 기준** Job 제출 후 trainer pod가 HyperPod 노드에 잡혔는지, `routing`과 `reward_batch` 로그가 나오는지 차례로 확인합니다.
 
 **시작 전에** 시나리오 A의 [00 전체 흐름](00_overview.md), [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md), [05 On-policy GRPO 학습](05_grpo_training.md)을 먼저 보세요. HyperPod 선택 기준은 [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
