@@ -120,13 +120,9 @@ cdk/deploy.sh C
 
 ![EKS 클러스터 Networking 탭: API server endpoint access Private](../images/console/eks-networking.png)
 
-*실습 계정에 시나리오 C를 실제로 배포한 화면입니다(2026-11-14, us-west-2). 계정과 리소스 식별자는 가렸습니다.*
-
 control plane 로그는 CloudWatch Logs의 `/aws/eks/<CLUSTER_NAME>/cluster`에 30일 보존 설정으로 저장됩니다.
 
 ![CloudWatch 로그 그룹 /aws/eks/gpu-sandbox/cluster: 보존 기간 1개월, authenticator와 audit 로그 스트림](../images/console/cloudwatch-log-group.png)
-
-*같은 배포의 화면이며, 계정과 리소스 식별자는 가렸습니다.*
 
 **문제가 생기면:**
 
@@ -152,8 +148,6 @@ kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 시나리오 C라면 `system` 두 대와 `sandbox-kata` 한 대가 출력됩니다. 실습 화면의 EKS 콘솔에는 노드 3, 노드 그룹 2, add-on 4, access entry 4(운영자 2개와 EKS가 만든 2개)가 표시됐습니다. 운영자 entry는 `ADMIN_PRINCIPAL_ARN`에 적은 역할이나 사용자마다 하나씩 생기니, 자신의 클러스터에서는 그 수와 맞는지 확인하세요.
 
 ![EKS 클러스터 개요: Kubernetes 1.36, standard support until August 2, 2027, 노드 3, 노드 그룹 2, add-on 4, access entry 4](../images/console/eks-cluster.png)
-
-*같은 배포의 화면이며, 계정과 리소스 식별자는 가렸습니다.*
 
 관리형 노드 그룹이 nested virtualization 옵션을 노드에 전달하는 것은 문서에 없는 동작이니, c8i 노드에서 nested virtualization이 활성화됐는지도 확인하세요(아래 "적용 범위와 한계").
 

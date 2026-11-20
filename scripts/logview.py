@@ -79,6 +79,10 @@ class View:
     def simulate(self, r: dict[str, Any]) -> str:
         return self.c("dim", f"simulate: {r.get('steps')} batches on {r.get('device')}, no model (golden submissions)")
 
+    def multiturn(self, r: dict[str, Any]) -> str:
+        return self.c("dim", f"multi-turn: {r.get('episodes')} episodes of up to {r.get('max_turns')} turns from "
+                             f"{r.get('warm_pool')} on {r.get('device')}, {r.get('policy')} policy (not training)")
+
     def episode_start(self, r: dict[str, Any]) -> str:
         pool = f"{r.get('runtime')}/{r.get('version')}"
         return f"episode {r.get('episode')} start  {self.c('cyan', pool)}  claim {r.get('claim')}" + self.c(
@@ -162,6 +166,7 @@ class View:
                 "sandbox_version_switch": self.sandbox_version_switch,
                 "parity": self.parity,
                 "simulate": self.simulate,
+                "multiturn": self.multiturn,
                 "episode_start": self.episode_start,
                 "turn": self.turn,
                 "episode_end": self.episode_end,

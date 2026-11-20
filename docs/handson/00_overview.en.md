@@ -173,7 +173,7 @@ After deploying a pool with `06_deploy_sandboxes.sh`, run the pool verification 
 | `scripts/ops/simulate.sh [steps] [interval_s]` (scenario C) | sends reward batches of golden submissions without a model to watch a version swap; not training | 30 batches by default, with 29 waits of 20 s between them. The 2026-11-17 run (`kata-clh-cpu`) took about 16 min (each batch adds its evaluation time) | none |
 | `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | deploys v2 next to v1 during training, verifies it and switches routing to v2. After the trainer log shows the switch, the same command with `--finish` scales v1 to zero (`--finish` skips the deploy and the switch) | see [06](06_sandbox_update.md) | gVisor: two more `g5.xlarge` for v2 (2.012 USD/hour while the node group runs 4 nodes). Kata QEMU: no extra node (v1 and v2 use four each, all eight T4s of the `g4dn.metal`; if experimental `kata-clh` pods hold GPUs, v2 cannot be scheduled) |
 | `scripts/ops/bench.sh [requests]` | compares cold start, latency and speedup per runtime | see [08](08_benchmark.md) | none |
-| `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | claims one sandbox per episode from an Agent Sandbox warm pool and runs multi-turn episodes ([11 Multi-turn episodes](11_multi_turn.md)) | not recorded (local tests only, not run on AWS) | none (uses existing nodes). Each idle warm sandbox holds one accelerator |
+| `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | claims one sandbox per episode from an Agent Sandbox warm pool and runs multi-turn episodes ([11 Multi-turn episodes](11_multi_turn.md)) | about 25 s for 2 episodes of 3 turns (measured, `kata-clh-cpu` on scenario C) | none (uses existing nodes). Each idle warm sandbox holds one accelerator |
 | `scripts/hyperpod/build_b2_ami.sh` (scenario B2) | builds the custom AMI for the sandbox instance group; run before `hyperpod/create.sh --b2` | 20 to 40 min (estimate) | builder `m6i.large` (during the build), AMI snapshot |
 | `scripts/hyperpod/create.sh` (`--b2`) | creates the HyperPod cluster and attaches it to the same EKS cluster; `--b2` adds the sandbox instance group | 15 to 30 min until InService (guidance) | HyperPod `ml.g5.2xlarge` (B2 adds `ml.g5.xlarge` x2) |
 | `scripts/hyperpod/check_gvisor.sh` (scenario B2) | prints each HyperPod node's driver version and whether gVisor nvproxy supports it (creates a debug pod per node and, at the end, deletes every pod in the `default` namespace whose name starts with `node-debugger-`) | see [07](07_hyperpod.md) | none |
@@ -250,7 +250,7 @@ The table below is an **estimate** from On-Demand list prices, not a measured bi
 
     ![Service Quotas: Running On-Demand G and VT instances, applied value 768, AWS default 0](../images/console/quotas-gvt.png)
 
-    *An example from a practice account (2026-11-14, ap-south-1). Account identifiers are masked; values differ by account and Region.*
+    *Values differ by account and Region.*
 4. **Region:** the default is `us-west-2`; `01_check_prereqs.sh` shows instance support and AZ availability there.
 5. **Build host:** the base images (PyTorch, vLLM) are large, so if your workstation is arm64, run `03_build_push_images.sh` on an x86_64 host with 100+ GB of disk.
 6. **Account:** use a sandbox account, not a production one. CDK (CloudFormation) needs permission to create EC2 and VPC, EKS, IAM role, KMS, CloudWatch Logs, Lambda and SSM resources.

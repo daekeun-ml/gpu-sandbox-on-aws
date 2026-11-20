@@ -176,8 +176,6 @@ In the EKS console, the cluster's Networking tab must show API server endpoint a
 
 ![EKS cluster Networking tab: API server endpoint access Private](../images/console/eks-networking.png)
 
-*Scenario C in a practice account (2026-11-14, us-west-2; account and resource identifiers masked).*
-
 **If it fails:**
 
 - For a bootstrap error such as `Has the environment been bootstrapped?`, run item 4 of preparation 2.
@@ -207,7 +205,7 @@ cdk/tunnel.sh
 
 ![Output of cdk/tunnel.sh: the kubectl context gpu-sandbox-tunnel goes through 127.0.0.1:8443 to the cluster endpoint, the session starts, Port 8443 opened, Waiting for connections...](../images/terminal/tunnel.png)
 
-*Run in the practice account (2026-11-20, us-west-2). The session ID, cluster address and instance ID are masked. It is working when it stays here without returning to the prompt.*
+*It is working when it stays here without returning to the prompt.*
 
 In the first terminal, list the nodes.
 

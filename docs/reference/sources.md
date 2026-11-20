@@ -75,6 +75,7 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 | 2026-11-18 | us-west-2 | 실험용 Kata CLH GPU(`kata-clh`) | `ENABLE_EXPERIMENTAL_CLH_GPU=1`로 실험용 풀 배포 | 실패. artifact 경로를 채운 뒤에도 VM이 시작되지 않음(`create container timeout`). 벤치마크에서 빠짐 |
 | 2026-11-18 | us-west-2 | 런타임 벤치마크 | 위 Kata 클러스터에서 다섯 풀(`gvisor`, `kata-qemu`, CPU 풀 세 개)에 `ops/bench.sh 32`를 배포 직후와 풀 재시작 뒤 두 번. 이 클러스터의 gVisor 노드는 `g5.2xlarge` 한 대 | 성공. 다섯 풀 모두 32개 중 32개 `ok`. 결과 표는 [08 런타임 벤치마크](../handson/08_benchmark.md) |
 | 2026-11-18 | us-east-1(클러스터는 us-west-2) | 데모 사이트 | recorder pod에서 `record`(gVisor A10G 풀, Kata QEMU T4 풀), 클러스터 로그로 `extras.json` 생성, `demo/deploy.sh`, 배포 뒤 외부 점검 | 성공. 보안 헤더, 허용 메서드, 버킷 설정, 로그 전송을 확인. 기본 인증서에서 TLS 1.0과 1.1 handshake가 받아들여짐([09 데모 사이트](../handson/09_demo_site.md)의 보안 설계) |
+| 2026-11-20 | us-west-2 | 시나리오 C(c8i) | `ops/rollout.sh kata-clh-cpu`(v1에서 v2, v2에서 v1), 함께 실행한 `ops/simulate.sh`, `extensions/agent_sandbox.sh install`, `pool kata-clh-cpu 1`, `claim kata-clh-cpu`, `episodes kata-clh-cpu 2 3` | 성공. 전환이 배치 경계에서 한 번 일어났고 batch마다 버전이 하나였음. v2에서 v1 방향 한 번은 CPU 측정 노이즈로 parity가 speedup 조건에서 실패(0.8979에서 0.5365, 판정은 같음). Agent Sandbox는 claim이 샌드박스 주소를 받고 반납했으며 warm pool이 새 샌드박스를 채움. `episodes`는 에피소드 2개가 모두 3 turn에 solved, 에피소드마다 claim과 샌드박스가 하나, 끝난 뒤 남은 claim 없음 |
 
 2026-11-14에는 ap-south-1 콘솔에서 Service Quotas 화면과 EC2 AMI Catalog의 HyperPod AMI 검색 결과도 캡처했습니다. 조회만 했고 스크립트는 실행하지 않았습니다.
 

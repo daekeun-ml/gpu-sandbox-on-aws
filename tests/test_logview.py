@@ -40,6 +40,9 @@ def test_events_become_short_lines():
     assert "SWITCH  kata-clh-cpu/v1 -> kata-clh-cpu/v2" in view.render(json.dumps(SWITCH))
     mixed = view.render(json.dumps({**BATCH, "served_versions": {"v1": 1, "v2": 2}}))
     assert "MIXED VERSIONS" in mixed
+    start = view.render(json.dumps({"event": "multiturn", "warm_pool": "kernel-eval-gvisor-cpu", "episodes": 2,
+                                    "max_turns": 3, "device": "cpu", "policy": "scripted"}))
+    assert "2 episodes of up to 3 turns from kernel-eval-gvisor-cpu" in start
     assert "PARITY FAIL" in view.render(json.dumps({"event": "parity", "baseline": "a", "candidate": "b",
                                                     "passed": False}))
 

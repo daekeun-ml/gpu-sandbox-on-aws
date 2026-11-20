@@ -114,7 +114,7 @@ awslabs의 [AI on EKS](https://github.com/awslabs/ai-on-eks) 프로젝트에는 
 
 ## 적용 범위와 한계
 
-- **검증 상태:** 이 에셋의 Agent Sandbox 확장은 로컬 테스트만 통과했습니다. 클러스터와 AWS에서는 실행하지 않았습니다.
+- **검증 상태:** 이 에셋의 Agent Sandbox 확장은 로컬 테스트를 통과했고, 설치, warm pool, claim, multi-turn 에피소드는 시나리오 C 클러스터(CPU 샌드박스)에서도 실행했습니다. GPU 샌드박스와 함께 쓰는 경우는 아직 클러스터에서 실행하지 않았습니다.
 - 설치, template 설정, warm pool, claim 명령과 `EpisodeSandbox` 사용법은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에 있습니다.
 - AI on EKS 솔루션의 내용은 2026-11에 공개 페이지를 읽고 정리한 것이며, 이 에셋에서 실행하지 않았습니다.
 

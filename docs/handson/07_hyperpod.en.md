@@ -385,7 +385,7 @@ The base AMI is an image HyperPod publishes. In the EC2 console, open the Commun
 
 ![Community AMIs in the EC2 AMI Catalog: HyperPod EKS 1.36 x86_64 AMI Amazon Linux 2023, OwnerAlias amazon](../images/console/ami-catalog-hyperpod.png)
 
-*Taken in a practice account (2026-11-14, ap-south-1). The 1.36 and 1.33 AMIs were published on the same date.*
+*The 1.36 and 1.33 AMIs were published on the same date.*
 
 What the builder does (`infra/hyperpod/ami/customize-b2.sh`):
 

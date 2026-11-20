@@ -60,6 +60,8 @@ YAML
     episodes="${3:-2}"
     max_turns="${4:-3}"
     pool="kernel-eval-${runtime}"
+    kubectl get --raw /healthz >/dev/null 2>&1 \
+      || die "cluster API not reachable: is cdk/tunnel.sh running in another terminal?"
     kubectl get crd sandboxclaims.extensions.agents.x-k8s.io sandboxwarmpools.extensions.agents.x-k8s.io \
       >/dev/null 2>&1 || die "agent-sandbox CRDs not found: run $0 install"
     kubectl -n rl-trainer get serviceaccount sandbox-episode >/dev/null 2>&1 \

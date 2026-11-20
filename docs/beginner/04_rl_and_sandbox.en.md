@@ -83,7 +83,7 @@ In the output below, switching from v1 to v2 under these rules gives v1 up to ba
 
 ![Reward loop output: v1 up to batch 2, v2 from batch 3](../images/learning/local-reward-loop.png)
 
-*A run with two sandbox servers on the author's laptop; the cluster prints output in the same form.*
+*A local run with two sandbox servers. The cluster prints the same form.*
 
 ## In one line
 

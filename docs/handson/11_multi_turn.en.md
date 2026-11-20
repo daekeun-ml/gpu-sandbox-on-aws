@@ -33,7 +33,7 @@ A reward pool picks a free pod for every request, so the turns of one episode ca
     More terms are in the [Glossary](../reference/glossary.md).
 
 !!! warning "Verification status"
-    The multi-turn code passed local tests (pytest), including an end-to-end test that runs two episodes against loopback CPU sandbox servers (`test_multiturn_against_loopback_sandboxes`). The steps on this page were not run on a cluster or on AWS. The sample events in step 3 are a shortened local run; the other outputs are the shape the code prints. The code in the veRL section was never run with veRL.
+    The multi-turn code passed local tests (pytest), including an end-to-end test that runs two episodes against loopback CPU sandbox servers (`test_multiturn_against_loopback_sandboxes`). `install`, `pool` and `episodes` on this page ran on a scenario C cluster with the `kata-clh-cpu` warm pool (one waiting sandbox), and all five conditions in the step 3 table held. The `gvisor-cpu` warm pool and the GPU section have not run on a cluster. The sample events in step 3 are a shortened local run; the other outputs are the shape the code prints. The code in the veRL section was never run with veRL.
 
 ## One episode, step by step
 
@@ -154,7 +154,9 @@ Run 2 episodes with up to 3 turns each. This step compares event fields (`claim`
 GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
 ```
 
-To follow progress only, leave out `GPUSANDBOX_LOG=json`. You then get a line for each episode start, turn (`episode 1 turn 2  wrong_answer ...`) and episode end, followed by the overall summary.
+To follow progress only, leave out `GPUSANDBOX_LOG=json`. You then get a line for each episode start, turn (`episode 1 turn 2  wrong_answer ...`) and episode end, followed by the overall summary. Below is the summary view from a scenario C cluster with the `kata-clh-cpu` warm pool (one waiting sandbox). With one waiting sandbox the script warns, but episode 2 takes the sandbox the warm pool started in its place and carries on. The final `No resources found` means the cleanup step that deletes leftover claims found none.
+
+![episodes kata-clh-cpu 2 3: a warning about one waiting sandbox, episodes 1 and 2 each going through policy_violation, wrong_answer and ok in 3 turns to solved, rewards 1.3268 and 1.315231, and the final summary solved 2/2, mean reward 1.321](../images/terminal/agent-sandbox-episodes.png)
 
 The script runs in this order.
 

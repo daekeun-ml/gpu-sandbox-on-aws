@@ -385,7 +385,7 @@ base AMI는 HyperPod가 공개한 이미지입니다. EC2 콘솔의 AMI Catalog�
 
 ![EC2 AMI Catalog의 Community AMIs: HyperPod EKS 1.36 x86_64 AMI Amazon Linux 2023, OwnerAlias amazon](../images/console/ami-catalog-hyperpod.png)
 
-*실습 계정에서 찍은 화면입니다(2026-11-14, ap-south-1). 1.36과 1.33 AMI가 같은 날짜로 올라와 있습니다.*
+*1.36과 1.33 AMI가 같은 날짜로 올라와 있습니다.*
 
 builder 인스턴스는 다음 작업을 실행합니다(`infra/hyperpod/ami/customize-b2.sh`).
 

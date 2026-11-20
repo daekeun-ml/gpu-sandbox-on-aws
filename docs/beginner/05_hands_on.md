@@ -56,8 +56,6 @@ python -m pytest -q
 
 ![로컬 터미널: python -m pytest -q 결과, 74 passed](../images/learning/local-pytest.png)
 
-*저자의 노트북(macOS, CPU 전용)에서 실행한 화면입니다.*
-
 **지금 일어나는 일:** 01편과 04편에서 설명한 기능(위험한 코드를 실행 전에 막는 검사, 채점기와 제출 코드를 나눈 구조, 토큰이 없으면 거절하는 인증, 배치 경계의 버전 교체)이 동작하는지 확인합니다.
 
 **문제가 생기면:** `ModuleNotFoundError`가 나오면 복제한 저장소 폴더(`gpu-sandbox-on-aws`)에서 `source .venv/bin/activate`를 실행했는지 확인하세요. 그래도 나오면 1번의 `uv pip install` 두 줄만 다시 실행합니다. Linux 호스트에서 다음 3번처럼 서버를 직접 띄우면 같은 사용자의 다른 프로세스가 종료될 수 있습니다(이유는 [시작하기](../getting_started.md) 3장 참고). Linux에서는 3~4번을 건너뛰세요. 2번 테스트 중 `test_golden_probe_and_parity_on_cpu_pools`가 로컬 서버 두 개를 띄워 4번과 같은 시험용 답안 네 개를 채점하고 결과를 확인합니다. macOS에서는 3~4번에서 같은 채점을 직접 실행해 보세요.
@@ -166,8 +164,6 @@ cdk/deploy.sh C
 
 ![CloudFormation 스택 gpu-sandbox-cdk의 Outputs 탭: EndpointPublicAccess false](../images/console/cfn-outputs.png)
 
-*실습 계정의 배포 화면입니다(2026-11-14, us-west-2, 계정과 리소스 식별자는 가림).*
-
 **지금 일어나는 일:** CDK가 private 네트워크(VPC), EKS 클러스터, 노드 두 종류(system 2대, `c8i.2xlarge` 1대), 접속용 인스턴스를 한 번에 만들고, 01편의 방어 중 노드와 클러스터 쪽 설정을 적용합니다. EKS API는 인터넷에서 접속할 수 없고, 노드에는 IMDSv2 필수와 hop limit 1이, 디스크에는 암호화가 적용됩니다. `c8i.2xlarge`에는 nested virtualization이 켜지고 gVisor와 node guard가 설치됩니다. VPC CNI의 네트워크 정책 기능도 켜지지만, `sandbox` 네임스페이스의 차단 규칙은 샌드박스 풀을 배포할 때 따로 설치합니다([10편](../handson/10_cpu_only.md) 5단계). 그래서 이 편의 시험용 pod(`default` 네임스페이스)에는 그 규칙이 적용되지 않습니다.
 
 **문제가 생기면:** [Production 09 CDK](../production/09_cdk.md)의 "문제가 생기면"을 보세요.
@@ -201,8 +197,6 @@ scripts/kata/cpu_nodes.sh
 **확인할 것:** 마지막에 아래와 같은 줄이 나옵니다(실습 계정에서 실행, 2026-11-14, 약 14분 소요, 대부분 kata-deploy 설치 시간). 맨 아래 runc 줄은 비교용으로 같은 노드에 띄운 일반 컨테이너의 결과입니다(아래 "직접 비교해 보기").
 
 ![같은 c8i.2xlarge 노드에서 gVisor는 4.19.0-gvisor, Kata는 6.18.56 Oct 16 빌드, runc는 노드 커널 6.18.56-125.164.amzn2023을 보여 줌](../images/learning/aws-runtime-kernels.png)
-
-*실습 계정(us-west-2)의 `c8i.2xlarge` 한 대에서 실행한 화면입니다.*
 
 | 런타임 | pod 안에서 보인 커널 | 의미 |
 |---|---|---|

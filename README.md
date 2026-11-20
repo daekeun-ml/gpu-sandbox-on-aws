@@ -288,7 +288,7 @@ multi-turn episode마다 미리 띄워 둔 샌드박스를 하나씩 빌려 쓰�
 
 - 런타임 프로필(gvisor, kata-qemu, kata-clh-cpu 등)마다 샌드박스를 미리 띄워 둡니다(warm pool). episode가 시작되면 하나를 받아 쓰고, 끝나면 돌려줍니다(`src/gpusandbox/agent_sandbox.py`의 `EpisodeSandbox`).
 - 샌드박스는 label이 붙은 trainer pod의 8000번 포트 접속만 받고, 밖으로 나가는 연결은 모두 막습니다. DNS 서버도 127.0.0.1로 고정해 controller가 공개 DNS 서버를 넣지 못하게 합니다.
-- 가짜 API로 단위 테스트만 했고, 클러스터에서는 아직 실행하지 않았습니다. Kata GPU 런타임과 함께 쓰는 경우도 확인하지 않았습니다.
+- 설치, warm pool, claim, multi-turn 에피소드(`episodes`)를 시나리오 C 클러스터(`kata-clh-cpu`)에서 실행해 확인했습니다. GPU 런타임과 함께 쓰는 경우는 아직 클러스터에서 확인하지 않았습니다.
 - warm pool의 GPU 샌드박스는 쉬는 동안에도 GPU를 잡고 있어 계속 과금됩니다.
 
 ```bash

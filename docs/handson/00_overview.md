@@ -173,7 +173,7 @@ kubectl이나 helm을 쓰는 단계(`04_install_gpu_stack.sh` 이후, HyperPod �
 | `scripts/ops/simulate.sh [steps] [interval_s]` (시나리오 C) | 모델 없이 golden 제출물로 reward 배치를 계속 보내며 버전 교체를 관찰. 학습이 아님 | 기본 30배치, 배치 사이 20초 대기 29회. 2026-11-17 실행(`kata-clh-cpu`)은 약 16분 (배치마다 평가 시간이 더해짐) | 없음 |
 | `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | 학습 중 v1 옆에 v2를 배포하고 검증한 뒤 routing을 v2로 전환. trainer 로그에서 전환을 확인한 뒤 같은 명령에 `--finish`를 붙여 v1을 0으로 줄임(`--finish`는 배포와 전환을 건너뜀) | [06](06_sandbox_update.md) 참고 | gVisor는 v2용 `g5.xlarge` 2대(시간당 2.012 USD, 노드 그룹을 4대로 늘린 동안). Kata QEMU는 추가 노드 없음(v1과 v2가 4개씩 `g4dn.metal`의 T4 8개를 모두 씀. 실험용 `kata-clh` pod가 GPU를 쓰고 있으면 v2가 배치되지 않음) |
 | `scripts/ops/bench.sh [requests]` | 런타임별 cold start, latency, speedup 비교 | [08](08_benchmark.md) 참고 | 없음 |
-| `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 할당받아 multi-turn 에피소드를 실행합니다([11 multi-turn 에피소드 실습](11_multi_turn.md)) | 기록 없음 (로컬 테스트만 했고 AWS에서는 실행하지 않음) | 없음 (기존 노드 사용). 대기 중인 warm sandbox도 가속기를 하나씩 점유 |
+| `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 할당받아 multi-turn 에피소드를 실행합니다([11 multi-turn 에피소드 실습](11_multi_turn.md)) | 에피소드 2개, 3 turn에 약 25초 (실측, 시나리오 C의 `kata-clh-cpu`) | 없음 (기존 노드 사용). 대기 중인 warm sandbox도 가속기를 하나씩 점유 |
 | `scripts/hyperpod/build_b2_ami.sh` (시나리오 B2) | sandbox 인스턴스 그룹용 custom AMI 빌드. `hyperpod/create.sh --b2` 전에 실행 | 20~40분 (추정) | 빌더 `m6i.large`(빌드 중), AMI 스냅샷 |
 | `scripts/hyperpod/create.sh` (`--b2`) | HyperPod 클러스터를 만들어 같은 EKS 클러스터에 연결. `--b2`는 sandbox 인스턴스 그룹을 추가 | InService까지 15~30분 (안내값) | HyperPod `ml.g5.2xlarge` (B2는 `ml.g5.xlarge` x2 추가) |
 | `scripts/hyperpod/check_gvisor.sh` (시나리오 B2) | HyperPod 노드마다 드라이버 버전과 gVisor nvproxy 지원 여부 출력 (노드마다 debug pod를 만들고, 끝에 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제) | [07](07_hyperpod.md) 참고 | 없음 |
@@ -250,7 +250,7 @@ flowchart LR
 
     ![Service Quotas: Running On-Demand G and VT instances, 적용된 값 768, AWS 기본값 0](../images/console/quotas-gvt.png)
 
-    *실습 계정의 예시 화면입니다(2026-11-14, ap-south-1). 계정 식별자는 가렸고, 값은 계정과 리전마다 다릅니다.*
+    *값은 계정과 리전마다 다릅니다.*
 4. **리전:** 기본값은 `us-west-2`이고, 그 리전의 인스턴스 지원과 AZ별 제공 여부는 `01_check_prereqs.sh`가 출력합니다.
 5. **빌드 호스트:** 베이스 이미지(PyTorch, vLLM)가 크므로, 작업 PC가 arm64라면 디스크 100 GB 이상인 x86_64 호스트에서 `03_build_push_images.sh`를 실행하세요.
 6. **계정:** 운영(production) 계정 대신 실습용 계정을 권장합니다. CDK(CloudFormation)에는 EC2와 VPC, EKS, IAM 역할, KMS, CloudWatch Logs, Lambda, SSM 리소스를 만들 권한이 필요합니다.

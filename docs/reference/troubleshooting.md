@@ -415,7 +415,7 @@ kubectl -n sandbox-gateway exec deploy/gateway -- cat /etc/gpusandbox/routing/ro
 
 ## Agent Sandbox와 multi-turn 에피소드
 
-multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <runtime>`)은 Job을 제출하기 전에 CRD, ServiceAccount, warm pool 상태를 확인하고, 확인에 실패하면 아래 메시지를 출력하고 멈춥니다. 이 경로는 로컬 테스트로만 확인했고 클러스터에서는 실행하지 않았습니다. 실행 방법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있습니다.
+multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <runtime>`)은 Job을 제출하기 전에 CRD, ServiceAccount, warm pool 상태를 확인하고, 확인에 실패하면 아래 메시지를 출력하고 멈춥니다. 이 경로는 시나리오 C 클러스터의 `kata-clh-cpu` warm pool로 실행해 확인했습니다. 클러스터 API에 닿지 않으면(터널이 꺼짐) 먼저 `cluster API not reachable`로 멈춥니다. 실행 방법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있습니다.
 
 | 증상 | 원인 | 해결 |
 |---|---|---|

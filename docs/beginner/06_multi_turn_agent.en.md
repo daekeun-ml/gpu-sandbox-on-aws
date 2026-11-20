@@ -114,7 +114,7 @@ This asset offers Agent Sandbox as an optional extension. The sandbox server, th
 
 ## Scope and limits
 
-- **Verification status:** this asset's Agent Sandbox extension passed local tests only. It was not run on a cluster or on AWS.
+- **Verification status:** this asset's Agent Sandbox extension passed local tests, and install, warm pool, claim and multi-turn episodes also ran on a scenario C cluster (CPU sandboxes). Use with GPU sandboxes has not run on a cluster yet.
 - The install, template settings, warm pool and claim commands and how to use `EpisodeSandbox` are in [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
 - The AI on EKS solution is summarised from its public page as read in 2026-11; it was not run in this asset.
 

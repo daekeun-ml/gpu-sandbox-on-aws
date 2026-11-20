@@ -133,7 +133,7 @@ AWS에서 각 RuntimeClass를 실행할 수 있는 위치는 Agent Sandbox와 �
 | [`src/gpusandbox/multiturn.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/multiturn.py) | 에피소드 실행기, Policy 인터페이스, `ScriptedPolicy`, 피드백 형식, 중지 규칙, JSON 이벤트. `python -m gpusandbox.tools multiturn`이 사용합니다 |
 | [`rl/verl/sandbox_tool.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool.py), [`rl/verl/sandbox_tool_config.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool_config.yaml) | veRL v0.9.1용 tool `KernelSandboxTool`, reward 함수 `compute_score`, `SandboxToolAgentLoop`와 tool 설정 예시(아래 "veRL multi-turn rollout에 연결하기") |
 
-샌드박스 서버, 이미지, 인증은 [핸즈온 04](../handson/04_sandbox_pools.md)의 풀과 같습니다. 이 확장의 단위 테스트(`tests/test_agent_sandbox.py` 4개, `tests/test_multiturn.py` 16개, `tests/test_manifests.py`)는 로컬에서 통과했습니다. 검사 항목은 아래 "적용 범위와 한계"에 있습니다. 클러스터와 AWS에서는 실행하지 않았으므로 각 명령의 확인 단계로 검증하세요. 명령을 순서대로 실행하는 방법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있습니다.
+샌드박스 서버, 이미지, 인증은 [핸즈온 04](../handson/04_sandbox_pools.md)의 풀과 같습니다. 이 확장의 단위 테스트(`tests/test_agent_sandbox.py` 4개, `tests/test_multiturn.py` 16개, `tests/test_manifests.py`)는 로컬에서 통과했습니다. 검사 항목은 아래 "적용 범위와 한계"에 있습니다. 클러스터에서는 `install`, `pool`, `claim`, `episodes`를 시나리오 C(`kata-clh-cpu`)에서 실행했으므로, 나머지는 각 명령의 확인 단계로 검증하세요. 명령을 순서대로 실행하는 방법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있습니다.
 
 ### template 설정과 이유
 
@@ -482,7 +482,8 @@ GPU가 필요 없고 허용한 도메인으로만 외부 접속을 허용하는 
 
 - **로컬 테스트로 확인한 것:** claim 본문, 주소 해석, claim 후 반납, Ready가 되지 않을 때의 반납(fake Kubernetes API), 일곱 프로필의 template 렌더링과 하드닝 값(비어 있는 egress, `runtimeClassName`, `automountServiceAccountToken: false`, `dnsPolicy: None`)입니다.
 - **multi-turn 경로의 로컬 테스트:** 에피소드마다 claim 하나, 중지 조건, `sandbox_error` 처리, policy가 실패할 때의 claim 반납, 피드백 길이, `multiturn` CLI를 fake Kubernetes API로 확인했습니다. veRL tool은 veRL 없이 trajectory 하나에 샌드박스 하나, 방치된 trajectory의 반납, trajectory 종료 시 반납, claim 실패, 설정 파일과 tool의 일치를 확인했습니다. 에피소드 Job 매니페스트(API 토큰과 하드닝, claim 권한, 허용 subject)도 확인했고, loopback 샌드박스 서버 두 개(CPU harness)에서 에피소드 두 개를 끝까지 실행했습니다.
-- **클러스터에서 실행하지 않은 것:** `install`, `pool`, `claim`, `episodes`, 위의 평가 확인 절차, pod 안의 `EpisodeSandbox`입니다. SandboxTemplate 안의 Kata GPU(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)도 검증하지 않았습니다. veRL tool은 veRL에서 실행하지 않았습니다(위 "확인하지 않은 것").
+- **클러스터에서 실행한 것:** 시나리오 C에서 `install`, `pool kata-clh-cpu 1`, `claim kata-clh-cpu`. claim이 샌드박스 주소를 받고 반납한 뒤 warm pool이 새 샌드박스를 채웠습니다([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)의 9단계). 이어서 `episodes kata-clh-cpu 2 3`이 pod 안의 `EpisodeSandbox`로 에피소드 2개를 실행했고, 에피소드마다 claim과 샌드박스가 하나씩이었으며 끝나면 claim이 반납됐습니다([11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)).
+- **클러스터에서 실행하지 않은 것:** 위의 평가 확인 절차입니다. SandboxTemplate 안의 Kata GPU(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)도 검증하지 않았습니다. veRL tool은 veRL에서 실행하지 않았습니다(위 "확인하지 않은 것").
 - **trainer에서 바로 쓰려면 추가 준비가 필요합니다.** 위 조건 표에 있는 API 토큰과 `kubernetes` 패키지를 준비하고, broker 사용 여부를 결정하세요.
 - **template 이름에 버전이 없습니다.** `VERSION_FILE=v2`로 `pool`을 다시 적용하면 같은 `kernel-eval-<runtime>` template이 수정됩니다. `OnReplenish`는 대기 중인 이전 버전 샌드박스를 claim되거나 삭제될 때까지 유지하므로, 전환 중에는 claim마다 v1과 v2가 섞일 수 있습니다(upstream 주석 기준 추론). `multiturn` CLI에서는 각 `turn` 이벤트의 `version`으로 확인할 수 있습니다. veRL tool은 에피소드 요약과 `compute_score` 결과에 버전을 싣지 않으므로, GRPO group 안에서 버전이 섞이면 안 되는 veRL 학습이라면 그 값을 직접 기록하거나 버전마다 이름이 다른 template과 pool을 만들어 group의 claim을 한 풀로 보내세요(둘 다 이 저장소에 없음).
 - **template에는 livenessProbe가 없습니다.** Deployment 풀과 달리 GPU 오류로 draining된 샌드박스를 kubelet이 다시 시작하지 않습니다. 그 에피소드의 남은 평가는 `sandbox_error`가 되므로(코드 기준), 에피소드를 폐기하고 새 claim을 만드세요.

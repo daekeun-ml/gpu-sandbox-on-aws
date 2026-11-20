@@ -415,7 +415,7 @@ kubectl -n sandbox-gateway exec deploy/gateway -- cat /etc/gpusandbox/routing/ro
 
 ## Agent Sandbox and multi-turn episodes
 
-Before it submits the Job, the multi-turn episode run (`scripts/extensions/agent_sandbox.sh episodes <runtime>`) checks the CRDs, the ServiceAccount and the warm pool, and stops with one of the messages below when a check fails. This path has been checked with local tests only and has not been run on a cluster. How to run it is in [11 Multi-turn episodes](../handson/11_multi_turn.md).
+Before it submits the Job, the multi-turn episode run (`scripts/extensions/agent_sandbox.sh episodes <runtime>`) checks the CRDs, the ServiceAccount and the warm pool, and stops with one of the messages below when a check fails. This path ran on a scenario C cluster with the `kata-clh-cpu` warm pool. When the cluster API is unreachable (the tunnel is down) it stops first with `cluster API not reachable`. How to run it is in [11 Multi-turn episodes](../handson/11_multi_turn.md).
 
 | Symptom | Cause | Fix |
 |---|---|---|

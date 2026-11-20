@@ -77,7 +77,7 @@ Costs are estimates that add up On-Demand compute list prices (us-east-1 and us-
 
     ![Local terminal: python -m pytest -q, 74 passed (taken when the suite had 74 tests)](images/learning/local-pytest.png)
 
-    *Taken on the author's laptop (macOS, CPU only) when the suite had 74 tests. It now has 109, and run times differ by machine.*
+    *Taken when the suite had 74 tests. It now has 109, and run times differ by machine.*
 
     **You can stop here:** when item 2 shows `PASS` everywhere, you have seen the scoring flow of a local server. gVisor and Kata isolation is checked in the AWS paths.
 

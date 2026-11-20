@@ -33,7 +33,7 @@ reward 풀은 요청마다 유휴 pod 하나를 선택하므로 한 에피소드
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 !!! warning "검증 상태"
-    multi-turn 코드는 로컬 테스트(pytest)를 통과했습니다. 여기에는 loopback CPU 샌드박스 서버를 상대로 에피소드 두 개를 실행하는 end-to-end 테스트(`test_multiturn_against_loopback_sandboxes`)가 포함됩니다. 이 페이지의 절차는 클러스터나 AWS에서 실행하지 않았습니다. 3단계의 예시 이벤트는 로컬 실행 출력을 줄인 것이고, 나머지 출력은 코드를 기준으로 쓴 예상 형태입니다. veRL 절의 코드는 veRL로 실행한 적이 없습니다.
+    multi-turn 코드는 로컬 테스트(pytest)를 통과했습니다. 여기에는 loopback CPU 샌드박스 서버를 상대로 에피소드 두 개를 실행하는 end-to-end 테스트(`test_multiturn_against_loopback_sandboxes`)가 포함됩니다. 이 페이지의 `install`, `pool`, `episodes`는 시나리오 C 클러스터에서 `kata-clh-cpu` warm pool(대기 1대)로 실행해, 3단계 표의 다섯 조건을 모두 확인했습니다. `gvisor-cpu` warm pool과 GPU 절은 클러스터에서 실행하지 않았습니다. 3단계의 예시 이벤트는 로컬 실행 출력을 줄인 것이고, 나머지 출력은 코드를 기준으로 쓴 예상 형태입니다. veRL 절의 코드는 veRL로 실행한 적이 없습니다.
 
 ## 에피소드 하나의 흐름
 
@@ -154,7 +154,9 @@ scripts/extensions/agent_sandbox.sh pool gvisor-cpu 2
 GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
 ```
 
-진행만 볼 때는 `GPUSANDBOX_LOG=json`을 빼고 실행하세요. 에피소드 시작, turn(`episode 1 turn 2  wrong_answer ...`), 에피소드 끝이 한 줄씩 나오고 마지막에 전체 요약이 나옵니다.
+진행만 볼 때는 `GPUSANDBOX_LOG=json`을 빼고 실행하세요. 에피소드 시작, turn(`episode 1 turn 2  wrong_answer ...`), 에피소드 끝이 한 줄씩 나오고 마지막에 전체 요약이 나옵니다. 아래는 시나리오 C 클러스터에서 `kata-clh-cpu` warm pool(대기 1대)로 실행한 요약 화면입니다. 대기 샌드박스가 1대라 경고가 나오지만, 에피소드 2는 warm pool이 새로 채운 샌드박스를 받아 이어서 실행됩니다. 마지막 `No resources found`는 남은 claim을 지우는 정리 단계에서 지울 claim이 없었다는 뜻입니다.
+
+![episodes kata-clh-cpu 2 3 실행 화면: 대기 샌드박스 1대 경고, 에피소드 1과 2가 각각 policy_violation, wrong_answer, ok 순서로 3 turn을 진행해 solved, reward 1.3268과 1.315231, 마지막 summary solved 2/2, mean reward 1.321](../images/terminal/agent-sandbox-episodes.png)
 
 스크립트는 다음 순서로 실행됩니다.
 

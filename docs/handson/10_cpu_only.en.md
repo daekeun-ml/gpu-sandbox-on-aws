@@ -82,7 +82,7 @@ flowchart LR
 
     ![Service Quotas: Running On-Demand Standard instances, applied value 1,152, AWS default 5](../images/console/quotas-standard.png)
 
-    *An example from a practice account (2026-11-14, ap-south-1). Quotas are per Region; check them in `AWS_REGION`.*
+    *Quotas are per Region; check them in `AWS_REGION`.*
 
 ## Step 1: Prerequisites (`01_check_prereqs.sh`)
 
@@ -114,7 +114,7 @@ cdk/tunnel.sh
 
 ![Output of cdk/tunnel.sh: the kubectl context gpu-sandbox-tunnel goes through 127.0.0.1:8443 to the cluster endpoint, the session starts, Port 8443 opened, Waiting for connections...](../images/terminal/tunnel.png)
 
-*Run in the practice account (2026-11-20, us-west-2). The session ID, cluster address and instance ID are masked. It is working when it stays here without returning to the prompt.*
+*It is working when it stays here without returning to the prompt.*
 
 Check the nodes from the first terminal.
 
@@ -125,8 +125,6 @@ kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 **What to look for:** two `system` nodes (`m6i.large`) and one `sandbox-kata` node (`c8i.2xlarge`) are `Ready`. The cluster page of the EKS console shows 3 nodes, 2 node groups and 4 add-ons.
 
 ![EKS cluster overview: Kubernetes 1.36, standard support until August 2, 2027, 3 nodes, 2 node groups, 4 add-ons, 4 access entries](../images/console/eks-cluster.png)
-
-*Scenario C deployed in a practice account (2026-11-14, us-west-2, account and resource identifiers masked).*
 
 **If it fails:** if it stops with `set ... in scripts/config.env`, fill in that value. Deploy errors are under "If it fails" of cluster creation (`02_create_cluster.sh`) in [01](01_cluster_and_images.md) and under "Cluster and nodes" in [Troubleshooting](../reference/troubleshooting.md); tunnel errors are in the "Open the tunnel" section of 01.
 
@@ -206,8 +204,6 @@ done
 
 ![verify.sh on the kata-clh-cpu v1 pool: the sandbox kernel 6.18.56 differs from the node kernel 6.18.62, IMDS, the Kubernetes API, the kubelet and S3 are all blocked, the four prepared submissions PASS, the connection from the default namespace is blocked, and the last line is pool sandbox-kata-clh-cpu-v1 verified](../images/terminal/verify-kata-clh-cpu.png)
 
-*Verifying the `kata-clh-cpu` pool in the practice account (2026-11-20, us-west-2). Node names and IP addresses are masked.*
-
 **If it fails:** if a pod is `Pending`, look for `Insufficient cpu` or `Insufficient memory` in `kubectl -n sandbox describe pod <pod>` and check that `KATA_CPU_REPLICAS=1` is in effect. Everything else is under "Sandbox pools and readiness" in [Troubleshooting](../reference/troubleshooting.md).
 
 ## Step 7: A reward loop without a model, and a version swap (`ops/simulate.sh`, `ops/rollout.sh`)
@@ -228,8 +224,6 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 
 ![rollout.sh kata-clh-cpu v1 v2: 1) deploy v2, 2) verify v2 (kernel comparison, blocked egress, four PASS, verified), 3) parity with four PASS and PARITY PASS, 4) the routing switch, and at the end the hint to watch for the SWITCH line](../images/terminal/rollout-kata-clh-cpu.png)
 
-*`ops/rollout.sh` run in the practice account (2026-11-20, us-west-2). Node names and IP addresses are masked.*
-
 **What to look for:** events like these in the first work terminal (the local run from the verification status, shortened). On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes. If no switch event appears after a minute, check the pool on the `batch` lines (`kata-clh-cpu/v1` or `v2`). For the raw JSON with every field, start the next run as `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`; for a simulation that is already running, use `kubectl -n rl-trainer logs -f job/simulate-<number>`.
 
 ```text
@@ -243,7 +237,7 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 - **No `batch` line shows `MIXED VERSIONS`.** The verdicts of one batch did not mix v1 and v2 (in the raw JSON, `served_versions` holds a single version). In training, a batch whose needed results are all cached from the same pool calls no sandbox and prints no `reward_batch` line; if the cache mixes pools, the batch is scored again on one pool and logs that line. On-policy training needs this to compute one batch's advantages against one standard.
 - **The results are the same before and after.** Both batches have 1 `ok`, 2 `wrong_answer` and pass 33%. Whether each submission got the same verdict on both versions shows in the `PASS` lines of the `ops/rollout.sh` parity output.
 
-The same steps run in the practice account (2026-11-20, us-west-2, `simulate.sh 16 15`): batches 1 to 6 ran on v1, and after the `SWITCH` line batches 7 on ran on v2, every batch with 1 `ok` and 2 `wrong_answer`.
+Below are the same steps run with `simulate.sh 16 15`: batches 1 to 6 ran on v1, and after the `SWITCH` line batches 7 on ran on v2, every batch with 1 `ok` and 2 `wrong_answer`.
 
 ![simulate.sh output: batches 1 to 6 on kata-clh-cpu/v1, at 05:37:31 the line SWITCH kata-clh-cpu/v1 -> kata-clh-cpu/v2, batches 7 to 16 on kata-clh-cpu/v2, every batch ok 1, wrong_answer 2, pass 33%](../images/terminal/simulate-switch.png)
 
@@ -257,9 +251,9 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 
 **If it fails:** if `ops/simulate.sh` stops with `no routing table`, run `05_setup_namespaces_auth.sh` from step 5 again. If `ops/rollout.sh` stops at parity, v2 receives no traffic and v1 stays active (more in [06 Updating the sandbox during training](06_sandbox_update.md)). CPU pools measure with a lot of noise, so when the speedup of the correct submission swings far, parity can fail like `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365` (2026-11-20 run). If the verdicts (`status`) match, run the same command again.
 
-## Step 8 (optional): Compare the three runtimes (`ops/bench.sh`)
+## Step 8 (optional): Compare the three runtimes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU) (`ops/bench.sh`)
 
-Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool. `ops/bench.sh` skips pools with no v1 pod. If `--finish` in step 7 scaled `kata-clh-cpu` v1 to zero, that pool is missing from the results, so run it while all three v1 pools are Ready.
+Send the same correct code to the three pools from step 6 (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) and compare them. The three pools share one node, one CPU type and one kernel, so differences in the measurements are easy to read as runtime differences. Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool. `ops/bench.sh` skips pools with no v1 pod. If `--finish` in step 7 scaled `kata-clh-cpu` v1 to zero, that pool is missing from the results, so run it while all three v1 pools are Ready.
 
 ```bash
 scripts/ops/bench.sh 16
@@ -276,6 +270,10 @@ scripts/extensions/agent_sandbox.sh install
 scripts/extensions/agent_sandbox.sh pool kata-clh-cpu 1
 scripts/extensions/agent_sandbox.sh claim kata-clh-cpu
 ```
+
+As the last command in the screen below shows, `kubectl -n sandbox get sandboxwarmpool,sandbox` then lists a new sandbox (`...-qnwbh`) that the warm pool started in place of the claimed one (`...-6bdp7`), back to one waiting sandbox.
+
+![agent_sandbox.sh output: install creates the controller, four CRDs and the claim permissions, pool kata-clh-cpu 1 creates the SandboxTemplate and SandboxWarmPool, claim prints the address of sandbox kernel-eval-kata-clh-cpu-6bdp7 and deletes the claim, and the final kubectl get shows the warm pool READY 1 and a new sandbox kernel-eval-kata-clh-cpu-qnwbh True](../images/terminal/agent-sandbox-claim.png)
 
 The concept and the output are in [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
 

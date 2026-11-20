@@ -120,13 +120,9 @@ The stack's Outputs tab in the CloudFormation console and the Networking tab in 
 
 ![Networking tab of the EKS cluster: API server endpoint access Private](../images/console/eks-networking.png)
 
-*An actual deployment of scenario C in a practice account (2026-11-14, us-west-2). Account and resource identifiers are masked.*
-
 The control plane logs go to `/aws/eks/<CLUSTER_NAME>/cluster` in CloudWatch Logs with 30-day retention.
 
 ![CloudWatch log group /aws/eks/gpu-sandbox/cluster: retention 1 month, authenticator and audit log streams](../images/console/cloudwatch-log-group.png)
-
-*The same deployment; account and resource identifiers are masked.*
 
 **If it fails:**
 
@@ -152,8 +148,6 @@ kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 For scenario C you see two `system` nodes and one `sandbox-kata` node. In the practice deployment the EKS console showed 3 nodes, 2 node groups, 4 add-ons and 4 access entries (2 operators and 2 created by EKS). There is one operator entry per role or user listed in `ADMIN_PRINCIPAL_ARN`, so check that count on your own cluster.
 
 ![EKS cluster overview: Kubernetes 1.36, standard support until August 2, 2027, 3 nodes, 2 node groups, 4 add-ons, 4 access entries](../images/console/eks-cluster.png)
-
-*The same deployment; account and resource identifiers are masked.*
 
 Managed node groups passing this option through is undocumented behavior, so also check that nested virtualization is on for the c8i node (see "Scope and limits" below).
 

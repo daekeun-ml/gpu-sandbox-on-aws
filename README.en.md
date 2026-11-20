@@ -288,7 +288,7 @@ This extension lends each multi-turn episode one sandbox that is already running
 
 - Sandboxes are started ahead of time for each runtime profile (gvisor, kata-qemu, kata-clh-cpu and others) in a warm pool. An episode takes one when it starts and returns it when it ends (`EpisodeSandbox` in `src/gpusandbox/agent_sandbox.py`).
 - A sandbox accepts connections only from labeled trainer pods on port 8000 and blocks every outbound connection. Its DNS server is fixed to 127.0.0.1 so that the controller cannot add a public one.
-- Only unit tests against a fake API have run; it has not run on a cluster yet. Use with the Kata GPU runtime is also unverified.
+- Install, warm pool, claim and multi-turn episodes (`episodes`) ran on a scenario C cluster (`kata-clh-cpu`). Use with a GPU runtime is not verified on a cluster yet.
 - GPU sandboxes in a warm pool hold their GPU while idle, so they are billed the whole time.
 
 ```bash

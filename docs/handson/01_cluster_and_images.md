@@ -176,8 +176,6 @@ EKS 콘솔의 클러스터 Networking 탭에서는 API server endpoint access가
 
 ![EKS 클러스터 Networking 탭: API server endpoint access Private](../images/console/eks-networking.png)
 
-*실습 계정의 시나리오 C 배포 화면입니다(2026-11-14, us-west-2, 계정과 리소스 식별자는 가림).*
-
 **문제가 생기면:**
 
 - `Has the environment been bootstrapped?` 같은 bootstrap 오류는 준비 2의 4번으로 해결합니다.
@@ -207,7 +205,7 @@ cdk/tunnel.sh
 
 ![cdk/tunnel.sh 실행 화면: kubectl context gpu-sandbox-tunnel이 127.0.0.1:8443을 거쳐 클러스터 endpoint로 연결된다는 로그, 세션 시작, Port 8443 opened, Waiting for connections...](../images/terminal/tunnel.png)
 
-*실습 계정에서 실행한 화면입니다(2026-11-20, us-west-2). 세션 ID, 클러스터 주소, 인스턴스 ID는 가렸습니다. 이 상태에서 프롬프트로 돌아오지 않고 멈춰 있으면 정상입니다.*
+*프롬프트로 돌아오지 않고 이 상태로 멈춰 있으면 정상입니다.*
 
 첫 번째 터미널에서 노드를 확인합니다.
 
