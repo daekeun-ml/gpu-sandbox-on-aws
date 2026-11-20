@@ -28,7 +28,20 @@ HEADER = {
     "SCRIPTS.en.md": "This file is built from the guidebook's [Script reference]({site}reference/scripts/)"
                      " (`tools/sync_scripts_md.py`). To change it, edit `docs/reference/scripts.en.md`.",
 }
-LINK = re.compile(r"\]\(((?!https?://|#|mailto:)[^)\s]+)\)")
+LINK = re.compile(r"(?<!!)\[([^\]]*)\]\(((?!https?://|#|mailto:)[^)\s]+)\)")
+IMAGE = re.compile(r"!\[([^\]]*)\]\(((?!https?://)[^)\s]+)\)")
+
+
+def repo_image(target: str, lang: str) -> str:
+    """Guidebook image path (relative to docs/reference/) -> repository path GitHub can show.
+    The i18n plugin serves name.svg from name.ko.svg or name.en.svg; GitHub needs the real file."""
+    path = posixpath.normpath(posixpath.join("docs/reference", target))
+    if not (ROOT / path).exists():
+        stem, dot, ext = path.rpartition(".")
+        for candidate in (f"{stem}.{lang}.{ext}", f"{stem}.ko.{ext}"):
+            if (ROOT / candidate).exists():
+                return candidate
+    return path
 
 
 def site_url(target: str, prefix: str) -> str:
@@ -49,7 +62,9 @@ def convert(target: str) -> str:
     text = re.sub(r'^!!! info "TL;DR"\n((?:    .*\n?)+)',
                   lambda m: "> [!NOTE]\n> **TL;DR** " + " ".join(l.strip() for l in m.group(1).splitlines()) + "\n",
                   text, count=1, flags=re.M)
-    text = LINK.sub(lambda m: "](" + site_url(m.group(1), prefix) + ")", text)
+    lang = "en" if target.endswith(".en.md") else "ko"
+    text = IMAGE.sub(lambda m: f"![{m.group(1)}](" + repo_image(m.group(2), lang) + ")", text)
+    text = LINK.sub(lambda m: f"[{m.group(1)}](" + site_url(m.group(2), prefix) + ")", text)
     title, _, rest = text.partition("\n")
     note = HEADER[target].format(site=prefix)
     return f"{switch}\n\n{title}\n\n{note}\n{rest}"

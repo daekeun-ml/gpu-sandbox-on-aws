@@ -5,6 +5,10 @@
 
 실행 순서와 시나리오별 경로는 [00 핸즈온 전체 흐름](../handson/00_overview.md)에, 증상별 원인과 해결은 [문제 해결](troubleshooting.md)에 있습니다. kubectl이나 helm을 쓰는 스크립트는 두 번째 터미널에서 `cdk/tunnel.sh`를 열어 둔 상태로 실행하세요.
 
+![작업 PC, AWS 계정, 클러스터 안의 세 구역에 핸즈온 스크립트를 실행 순서대로 놓은 그림입니다. 작업 PC에서 01_check_prereqs.sh가 도구와 쿼터를 조회하고(만드는 것 없음), 02_create_cluster.sh가 AWS 계정에 CDK 스택(VPC, private EKS, 노드 그룹, access instance)을 배포합니다. 이어서 cdk/tunnel.sh가 SSM 포트 포워딩으로 작업 PC의 127.0.0.1:8443을 private EKS API에 연결하고, 이후 kubectl은 모두 이 터널을 거칩니다. 03_build_push_images.sh는 sandbox, trainer, control 이미지를 ECR에 push하고 config.env에 넣을 export 줄을 출력합니다. 클러스터 안에서는 04_install_gpu_stack.sh(NVIDIA device plugin, gvisor RuntimeClass, smoke pod), 05_setup_namespaces_auth.sh(네임스페이스, NetworkPolicy, JWKS, routing ConfigMap), 06_deploy_sandboxes.sh(샌드박스 풀: Deployment와 headless Service), ops/verify.sh(격리, 연결 차단, probe Job의 golden verdict 확인), 07_run_grpo.sh(시나리오 A의 GRPO 학습 Job) 순서로 진행합니다. 점선 상자는 선택 단계입니다. kata/cpu_nodes.sh와 kata/gpu_nodes.sh는 04와 05 사이에 Kata 런타임을 설치하고, 07 대신 시나리오 C는 ops/simulate.sh를, 시나리오 B는 hyperpod/run_grpo.sh를 실행합니다. ops/rollout.sh는 07(또는 그 대신 실행한 스크립트)이 실행 중일 때 v2 풀을 배포하고 routing을 전환합니다. 마지막으로 08_cleanup.sh가 CDK 스택을 지우며, 시나리오 B는 그 전에 hyperpod/delete.sh를 실행합니다.](../images/figures/reference-scripts.svg)
+
+*그림 요약: 번호 순서대로 실행하고, 02와 03 사이에 연 `cdk/tunnel.sh`는 끝날 때까지 열어 둡니다. 02는 AWS 계정에 CDK 스택을, 03은 ECR에 이미지를 만들고, 04부터 07까지는 클러스터 안에서 실행됩니다. 점선 상자는 시나리오에 따라 더하거나 바꾸는 단계예요. 실습을 마치면 `08_cleanup.sh`로 스택을 지웁니다.*
+
 ## 기본 순서
 
 ### `scripts/01_check_prereqs.sh`
