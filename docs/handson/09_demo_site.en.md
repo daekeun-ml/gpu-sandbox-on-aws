@@ -649,4 +649,4 @@ GPU node and cluster cleanup are in [99 Cleanup](99_cleanup.md).
     | S3 Block Public Access (including the definition of "public") | https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html |
     | cfn-lint | https://github.com/aws-cloudformation/cfn-lint |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-09-demo-site)
+    [Selected references on this topic](../reference/references.md#ref-handson-09-demo-site)

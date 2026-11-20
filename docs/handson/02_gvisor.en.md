@@ -290,4 +290,4 @@ To compare with Kata, continue with [03 Kata sandboxes (CLH, QEMU)](03_kata.md);
     | NVIDIA k8s-device-plugin | https://github.com/NVIDIA/k8s-device-plugin |
     | GPU stack and gVisor install script (04_install_gpu_stack.sh) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/04_install_gpu_stack.sh |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-02-gvisor)
+    [Selected references on this topic](../reference/references.md#ref-handson-02-gvisor)

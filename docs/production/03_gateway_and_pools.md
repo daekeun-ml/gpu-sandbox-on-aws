@@ -270,6 +270,6 @@ volumes:
     | trainer | [verl-project/verl](https://github.com/verl-project/verl), [huggingface/trl](https://github.com/huggingface/trl), [TRL 문서](https://huggingface.co/docs/trl) |
     | 코드 | [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py), [`client/pool.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/client/pool.py), [`gateway.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/gateway.yaml.tpl) |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-03-gateway-and-pools)
+    [관련 대표 자료](../reference/references.md#ref-production-03-gateway-and-pools)
 
 다음: [04 Reward 무결성](04_reward_integrity.md)

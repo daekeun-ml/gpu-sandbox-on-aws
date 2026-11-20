@@ -292,4 +292,4 @@ When you are done, scale the GPU node groups to zero or delete them as described
     | AWS China blog (Kata + CLH, OpenSandbox) | https://aws.amazon.com/cn/blogs/china/amazon-eks-build-security-ai-agent/ |
     | KernelBench (timing method) | https://github.com/ScalingIntelligence/KernelBench |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-08-benchmark)
+    [Selected references on this topic](../reference/references.md#ref-handson-08-benchmark)

@@ -173,4 +173,4 @@ The [multi-turn exercise](../handson/11_multi_turn.md) starts with a CPU pool. C
         | Amazon EKS NetworkPolicy (VPC CNI), policy agent | https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html , https://github.com/aws/aws-network-policy-agent |
         | veRL `ToolAgentLoop` (v0.9.1, create, execute and release for every tool call) | https://github.com/verl-project/verl/blob/v0.9.1/verl/experimental/agent_loop/tool_agent_loop.py |
 
-        All sources: [this page in All references](../reference/references.md#ref-concepts-06-agent-sandbox)
+        [Selected references on this topic](../reference/references.md#ref-concepts-06-agent-sandbox)

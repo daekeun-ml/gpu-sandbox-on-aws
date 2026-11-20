@@ -347,6 +347,6 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
     | KernelBench (`excessive_speedup_threshold`) | https://github.com/ScalingIntelligence/KernelBench |
     | KernelBench v0.1 blog (reward hacking cases) | https://scalingintelligence.stanford.edu/blogs/kernelbenchv01/ |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-06-sandbox-update)
+    [Selected references on this topic](../reference/references.md#ref-handson-06-sandbox-update)
 
 In production, trainers that score answers one at a time, such as veRL, cannot keep one version per batch, so the gateway pins the version per `group_key` ([Production 05 Sandbox versioning](../production/05_sandbox_updates.md)).

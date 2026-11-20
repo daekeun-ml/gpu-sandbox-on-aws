@@ -111,4 +111,4 @@ The runtime controls the execution boundary. Pool access and network controls al
         | Kata NVIDIA GPU passthrough (4.3.1), CLH GPU issue | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md , https://github.com/kata-containers/kata-containers/issues/11687 |
         | This asset's runtime settings | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml |
 
-        All sources: [this page in All references](../reference/references.md#ref-concepts-02-isolation-runtimes)
+        [Selected references on this topic](../reference/references.md#ref-concepts-02-isolation-runtimes)

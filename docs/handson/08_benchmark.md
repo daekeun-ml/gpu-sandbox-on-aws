@@ -292,4 +292,4 @@ scripts/ops/bench.sh
     | AWS China 블로그 (Kata + CLH, OpenSandbox) | https://aws.amazon.com/cn/blogs/china/amazon-eks-build-security-ai-agent/ |
     | KernelBench (timing 방식) | https://github.com/ScalingIntelligence/KernelBench |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-08-benchmark)
+    [관련 대표 자료](../reference/references.md#ref-handson-08-benchmark)

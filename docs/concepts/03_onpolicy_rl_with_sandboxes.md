@@ -135,7 +135,7 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
         | reward, gateway, veRL reward | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/rewards.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/reward_fn.py |
         | blue/green 스크립트, 버전 파일 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/rollout.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/versions/v2.env |
 
-        전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-concepts-03-onpolicy-rl-with-sandboxes)
+        [관련 대표 자료](../reference/references.md#ref-concepts-03-onpolicy-rl-with-sandboxes)
 
 ??? note "TRL과 veRL의 인프라 오류 처리 차이"
     | verdict 상태 | 책임 | TRL (`src/gpusandbox/rewards.py`) | veRL (`rl/verl/reward_fn.py`) |

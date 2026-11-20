@@ -248,4 +248,4 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
         | 가격 (EC2, SageMaker AI) | https://aws.amazon.com/ec2/pricing/on-demand/ , https://aws.amazon.com/sagemaker/ai/pricing/ |
         | 이 저장소의 HyperPod 템플릿과 점검 스크립트 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/cluster.json.tpl , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/trainer/hyperpod-job-grpo.yaml.tpl , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/check_gvisor.sh |
 
-        전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-concepts-04-platforms-and-instances)
+        [관련 대표 자료](../reference/references.md#ref-concepts-04-platforms-and-instances)

@@ -371,4 +371,4 @@ scripts/08_cleanup.sh
     | CDK 스택 (c8i 노드 그룹과 launch template) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py |
     | Kata Containers | https://github.com/kata-containers/kata-containers |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-10-cpu-only)
+    [관련 대표 자료](../reference/references.md#ref-handson-10-cpu-only)

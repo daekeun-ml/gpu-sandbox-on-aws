@@ -97,4 +97,4 @@ L4에서 측정하면서 샌드박스마다 별도 VM을 요구하는 경우, �
         | gVisor GPU 지원, GitHub | https://gvisor.dev/docs/user_guide/gpu/ , https://github.com/google/gvisor |
         | Kata NVIDIA GPU passthrough (4.3.1), GitHub | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md , https://github.com/kata-containers/kata-containers |
 
-        전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-concepts-05-decision-guide)
+        [관련 대표 자료](../reference/references.md#ref-concepts-05-decision-guide)

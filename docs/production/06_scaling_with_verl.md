@@ -359,4 +359,4 @@ Ray on HyperPod 문서는 port-forward 없이 인증된 브라우저 링크로 �
     | veRL 0.9.1 reward config | https://github.com/verl-project/verl/blob/v0.9.1/verl/trainer/config/reward/reward.yaml |
     | RayCluster 템플릿 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/raycluster-verl.yaml.tpl |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-06-scaling-with-verl)
+    [관련 대표 자료](../reference/references.md#ref-production-06-scaling-with-verl)

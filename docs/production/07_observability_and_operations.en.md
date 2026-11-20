@@ -298,6 +298,6 @@ kubectl -n sandbox-gateway get configmap sandbox-routing -o jsonpath='{.data.rou
     | Prometheus Python client | https://github.com/prometheus/client_python |
     | Sandbox server metrics | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-07-observability-and-operations)
+    [Selected references on this topic](../reference/references.md#ref-production-07-observability-and-operations)
 
 Related pages: [02 Security](02_security.md), [03 Gateway and pools](03_gateway_and_pools.md), [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md), [Troubleshooting](../reference/troubleshooting.md)

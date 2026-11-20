@@ -433,4 +433,4 @@ With training running, switch the sandbox from v1 to v2 in [06 Updating the sand
     | KernelBench (ModelNew contract) | https://github.com/ScalingIntelligence/KernelBench |
     | Amazon EC2 accelerated computing instances (A10G, T4) | https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-05-grpo-training)
+    [Selected references on this topic](../reference/references.md#ref-handson-05-grpo-training)

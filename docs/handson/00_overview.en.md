@@ -333,4 +333,4 @@ Run `01_check_prereqs.sh`, `02_create_cluster.sh` and `03_build_push_images.sh` 
     | Install the Session Manager plugin | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html |
     | This repository | https://github.com/daekeun-ml/gpu-sandbox-on-aws |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-00-overview)
+    [Selected references on this topic](../reference/references.md#ref-handson-00-overview)

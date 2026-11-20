@@ -207,6 +207,6 @@ veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니�
     | Karpenter | [Karpenter 문서](https://karpenter.sh/docs/), [aws/karpenter-provider-aws](https://github.com/aws/karpenter-provider-aws) |
     | 런타임 | [google/gvisor](https://github.com/google/gvisor), [kata-containers/kata-containers](https://github.com/kata-containers/kata-containers) |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-00-architecture)
+    [관련 대표 자료](../reference/references.md#ref-production-00-architecture)
 
 다음: [01 용량과 노드 관리](01_capacity_and_nodes.md)

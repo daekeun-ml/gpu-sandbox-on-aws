@@ -304,6 +304,6 @@ PASS read_host_file               status=policy_violation  speedup=None
     | EKS VPC CNI network policy (샌드박스 egress 차단) | https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html |
     | harness: 부모, 자식, 측정, 정책 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/evaluate.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/runner.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/timing.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/policy.py |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-04-reward-integrity)
+    [관련 대표 자료](../reference/references.md#ref-production-04-reward-integrity)
 
 다음: [05 샌드박스 버전 관리](05_sandbox_updates.md)

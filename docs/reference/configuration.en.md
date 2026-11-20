@@ -530,4 +530,4 @@ To use two local servers as two versions, write:
     | scripts/config.env.example | [scripts/config.env.example](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example) |
     | src/gpusandbox/auth.py | [src/gpusandbox/auth.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/auth.py) |
 
-    All sources: [this page in All references](references.md#ref-reference-configuration)
+    [Selected references on this topic](references.md#ref-reference-configuration)

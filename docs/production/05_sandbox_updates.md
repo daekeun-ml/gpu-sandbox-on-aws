@@ -302,4 +302,4 @@ GRPO advantage는 group 안에서 상대적으로 계산되므로, group 전체 
     | 롤아웃 스크립트 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/rollout.sh |
     | 버전 파일 v1, v2 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/k8s/sandbox/versions |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-05-sandbox-updates)
+    [관련 대표 자료](../reference/references.md#ref-production-05-sandbox-updates)

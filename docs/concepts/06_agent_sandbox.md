@@ -183,4 +183,4 @@
         | Amazon EKS NetworkPolicy (VPC CNI), policy agent | https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html , https://github.com/aws/aws-network-policy-agent |
         | veRL `ToolAgentLoop` (v0.9.1, tool 호출마다 create, execute, release) | https://github.com/verl-project/verl/blob/v0.9.1/verl/experimental/agent_loop/tool_agent_loop.py |
 
-        전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-concepts-06-agent-sandbox)
+        [관련 대표 자료](../reference/references.md#ref-concepts-06-agent-sandbox)

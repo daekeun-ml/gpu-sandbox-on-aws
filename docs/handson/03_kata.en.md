@@ -479,4 +479,4 @@ Deploy and verify the Kata pools (`kata-clh-cpu`, `kata-qemu-cpu`, `kata-qemu`) 
     | Kata Containers | https://github.com/kata-containers/kata-containers |
     | Kata 4.3.1 NVIDIA GPU passthrough (QEMU) | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-03-kata)
+    [Selected references on this topic](../reference/references.md#ref-handson-03-kata)

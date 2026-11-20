@@ -366,6 +366,6 @@ EC2 On-Demand quota는 인스턴스 수가 아니라 vCPU 기준입니다. 아�
     | nvproxy 드라이버 정책 | [gVisor GPU support](https://gvisor.dev/docs/user_guide/gpu/), [google/gvisor](https://github.com/google/gvisor) |
     | quota | [Amazon EC2 instance type quotas](https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-quotas.html) |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-01-capacity-and-nodes)
+    [관련 대표 자료](../reference/references.md#ref-production-01-capacity-and-nodes)
 
 다음: [02 보안](02_security.md)

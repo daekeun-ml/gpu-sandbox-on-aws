@@ -408,4 +408,4 @@ rm -rf /tmp/gpusandbox /tmp/grpo-dry-run
     | uv | https://github.com/astral-sh/uv |
     | GRPO trainer, 설정 예시 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/trl/train_grpo.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](reference/references.md#ref-getting-started)
+    [관련 대표 자료](reference/references.md#ref-getting-started)

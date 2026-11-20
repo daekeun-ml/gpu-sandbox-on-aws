@@ -530,4 +530,4 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
     | Session Manager plugin 설치 | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html |
     | CDK 스택 (stack.py) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-01-cluster-and-images)
+    [관련 대표 자료](../reference/references.md#ref-handson-01-cluster-and-images)

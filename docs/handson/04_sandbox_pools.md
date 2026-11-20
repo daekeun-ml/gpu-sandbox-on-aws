@@ -413,4 +413,4 @@ Kata 노드 그룹을 0으로 줄이는 방법은 [03 Kata 샌드박스](03_kata
     | 샌드박스 Deployment 템플릿 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/deployment.yaml.tpl |
     | 풀 검증 스크립트 (ops/verify.sh) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/verify.sh |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-04-sandbox-pools)
+    [관련 대표 자료](../reference/references.md#ref-handson-04-sandbox-pools)

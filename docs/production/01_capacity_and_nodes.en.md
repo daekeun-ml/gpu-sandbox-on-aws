@@ -366,6 +366,6 @@ EC2 On-Demand quotas count vCPUs, not instances. The defaults below come from th
     | nvproxy driver policy | [gVisor GPU support](https://gvisor.dev/docs/user_guide/gpu/), [google/gvisor](https://github.com/google/gvisor) |
     | Quotas | [Amazon EC2 instance type quotas](https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-quotas.html) |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-01-capacity-and-nodes)
+    [Selected references on this topic](../reference/references.md#ref-production-01-capacity-and-nodes)
 
 Next: [02 Security](02_security.md)

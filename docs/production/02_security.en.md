@@ -239,6 +239,6 @@ If it fails, see the sandbox pool and readiness table (step 2) and the NetworkPo
     | gVisor GPU security | [gVisor GPU support](https://gvisor.dev/docs/user_guide/gpu/), [google/gvisor](https://github.com/google/gvisor) |
     | Kata GPU passthrough | [NVIDIA GPU passthrough and Kata QEMU (4.3.1)](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md) |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-02-security)
+    [Selected references on this topic](../reference/references.md#ref-production-02-security)
 
 Next: [03 Gateway and pools](03_gateway_and_pools.md)

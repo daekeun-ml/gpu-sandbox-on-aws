@@ -483,4 +483,4 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
     | Kata Containers | https://github.com/kata-containers/kata-containers |
     | Kata 4.3.1 NVIDIA GPU passthrough (QEMU) | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-03-kata)
+    [관련 대표 자료](../reference/references.md#ref-handson-03-kata)

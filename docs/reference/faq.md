@@ -242,4 +242,4 @@
     | gVisor GPU 지원 (nvproxy, 보안 범위) | https://gvisor.dev/docs/user_guide/gpu/ , https://github.com/google/gvisor |
     | Kata 4.3.1 NVIDIA GPU passthrough, hypervisor 지원 표, issue #11687 | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md , https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md , https://github.com/kata-containers/kata-containers/issues/11687 |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](references.md#ref-reference-faq)
+    [관련 대표 자료](references.md#ref-reference-faq)

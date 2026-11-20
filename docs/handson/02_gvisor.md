@@ -295,4 +295,4 @@ Kata까지 비교하려면 [03 Kata 샌드박스 (CLH, QEMU)](03_kata.md)로, gV
     | NVIDIA k8s-device-plugin | https://github.com/NVIDIA/k8s-device-plugin |
     | GPU 스택과 gVisor 설치 스크립트 (04_install_gpu_stack.sh) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/04_install_gpu_stack.sh |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-02-gvisor)
+    [관련 대표 자료](../reference/references.md#ref-handson-02-gvisor)

@@ -433,4 +433,4 @@ EKS control plane, NAT gateway, EBS 요금은 별도입니다. `g4dn.metal` 노�
     | KernelBench (ModelNew 계약) | https://github.com/ScalingIntelligence/KernelBench |
     | Amazon EC2 가속 컴퓨팅 인스턴스 (A10G, T4) | https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-05-grpo-training)
+    [관련 대표 자료](../reference/references.md#ref-handson-05-grpo-training)

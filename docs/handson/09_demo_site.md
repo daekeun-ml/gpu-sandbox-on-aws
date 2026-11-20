@@ -649,4 +649,4 @@ GPU 노드와 클러스터 정리는 [99 정리](99_cleanup.md)에 있습니다.
     | S3 Block Public Access ("public" 정의 포함) | https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html |
     | cfn-lint | https://github.com/aws-cloudformation/cfn-lint |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-09-demo-site)
+    [관련 대표 자료](../reference/references.md#ref-handson-09-demo-site)

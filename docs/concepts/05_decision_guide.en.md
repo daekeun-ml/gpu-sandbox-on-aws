@@ -95,4 +95,4 @@ See [runtime comparison](02_isolation_runtimes.md) and [platform selection](04_p
         | gVisor GPU support, GitHub | https://gvisor.dev/docs/user_guide/gpu/ , https://github.com/google/gvisor |
         | Kata NVIDIA GPU passthrough (4.3.1), GitHub | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md , https://github.com/kata-containers/kata-containers |
 
-        All sources: [this page in All references](../reference/references.md#ref-concepts-05-decision-guide)
+        [Selected references on this topic](../reference/references.md#ref-concepts-05-decision-guide)

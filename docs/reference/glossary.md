@@ -320,6 +320,6 @@
     | Kata Containers 4.3.1 NVIDIA GPU passthrough | [Kata Containers 4.3.1 NVIDIA GPU passthrough](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md), [kata-containers/kata-containers](https://github.com/kata-containers/kata-containers) |
     | Karpenter 문서 | [Karpenter 문서](https://karpenter.sh/docs/), [aws/karpenter-provider-aws](https://github.com/aws/karpenter-provider-aws) |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](references.md#ref-reference-glossary)
+    [관련 대표 자료](references.md#ref-reference-glossary)
 
 전체 출처 목록은 [검증된 사실과 출처](sources.md)에 있습니다.

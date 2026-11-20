@@ -461,4 +461,4 @@ The warm pool and the Job run on the nodes created in [10](10_cpu_only.md), so u
     | Automatic cleanup of finished Jobs (`ttlSecondsAfterFinished`) | https://kubernetes.io/docs/concepts/workloads/controllers/ttlafterfinished/ |
     | EC2 nested virtualization | https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-11-multi-turn)
+    [Selected references on this topic](../reference/references.md#ref-handson-11-multi-turn)

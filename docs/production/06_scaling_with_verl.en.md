@@ -359,4 +359,4 @@ Related pages: [05 On-policy GRPO training](../handson/05_grpo_training.md), [07
     | veRL 0.9.1 reward config | https://github.com/verl-project/verl/blob/v0.9.1/verl/trainer/config/reward/reward.yaml |
     | RayCluster template | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/raycluster-verl.yaml.tpl |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-06-scaling-with-verl)
+    [Selected references on this topic](../reference/references.md#ref-production-06-scaling-with-verl)

@@ -528,4 +528,4 @@ Keep the tunnel running and continue on the page for your scenario.
     | Install the Session Manager plugin | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html |
     | CDK stack (stack.py) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-01-cluster-and-images)
+    [Selected references on this topic](../reference/references.md#ref-handson-01-cluster-and-images)

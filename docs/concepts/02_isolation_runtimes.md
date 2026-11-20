@@ -115,4 +115,4 @@ QEMU와 Cloud Hypervisor는 Kata가 VM을 시작할 때 쓰는 **hypervisor**입
         | Kata NVIDIA GPU passthrough (4.3.1), CLH GPU 이슈 | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md , https://github.com/kata-containers/kata-containers/issues/11687 |
         | 이 저장소의 런타임 설정 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml |
 
-        전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-concepts-02-isolation-runtimes)
+        [관련 대표 자료](../reference/references.md#ref-concepts-02-isolation-runtimes)

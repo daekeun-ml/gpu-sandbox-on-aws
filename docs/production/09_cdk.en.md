@@ -263,4 +263,4 @@ After one deploy and delete with scenario C, deploy scenario A the same way. For
     | Start a Session Manager session (port forwarding) | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-sessions-start.html |
     | This repository's CDK app | https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/cdk |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-09-cdk)
+    [Selected references on this topic](../reference/references.md#ref-production-09-cdk)

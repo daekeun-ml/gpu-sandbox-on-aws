@@ -333,4 +333,4 @@ kubectl이나 helm을 쓰는 단계(`04_install_gpu_stack.sh` 이후, HyperPod �
     | Session Manager plugin 설치 | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html |
     | 이 저장소 | https://github.com/daekeun-ml/gpu-sandbox-on-aws |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-00-overview)
+    [관련 대표 자료](../reference/references.md#ref-handson-00-overview)

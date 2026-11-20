@@ -320,6 +320,6 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
     | Kata Containers 4.3.1 NVIDIA GPU passthrough | [Kata Containers 4.3.1 NVIDIA GPU passthrough](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md), [kata-containers/kata-containers](https://github.com/kata-containers/kata-containers) |
     | Karpenter documentation | [Karpenter documentation](https://karpenter.sh/docs/), [aws/karpenter-provider-aws](https://github.com/aws/karpenter-provider-aws) |
 
-    All sources: [this page in All references](references.md#ref-reference-glossary)
+    [Selected references on this topic](references.md#ref-reference-glossary)
 
 The full list of sources is in [Verified facts and sources](sources.md).

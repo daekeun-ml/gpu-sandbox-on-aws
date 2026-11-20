@@ -242,4 +242,4 @@ When you finish the hands-on, run [99 Cleanup](../handson/99_cleanup.md) (for sc
     | Karpenter (AWS provider) | https://github.com/aws/karpenter-provider-aws |
     | Cleanup script | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/08_cleanup.sh |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-08-cost)
+    [Selected references on this topic](../reference/references.md#ref-production-08-cost)

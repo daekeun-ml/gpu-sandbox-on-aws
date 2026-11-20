@@ -244,4 +244,4 @@ HyperPod can recover a faulty node and the training operator can restart a Job. 
         | Pricing (EC2, SageMaker AI) | https://aws.amazon.com/ec2/pricing/on-demand/ , https://aws.amazon.com/sagemaker/ai/pricing/ |
         | This asset's HyperPod template and check script | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/hyperpod/cluster.json.tpl , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/trainer/hyperpod-job-grpo.yaml.tpl , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/hyperpod/check_gvisor.sh |
 
-        All sources: [this page in All references](../reference/references.md#ref-concepts-04-platforms-and-instances)
+        [Selected references on this topic](../reference/references.md#ref-concepts-04-platforms-and-instances)

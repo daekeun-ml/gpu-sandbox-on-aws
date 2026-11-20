@@ -371,4 +371,4 @@ These are **estimates** from On-Demand list prices, not measured bills (us-east-
     | CDK stack (c8i node group and launch template) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py |
     | Kata Containers | https://github.com/kata-containers/kata-containers |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-10-cpu-only)
+    [Selected references on this topic](../reference/references.md#ref-handson-10-cpu-only)

@@ -304,6 +304,6 @@ Related pages: [02 Security](02_security.md), [03 Gateway and pools](03_gateway_
     | EKS VPC CNI network policy (sandbox egress denial) | https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html |
     | Harness: parent, child, timing, policy | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/evaluate.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/runner.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/timing.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/policy.py |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-04-reward-integrity)
+    [Selected references on this topic](../reference/references.md#ref-production-04-reward-integrity)
 
 Next: [05 Sandbox versioning](05_sandbox_updates.md)

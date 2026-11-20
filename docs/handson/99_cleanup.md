@@ -352,4 +352,4 @@ aws ec2 deregister-image --region "$AWS_REGION" --image-id <ami-id> --delete-ass
     | HyperPod DeleteCluster API | https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DeleteCluster.html |
     | Agent Sandbox 저장소 (SandboxClaim, SandboxWarmPool, SandboxTemplate) | https://github.com/kubernetes-sigs/agent-sandbox |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-99-cleanup)
+    [관련 대표 자료](../reference/references.md#ref-handson-99-cleanup)

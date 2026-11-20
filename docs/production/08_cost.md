@@ -242,4 +242,4 @@ aws ec2 describe-instances --region "${AWS_REGION}" \
     | Karpenter (AWS provider) | https://github.com/aws/karpenter-provider-aws |
     | 정리 스크립트 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/08_cleanup.sh |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-08-cost)
+    [관련 대표 자료](../reference/references.md#ref-production-08-cost)

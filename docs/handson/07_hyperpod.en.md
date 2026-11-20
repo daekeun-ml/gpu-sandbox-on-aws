@@ -657,4 +657,4 @@ scripts/08_cleanup.sh        # EKS cluster and the rest
     | CreateCluster API (NodeRecovery, Orchestrator) | https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateCluster.html |
     | HyperPod CLI and dependency Helm chart | https://github.com/aws/sagemaker-hyperpod-cli |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-07-hyperpod)
+    [Selected references on this topic](../reference/references.md#ref-handson-07-hyperpod)

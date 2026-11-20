@@ -270,6 +270,6 @@ Change the trainer container's `env` and the pod's `volumes` in `k8s/trainer/job
     | Trainers | [verl-project/verl](https://github.com/verl-project/verl), [huggingface/trl](https://github.com/huggingface/trl), [TRL docs](https://huggingface.co/docs/trl) |
     | Code | [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py), [`client/pool.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/client/pool.py), [`gateway.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/gateway.yaml.tpl) |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-03-gateway-and-pools)
+    [Selected references on this topic](../reference/references.md#ref-production-03-gateway-and-pools)
 
 Next: [04 Reward integrity](04_reward_integrity.md)

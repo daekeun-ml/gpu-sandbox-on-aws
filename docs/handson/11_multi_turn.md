@@ -461,4 +461,4 @@ warm pool과 Job은 [10](10_cpu_only.md)에서 만든 노드에서 실행되므�
     | 완료된 Job의 자동 삭제 (`ttlSecondsAfterFinished`) | https://kubernetes.io/docs/concepts/workloads/controllers/ttlafterfinished/ |
     | EC2 nested virtualization | https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-11-multi-turn)
+    [관련 대표 자료](../reference/references.md#ref-handson-11-multi-turn)

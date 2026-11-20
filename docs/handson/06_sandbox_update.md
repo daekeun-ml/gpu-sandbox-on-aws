@@ -347,6 +347,6 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
     | KernelBench (`excessive_speedup_threshold`) | https://github.com/ScalingIntelligence/KernelBench |
     | KernelBench v0.1 블로그 (reward hacking 사례) | https://scalingintelligence.stanford.edu/blogs/kernelbenchv01/ |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-handson-06-sandbox-update)
+    [관련 대표 자료](../reference/references.md#ref-handson-06-sandbox-update)
 
 운영 환경에서 veRL처럼 completion을 하나씩 채점하는 trainer는 batch 단위로 버전을 맞출 수 없어서, gateway가 `group_key` 단위로 버전을 고정합니다([Production 05 샌드박스 버전 관리](../production/05_sandbox_updates.md)).

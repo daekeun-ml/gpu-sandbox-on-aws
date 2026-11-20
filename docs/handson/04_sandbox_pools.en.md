@@ -411,4 +411,4 @@ Start training with the verified pool as the reward in [05 On-policy GRPO traini
     | Sandbox Deployment template | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/deployment.yaml.tpl |
     | Pool verification script (ops/verify.sh) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/verify.sh |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-04-sandbox-pools)
+    [Selected references on this topic](../reference/references.md#ref-handson-04-sandbox-pools)

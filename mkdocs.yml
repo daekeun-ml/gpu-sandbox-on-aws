@@ -110,7 +110,7 @@ plugins:
             문제 해결: Troubleshooting
             자주 하는 오해: Misconceptions
             검증된 사실과 출처: Verified facts and sources
-            참고 자료 모음: All references
+            참고 자료 모음: Selected references
 
 markdown_extensions:
   - admonition

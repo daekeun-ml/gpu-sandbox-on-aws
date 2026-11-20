@@ -90,4 +90,4 @@ See [runtime isolation](02_isolation_runtimes.md) for the GPU paths and [on-poli
         | Tasks, prompts, reward code | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/tasks/__init__.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/prompts.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/rewards.py |
         | Harness timing, policy | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/timing.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/policy.py |
 
-        All sources: [this page in All references](../reference/references.md#ref-concepts-01-why-gpu-sandbox)
+        [Selected references on this topic](../reference/references.md#ref-concepts-01-why-gpu-sandbox)

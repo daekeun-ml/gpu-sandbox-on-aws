@@ -530,4 +530,4 @@ Deployment 템플릿이 모든 풀에 넣는 고정 값도 있습니다.
     | scripts/config.env.example | [scripts/config.env.example](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example) |
     | src/gpusandbox/auth.py | [src/gpusandbox/auth.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/auth.py) |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](references.md#ref-reference-configuration)
+    [관련 대표 자료](references.md#ref-reference-configuration)

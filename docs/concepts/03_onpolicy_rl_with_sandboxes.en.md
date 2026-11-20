@@ -131,7 +131,7 @@ The TRL exercise records a grading failure as `sandbox_error` and excludes that 
         | Rewards, gateway, veRL reward | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/rewards.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/reward_fn.py |
         | Blue/green script, version file | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/rollout.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/versions/v2.env |
 
-        All sources: [this page in All references](../reference/references.md#ref-concepts-03-onpolicy-rl-with-sandboxes)
+        [Selected references on this topic](../reference/references.md#ref-concepts-03-onpolicy-rl-with-sandboxes)
 
 ??? note "Do not turn infrastructure errors into wrong answers"
     | Verdict status | Responsible | TRL (`src/gpusandbox/rewards.py`) | veRL (`rl/verl/reward_fn.py`) |

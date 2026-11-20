@@ -239,6 +239,6 @@ PASS read_host_file               status=policy_violation  speedup=<값>
     | gVisor GPU 보안 | [gVisor GPU support](https://gvisor.dev/docs/user_guide/gpu/), [google/gvisor](https://github.com/google/gvisor) |
     | Kata GPU passthrough | [NVIDIA GPU passthrough and Kata QEMU (4.3.1)](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md) |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-02-security)
+    [관련 대표 자료](../reference/references.md#ref-production-02-security)
 
 다음: [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)

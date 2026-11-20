@@ -352,4 +352,4 @@ If a resource you chose to delete does not match the expected state in the table
     | HyperPod DeleteCluster API | https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DeleteCluster.html |
     | Agent Sandbox repository (SandboxClaim, SandboxWarmPool, SandboxTemplate) | https://github.com/kubernetes-sigs/agent-sandbox |
 
-    All sources: [this page in All references](../reference/references.md#ref-handson-99-cleanup)
+    [Selected references on this topic](../reference/references.md#ref-handson-99-cleanup)

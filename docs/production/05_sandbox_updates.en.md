@@ -302,4 +302,4 @@ Related pages: [03 Gateway and pools](03_gateway_and_pools.md), [04 Reward integ
     | Rollout script | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/rollout.sh |
     | Version files v1, v2 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/k8s/sandbox/versions |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-05-sandbox-updates)
+    [Selected references on this topic](../reference/references.md#ref-production-05-sandbox-updates)

@@ -207,6 +207,6 @@ If a step fails, look the symptom up in [Troubleshooting](../reference/troublesh
     | Karpenter | [Karpenter documentation](https://karpenter.sh/docs/), [aws/karpenter-provider-aws](https://github.com/aws/karpenter-provider-aws) |
     | Runtimes | [google/gvisor](https://github.com/google/gvisor), [kata-containers/kata-containers](https://github.com/kata-containers/kata-containers) |
 
-    All sources: [this page in All references](../reference/references.md#ref-production-00-architecture)
+    [Selected references on this topic](../reference/references.md#ref-production-00-architecture)
 
 Next: [01 Capacity and nodes](01_capacity_and_nodes.md)

@@ -263,4 +263,4 @@ cdk/destroy.sh
     | Session Manager 세션 시작 (포트 포워딩) | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-sessions-start.html |
     | 이 저장소의 CDK 앱 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/cdk |
 
-    전체 출처: [참고 자료 모음의 이 페이지 절](../reference/references.md#ref-production-09-cdk)
+    [관련 대표 자료](../reference/references.md#ref-production-09-cdk)

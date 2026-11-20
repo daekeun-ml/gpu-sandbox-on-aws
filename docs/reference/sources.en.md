@@ -5,7 +5,7 @@
 
 - [AWS run record](#aws-run-record) lists the runs performed for this repository.
 - [Predeployment checks](#re-verify-checklist-before-deploying) cover prices, quotas, and driver compatibility.
-- [All references](references.md) lists the original sources.
+- [Selected references](references.md) lists the original sources.
 
 ## Reading the evidence levels
 
