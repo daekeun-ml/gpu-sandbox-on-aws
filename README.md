@@ -8,7 +8,7 @@
 
 처음이라면 [학습 코스 고르기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/learning_paths/)에서 목적과 예산에 맞는 코스를 고르세요(무료인 읽기, 로컬 실행 코스가 먼저).
 
-**바로 가기:** [아키텍처](#아키텍처) | [시나리오와 런타임](#시나리오와-런타임) | [시작하기](#시작하기) | [가이드북의 주요 페이지](#가이드북의-주요-페이지)
+**바로 가기:** [아키텍처](#아키텍처) | [시나리오와 런타임](#시나리오와-런타임) | [시작하기](#시작하기) | [가이드북의 주요 페이지](#가이드북의-주요-페이지) | [문제 해결](TROUBLESHOOTING.md)
 
 ## 아키텍처
 
@@ -231,7 +231,7 @@ scripts/08_cleanup.sh
 | `scripts/extensions/` | Agent Sandbox 확장 |
 | `cdk/` | 인프라(VPC, EKS, 노드 그룹)를 만드는 CDK 앱과 터널 |
 
-막히면 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)을 보세요.
+막히면 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)에서 단계별로 자주 생기는 문제를 확인하세요. 전체 목록은 가이드북의 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)에 있습니다.
 
 ## 가이드북의 주요 페이지
 

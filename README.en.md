@@ -8,7 +8,7 @@
 
 If you are new, pick a path that fits your goal and budget in [Choose a learning path](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/learning_paths/) (the free reading and local run paths come first).
 
-**Jump to:** [Architecture](#architecture) | [Scenarios and runtimes](#scenarios-and-runtimes) | [Getting started](#getting-started) | [Key pages of the guidebook](#key-pages-of-the-guidebook)
+**Jump to:** [Architecture](#architecture) | [Scenarios and runtimes](#scenarios-and-runtimes) | [Getting started](#getting-started) | [Key pages of the guidebook](#key-pages-of-the-guidebook) | [Troubleshooting](TROUBLESHOOTING.en.md)
 
 ## Architecture
 
@@ -231,7 +231,7 @@ scripts/08_cleanup.sh
 | `scripts/extensions/` | Agent Sandbox extension |
 | `cdk/` | The CDK app that creates the infrastructure (VPC, EKS, node groups) and the tunnel |
 
-If something fails, see [Troubleshooting](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/).
+If something fails, check [TROUBLESHOOTING.en.md](TROUBLESHOOTING.en.md) for common problems per step. The full list is in the guidebook's [Troubleshooting](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/).
 
 ## Key pages of the guidebook
 
