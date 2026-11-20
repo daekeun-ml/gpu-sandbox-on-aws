@@ -71,51 +71,55 @@ scripts/kata/cpu_nodes.sh    # kata-deploy, the gvisor-cpu RuntimeClass, smoke p
 
 이 노드 그룹의 EC2 launch template은 CDK 스택(`cdk/gpusandbox_cdk/stack.py`)이 만들고, user data는 `infra/eks/userdata.py`의 `nested_cpu_node`가 만듭니다. CPU 옵션은 CloudFormation launch template 리소스에 그대로 들어갑니다.
 
-| 항목 | 값 | 이유 |
-|---|---|---|
-| `CpuOptions` | `CoreCount` 4, `ThreadsPerCore` 2(`c8i.2xlarge`), `NestedVirtualization: enabled` | 가상 인스턴스 안에 `/dev/kvm`을 만듦 |
-| `MetadataOptions` | `HttpTokens: required`, `HttpPutResponseHopLimit: 1` | IMDSv2만 허용, pod가 노드 자격 증명을 읽지 못하게 |
-| `BlockDeviceMappings` | `/dev/xvda` 100 GB gp3, 암호화 | 이미지와 VM 자산 |
-| `UserData` (MIME multipart) | NodeConfig(containerd `imports`와 gVisor `runsc` handler), `/etc/containerd/conf.d` 생성, 고정 버전 gVisor 설치(nvproxy 없음), node guard | 아래 설명 |
-| `ImageId` | 지정하지 않음 | EKS가 EKS 최적화 AMI(`AL2023_x86_64_STANDARD`)를 선택하고 자체 bootstrap user data를 병합 |
-| 노드 그룹 | desired 1, min 0, max 2, label `gpusandbox/role=sandbox-kata`와 `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | Kata 샌드박스 전용. smoke pod와 CPU 풀은 `gpusandbox/kata-gpu=false`로 이 노드를 선택함 |
+??? note "상세 설명"
+    | 항목 | 값 | 이유 |
+    |---|---|---|
+    | `CpuOptions` | `CoreCount` 4, `ThreadsPerCore` 2(`c8i.2xlarge`), `NestedVirtualization: enabled` | 가상 인스턴스 안에 `/dev/kvm`을 만듦 |
+    | `MetadataOptions` | `HttpTokens: required`, `HttpPutResponseHopLimit: 1` | IMDSv2만 허용, pod가 노드 자격 증명을 읽지 못하게 |
+    | `BlockDeviceMappings` | `/dev/xvda` 100 GB gp3, 암호화 | 이미지와 VM 자산 |
+    | `UserData` (MIME multipart) | NodeConfig(containerd `imports`와 gVisor `runsc` handler), `/etc/containerd/conf.d` 생성, 고정 버전 gVisor 설치(nvproxy 없음), node guard | 아래 설명 |
+    | `ImageId` | 지정하지 않음 | EKS가 EKS 최적화 AMI(`AL2023_x86_64_STANDARD`)를 선택하고 자체 bootstrap user data를 병합 |
+    | 노드 그룹 | desired 1, min 0, max 2, label `gpusandbox/role=sandbox-kata`와 `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | Kata 샌드박스 전용. smoke pod와 CPU 풀은 `gpusandbox/kata-gpu=false`로 이 노드를 선택함 |
 
-- **`CpuOptions`의 코어 수와 스레드 수**: API가 다른 CPU 옵션과 함께 코어 수와 스레드 수를 요구합니다. 값은 `cdk/gpusandbox_cdk/config.py`의 표에서 읽습니다.
-- **`UserData`의 gVisor**: 같은 노드에서 세 런타임을 비교하려고 함께 설치합니다([10 c8i 단독 저비용 경로](10_cpu_only.md)).
+    - **`CpuOptions`의 코어 수와 스레드 수**: API가 다른 CPU 옵션과 함께 코어 수와 스레드 수를 요구합니다. 값은 `cdk/gpusandbox_cdk/config.py`의 표에서 읽습니다.
+    - **`UserData`의 gVisor**: 같은 노드에서 세 런타임을 비교하려고 함께 설치합니다([10 c8i 단독 저비용 경로](10_cpu_only.md)).
 
-관리형 노드 그룹이 launch template의 `NestedVirtualization`을 노드에 전달하는지는 EKS 문서에 나와 있지 않습니다. 실습 계정(2026-11-14)에서는 전달됐지만(노드에 `/dev/kvm` 있음) 동작이 바뀔 수 있으니, 처음 배포한 뒤 확인하세요. 아래 명령은 현재 kubectl context(터널)의 Kata CPU 노드에서 인스턴스 ID를 읽으므로, 같은 리전에 이 저장소로 만든 다른 클러스터가 있어도 그 노드를 읽지 않습니다.
+    관리형 노드 그룹이 launch template의 `NestedVirtualization`을 노드에 전달하는지는 EKS 문서에 나와 있지 않습니다. 실습 계정(2026-11-14)에서는 전달됐지만(노드에 `/dev/kvm` 있음) 동작이 바뀔 수 있으니, 처음 배포한 뒤 확인하세요. 아래 명령은 현재 kubectl context(터널)의 Kata CPU 노드에서 인스턴스 ID를 읽으므로, 같은 리전에 이 저장소로 만든 다른 클러스터가 있어도 그 노드를 읽지 않습니다.
 
-```bash
-provider_id="$(kubectl get nodes -l gpusandbox/kata-gpu=false -o jsonpath='{.items[0].spec.providerID}')"
-aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "${provider_id##*/}" \
-  --query 'Reservations[].Instances[].CpuOptions'
-```
+    ```bash
+    provider_id="$(kubectl get nodes -l gpusandbox/kata-gpu=false -o jsonpath='{.items[0].spec.providerID}')"
+    aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "${provider_id##*/}" \
+      --query 'Reservations[].Instances[].CpuOptions'
+    ```
 
-**확인할 것:** 결과에 `"NestedVirtualization": "enabled"`가 있어야 합니다. 없으면 Kata smoke pod가 KVM을 열지 못해 실패합니다.
+    **확인할 것:** 결과에 `"NestedVirtualization": "enabled"`가 있어야 합니다. 없으면 Kata smoke pod가 KVM을 열지 못해 실패합니다.
 
-user data의 NodeConfig는 containerd 설정에 `imports = ["/etc/containerd/conf.d/*.toml"]`을 추가합니다. 그래서 nodeadm이 부팅할 때마다 `config.toml`을 다시 작성해도 containerd가 drop-in 디렉터리의 runtime handler 설정을 다시 읽습니다. 이 동작은 문서로 확인한 것이 아니라 추론이므로, 노드를 재부팅한 뒤 Kata RuntimeClass로 pod가 실행되는지 확인해 보세요.
+    user data의 NodeConfig는 containerd 설정에 `imports = ["/etc/containerd/conf.d/*.toml"]`을 추가합니다. 그래서 nodeadm이 부팅할 때마다 `config.toml`을 다시 작성해도 containerd가 drop-in 디렉터리의 runtime handler 설정을 다시 읽습니다. 이 동작은 문서로 확인한 것이 아니라 추론이므로, 노드를 재부팅한 뒤 Kata RuntimeClass로 pod가 실행되는지 확인해 보세요.
 
 ### kata-deploy 4.3.1 (DaemonSet 모드)
 
-`kata/cpu_nodes.sh`가 내부에서 실행하는 명령이며(직접 실행할 필요 없음), `kata/gpu_nodes.sh`도 같은 차트를 `upgrade --install`합니다.
+`kata-deploy`는 대상 노드에 Kata 런타임을 설치합니다. 설치가 끝나면 아래 smoke pod로 VM 부팅을 확인합니다.
 
-```bash
-helm upgrade --install kata-deploy oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy \
-  --version "${KATA_VERSION}" --namespace kube-system \
-  -f "${REPO_ROOT}/infra/kata/kata-deploy-values.yaml" --wait --timeout 20m
-```
+??? note "상세 설명"
+    `kata/cpu_nodes.sh`가 내부에서 실행하는 명령이며(직접 실행할 필요 없음), `kata/gpu_nodes.sh`도 같은 차트를 `upgrade --install`합니다.
 
-| 설정 (`infra/kata/kata-deploy-values.yaml`) | 값 | 이유 |
-|---|---|---|
-| `deploymentMode` | `daemonset` | 차트 기본값 `job`은 설치 시점의 노드에만 설치. 이 노드 그룹들은 0에서 늘어나므로 나중에 추가되는 노드에도 설치되는 DaemonSet 사용 |
-| `nodeSelector`, `tolerations` | `gpusandbox/role: sandbox-kata` | Kata 노드(CPU, GPU)에만 설치 |
-| `shims.disableAll` | `true` | 사용할 shim만 활성화 |
-| 활성화하는 shim | `qemu`, `clh`, `qemu-nvidia-gpu` (amd64) | 위 RuntimeClass 표 |
-| `allowedHypervisorAnnotations` | `[]` | pod annotation으로 하이퍼바이저 설정을 바꾸지 못하게 비움 |
-| `qemu-nvidia-gpu.runtimeClass.nodeSelector` | `nvidia.com/cc.ready.state: "false"` | GPU Operator의 cc-manager가 confidential computing이 비활성화된 노드에 붙이는 label. T4에는 CC가 없음 |
-| `qemu-nvidia-gpu.nvrc.enableDCGM` | `false` | NVIDIA guest 스택(NVRC)의 DCGM 기능을 비활성화 |
-| `defaultShim.amd64` | `qemu` | 기본 shim |
-| `runtimeClasses` | `enabled: true`, `createDefault: false`, `overheadEnabled: true` | RuntimeClass를 만들고, VM 자체 메모리와 CPU를 scheduler가 계산하도록 overhead 유지 |
+    ```bash
+    helm upgrade --install kata-deploy oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy \
+      --version "${KATA_VERSION}" --namespace kube-system \
+      -f "${REPO_ROOT}/infra/kata/kata-deploy-values.yaml" --wait --timeout 20m
+    ```
+
+    | 설정 (`infra/kata/kata-deploy-values.yaml`) | 값 | 이유 |
+    |---|---|---|
+    | `deploymentMode` | `daemonset` | 차트 기본값 `job`은 설치 시점의 노드에만 설치. 이 노드 그룹들은 0에서 늘어나므로 나중에 추가되는 노드에도 설치되는 DaemonSet 사용 |
+    | `nodeSelector`, `tolerations` | `gpusandbox/role: sandbox-kata` | Kata 노드(CPU, GPU)에만 설치 |
+    | `shims.disableAll` | `true` | 사용할 shim만 활성화 |
+    | 활성화하는 shim | `qemu`, `clh`, `qemu-nvidia-gpu` (amd64) | 위 RuntimeClass 표 |
+    | `allowedHypervisorAnnotations` | `[]` | pod annotation으로 하이퍼바이저 설정을 바꾸지 못하게 비움 |
+    | `qemu-nvidia-gpu.runtimeClass.nodeSelector` | `nvidia.com/cc.ready.state: "false"` | GPU Operator의 cc-manager가 confidential computing이 비활성화된 노드에 붙이는 label. T4에는 CC가 없음 |
+    | `qemu-nvidia-gpu.nvrc.enableDCGM` | `false` | NVIDIA guest 스택(NVRC)의 DCGM 기능을 비활성화 |
+    | `defaultShim.amd64` | `qemu` | 기본 shim |
+    | `runtimeClasses` | `enabled: true`, `createDefault: false`, `overheadEnabled: true` | RuntimeClass를 만들고, VM 자체 메모리와 CPU를 scheduler가 계산하도록 overhead 유지 |
 
 ### smoke pod: gvisor-cpu, kata-clh, kata-qemu
 
@@ -215,83 +219,88 @@ flowchart LR
 
 ### sandbox-kata-gpu 노드 그룹
 
-| 항목 | 값 | 이유 |
-|---|---|---|
-| 인스턴스 | `${KATA_GPU_INSTANCE_TYPE}` (`g4dn.metal`, T4 x8, 96 vCPU, 384 GiB) | NVIDIA GPU가 있는 x86 bare metal은 이 타입뿐 |
-| AMI | `AmiType: CUSTOM`, launch template의 `ImageId`에 `${KATA_IOMMU_AMI_ID}` | 위에서 빌드한 IOMMU AMI |
-| 크기 | desired 1, min 0, max 1, 200 GB | 한 대로 충분 |
-| IMDS | launch template에서 IMDSv2와 hop limit 1 | 모든 노드와 같은 설정. pod가 노드 자격 증명을 읽지 못하게 |
-| label | `gpusandbox/role=sandbox-kata`, `gpusandbox/kata-gpu=true`, `nvidia.com/gpu.workload.config=vm-passthrough` | GPU Operator가 이 노드의 GPU를 vfio-pci에 바인딩 |
-| taint | `gpusandbox/role=sandbox-kata:NoSchedule` | Kata 샌드박스 전용 |
-| NodeConfig | `cluster`(이름, API endpoint, 인증서, service CIDR `172.20.0.0/16`), containerd `imports = ["/etc/containerd/conf.d/*.toml"]`, kubelet `runtimeRequestTimeout: 20m` | 클러스터 정보를 직접 적음 (아래 목록) |
-| user data 셸 부분 | `/etc/containerd/conf.d` 생성, `node-guard.sh` | node guard는 [01](01_cluster_and_images.md) 참고 |
+??? note "상세 설명"
+    | 항목 | 값 | 이유 |
+    |---|---|---|
+    | 인스턴스 | `${KATA_GPU_INSTANCE_TYPE}` (`g4dn.metal`, T4 x8, 96 vCPU, 384 GiB) | NVIDIA GPU가 있는 x86 bare metal은 이 타입뿐 |
+    | AMI | `AmiType: CUSTOM`, launch template의 `ImageId`에 `${KATA_IOMMU_AMI_ID}` | 위에서 빌드한 IOMMU AMI |
+    | 크기 | desired 1, min 0, max 1, 200 GB | 한 대로 충분 |
+    | IMDS | launch template에서 IMDSv2와 hop limit 1 | 모든 노드와 같은 설정. pod가 노드 자격 증명을 읽지 못하게 |
+    | label | `gpusandbox/role=sandbox-kata`, `gpusandbox/kata-gpu=true`, `nvidia.com/gpu.workload.config=vm-passthrough` | GPU Operator가 이 노드의 GPU를 vfio-pci에 바인딩 |
+    | taint | `gpusandbox/role=sandbox-kata:NoSchedule` | Kata 샌드박스 전용 |
+    | NodeConfig | `cluster`(이름, API endpoint, 인증서, service CIDR `172.20.0.0/16`), containerd `imports = ["/etc/containerd/conf.d/*.toml"]`, kubelet `runtimeRequestTimeout: 20m` | 클러스터 정보를 직접 적음 (아래 목록) |
+    | user data 셸 부분 | `/etc/containerd/conf.d` 생성, `node-guard.sh` | node guard는 [01](01_cluster_and_images.md) 참고 |
 
-- **NodeConfig의 `cluster`**: launch template에 AMI를 지정하면 EKS가 bootstrap을 병합하지 않으므로 클러스터 정보를 직접 적습니다.
-- **NodeConfig의 containerd `imports`**: kata-deploy drop-in을 유지합니다.
-- **NodeConfig의 kubelet `runtimeRequestTimeout`**: VFIO가 guest 메모리를 pin하는 동안 기다립니다.
+    - **NodeConfig의 `cluster`**: launch template에 AMI를 지정하면 EKS가 bootstrap을 병합하지 않으므로 클러스터 정보를 직접 적습니다.
+    - **NodeConfig의 containerd `imports`**: kata-deploy drop-in을 유지합니다.
+    - **NodeConfig의 kubelet `runtimeRequestTimeout`**: VFIO가 guest 메모리를 pin하는 동안 기다립니다.
 
 ### GPU Operator v26.7.2 (sandbox 모드)
 
-`kata/gpu_nodes.sh`가 내부에서 실행하는 명령입니다(직접 실행할 필요 없음).
+GPU Operator는 VM에 넘길 GPU를 `nvidia.com/pgpu`로 등록합니다. 아래 결과 확인에서 이 수량을 확인하세요.
 
-```bash
-helm upgrade --install gpu-operator nvidia/gpu-operator --version "${GPU_OPERATOR_VERSION}" \
-  --namespace gpu-operator --create-namespace \
-  -f "${REPO_ROOT}/infra/kata/gpu-operator-values.yaml" --wait --timeout 20m
-```
+??? note "상세 설명"
+    `kata/gpu_nodes.sh`가 내부에서 실행하는 명령입니다(직접 실행할 필요 없음).
 
-```mermaid
-flowchart TB
-    subgraph Node["g4dn.metal (sandbox-kata-gpu), 호스트에 NVIDIA 드라이버 없음"]
-        VF["vfio-manager<br/>T4 8개를 vfio-pci에 바인딩"]
-        DP["kata sandbox device plugin<br/>nvidia.com/pgpu: 8"]
-        subgraph VM["Kata VM (QEMU, kata-qemu-nvidia-gpu)"]
-            GS["NVIDIA guest 스택<br/>kernel, rootfs, NVRC, 615.71.09"]
-            C["sandbox 컨테이너"]
+    ```bash
+    helm upgrade --install gpu-operator nvidia/gpu-operator --version "${GPU_OPERATOR_VERSION}" \
+      --namespace gpu-operator --create-namespace \
+      -f "${REPO_ROOT}/infra/kata/gpu-operator-values.yaml" --wait --timeout 20m
+    ```
+
+    ```mermaid
+    flowchart TB
+        subgraph Node["g4dn.metal (sandbox-kata-gpu), 호스트에 NVIDIA 드라이버 없음"]
+            VF["vfio-manager<br/>T4 8개를 vfio-pci에 바인딩"]
+            DP["kata sandbox device plugin<br/>nvidia.com/pgpu: 8"]
+            subgraph VM["Kata VM (QEMU, kata-qemu-nvidia-gpu)"]
+                GS["NVIDIA guest 스택<br/>kernel, rootfs, NVRC, 615.71.09"]
+                C["sandbox 컨테이너"]
+            end
         end
-    end
-    VF --> DP -->|"T4 1개 cold-plug"| VM
-```
+        VF --> DP -->|"T4 1개 cold-plug"| VM
+    ```
 
-*그림 요약: 호스트는 GPU를 vfio-pci에 바인딩해 두기만 하고, 드라이버는 VM 안의 guest 스택에만 있습니다.*
+    *그림 요약: 호스트는 GPU를 vfio-pci에 바인딩해 두기만 하고, 드라이버는 VM 안의 guest 스택에만 있습니다.*
 
-| 설정 (`infra/kata/gpu-operator-values.yaml`) | 값 | 이유 |
-|---|---|---|
-| `sandboxWorkloads` | `enabled: true`, `defaultWorkload: container`, `mode: kata` | label이 `vm-passthrough`인 노드만 VM passthrough로 다룸 |
-| `ccManager.defaultMode` | `"off"` | T4에는 confidential computing이 없음. `on`이면 cc-manager가 종료되고 `kata-qemu-nvidia-gpu`의 nodeSelector(`cc.ready.state=false`)가 노드와 맞지 않음 |
-| `nfd` | `enabled: true`, `nodefeaturerules: true` | 노드의 NVIDIA PCI 장치 감지 |
-| `cdi.enabled` | `true` | CDI 사용 |
-| `driver`, `toolkit`, `devicePlugin`, `dcgmExporter`, `gfd`, `migManager`, `vgpuDeviceManager` | 모두 `enabled: false` | 호스트는 NVIDIA 드라이버를 로드하지 않고, 컨테이너 모드 구성 요소도 쓰지 않음 |
-| `vfioManager.enabled` | `true` | T4 8개를 vfio-pci에 바인딩 |
-| `kataSandboxDevicePlugin.enabled` | `true` | T4를 `nvidia.com/pgpu` 리소스로 등록 |
+    | 설정 (`infra/kata/gpu-operator-values.yaml`) | 값 | 이유 |
+    |---|---|---|
+    | `sandboxWorkloads` | `enabled: true`, `defaultWorkload: container`, `mode: kata` | label이 `vm-passthrough`인 노드만 VM passthrough로 다룸 |
+    | `ccManager.defaultMode` | `"off"` | T4에는 confidential computing이 없음. `on`이면 cc-manager가 종료되고 `kata-qemu-nvidia-gpu`의 nodeSelector(`cc.ready.state=false`)가 노드와 맞지 않음 |
+    | `nfd` | `enabled: true`, `nodefeaturerules: true` | 노드의 NVIDIA PCI 장치 감지 |
+    | `cdi.enabled` | `true` | CDI 사용 |
+    | `driver`, `toolkit`, `devicePlugin`, `dcgmExporter`, `gfd`, `migManager`, `vgpuDeviceManager` | 모두 `enabled: false` | 호스트는 NVIDIA 드라이버를 로드하지 않고, 컨테이너 모드 구성 요소도 쓰지 않음 |
+    | `vfioManager.enabled` | `true` | T4 8개를 vfio-pci에 바인딩 |
+    | `kataSandboxDevicePlugin.enabled` | `true` | T4를 `nvidia.com/pgpu` 리소스로 등록 |
 
-trainer와 gVisor 노드에는 `nvidia.com/gpu.deploy.operands=false` label이 있어서 GPU Operator가 이 노드에 NVIDIA GPU operand를 배포하지 않습니다. 다만 NFD worker는 `gpusandbox/role` taint를 허용하도록 설정돼 있어 이 노드에서도 실행됩니다. NVIDIA 문서에 따르면 한 노드는 한 번에 한 가지 컨테이너 런타임 모드만 쓸 수 있으므로, 컨테이너 GPU 워크로드와 VM passthrough를 한 노드에서 함께 쓰지 않습니다.
+    trainer와 gVisor 노드에는 `nvidia.com/gpu.deploy.operands=false` label이 있어서 GPU Operator가 이 노드에 NVIDIA GPU operand를 배포하지 않습니다. 다만 NFD worker는 `gpusandbox/role` taint를 허용하도록 설정돼 있어 이 노드에서도 실행됩니다. NVIDIA 문서에 따르면 한 노드는 한 번에 한 가지 컨테이너 런타임 모드만 쓸 수 있으므로, 컨테이너 GPU 워크로드와 VM passthrough를 한 노드에서 함께 쓰지 않습니다.
 
 ### kata-qemu-nvidia-gpu와 VM 크기
 
 `kata-qemu-nvidia-gpu`는 4.0.0부터 기본값인 runtime-rs 대신 Kata의 Go shim을 씁니다.
 
-??? note "Go shim과 cold-plug를 쓰는 이유"
-    - runtime-rs의 GPU cold-plug에는 IOMMUFD가 필요한데, AL2023 커널에 `CONFIG_IOMMUFD`가 없습니다.
-    - Kata 문서는 NVIDIA GPU passthrough에서 cold-plug만 지원한다고 명시합니다.
-    - kata-deploy가 함께 배포하는 NVIDIA guest 스택(커널, rootfs, NVRC, open 커널 모듈 615.71.09)의 모듈 README에는 Tesla T4가 있습니다.
+??? note "상세 설명"
+    ??? note "Go shim과 cold-plug를 쓰는 이유"
+        - runtime-rs의 GPU cold-plug에는 IOMMUFD가 필요한데, AL2023 커널에 `CONFIG_IOMMUFD`가 없습니다.
+        - Kata 문서는 NVIDIA GPU passthrough에서 cold-plug만 지원한다고 명시합니다.
+        - kata-deploy가 함께 배포하는 NVIDIA guest 스택(커널, rootfs, NVRC, open 커널 모듈 615.71.09)의 모듈 README에는 Tesla T4가 있습니다.
 
-| 항목 | 값 |
-|---|---|
-| Go NVIDIA shim의 `default_memory` | 8192 MiB |
-| 컨테이너 limits (`kata-qemu` 프로필) | CPU 8, 메모리 16 GiB, `nvidia.com/pgpu: 1` |
-| VM 메모리 | 8 GiB + 16 GiB = 24 GiB, VFIO type1이 guest RAM 전체를 pin (overcommit 없음) |
-| RuntimeClass overhead | 10240Mi, CPU 1 |
-| scheduler가 예약하는 pod당 메모리 | 16 GiB + 10 GiB = 26 GiB |
-| T4 8개를 모두 쓸 때 | 메모리 8 x 26 = 208 GiB (노드 384 GiB), CPU 8 x (8 + 1) = 72 vCPU (노드 96 vCPU) |
-| 기본 replicas | 4 (`KATA_QEMU_REPLICAS`로 변경, T4 수만큼 최대 8) |
+    | 항목 | 값 |
+    |---|---|
+    | Go NVIDIA shim의 `default_memory` | 8192 MiB |
+    | 컨테이너 limits (`kata-qemu` 프로필) | CPU 8, 메모리 16 GiB, `nvidia.com/pgpu: 1` |
+    | VM 메모리 | 8 GiB + 16 GiB = 24 GiB, VFIO type1이 guest RAM 전체를 pin (overcommit 없음) |
+    | RuntimeClass overhead | 10240Mi, CPU 1 |
+    | scheduler가 예약하는 pod당 메모리 | 16 GiB + 10 GiB = 26 GiB |
+    | T4 8개를 모두 쓸 때 | 메모리 8 x 26 = 208 GiB (노드 384 GiB), CPU 8 x (8 + 1) = 72 vCPU (노드 96 vCPU) |
+    | 기본 replicas | 4 (`KATA_QEMU_REPLICAS`로 변경, T4 수만큼 최대 8) |
 
-- **예약 메모리와 pin하는 메모리**: overhead(10 GiB)가 limits에 포함되지 않는 `default_memory`(8 GiB)보다 크므로, scheduler가 예약하는 메모리가 VFIO가 실제로 pin하는 양보다 작아지지 않습니다.
-- **첫 Ready까지 걸리는 시간**: GPU VM은 부팅 전에 메모리를 모두 pin하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready 상태가 될 때까지 몇 분 걸릴 수 있습니다(2026-11-18에는 이미지가 캐시된 상태에서 pod마다 30에서 36초, [08 런타임 벤치마크](08_benchmark.md)).
-- **늘린 대기 시간**: 그래서 kubelet `runtimeRequestTimeout`을 20분으로 늘렸고, 샌드박스 Deployment의 startupProbe는 최대 10분 기다립니다([04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)).
+    - **예약 메모리와 pin하는 메모리**: overhead(10 GiB)가 limits에 포함되지 않는 `default_memory`(8 GiB)보다 크므로, scheduler가 예약하는 메모리가 VFIO가 실제로 pin하는 양보다 작아지지 않습니다.
+    - **첫 Ready까지 걸리는 시간**: GPU VM은 부팅 전에 메모리를 모두 pin하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready 상태가 될 때까지 몇 분 걸릴 수 있습니다(2026-11-18에는 이미지가 캐시된 상태에서 pod마다 30에서 36초, [08 런타임 벤치마크](08_benchmark.md)).
+    - **늘린 대기 시간**: 그래서 kubelet `runtimeRequestTimeout`을 20분으로 늘렸고, 샌드박스 Deployment의 startupProbe는 최대 10분 기다립니다([04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)).
 
-!!! note "보안 속성"
-    IOMMU가 GPU의 DMA를 해당 VM의 메모리로 제한하므로, IOMMU를 끄는 unsafe noiommu 모드는 쓰지 않습니다. vfio-pci는 장치를 해제할 때 function(또는 bus)을 reset하고, T4는 `reset_method=bus`로 보고됐습니다(제3자 보고이며 NVIDIA의 보증이 아님).
+    !!! note "보안 속성"
+        IOMMU가 GPU의 DMA를 해당 VM의 메모리로 제한하므로, IOMMU를 끄는 unsafe noiommu 모드는 쓰지 않습니다. vfio-pci는 장치를 해제할 때 function(또는 bus)을 reset하고, T4는 `reset_method=bus`로 보고됐습니다(제3자 보고이며 NVIDIA의 보증이 아님).
 
 ### `kata/gpu_nodes.sh` 결과 확인
 

@@ -24,43 +24,46 @@
 
 ## 에피소드 하나의 흐름
 
-Job `episodes-<unix 시각>`은 `rl-trainer` 네임스페이스에서 ServiceAccount `sandbox-episode`로 실행되고, 에피소드를 하나씩 차례로 실행합니다. 에피소드 하나는 다음 순서로 진행됩니다.
+실행기는 에피소드마다 `SandboxClaim`을 만들고, 턴을 같은 샌드박스로 보낸 뒤 claim을 지웁니다. [Agent Sandbox 개념](../concepts/06_agent_sandbox.md)에서 claim과 warm pool의 관계를 볼 수 있습니다.
 
-```mermaid
-sequenceDiagram
-    participant J as Job episodes (rl-trainer)
-    participant API as Kubernetes API와 agent-sandbox controller
-    participant P as SandboxWarmPool kernel-eval-gvisor-cpu
-    participant S as 할당된 샌드박스 (gvisor-cpu)
-    J->>API: SandboxClaim 생성 (warmPoolRef, shutdownTime)
-    API->>P: 대기 중인 샌드박스 하나를 claim에 할당
-    P->>P: replicas를 맞추려고 새 샌드박스 시작
-    API-->>J: claim Ready, status.sandbox.serviceFQDN
-    J->>S: GET /info (런타임, 버전, pod)
-    loop turn 1부터 최대 max_turns까지
-        J->>S: POST /v1/evaluate (audience 토큰)
-        S-->>J: verdict
-        J->>J: 피드백 작성, 종료 조건 확인
-    end
-    J->>API: SandboxClaim 삭제
-    API->>S: 샌드박스와 pod 삭제
-```
+??? note "상세 설명"
+    Job `episodes-<unix 시각>`은 `rl-trainer` 네임스페이스에서 ServiceAccount `sandbox-episode`로 실행되고, 에피소드를 하나씩 차례로 실행합니다. 에피소드 하나는 다음 순서로 진행됩니다.
 
-*그림 요약: 에피소드 하나는 claim 하나로 샌드박스 하나를 할당받아 모든 turn을 그 샌드박스로 보내고, 끝나면 claim을 삭제합니다. 다음 에피소드는 새 claim으로 다른 샌드박스를 할당받습니다.*
+    ```mermaid
+    sequenceDiagram
+        participant J as Job episodes (rl-trainer)
+        participant API as Kubernetes API와 agent-sandbox controller
+        participant P as SandboxWarmPool kernel-eval-gvisor-cpu
+        participant S as 할당된 샌드박스 (gvisor-cpu)
+        J->>API: SandboxClaim 생성 (warmPoolRef, shutdownTime)
+        API->>P: 대기 중인 샌드박스 하나를 claim에 할당
+        P->>P: replicas를 맞추려고 새 샌드박스 시작
+        API-->>J: claim Ready, status.sandbox.serviceFQDN
+        J->>S: GET /info (런타임, 버전, pod)
+        loop turn 1부터 최대 max_turns까지
+            J->>S: POST /v1/evaluate (audience 토큰)
+            S-->>J: verdict
+            J->>J: 피드백 작성, 종료 조건 확인
+        end
+        J->>API: SandboxClaim 삭제
+        API->>S: 샌드박스와 pod 삭제
+    ```
 
-에피소드는 다음 중 하나가 되면 끝납니다.
+    *그림 요약: 에피소드 하나는 claim 하나로 샌드박스 하나를 할당받아 모든 turn을 그 샌드박스로 보내고, 끝나면 claim을 삭제합니다. 다음 에피소드는 새 claim으로 다른 샌드박스를 할당받습니다.*
 
-- 정답이 나올 때(`solved`)
-- `max_turns`번 제출했을 때
-- verdict가 `sandbox_error`일 때. `sandbox_error`로 끝난 에피소드는 reward가 `None`이 되어 평균에서 제외됩니다.
+    에피소드는 다음 중 하나가 되면 끝납니다.
 
-| 구성 요소 | 이 실습에서 | 파일 |
-|---|---|---|
-| Job `episodes-<unix 시각>` | `rl-trainer` 네임스페이스, ServiceAccount `sandbox-episode`. Kubernetes API 토큰은 이 Job의 pod에만 마운트하고, sandbox audience 토큰과 label `gpusandbox/client=true`를 함께 씁니다 | `k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl` |
-| ServiceAccount `sandbox-episode` | 토큰 자동 마운트는 기본으로 꺼져 있습니다 | `k8s/base/trainer-rbac.yaml` |
-| Role과 RoleBinding `sandbox-claims` | `sandbox` 네임스페이스의 `sandboxclaims`에 create, get, list, watch, delete 권한만 부여합니다 | `k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml` |
-| SandboxTemplate과 SandboxWarmPool `kernel-eval-gvisor-cpu` | 프로필 `gvisor-cpu`(CPU 1개, 메모리 2Gi, c8i 노드). ingress는 `rl-trainer`의 `gpusandbox/client=true` pod에서 오는 TCP 8000만 허용하고, egress는 모두 차단합니다 | `k8s/extensions/agent-sandbox/template.yaml.tpl` |
-| 에피소드 실행기 | `python -m gpusandbox.tools multiturn`. 에피소드마다 `EpisodeSandbox`로 claim을 만들고, turn마다 `/v1/evaluate`를 호출합니다 | `src/gpusandbox/multiturn.py`, `src/gpusandbox/agent_sandbox.py`, `src/gpusandbox/tools.py` |
+    - 정답이 나올 때(`solved`)
+    - `max_turns`번 제출했을 때
+    - verdict가 `sandbox_error`일 때. `sandbox_error`로 끝난 에피소드는 reward가 `None`이 되어 평균에서 제외됩니다.
+
+    | 구성 요소 | 이 실습에서 | 파일 |
+    |---|---|---|
+    | Job `episodes-<unix 시각>` | `rl-trainer` 네임스페이스, ServiceAccount `sandbox-episode`. Kubernetes API 토큰은 이 Job의 pod에만 마운트하고, sandbox audience 토큰과 label `gpusandbox/client=true`를 함께 씁니다 | `k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl` |
+    | ServiceAccount `sandbox-episode` | 토큰 자동 마운트는 기본으로 꺼져 있습니다 | `k8s/base/trainer-rbac.yaml` |
+    | Role과 RoleBinding `sandbox-claims` | `sandbox` 네임스페이스의 `sandboxclaims`에 create, get, list, watch, delete 권한만 부여합니다 | `k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml` |
+    | SandboxTemplate과 SandboxWarmPool `kernel-eval-gvisor-cpu` | 프로필 `gvisor-cpu`(CPU 1개, 메모리 2Gi, c8i 노드). ingress는 `rl-trainer`의 `gpusandbox/client=true` pod에서 오는 TCP 8000만 허용하고, egress는 모두 차단합니다 | `k8s/extensions/agent-sandbox/template.yaml.tpl` |
+    | 에피소드 실행기 | `python -m gpusandbox.tools multiturn`. 에피소드마다 `EpisodeSandbox`로 claim을 만들고, turn마다 `/v1/evaluate`를 호출합니다 | `src/gpusandbox/multiturn.py`, `src/gpusandbox/agent_sandbox.py`, `src/gpusandbox/tools.py` |
 
 ## 준비
 

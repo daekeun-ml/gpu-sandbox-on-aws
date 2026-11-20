@@ -1,7 +1,7 @@
 # 00 핸즈온 전체 흐름
 
 !!! info "TL;DR"
-    GPU 샌드박스를 배포하고, 모델이 만든 코드를 채점한 뒤, 학습 중에 채점 풀을 교체합니다. 먼저 아래 표에서 시나리오를 고르세요.
+    GPU 샌드박스를 배포하고, 모델이 만든 코드를 채점한 뒤, 학습 중에 채점 풀을 교체합니다. 먼저 아래에서 실습 경로를 고르세요.
 
     **완료 기준** A는 GPU 학습까지, B는 HyperPod에서 학습까지, C는 GPU 없이 채점과 버전 전환까지 확인하는 경로입니다.
 
@@ -20,6 +20,97 @@
     - **projected ServiceAccount token, audience**: Kubernetes가 pod에 마운트하는 수명이 짧은 토큰과, 그 토큰을 받는 대상을 지정하는 필드(여기서는 `gpu-sandbox`)입니다.
     - **JWKS**: 토큰 서명을 확인하는 공개 키 목록입니다. 비밀 값이 아닙니다.
     - **smoke pod**: 런타임이 제대로 설치됐는지 짧게 확인하고 종료되는 테스트용 pod입니다.
+
+## 실습 경로 고르기
+
+| 목표 | 시작할 곳 | 첫 성공 신호 |
+|---|---|---|
+| GPU에서 생성·채점·학습 연결 | [01 클러스터와 이미지](01_cluster_and_images.md)부터 05까지 | trainer에 `reward_batch`가 나오고 학습 step이 진행됩니다. |
+| HyperPod trainer에서 학습 | [07 HyperPod](07_hyperpod.md)의 B1 또는 B2 | HyperPod 노드에서 trainer pod가 실행되고 채점 로그가 나옵니다. |
+| GPU 없이 채점과 풀 교체 연습 | [10 CPU 경로](10_cpu_only.md) | 시뮬레이터 로그의 채점 버전이 v1에서 v2로 바뀝니다. |
+
+## 단계 순서
+
+예상 시간은 스크립트의 안내값이나 timeout이고, "실측"으로 적은 값만 실습 계정에서 측정한 것입니다(2026-11-14, `07_run_grpo.sh`는 2026-11-18). 번호가 붙은 스크립트(01~08)는 시나리오 A에서 순서대로 실행하는 필수 경로입니다. 선택 기능과 운영용 스크립트는 용도별 폴더(`scripts/kata/`, `scripts/ops/`, `scripts/extensions/`, `scripts/hyperpod/`)에 있습니다. 스크립트마다 사용법, 다시 실행할 때의 동작, 성공 신호는 [스크립트 레퍼런스](../reference/scripts.md)에 있습니다.
+
+### 필수 경로
+
+| 스크립트 | 하는 일 | 예상 시간 | 이 단계에서 과금이 시작되는 리소스 |
+|---|---|---|---|
+| `scripts/01_check_prereqs.sh` | 도구(CDK CLI, Session Manager plugin 포함), AWS identity, G and VT와 Standard vCPU 쿼터, nested virtualization 지원, GPU 인스턴스의 AZ별 제공 여부 확인 (읽기 전용) | 짧음 (조회만) | 없음 |
+| `scripts/02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) | CDK 스택 하나: VPC, EKS 컨트롤 플레인(private endpoint), add-on, system 노드, 시나리오별 노드 그룹(A: trainer와 gVisor, B1: gVisor, C: Kata CPU), access instance | 20~30분 (안내값), 시나리오 C 약 20분 (실측) | EKS 컨트롤 플레인, NAT gateway, `m6i.large` x2, `t4g.nano`, `g5.xlarge` x2(A, B1), `g5.2xlarge`(A만), `c8i.2xlarge`(C 또는 `WITH_KATA_CPU=1`), `g4dn.metal`(`WITH_KATA_GPU=1`) |
+| `scripts/03_build_push_images.sh` (`--no-trainer`) | sandbox, trainer, control 이미지를 `linux/amd64`로 빌드해 ECR에 push. `--no-trainer`는 trainer 이미지를 건너뜀 | 빌드 호스트와 네트워크에 따라 다름 | ECR 저장 용량 |
+| `scripts/04_install_gpu_stack.sh` | NVIDIA device plugin (CDI 모드)을 설치한 뒤 `gvisor` RuntimeClass와 smoke pod | device plugin은 Helm `--wait`, smoke pod timeout 15분 | 없음 |
+| `scripts/05_setup_namespaces_auth.sh` | 네임스페이스, NetworkPolicy, ServiceAccount, JWKS, routing ConfigMap | 짧음 | 없음 |
+| `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]` | 샌드박스 풀 (Deployment + headless Service) | rollout timeout 30분 | 없음 (기존 노드 사용) |
+| `scripts/07_run_grpo.sh [max_steps]` | GRPO 학습 Job (기본 60 step) | [05](05_grpo_training.md) 참고. 기본 60 step은 약 50분, 5 step은 약 12분 (실측) | 없음 |
+| `scripts/08_cleanup.sh` (`--images`) | 풀, Job, CDK 스택(클러스터, 노드 그룹, VPC, access instance), AMI, (ECR) 삭제 | 기록 없음 (CloudFormation 삭제를 기다림) | CDK 스택의 리소스 해제 (아래 목록) |
+
+- **`07_run_grpo.sh`의 실측값**: 이미지 pull과 모델 다운로드를 포함하고, `g5.2xlarge`에서 측정한 시간입니다.
+- **`08_cleanup.sh`가 지우는 방식**: secrets용 KMS 키는 7일 삭제 대기를 거칩니다. AMI는 `config.env`에 ID가 있을 때 확인 후 삭제하고, ECR은 `--images`를 붙일 때만 삭제합니다. 마지막에 남은 인스턴스를 조회합니다.
+
+`06_deploy_sandboxes.sh`로 풀을 배포한 뒤에는 풀 검증(`scripts/ops/verify.sh`)을 실행하고, `07_run_grpo.sh`로 학습을 시작한 뒤에는 버전 교체(`scripts/ops/rollout.sh`)를 실행합니다. 두 스크립트는 아래 표에 있고, 전체 실행 순서는 "최소 경로와 전체 경로"의 그림에 있습니다.
+
+### 선택 기능과 운영
+
+| 스크립트 | 하는 일 | 예상 시간 | 이 단계에서 과금이 시작되는 리소스 |
+|---|---|---|---|
+| `scripts/kata/cpu_nodes.sh` | Kata CPU 노드 그룹이 있는지 확인, kata-deploy, `gvisor-cpu` RuntimeClass, `gvisor-cpu`, `kata-clh`, `kata-qemu` smoke pod | 약 14분 (실측, 대부분 kata-deploy), kata-deploy timeout 20분 | 없음 (노드는 `02_create_cluster.sh`에서 생김) |
+| `scripts/kata/gpu_nodes.sh` | `KATA_IOMMU_AMI_ID`가 비어 있으면 IOMMU AMI를 빌드하고 멈춤. `02_create_cluster.sh` 재실행 뒤 GPU Operator, kata-deploy, `nvidia.com/pgpu` 확인 | AMI 약 10분 (안내값), pgpu 대기 최대 20분 | AMI 빌더 `m6i.large`(잠시), AMI 스냅샷 (`g4dn.metal`은 `02_create_cluster.sh` 재실행 때) |
+| `scripts/ops/verify.sh <runtime> [version]` | 격리 증거, egress 차단, golden verdict, NetworkPolicy 확인 | 수 분 (probe Job 포함) | 없음 |
+| `scripts/ops/simulate.sh [steps] [interval_s]` (시나리오 C) | 모델 없이 golden 제출물로 reward 배치를 계속 보내며 버전 교체를 관찰. 학습이 아님 | 기본 30배치, 배치 사이 20초 대기 29회. 2026-11-17 실행(`kata-clh-cpu`)은 약 16분 | 없음 |
+| `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | 학습 중 v1 옆에 v2를 배포하고 검증한 뒤 routing을 v2로 전환. `--finish`를 붙이면 v1을 0으로 줄임 | [06](06_sandbox_update.md) 참고 | gVisor는 v2용 `g5.xlarge` 2대. Kata QEMU는 추가 노드 없음 |
+| `scripts/ops/bench.sh [requests]` | 런타임별 cold start, latency, speedup 비교 | [08](08_benchmark.md) 참고 | 없음 |
+| `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 할당받아 multi-turn 에피소드를 실행합니다([11 multi-turn 에피소드 실습](11_multi_turn.md)) | 에피소드 2개, 3 turn에 약 25초 (실측, 시나리오 C의 `kata-clh-cpu`) | 없음 (기존 노드 사용). 대기 중인 warm sandbox도 가속기를 하나씩 점유 |
+| `scripts/hyperpod/build_b2_ami.sh` (시나리오 B2) | sandbox 인스턴스 그룹용 custom AMI 빌드. `hyperpod/create.sh --b2` 전에 실행 | 20~40분 (추정) | 빌더 `m6i.large`(빌드 중), AMI 스냅샷 |
+| `scripts/hyperpod/create.sh` (`--b2`) | HyperPod 클러스터를 만들어 같은 EKS 클러스터에 연결. `--b2`는 sandbox 인스턴스 그룹을 추가 | InService까지 15~30분 (안내값) | HyperPod `ml.g5.2xlarge` (B2는 `ml.g5.xlarge` x2 추가) |
+| `scripts/hyperpod/check_gvisor.sh` (시나리오 B2) | HyperPod 노드마다 드라이버 버전과 gVisor nvproxy 지원 여부 출력 | [07](07_hyperpod.md) 참고 | 없음 |
+| `scripts/hyperpod/run_grpo.sh [max_steps]` | 시나리오 B에서 `07_run_grpo.sh` 대신 실행하는 GRPO 학습 | [07](07_hyperpod.md) 참고 | 없음 |
+| `scripts/hyperpod/delete.sh` | HyperPodPyTorchJob, HyperPod 클러스터, execution role, lifecycle bucket 삭제 | [07](07_hyperpod.md) 참고 | HyperPod 리소스 해제 |
+| [09 데모 사이트](09_demo_site.md) 참고 (선택) | 녹화된 평가 기록(JSON)을 재생하는 정적 데모 사이트를 private S3와 CloudFront로 배포. 방문자는 클러스터나 GPU에 접근하지 않음 | [09](09_demo_site.md) 참고 | S3 저장, CloudFront 요청과 전송, AWS WAF(방문자가 없어도 월 약 10 USD) |
+
+- **`ops/simulate.sh`의 소요 시간**: 배치마다 평가 시간이 더해집니다.
+- **`ops/rollout.sh --finish`**: trainer 로그에서 전환을 확인한 뒤 같은 명령에 `--finish`를 붙입니다. `--finish`는 배포와 전환을 건너뜁니다.
+- **`ops/rollout.sh`의 gVisor 과금**: v2용 `g5.xlarge` 2대는 노드 그룹을 4대로 늘린 동안 시간당 2.012 USD입니다.
+- **`ops/rollout.sh`의 Kata QEMU**: v1과 v2가 4개씩 `g4dn.metal`의 T4 8개를 모두 씁니다. 실험용 `kata-clh` pod가 GPU를 쓰고 있으면 v2가 배치되지 않습니다.
+- **`hyperpod/check_gvisor.sh`의 debug pod**: 노드마다 debug pod를 만들고, 끝에 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제합니다.
+
+시나리오 B는 순서가 다릅니다.
+
+1. `02_create_cluster.sh` 뒤 `scripts/hyperpod/create.sh`(InService까지 15~30분 안내)를 실행합니다(B2는 custom AMI를 먼저 만든 뒤 `--b2`를 붙여 실행해 샌드박스 인스턴스 그룹까지 만듦).
+2. `07_run_grpo.sh` 대신 `scripts/hyperpod/run_grpo.sh`를 씁니다.
+3. 정리할 때는 `08_cleanup.sh`보다 먼저 `scripts/hyperpod/delete.sh`를 실행하세요.
+
+Kata 노드 그룹은 따로 만드는 스크립트 없이 `02_create_cluster.sh`를 다시 실행해 추가합니다. `02_create_cluster.sh`는 처음과 같은 옵션(`--hyperpod`, `--cpu-only` 등)으로 다시 실행하세요.
+
+- **Kata CPU**: `scripts/config.env`에 `WITH_KATA_CPU=1`을 넣고 `02_create_cluster.sh`, `kata/cpu_nodes.sh` 순으로 실행하세요.
+- **Kata GPU**: 다음 순서로 실행합니다.
+    1. `KATA_IOMMU_AMI_ID`를 비운 채 `kata/gpu_nodes.sh`를 실행해 AMI를 빌드합니다.
+    2. 출력된 `export KATA_IOMMU_AMI_ID=...` 줄을 그대로 넣고 `WITH_KATA_GPU`를 `"1"`로 바꿉니다.
+    3. `02_create_cluster.sh`, `kata/gpu_nodes.sh` 순으로 다시 실행합니다.
+
+## 최소 경로와 전체 경로
+
+```mermaid
+flowchart LR
+    S01["01 사전 확인"] --> S02["02 클러스터"] --> S03["03 이미지"] --> S04["04 GPU 스택, gVisor"]
+    S04 --> S05["05 네임스페이스, 인증"]
+    S04 -.-> KC["Kata CPU<br/>kata/cpu_nodes.sh"] -.-> KG["Kata GPU<br/>kata/gpu_nodes.sh"] -.-> S05
+    S05 --> S06["06 풀 배포"] --> VF["풀 검증<br/>ops/verify.sh"] --> S07["07 GRPO"] --> RO["버전 교체<br/>ops/rollout.sh"] --> S08["08 정리"]
+    RO -.-> DEMO["데모 사이트 (선택)"]
+```
+
+*그림 요약: 실선만 따라가면 gVisor 최소 경로가 끝나고, 점선 단계(Kata CPU, Kata GPU, 데모 사이트)는 필요할 때 끼워 넣습니다.*
+
+| 구분 | 최소 경로 (gVisor만) | 전체 경로 (gVisor + Kata CPU + Kata GPU) |
+|---|---|---|
+| 실행 단계 | 01~08, 풀 검증(`ops/verify.sh`), 버전 교체(`ops/rollout.sh`) (벤치마크 `ops/bench.sh`와 09 데모 사이트는 선택) | 최소 경로 + `02_create_cluster.sh` 재실행(`WITH_KATA_CPU`, `WITH_KATA_GPU`), `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh`, Kata 풀에 대한 `06_deploy_sandboxes.sh`와 `ops/verify.sh`, `ops/bench.sh` |
+| 샌드박스 풀 | `gvisor` | `gvisor`, `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`, `kata-qemu` (실험적 `kata-clh`) |
+| 추가 노드 | 없음 | `c8i.2xlarge` x1, `g4dn.metal` x1 |
+| G and VT vCPU (시나리오 A) | 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2), 버전 교체 중 24 (`g5.xlarge` 4대) | 112 (16 + `g4dn.metal` 96), 버전 교체 중 120 |
+| 이런 경우에 | 처음 해 볼 때, gVisor의 격리 수준으로 충분할 때 | VM 경계 격리를 비교하거나 Kata + GPU가 필요할 때 |
+
+런타임이 달라도 샌드박스 이미지, `/v1/evaluate` API, 검증 스크립트(`ops/verify.sh`)는 같습니다. 09 데모 사이트는 클러스터와 독립된 선택 단계라, 저장소에 포함된 녹화 기록(노트북의 CPU 풀로 만든 것)으로 바로 배포할 수 있습니다.
 
 ## 아키텍처
 
@@ -130,89 +221,6 @@ flowchart LR
 *그림 요약: 인터넷에서 클러스터 API로 들어오는 경로는 없고, 작업 PC는 SSM 세션 하나로만 API에 접속합니다.*
 
 kubectl이나 helm을 쓰는 단계(`04_install_gpu_stack.sh` 이후, HyperPod 스크립트 포함)는 두 번째 터미널에서 `cdk/tunnel.sh`로 터널을 열어 둔 상태로 실행합니다. 터널을 열려면 작업 PC에 Session Manager plugin이 있어야 하고, `cdk/tunnel.sh`가 kubectl context `<CLUSTER_NAME>-tunnel`을 만듭니다. 터널을 여는 방법은 [01 클러스터와 이미지](01_cluster_and_images.md)에, 스택의 보안 기본값은 [Production 09 CDK](../production/09_cdk.md)에 있습니다.
-
-## 단계 순서
-
-예상 시간은 스크립트의 안내값이나 timeout이고, "실측"으로 적은 값만 실습 계정에서 측정한 것입니다(2026-11-14, `07_run_grpo.sh`는 2026-11-18). 번호가 붙은 스크립트(01~08)는 시나리오 A에서 순서대로 실행하는 필수 경로입니다. 선택 기능과 운영용 스크립트는 용도별 폴더(`scripts/kata/`, `scripts/ops/`, `scripts/extensions/`, `scripts/hyperpod/`)에 있습니다. 스크립트마다 사용법, 다시 실행할 때의 동작, 성공 신호는 [스크립트 레퍼런스](../reference/scripts.md)에 있습니다.
-
-### 필수 경로
-
-| 스크립트 | 하는 일 | 예상 시간 | 이 단계에서 과금이 시작되는 리소스 |
-|---|---|---|---|
-| `scripts/01_check_prereqs.sh` | 도구(CDK CLI, Session Manager plugin 포함), AWS identity, G and VT와 Standard vCPU 쿼터, nested virtualization 지원, GPU 인스턴스의 AZ별 제공 여부 확인 (읽기 전용) | 짧음 (조회만) | 없음 |
-| `scripts/02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) | CDK 스택 하나: VPC, EKS 컨트롤 플레인(private endpoint), add-on, system 노드, 시나리오별 노드 그룹(A: trainer와 gVisor, B1: gVisor, C: Kata CPU), access instance | 20~30분 (안내값), 시나리오 C 약 20분 (실측) | EKS 컨트롤 플레인, NAT gateway, `m6i.large` x2, `t4g.nano`, `g5.xlarge` x2(A, B1), `g5.2xlarge`(A만), `c8i.2xlarge`(C 또는 `WITH_KATA_CPU=1`), `g4dn.metal`(`WITH_KATA_GPU=1`) |
-| `scripts/03_build_push_images.sh` (`--no-trainer`) | sandbox, trainer, control 이미지를 `linux/amd64`로 빌드해 ECR에 push. `--no-trainer`는 trainer 이미지를 건너뜀 | 빌드 호스트와 네트워크에 따라 다름 | ECR 저장 용량 |
-| `scripts/04_install_gpu_stack.sh` | NVIDIA device plugin (CDI 모드)을 설치한 뒤 `gvisor` RuntimeClass와 smoke pod | device plugin은 Helm `--wait`, smoke pod timeout 15분 | 없음 |
-| `scripts/05_setup_namespaces_auth.sh` | 네임스페이스, NetworkPolicy, ServiceAccount, JWKS, routing ConfigMap | 짧음 | 없음 |
-| `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]` | 샌드박스 풀 (Deployment + headless Service) | rollout timeout 30분 | 없음 (기존 노드 사용) |
-| `scripts/07_run_grpo.sh [max_steps]` | GRPO 학습 Job (기본 60 step) | [05](05_grpo_training.md) 참고. 기본 60 step은 약 50분, 5 step은 약 12분 (실측) | 없음 |
-| `scripts/08_cleanup.sh` (`--images`) | 풀, Job, CDK 스택(클러스터, 노드 그룹, VPC, access instance), AMI, (ECR) 삭제 | 기록 없음 (CloudFormation 삭제를 기다림) | CDK 스택의 리소스 해제 (아래 목록) |
-
-- **`07_run_grpo.sh`의 실측값**: 이미지 pull과 모델 다운로드를 포함하고, `g5.2xlarge`에서 측정한 시간입니다.
-- **`08_cleanup.sh`가 지우는 방식**: secrets용 KMS 키는 7일 삭제 대기를 거칩니다. AMI는 `config.env`에 ID가 있을 때 확인 후 삭제하고, ECR은 `--images`를 붙일 때만 삭제합니다. 마지막에 남은 인스턴스를 조회합니다.
-
-`06_deploy_sandboxes.sh`로 풀을 배포한 뒤에는 풀 검증(`scripts/ops/verify.sh`)을 실행하고, `07_run_grpo.sh`로 학습을 시작한 뒤에는 버전 교체(`scripts/ops/rollout.sh`)를 실행합니다. 두 스크립트는 아래 표에 있고, 전체 실행 순서는 "최소 경로와 전체 경로"의 그림에 있습니다.
-
-### 선택 기능과 운영
-
-| 스크립트 | 하는 일 | 예상 시간 | 이 단계에서 과금이 시작되는 리소스 |
-|---|---|---|---|
-| `scripts/kata/cpu_nodes.sh` | Kata CPU 노드 그룹이 있는지 확인, kata-deploy, `gvisor-cpu` RuntimeClass, `gvisor-cpu`, `kata-clh`, `kata-qemu` smoke pod | 약 14분 (실측, 대부분 kata-deploy), kata-deploy timeout 20분 | 없음 (노드는 `02_create_cluster.sh`에서 생김) |
-| `scripts/kata/gpu_nodes.sh` | `KATA_IOMMU_AMI_ID`가 비어 있으면 IOMMU AMI를 빌드하고 멈춤. `02_create_cluster.sh` 재실행 뒤 GPU Operator, kata-deploy, `nvidia.com/pgpu` 확인 | AMI 약 10분 (안내값), pgpu 대기 최대 20분 | AMI 빌더 `m6i.large`(잠시), AMI 스냅샷 (`g4dn.metal`은 `02_create_cluster.sh` 재실행 때) |
-| `scripts/ops/verify.sh <runtime> [version]` | 격리 증거, egress 차단, golden verdict, NetworkPolicy 확인 | 수 분 (probe Job 포함) | 없음 |
-| `scripts/ops/simulate.sh [steps] [interval_s]` (시나리오 C) | 모델 없이 golden 제출물로 reward 배치를 계속 보내며 버전 교체를 관찰. 학습이 아님 | 기본 30배치, 배치 사이 20초 대기 29회. 2026-11-17 실행(`kata-clh-cpu`)은 약 16분 | 없음 |
-| `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | 학습 중 v1 옆에 v2를 배포하고 검증한 뒤 routing을 v2로 전환. `--finish`를 붙이면 v1을 0으로 줄임 | [06](06_sandbox_update.md) 참고 | gVisor는 v2용 `g5.xlarge` 2대. Kata QEMU는 추가 노드 없음 |
-| `scripts/ops/bench.sh [requests]` | 런타임별 cold start, latency, speedup 비교 | [08](08_benchmark.md) 참고 | 없음 |
-| `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 할당받아 multi-turn 에피소드를 실행합니다([11 multi-turn 에피소드 실습](11_multi_turn.md)) | 에피소드 2개, 3 turn에 약 25초 (실측, 시나리오 C의 `kata-clh-cpu`) | 없음 (기존 노드 사용). 대기 중인 warm sandbox도 가속기를 하나씩 점유 |
-| `scripts/hyperpod/build_b2_ami.sh` (시나리오 B2) | sandbox 인스턴스 그룹용 custom AMI 빌드. `hyperpod/create.sh --b2` 전에 실행 | 20~40분 (추정) | 빌더 `m6i.large`(빌드 중), AMI 스냅샷 |
-| `scripts/hyperpod/create.sh` (`--b2`) | HyperPod 클러스터를 만들어 같은 EKS 클러스터에 연결. `--b2`는 sandbox 인스턴스 그룹을 추가 | InService까지 15~30분 (안내값) | HyperPod `ml.g5.2xlarge` (B2는 `ml.g5.xlarge` x2 추가) |
-| `scripts/hyperpod/check_gvisor.sh` (시나리오 B2) | HyperPod 노드마다 드라이버 버전과 gVisor nvproxy 지원 여부 출력 | [07](07_hyperpod.md) 참고 | 없음 |
-| `scripts/hyperpod/run_grpo.sh [max_steps]` | 시나리오 B에서 `07_run_grpo.sh` 대신 실행하는 GRPO 학습 | [07](07_hyperpod.md) 참고 | 없음 |
-| `scripts/hyperpod/delete.sh` | HyperPodPyTorchJob, HyperPod 클러스터, execution role, lifecycle bucket 삭제 | [07](07_hyperpod.md) 참고 | HyperPod 리소스 해제 |
-| [09 데모 사이트](09_demo_site.md) 참고 (선택) | 녹화된 평가 기록(JSON)을 재생하는 정적 데모 사이트를 private S3와 CloudFront로 배포. 방문자는 클러스터나 GPU에 접근하지 않음 | [09](09_demo_site.md) 참고 | S3 저장, CloudFront 요청과 전송, AWS WAF(방문자가 없어도 월 약 10 USD) |
-
-- **`ops/simulate.sh`의 소요 시간**: 배치마다 평가 시간이 더해집니다.
-- **`ops/rollout.sh --finish`**: trainer 로그에서 전환을 확인한 뒤 같은 명령에 `--finish`를 붙입니다. `--finish`는 배포와 전환을 건너뜁니다.
-- **`ops/rollout.sh`의 gVisor 과금**: v2용 `g5.xlarge` 2대는 노드 그룹을 4대로 늘린 동안 시간당 2.012 USD입니다.
-- **`ops/rollout.sh`의 Kata QEMU**: v1과 v2가 4개씩 `g4dn.metal`의 T4 8개를 모두 씁니다. 실험용 `kata-clh` pod가 GPU를 쓰고 있으면 v2가 배치되지 않습니다.
-- **`hyperpod/check_gvisor.sh`의 debug pod**: 노드마다 debug pod를 만들고, 끝에 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제합니다.
-
-시나리오 B는 순서가 다릅니다.
-
-1. `02_create_cluster.sh` 뒤 `scripts/hyperpod/create.sh`(InService까지 15~30분 안내)를 실행합니다(B2는 custom AMI를 먼저 만든 뒤 `--b2`를 붙여 실행해 샌드박스 인스턴스 그룹까지 만듦).
-2. `07_run_grpo.sh` 대신 `scripts/hyperpod/run_grpo.sh`를 씁니다.
-3. 정리할 때는 `08_cleanup.sh`보다 먼저 `scripts/hyperpod/delete.sh`를 실행하세요.
-
-Kata 노드 그룹은 따로 만드는 스크립트 없이 `02_create_cluster.sh`를 다시 실행해 추가합니다. `02_create_cluster.sh`는 처음과 같은 옵션(`--hyperpod`, `--cpu-only` 등)으로 다시 실행하세요.
-
-- **Kata CPU**: `scripts/config.env`에 `WITH_KATA_CPU=1`을 넣고 `02_create_cluster.sh`, `kata/cpu_nodes.sh` 순으로 실행하세요.
-- **Kata GPU**: 다음 순서로 실행합니다.
-    1. `KATA_IOMMU_AMI_ID`를 비운 채 `kata/gpu_nodes.sh`를 실행해 AMI를 빌드합니다.
-    2. 출력된 `export KATA_IOMMU_AMI_ID=...` 줄을 그대로 넣고 `WITH_KATA_GPU`를 `"1"`로 바꿉니다.
-    3. `02_create_cluster.sh`, `kata/gpu_nodes.sh` 순으로 다시 실행합니다.
-
-## 최소 경로와 전체 경로
-
-```mermaid
-flowchart LR
-    S01["01 사전 확인"] --> S02["02 클러스터"] --> S03["03 이미지"] --> S04["04 GPU 스택, gVisor"]
-    S04 --> S05["05 네임스페이스, 인증"]
-    S04 -.-> KC["Kata CPU<br/>kata/cpu_nodes.sh"] -.-> KG["Kata GPU<br/>kata/gpu_nodes.sh"] -.-> S05
-    S05 --> S06["06 풀 배포"] --> VF["풀 검증<br/>ops/verify.sh"] --> S07["07 GRPO"] --> RO["버전 교체<br/>ops/rollout.sh"] --> S08["08 정리"]
-    RO -.-> DEMO["데모 사이트 (선택)"]
-```
-
-*그림 요약: 실선만 따라가면 gVisor 최소 경로가 끝나고, 점선 단계(Kata CPU, Kata GPU, 데모 사이트)는 필요할 때 끼워 넣습니다.*
-
-| 구분 | 최소 경로 (gVisor만) | 전체 경로 (gVisor + Kata CPU + Kata GPU) |
-|---|---|---|
-| 실행 단계 | 01~08, 풀 검증(`ops/verify.sh`), 버전 교체(`ops/rollout.sh`) (벤치마크 `ops/bench.sh`와 09 데모 사이트는 선택) | 최소 경로 + `02_create_cluster.sh` 재실행(`WITH_KATA_CPU`, `WITH_KATA_GPU`), `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh`, Kata 풀에 대한 `06_deploy_sandboxes.sh`와 `ops/verify.sh`, `ops/bench.sh` |
-| 샌드박스 풀 | `gvisor` | `gvisor`, `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`, `kata-qemu` (실험적 `kata-clh`) |
-| 추가 노드 | 없음 | `c8i.2xlarge` x1, `g4dn.metal` x1 |
-| G and VT vCPU (시나리오 A) | 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2), 버전 교체 중 24 (`g5.xlarge` 4대) | 112 (16 + `g4dn.metal` 96), 버전 교체 중 120 |
-| 이런 경우에 | 처음 해 볼 때, gVisor의 격리 수준으로 충분할 때 | VM 경계 격리를 비교하거나 Kata + GPU가 필요할 때 |
-
-런타임이 달라도 샌드박스 이미지, `/v1/evaluate` API, 검증 스크립트(`ops/verify.sh`)는 같습니다. 09 데모 사이트는 클러스터와 독립된 선택 단계라, 저장소에 포함된 녹화 기록(노트북의 CPU 풀로 만든 것)으로 바로 배포할 수 있습니다.
 
 ## 소요 시간과 비용
 

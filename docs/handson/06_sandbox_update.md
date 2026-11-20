@@ -73,11 +73,7 @@ G/VT On-Demand vCPU 쿼터도 더 필요합니다. 시나리오 A에서는 train
 [05](05_grpo_training.md)의 학습이 다른 터미널에서 실행 중일 때 아래 명령을 실행합니다.
 
 ```bash
-# steps 1-4: deploy, verify, parity, switch
 scripts/ops/rollout.sh gvisor v1 v2
-
-# step 5, only after a reward_batch on v2 shows a status other than sandbox_error (see below)
-scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
 
 첫 번째 인자는 active runtime으로도 쓰입니다. 그러니 학습 중인 runtime(여기서는 `gvisor`)을 넣으세요.
@@ -173,79 +169,91 @@ speedup은 같은 GPU 종류에서도 pod마다 달라지므로, 이 검사는 �
 
 ## Trainer가 전환을 받는 과정
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Op as 운영자 (ops/rollout.sh)
-    participant V1 as sandbox-gvisor-v1
-    participant V2 as sandbox-gvisor-v2
-    participant CM as ConfigMap sandbox-routing
-    participant T as Trainer (RoutingTable, KernelRewards)
-    T->>CM: batch N의 snapshot은 gvisor/v1
-    T->>V1: batch N 평가
-    Op->>V2: 06_deploy_sandboxes.sh gvisor v2
-    Op->>V2: ops/verify.sh gvisor v2
-    Op->>V1: parity (golden set)
-    Op->>V2: parity (golden set)
-    Op->>CM: active를 gvisor/v2로 변경
-    Note over CM,T: kubelet이 마운트된 파일을 갱신 (스크립트 안내로는 약 1분 이내)
-    V1-->>T: batch N 결과 (첫 전환이라 캐시가 v1뿐, v1으로 끝남)
-    T->>CM: batch N+1의 snapshot은 gvisor/v2
-    T->>V2: batch N+1 평가
-    V2-->>T: batch N+1 결과
-    T->>T: sandbox_version_switch, reward_batch 출력
-    Op->>V1: --finish로 replica 0
-```
+trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용합니다. 전환 후에는 로그의 버전과 실제 평가 상태를 함께 확인하세요. [On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 배치 단위로 버전을 고정하는 이유를 설명합니다.
 
-*그림 요약: 한 batch는 한 버전으로 채점됩니다. 첫 전환에서는 캐시에 v1 결과만 있으므로 전환 전에 v1으로 보낸 batch N은 v1으로 끝나고, 갱신된 routing 표를 처음 읽은 batch N+1부터 v2가 채점합니다. ConfigMap 갱신이 늦으면 v1으로 채점하는 batch가 더 이어질 수 있습니다.*
+??? note "상세 설명"
+    ```mermaid
+    sequenceDiagram
+        autonumber
+        participant Op as 운영자 (ops/rollout.sh)
+        participant V1 as sandbox-gvisor-v1
+        participant V2 as sandbox-gvisor-v2
+        participant CM as ConfigMap sandbox-routing
+        participant T as Trainer (RoutingTable, KernelRewards)
+        T->>CM: batch N의 snapshot은 gvisor/v1
+        T->>V1: batch N 평가
+        Op->>V2: 06_deploy_sandboxes.sh gvisor v2
+        Op->>V2: ops/verify.sh gvisor v2
+        Op->>V1: parity (golden set)
+        Op->>V2: parity (golden set)
+        Op->>CM: active를 gvisor/v2로 변경
+        Note over CM,T: kubelet이 마운트된 파일을 갱신 (스크립트 안내로는 약 1분 이내)
+        V1-->>T: batch N 결과 (첫 전환이라 캐시가 v1뿐, v1으로 끝남)
+        T->>CM: batch N+1의 snapshot은 gvisor/v2
+        T->>V2: batch N+1 평가
+        V2-->>T: batch N+1 결과
+        T->>T: sandbox_version_switch, reward_batch 출력
+        Op->>V1: --finish로 replica 0
+    ```
 
-1. ConfigMap은 디렉터리로 마운트되어 있어서 kubelet이 파일을 갱신합니다. 갱신 지연은 최대 kubelet sync 주기와 cache 전파 지연을 더한 시간까지 걸릴 수 있습니다(Kubernetes 문서).
-2. `RoutingTable`은 파일을 최대 2초에 한 번 다시 읽고, 내용이 바뀌면 `revision`을 1 올립니다. 파일을 쓰는 도중이라 읽지 못하면 마지막으로 정상적으로 읽은 table을 계속 씁니다.
-3. `KernelRewards`는 한 batch의 결과를 한 풀의 버전으로 맞춥니다. 클라이언트는 호출될 때마다 그 시점의 snapshot으로 풀을 정합니다.
-    - **보내는 completion**: 기본 batch는 2 group, completion 16개이며, 이 중 샌드박스 평가가 필요한 completion만 보냅니다. 같은 풀의 캐시에 결과가 있거나, 코드가 없거나, trainer 쪽 정책 검사에서 걸린 completion은 보내지 않습니다.
-    - **다른 풀로 캐시된 completion**: 이번 batch를 채점한 풀로 다시 보내므로, 한 batch에서 클라이언트를 두 번 이상 부를 수 있습니다.
-    - **채점 중에 풀이 다시 바뀌면**: 세 번째 호출에서 batch 전체를 한 요청으로 보내므로, 한 batch는 항상 한 버전으로 끝납니다.
-    - **필요한 결과가 모두 한 풀의 캐시에 있으면**: 샌드박스를 부르지 않고 `reward_batch` 줄도 나오지 않습니다.
-    - **`reward_batch`의 `n`**: 샌드박스로 보낸 서로 다른 completion 수입니다.
-4. v1 snapshot으로 보낸 요청은 v1이 채점합니다. 어느 경우든 `--finish`는 v1으로 보낸 batch가 끝난 뒤에 실행합니다.
-    - **처음 전환할 때**: 캐시에 v1 결과만 있으므로, 전환 전에 v1으로 보낸 batch는 v1에서 끝납니다.
-    - **다른 풀로 캐시된 결과가 있어 한 번 더 호출하는 사이 routing이 바뀌면**: 마지막 호출의 풀로 batch 전체를 다시 채점합니다.
-5. 새 snapshot을 처음 쓰는 batch의 결과를 받은 뒤, 그 batch의 `reward_batch` 바로 앞에 전환 이벤트가 한 번 나옵니다. `07_run_grpo.sh` 터미널에서는 첫 줄처럼, pod 로그와 `GPUSANDBOX_LOG=json`에서는 둘째 줄처럼 보입니다.
+    *그림 요약: 한 batch는 한 버전으로 채점됩니다. 첫 전환에서는 캐시에 v1 결과만 있으므로 전환 전에 v1으로 보낸 batch N은 v1으로 끝나고, 갱신된 routing 표를 처음 읽은 batch N+1부터 v2가 채점합니다. ConfigMap 갱신이 늦으면 v1으로 채점하는 batch가 더 이어질 수 있습니다.*
 
-```text
-[hh:mm:ss] SWITCH  gvisor/v1 -> gvisor/v2  (routing rev <int>, step <int>)
-{"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", "routing_revision": <int>, "global_step": <int>, "ts": <float>}
-```
+    1. ConfigMap은 디렉터리로 마운트되어 있어서 kubelet이 파일을 갱신합니다. 갱신 지연은 최대 kubelet sync 주기와 cache 전파 지연을 더한 시간까지 걸릴 수 있습니다(Kubernetes 문서).
+    2. `RoutingTable`은 파일을 최대 2초에 한 번 다시 읽고, 내용이 바뀌면 `revision`을 1 올립니다. 파일을 쓰는 도중이라 읽지 못하면 마지막으로 정상적으로 읽은 table을 계속 씁니다.
+    3. `KernelRewards`는 한 batch의 결과를 한 풀의 버전으로 맞춥니다. 클라이언트는 호출될 때마다 그 시점의 snapshot으로 풀을 정합니다.
+        - **보내는 completion**: 기본 batch는 2 group, completion 16개이며, 이 중 샌드박스 평가가 필요한 completion만 보냅니다. 같은 풀의 캐시에 결과가 있거나, 코드가 없거나, trainer 쪽 정책 검사에서 걸린 completion은 보내지 않습니다.
+        - **다른 풀로 캐시된 completion**: 이번 batch를 채점한 풀로 다시 보내므로, 한 batch에서 클라이언트를 두 번 이상 부를 수 있습니다.
+        - **채점 중에 풀이 다시 바뀌면**: 세 번째 호출에서 batch 전체를 한 요청으로 보내므로, 한 batch는 항상 한 버전으로 끝납니다.
+        - **필요한 결과가 모두 한 풀의 캐시에 있으면**: 샌드박스를 부르지 않고 `reward_batch` 줄도 나오지 않습니다.
+        - **`reward_batch`의 `n`**: 샌드박스로 보낸 서로 다른 completion 수입니다.
+    4. v1 snapshot으로 보낸 요청은 v1이 채점합니다. 어느 경우든 `--finish`는 v1으로 보낸 batch가 끝난 뒤에 실행합니다.
+        - **처음 전환할 때**: 캐시에 v1 결과만 있으므로, 전환 전에 v1으로 보낸 batch는 v1에서 끝납니다.
+        - **다른 풀로 캐시된 결과가 있어 한 번 더 호출하는 사이 routing이 바뀌면**: 마지막 호출의 풀로 batch 전체를 다시 채점합니다.
+    5. 새 snapshot을 처음 쓰는 batch의 결과를 받은 뒤, 그 batch의 `reward_batch` 바로 앞에 전환 이벤트가 한 번 나옵니다. `07_run_grpo.sh` 터미널에서는 첫 줄처럼, pod 로그와 `GPUSANDBOX_LOG=json`에서는 둘째 줄처럼 보입니다.
 
-그 뒤 `batch` 줄의 풀이 `gvisor/v2`가 됩니다. 원래 JSON에서는 `reward_batch`의 `version`이 `v2`, `served_versions`가 `{"v2": <int>}`입니다. 요약 줄에 `MIXED VERSIONS`가 붙으면 한 batch를 두 버전이 채점한 것입니다. `global_step`(요약의 `step`)으로 학습 곡선에 전환 시점을 표시하세요.
+    ```text
+    [hh:mm:ss] SWITCH  gvisor/v1 -> gvisor/v2  (routing rev <int>, step <int>)
+    {"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", "routing_revision": <int>, "global_step": <int>, "ts": <float>}
+    ```
+
+    그 뒤 `batch` 줄의 풀이 `gvisor/v2`가 됩니다. 원래 JSON에서는 `reward_batch`의 `version`이 `v2`, `served_versions`가 `{"v2": <int>}`입니다. 요약 줄에 `MIXED VERSIONS`가 붙으면 한 batch를 두 버전이 채점한 것입니다. `global_step`(요약의 `step`)으로 학습 곡선에 전환 시점을 표시하세요.
 
 ## v2 pod 재활용 (SANDBOX_MAX_EVALS=200)
 
 v2 pod는 평가를 200번 수행한 뒤 draining 상태가 되어 Ready에서 제외됩니다. 전환 전 2, 3단계에서 보낸 golden 요청도 이 200번에 포함됩니다.
 
-- **Production에서는**: gateway의 recycler가 이런 pod를 지웁니다([03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md)).
-- **핸즈온의 direct 모드에서는**: pod가 Ready가 아닌 채로 남습니다.
+??? note "상세 설명"
+    - **Production에서는**: gateway의 recycler가 이런 pod를 지웁니다([03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md)).
+    - **핸즈온의 direct 모드에서는**: pod가 Ready가 아닌 채로 남습니다.
 
-v2 pod 2개의 한도는 합계 400번입니다. golden 요청 12번을 빼고 step마다 completion 16개를 한 번씩 평가하면 약 24 step분이 남습니다.
+    v2 pod 2개의 한도는 합계 400번입니다. golden 요청 12번을 빼고 step마다 completion 16개를 한 번씩 평가하면 약 24 step분이 남습니다.
 
-- **캐시 덕분에 `n`이 작으면**: 더 오래 씁니다.
-- **다른 풀로 캐시된 결과를 다시 보내거나 batch 전체를 다시 보내면**: 더 빨리 소진됩니다.
-- **두 pod가 모두 draining 상태이면**: 요청이 `sandbox_error`가 되어 reward 계산에서 빠집니다.
+    - **캐시 덕분에 `n`이 작으면**: 더 오래 씁니다.
+    - **다른 풀로 캐시된 결과를 다시 보내거나 batch 전체를 다시 보내면**: 더 빨리 소진됩니다.
+    - **두 pod가 모두 draining 상태이면**: 요청이 `sandbox_error`가 되어 reward 계산에서 빠집니다.
 
-학습을 오래 실행할 때는 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod를 직접 지우세요. 아래 pod도 `0/1`로 보이니 구분하세요.
+    학습을 오래 실행할 때는 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod를 직접 지우세요. 아래 pod도 `0/1`로 보이니 구분하세요.
 
-- **시작 중인 pod나 GPU probe, egress 검사에 실패한 pod**: `0/1`로 보입니다.
-- **평가 중 `gpu_fault`가 난 pod**: `0/1`이 되지만, liveness probe가 30초 안팎에 컨테이너를 다시 시작하므로 `RESTARTS`가 늘어납니다.
-- **egress 검사에 실패하는 pod**: 실패하는 동안 서버는 5초마다 검사하고 실패할 때마다 `egress is open, refusing work`를 기록합니다. `kubectl -n sandbox logs <pod> --since=1m`처럼 최근 로그에 이 줄이 계속 나오면 지우지 말고 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목부터 보세요.
+    - **시작 중인 pod나 GPU probe, egress 검사에 실패한 pod**: `0/1`로 보입니다.
+    - **평가 중 `gpu_fault`가 난 pod**: `0/1`이 되지만, liveness probe가 30초 안팎에 컨테이너를 다시 시작하므로 `RESTARTS`가 늘어납니다.
+    - **egress 검사에 실패하는 pod**: 실패하는 동안 서버는 5초마다 검사하고 실패할 때마다 `egress is open, refusing work`를 기록합니다. `kubectl -n sandbox logs <pod> --since=1m`처럼 최근 로그에 이 줄이 계속 나오면 지우지 말고 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목부터 보세요.
 
-아래 첫 명령으로 v2 pod를 확인하고, 둘째 명령은 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod에만 실행하세요.
+    아래 첫 명령으로 v2 pod를 확인하고, 둘째 명령은 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod에만 실행하세요.
+
+    ```bash
+    kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v2
+    kubectl -n sandbox delete pod <READY-0/1-pod-name>
+    ```
+
+    **확인할 것:** 지운 뒤 Deployment가 새 pod를 만들고, 몇 분 뒤 첫 명령의 결과가 다시 모두 `1/1`이 됩니다.
+
+## 전환 확인 후 v1 정리
+
+trainer 로그에서 v2가 처리한 `reward_batch`에 `sandbox_error` 이외의 평가 결과가 하나 이상 있는지 확인하세요. 확인했다면 아래 명령으로 v1의 replica를 0으로 줄입니다.
 
 ```bash
-kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v2
-kubectl -n sandbox delete pod <READY-0/1-pod-name>
+scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
-
-**확인할 것:** 지운 뒤 Deployment가 새 pod를 만들고, 몇 분 뒤 첫 명령의 결과가 다시 모두 `1/1`이 됩니다.
 
 ## Rollback
 

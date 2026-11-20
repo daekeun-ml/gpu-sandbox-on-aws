@@ -23,36 +23,39 @@
 
 ## 아키텍처
 
-[![시나리오 C: GPU 없이 c8i.2xlarge 한 대에 세 런타임의 CPU 풀이 있는 구성](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
+c8i 노드 한 대에서 gVisor와 Kata를 실행합니다. `ops/simulate.sh`는 모델 대신 정해진 입력을 채점 풀로 보내고, `ops/rollout.sh`는 활성 풀을 v2로 바꿉니다.
 
-*그림 요약: AWS 리소스로 보면 GPU 노드가 없고, c8i.2xlarge 한 대가 샌드박스 노드 그룹을 맡습니다.*
+??? note "상세 설명"
+    [![시나리오 C: GPU 없이 c8i.2xlarge 한 대에 세 런타임의 CPU 풀이 있는 구성](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
-```mermaid
-flowchart LR
-    subgraph SYS["system: m6i.large x2, runc"]
-        J["Job simulate (ops/simulate.sh)<br/>ns rl-trainer"]
-        CM[("ConfigMap sandbox-routing")]
-    end
-    subgraph C8I["sandbox-kata-cpu: c8i.2xlarge (nested virtualization)"]
-        G["pool gvisor-cpu<br/>runsc, systrap"]
-        K1["pool kata-clh-cpu v1, v2<br/>Cloud Hypervisor VM"]
-        K2["pool kata-qemu-cpu<br/>QEMU VM"]
-    end
-    CM -. "배치마다 active runtime, version" .-> J
-    J == "POST /v1/evaluate :8000" ==> K1
-    J -.-> G & K2
-```
+    *그림 요약: AWS 리소스로 보면 GPU 노드가 없고, c8i.2xlarge 한 대가 샌드박스 노드 그룹을 맡습니다.*
 
-*그림 요약: 샌드박스 풀 세 종류가 같은 c8i 노드에 함께 올라가고, 어느 풀을 부를지는 routing ConfigMap이 정합니다.*
+    ```mermaid
+    flowchart LR
+        subgraph SYS["system: m6i.large x2, runc"]
+            J["Job simulate (ops/simulate.sh)<br/>ns rl-trainer"]
+            CM[("ConfigMap sandbox-routing")]
+        end
+        subgraph C8I["sandbox-kata-cpu: c8i.2xlarge (nested virtualization)"]
+            G["pool gvisor-cpu<br/>runsc, systrap"]
+            K1["pool kata-clh-cpu v1, v2<br/>Cloud Hypervisor VM"]
+            K2["pool kata-qemu-cpu<br/>QEMU VM"]
+        end
+        CM -. "배치마다 active runtime, version" .-> J
+        J == "POST /v1/evaluate :8000" ==> K1
+        J -.-> G & K2
+    ```
 
-| 시나리오 A의 구성 요소 | 시나리오 C에서는 | 같은지 여부 |
-|---|---|---|
-| GRPO trainer(`g5.2xlarge`, vLLM 생성, gradient 계산) | 없음. Job `simulate`가 completion 대신 golden 제출물을 사용 | 다름 (학습 없음) |
-| reward 함수 `KernelRewards` | 같은 코드, `require_triton=False` | 같음 |
-| 배치 하나를 한 버전으로 채점 (routing snapshot) | 같은 코드 | 같음 |
-| 샌드박스 이미지, API, 인증, NetworkPolicy | 같은 것 | 같음 |
-| 샌드박스 런타임 | `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu` | RuntimeClass만 다름 |
-| harness 측정 | CPU timing(`device=cpu`), 작은 입력(`SANDBOX_SIZE=smoke`), Triton 없음 | 다름 (GPU timing 없음) |
+    *그림 요약: 샌드박스 풀 세 종류가 같은 c8i 노드에 함께 올라가고, 어느 풀을 부를지는 routing ConfigMap이 정합니다.*
+
+    | 시나리오 A의 구성 요소 | 시나리오 C에서는 | 같은지 여부 |
+    |---|---|---|
+    | GRPO trainer(`g5.2xlarge`, vLLM 생성, gradient 계산) | 없음. Job `simulate`가 completion 대신 golden 제출물을 사용 | 다름 (학습 없음) |
+    | reward 함수 `KernelRewards` | 같은 코드, `require_triton=False` | 같음 |
+    | 배치 하나를 한 버전으로 채점 (routing snapshot) | 같은 코드 | 같음 |
+    | 샌드박스 이미지, API, 인증, NetworkPolicy | 같은 것 | 같음 |
+    | 샌드박스 런타임 | `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu` | RuntimeClass만 다름 |
+    | harness 측정 | CPU timing(`device=cpu`), 작은 입력(`SANDBOX_SIZE=smoke`), Triton 없음 | 다름 (GPU timing 없음) |
 
 ## 준비
 

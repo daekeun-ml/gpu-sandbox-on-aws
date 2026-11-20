@@ -288,38 +288,41 @@ kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '"event
 
 ## HyperPodPyTorchJob 템플릿
 
-`k8s/trainer/hyperpod-job-grpo.yaml.tpl`의 HyperPod 고유 설정입니다.
+템플릿은 trainer pod의 배치 조건, 실행 명령, 학습 중단 감지에 사용할 로그 패턴을 정합니다.
 
-| 필드 | 값 | 의미 (AWS 문서 기준) |
-|---|---|---|
-| command | `hyperpodrun --nproc_per_node=1 --nnodes=1 /opt/gpusandbox/rl/trl/train_grpo.py ...` | PyTorch ElasticAgent를 확장한 HyperPod elastic agent launcher |
-| `runPolicy.jobMaxRetryCount` | 3 | process 수준 재시작의 최대 횟수 |
-| `restartPolicy.numRestartBeforeFullJobRestart` | 1 | job 수준 재시작 전에 허용하는 process 수준 재시작 횟수 |
-| `restartPolicy.evalPeriodSeconds` | 3600 | 재시작 한도를 평가하는 기간(초) |
-| `restartPolicy.maxFullJobRestarts` | 2 | job을 실패로 끝내기 전 full job 재시작 최대 횟수 |
-| `cleanPodPolicy` | All | operator가 정리할 pod 범위 |
-| log rule `JobStart` | `.*"event": "routing".*`, `expectedStartCutOffInSeconds: 1200` | 시작 후 20분 안에 routing 이벤트가 없으면 HANGING |
-| log rule `RewardStalled` | `.*"event": "reward_batch".*`, `expectedRecurringFrequencyInSeconds: 1800` | reward_batch 줄 사이가 30분을 넘으면 HANGING |
-| nodeAffinity | `node.kubernetes.io/instance-type In [ml.g5.2xlarge]`, `sagemaker.amazonaws.com/node-health-status In [Schedulable]` | 상태가 Schedulable인 HyperPod 노드에만 배치 |
-| pod label | `app: grpo-trainer`, `gpusandbox/client: "true"` | 시나리오 A와 같은 NetworkPolicy가 이 label이 있는 pod의 연결을 허용합니다 |
-| `/outputs` | emptyDir | `rl-trainer` namespace의 Pod Security `baseline`이 hostPath를 금지하기 때문입니다 |
+??? note "상세 설명"
+    `k8s/trainer/hyperpod-job-grpo.yaml.tpl`의 HyperPod 고유 설정입니다.
 
-AWS 문서에 따르면 규칙이 HANGING 상태가 되면 HyperPod elastic agent가 컨테이너가 멈춘 것으로 판단하고, training operator와 함께 job을 재시작합니다. 로그 감시는 stdout을 읽습니다. 이 저장소의 이벤트는 flush로 stdout에 바로 출력됩니다.
+    | 필드 | 값 | 의미 (AWS 문서 기준) |
+    |---|---|---|
+    | command | `hyperpodrun --nproc_per_node=1 --nnodes=1 /opt/gpusandbox/rl/trl/train_grpo.py ...` | PyTorch ElasticAgent를 확장한 HyperPod elastic agent launcher |
+    | `runPolicy.jobMaxRetryCount` | 3 | process 수준 재시작의 최대 횟수 |
+    | `restartPolicy.numRestartBeforeFullJobRestart` | 1 | job 수준 재시작 전에 허용하는 process 수준 재시작 횟수 |
+    | `restartPolicy.evalPeriodSeconds` | 3600 | 재시작 한도를 평가하는 기간(초) |
+    | `restartPolicy.maxFullJobRestarts` | 2 | job을 실패로 끝내기 전 full job 재시작 최대 횟수 |
+    | `cleanPodPolicy` | All | operator가 정리할 pod 범위 |
+    | log rule `JobStart` | `.*"event": "routing".*`, `expectedStartCutOffInSeconds: 1200` | 시작 후 20분 안에 routing 이벤트가 없으면 HANGING |
+    | log rule `RewardStalled` | `.*"event": "reward_batch".*`, `expectedRecurringFrequencyInSeconds: 1800` | reward_batch 줄 사이가 30분을 넘으면 HANGING |
+    | nodeAffinity | `node.kubernetes.io/instance-type In [ml.g5.2xlarge]`, `sagemaker.amazonaws.com/node-health-status In [Schedulable]` | 상태가 Schedulable인 HyperPod 노드에만 배치 |
+    | pod label | `app: grpo-trainer`, `gpusandbox/client: "true"` | 시나리오 A와 같은 NetworkPolicy가 이 label이 있는 pod의 연결을 허용합니다 |
+    | `/outputs` | emptyDir | `rl-trainer` namespace의 Pod Security `baseline`이 hostPath를 금지하기 때문입니다 |
 
-샌드박스로 보낸 completion이 없는 step에서는 `reward_batch` 줄이 출력되지 않습니다. 그래서 모든 completion이 코드 없음이나 trainer 쪽 정책 위반으로 처리되는 상태가 30분 넘게 이어지면, `RewardStalled` 규칙이 이를 hang으로 판단할 수 있습니다.
+    AWS 문서에 따르면 규칙이 HANGING 상태가 되면 HyperPod elastic agent가 컨테이너가 멈춘 것으로 판단하고, training operator와 함께 job을 재시작합니다. 로그 감시는 stdout을 읽습니다. 이 저장소의 이벤트는 flush로 stdout에 바로 출력됩니다.
 
-!!! note "재시작 뒤 checkpoint"
-    `train_grpo.py`는 시작할 때 `/outputs/grpo`의 마지막 checkpoint(20 step마다 저장)에서 이어 학습합니다. 그런데 emptyDir는 pod가 삭제되면 함께 삭제됩니다.
+    샌드박스로 보낸 completion이 없는 step에서는 `reward_batch` 줄이 출력되지 않습니다. 그래서 모든 completion이 코드 없음이나 trainer 쪽 정책 위반으로 처리되는 상태가 30분 넘게 이어지면, `RewardStalled` 규칙이 이를 hang으로 판단할 수 있습니다.
 
-    - **pod가 다시 만들어지는 full job 재시작이나 노드 교체 뒤**: 디렉터리가 비어 있어 학습이 처음부터 다시 시작됩니다.
-    - **process 수준 재시작**: 기존 pod를 그대로 쓰는지에 따라 결과가 달라집니다.
+    !!! note "재시작 뒤 checkpoint"
+        `train_grpo.py`는 시작할 때 `/outputs/grpo`의 마지막 checkpoint(20 step마다 저장)에서 이어 학습합니다. 그런데 emptyDir는 pod가 삭제되면 함께 삭제됩니다.
 
-    노드 교체 뒤에도 학습을 이어 가려면 `/outputs`에 FSx for Lustre 같은 공유 스토리지 PVC를 마운트하세요([06 veRL로 확장](../production/06_scaling_with_verl.md)).
+        - **pod가 다시 만들어지는 full job 재시작이나 노드 교체 뒤**: 디렉터리가 비어 있어 학습이 처음부터 다시 시작됩니다.
+        - **process 수준 재시작**: 기존 pod를 그대로 쓰는지에 따라 결과가 달라집니다.
 
-HyperPod 노드에는 두 가지 제약이 있습니다.
+        노드 교체 뒤에도 학습을 이어 가려면 `/outputs`에 FSx for Lustre 같은 공유 스토리지 PVC를 마운트하세요([06 veRL로 확장](../production/06_scaling_with_verl.md)).
 
-- **노드당 pod 수**: ENI가 하나라 노드당 pod 수가 적습니다. `ml.g6.2xlarge`는 최대 14개(HyperPod chart의 DaemonSet 포함)였고, `ml.g5.2xlarge`의 한도는 확인하지 않았습니다.
-- **IMDS 접근**: 기본적으로 hostNetwork pod만 IMDS에 접근할 수 있으므로 trainer pod는 노드 자격 증명을 읽을 수 없습니다.
+    HyperPod 노드에는 두 가지 제약이 있습니다.
+
+    - **노드당 pod 수**: ENI가 하나라 노드당 pod 수가 적습니다. `ml.g6.2xlarge`는 최대 14개(HyperPod chart의 DaemonSet 포함)였고, `ml.g5.2xlarge`의 한도는 확인하지 않았습니다.
+    - **IMDS 접근**: 기본적으로 hostNetwork pod만 IMDS에 접근할 수 있으므로 trainer pod는 노드 자격 증명을 읽을 수 없습니다.
 
 ## 확인 방법
 
@@ -580,39 +583,43 @@ scripts/hyperpod/run_grpo.sh
 
 ### custom AMI 관리
 
-| 상황 | 할 일 |
-|---|---|
-| HyperPod가 새 base AMI를 공개함 | custom AMI는 자동으로 갱신되지 않습니다. 표 아래 순서로 sandbox 그룹의 AMI를 바꿉니다 |
-| gVisor를 새 릴리스로 업그레이드함 | 표 아래 순서로 새 AMI를 만들어 sandbox 그룹에 적용합니다 |
-| 실습을 끝냄 | `scripts/08_cleanup.sh`가 `HYPERPOD_B2_AMI_ID`의 AMI와 스냅샷을 지울지 묻습니다 |
+??? note "상세 설명"
+    | 상황 | 할 일 |
+    |---|---|
+    | HyperPod가 새 base AMI를 공개함 | custom AMI는 자동으로 갱신되지 않습니다. 표 아래 순서로 sandbox 그룹의 AMI를 바꿉니다 |
+    | gVisor를 새 릴리스로 업그레이드함 | 표 아래 순서로 새 AMI를 만들어 sandbox 그룹에 적용합니다 |
+    | 실습을 끝냄 | `scripts/08_cleanup.sh`가 `HYPERPOD_B2_AMI_ID`의 AMI와 스냅샷을 지울지 묻습니다 |
 
-**HyperPod가 새 base AMI를 공개했을 때:**
+    **HyperPod가 새 base AMI를 공개했을 때:**
 
-1. 2단계를 다시 실행합니다.
-2. `scripts/config.env`의 `HYPERPOD_B2_AMI_ID`를 새 AMI ID로 바꾼 뒤 `source scripts/config.env`로 다시 불러옵니다.
-3. `aws sagemaker update-cluster-software --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" --instance-groups InstanceGroupName=sandbox --image-id "$HYPERPOD_B2_AMI_ID"`로 sandbox 그룹만 바꿉니다. `--instance-groups`를 빼면 모든 인스턴스 그룹이 이 이미지로 바뀝니다.
+    1. 2단계를 다시 실행합니다.
+    2. `scripts/config.env`의 `HYPERPOD_B2_AMI_ID`를 새 AMI ID로 바꾼 뒤 `source scripts/config.env`로 다시 불러옵니다.
+    3. `aws sagemaker update-cluster-software --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" --instance-groups InstanceGroupName=sandbox --image-id "$HYPERPOD_B2_AMI_ID"`로 sandbox 그룹만 바꿉니다. `--instance-groups`를 빼면 모든 인스턴스 그룹이 이 이미지로 바뀝니다.
 
-**gVisor를 새 릴리스로 업그레이드할 때:**
+    **gVisor를 새 릴리스로 업그레이드할 때:**
 
-1. `GVISOR_RELEASE`를 바꾸고 2단계를 다시 실행합니다. 새 릴리스의 지원 목록에 드라이버가 있는지는 빌드 중에 확인합니다.
-2. 위 순서와 같이 새 AMI ID를 설정 파일에 저장하고 다시 불러온 뒤 `update-cluster-software`로 sandbox 그룹만 바꿉니다. 3단계(`create.sh --b2`)는 기존 클러스터에 `create-cluster`를 다시 호출하므로 실행하지 않습니다.
+    1. `GVISOR_RELEASE`를 바꾸고 2단계를 다시 실행합니다. 새 릴리스의 지원 목록에 드라이버가 있는지는 빌드 중에 확인합니다.
+    2. 위 순서와 같이 새 AMI ID를 설정 파일에 저장하고 다시 불러온 뒤 `update-cluster-software`로 sandbox 그룹만 바꿉니다. 3단계(`create.sh --b2`)는 기존 클러스터에 `create-cluster`를 다시 호출하므로 실행하지 않습니다.
 
 ## Kata를 HyperPod 노드에서 쓸 수 없는 이유
 
-Kata는 pod마다 작은 VM을 띄우므로 노드에 `/dev/kvm`(KVM 가상화 장치)이 있어야 합니다. HyperPod 노드는 이 조건을 충족하지 못합니다.
+이 실습에서는 Kata가 필요하면 EC2에 배치합니다. [플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)에서 런타임별 노드 조건을 비교할 수 있습니다.
 
-| 조건 | Kata가 요구하는 것 | HyperPod 노드 |
-|---|---|---|
-| `/dev/kvm` | QEMU와 Cloud Hypervisor는 KVM을 씁니다. AWS에서는 bare metal이나 nested virtualization 인스턴스가 필요합니다 | `ml.*.metal` 인스턴스 유형이 없습니다(`CreateCluster` 인스턴스 유형 목록) |
-| nested virtualization | EC2에서는 C8i, M8i, R8i 등에서 CPU 옵션으로 켭니다 | 인스턴스 그룹 설정에 해당 CPU 옵션이 없고, G와 P 계열은 애초에 nested virtualization 대상이 아닙니다 |
-| GPU passthrough | IOMMU가 필요하고, 호스트에서 GPU가 `vfio-pci` 드라이버에 바인딩되어 있어야 합니다 | HyperPod AMI는 호스트에서 NVIDIA 드라이버를 로드합니다 |
+??? note "상세 설명"
+    Kata는 pod마다 작은 VM을 띄우므로 노드에 `/dev/kvm`(KVM 가상화 장치)이 있어야 합니다. HyperPod 노드는 이 조건을 충족하지 못합니다.
 
-custom AMI를 써도 이 조건은 달라지지 않습니다. AMI로는 소프트웨어만 바꿀 수 있고, `/dev/kvm` 유무는 인스턴스 유형(bare metal이나 nested virtualization 지원 여부)에 따라 결정됩니다.
+    | 조건 | Kata가 요구하는 것 | HyperPod 노드 |
+    |---|---|---|
+    | `/dev/kvm` | QEMU와 Cloud Hypervisor는 KVM을 씁니다. AWS에서는 bare metal이나 nested virtualization 인스턴스가 필요합니다 | `ml.*.metal` 인스턴스 유형이 없습니다(`CreateCluster` 인스턴스 유형 목록) |
+    | nested virtualization | EC2에서는 C8i, M8i, R8i 등에서 CPU 옵션으로 켭니다 | 인스턴스 그룹 설정에 해당 CPU 옵션이 없고, G와 P 계열은 애초에 nested virtualization 대상이 아닙니다 |
+    | GPU passthrough | IOMMU가 필요하고, 호스트에서 GPU가 `vfio-pci` 드라이버에 바인딩되어 있어야 합니다 | HyperPod AMI는 호스트에서 NVIDIA 드라이버를 로드합니다 |
 
-Kata 샌드박스가 필요하면 B1처럼 같은 클러스터의 EC2 노드 그룹(`g4dn.metal`, `c8i`)에서 실행하세요.
+    custom AMI를 써도 이 조건은 달라지지 않습니다. AMI로는 소프트웨어만 바꿀 수 있고, `/dev/kvm` 유무는 인스턴스 유형(bare metal이나 nested virtualization 지원 여부)에 따라 결정됩니다.
 
-!!! question "❓ 오해: HyperPod를 쓰면 GPU 샌드박스도 HyperPod 노드에 둬야 한다"
-    HyperPod EKS는 기존 EKS 클러스터에 인스턴스 그룹을 연결하는 구조입니다. 그래서 샌드박스를 같은 클러스터의 EC2 노드 그룹에서 실행하면서 NetworkPolicy와 토큰 인증을 그대로 쓸 수 있습니다. 이 구성에서 HyperPod가 맡는 일은 장시간 실행되는 trainer의 노드 복구와 job 재시작입니다. B2는 custom AMI를 직접 관리해야 하므로, 샌드박스 노드에도 HyperPod의 노드 복구가 필요할 때 선택하세요.
+    Kata 샌드박스가 필요하면 B1처럼 같은 클러스터의 EC2 노드 그룹(`g4dn.metal`, `c8i`)에서 실행하세요.
+
+    !!! question "❓ 오해: HyperPod를 쓰면 GPU 샌드박스도 HyperPod 노드에 둬야 한다"
+        HyperPod EKS는 기존 EKS 클러스터에 인스턴스 그룹을 연결하는 구조입니다. 그래서 샌드박스를 같은 클러스터의 EC2 노드 그룹에서 실행하면서 NetworkPolicy와 토큰 인증을 그대로 쓸 수 있습니다. 이 구성에서 HyperPod가 맡는 일은 장시간 실행되는 trainer의 노드 복구와 job 재시작입니다. B2는 custom AMI를 직접 관리해야 하므로, 샌드박스 노드에도 HyperPod의 노드 복구가 필요할 때 선택하세요.
 
 ## 적용 범위와 한계
 

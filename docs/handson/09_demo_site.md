@@ -500,65 +500,68 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-d
 
 ## 보안 설계
 
-설정은 [`demo/infra/site.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/demo/infra/site.yaml)과 [`demo/site`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/demo/site)에 있습니다.
+CloudFront는 S3에 올린 기록만 제공합니다. 배포 전 2.5단계에서 공개할 파일을 확인하세요.
 
-| 계층 | 설정 | 방지하는 것 |
-|---|---|---|
-| 버킷 | Block Public Access 네 가지(`BlockPublicAcls`, `IgnorePublicAcls`, `BlockPublicPolicy`, `RestrictPublicBuckets`)를 모두 켬 | 버킷이나 객체가 정책이나 ACL로 공개되는 것 |
-| 버킷 | Object Ownership `BucketOwnerEnforced` (ACL 비활성) | ACL을 통해 의도하지 않은 권한이 부여되는 경로. OAC 문서가 권장하는 설정입니다 |
-| 버킷 | SSE-S3(`AES256`) 기본 암호화 | 저장된 객체가 암호화되지 않은 채 남는 것 |
-| 버킷 정책 | `s3:GetObject`를 `cloudfront.amazonaws.com`에만 허용하고, `AWS:SourceArn`이 이 배포의 ARN일 때만 허용 | 다른 CloudFront 배포(다른 계정의 배포 포함)가 이 버킷을 읽는 것 |
-| 버킷 정책 | `aws:SecureTransport`가 `false`인 모든 `s3:*` 요청 거부 | 평문 HTTP로 버킷에 접근하는 것 |
-| OAC | `SigningBehavior: always`, `sigv4` | 서명 없는 origin 요청 |
-| CloudFront | `ViewerProtocolPolicy: redirect-to-https` | 평문 HTTP로 페이지에 접속하는 것 |
-| CloudFront | `AllowedMethods: [GET, HEAD]` | PUT, POST, DELETE 같은 쓰기 요청 |
-| CloudFront | `DefaultRootObject: index.html` | 루트 URL을 요청했을 때 배포의 내용이 노출되는 것 |
-| WAF | 배포에 연결한 web ACL(scope `CLOUDFRONT`, 기본 동작 Allow): rate limit, 영상 경로 제한, AWS managed rule group 세 개 | 한 IP의 과도한 요청과 영상 반복 다운로드로 생기는 전송 비용, 평판 목록에 있는 IP, 일반적인 웹 공격 패턴과 알려진 악성 입력 |
-| 접근 로그 | CloudFront 표준 로깅 v2(CloudWatch Logs vended delivery: `AWS::Logs::DeliverySource`, `DeliveryDestination`, `Delivery`)를 로그 버킷으로 전송 | 공개 엔드포인트의 접근 기록이 남지 않는 것 |
-| 접근 로그 | 사이트 버킷의 S3 서버 액세스 로그를 같은 로그 버킷의 `s3-access/` 접두사로 전송 | 버킷 접근 기록이 남지 않는 것 |
-| 로그 버킷 | Block Public Access 네 가지, `BucketOwnerEnforced`, SSE-S3, 90일 뒤 만료, TLS가 아닌 요청 거부, 쓰기 제한, `DeletionPolicy: Retain` | 로그가 공개되거나 무기한 쌓이는 것, 스택을 지울 때 로그가 함께 사라지는 것 |
-| 응답 헤더 | CSP `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` | 외부 스크립트, 스타일, 영상, 연결, 폼 전송, 다른 사이트의 프레임 삽입 |
-| 응답 헤더 | HSTS `max-age` 63072000, `includeSubDomains` | HTTPS 대신 HTTP로 접속하는 것 |
-| 응답 헤더 | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` | MIME sniffing, clickjacking, referrer 유출, 브라우저 기능 사용 |
-| 페이지 | 기록의 값은 모두 text node로 삽입하고(차트는 SVG 요소와 text node로 그림) `innerHTML` 같은 HTML 삽입을 쓰지 않습니다 | 기록 안의 문자열(평가된 코드가 만든 오류 메시지의 끝부분, 정책 위반, 터미널 출력)이 HTML이나 스크립트로 실행되는 것 |
-| 공개 데이터 | `build_extras.py`가 내부 주소와 식별자를 가리고, `deploy.sh`가 업로드 전에 같은 검사(`--check`)를 다시 실행 | 클러스터 로그에 들어 있는 내부 주소와 식별자가 공개되는 것, 영상에 검사하지 않은 데이터가 찍히는 것 |
-| 업로드 | `aws s3 sync`가 허용 목록만 올리고, 데이터는 검사를 거친 두 파일만 따로 업로드 | `demo/site`에 남은 임시 파일이나 검사하지 않은 파일이 공개되는 것 |
+??? note "상세 설명"
+    설정은 [`demo/infra/site.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/demo/infra/site.yaml)과 [`demo/site`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/demo/site)에 있습니다.
 
-- **OAC의 `always`**: 모든 origin 요청에 서명하도록(`always`) 설정하면 CloudFront와 S3 사이도 HTTPS로만 통신합니다(CloudFront 문서).
-- **WAF 규칙**: IP마다 5분에 1000건을 넘는 요청 차단(rate limit), 영상 경로(`/media/`)는 IP마다 5분에 100건으로 따로 제한, AWS managed rule group `AWSManagedRulesAmazonIpReputationList`, `AWSManagedRulesCommonRuleSet`, `AWSManagedRulesKnownBadInputsRuleSet`입니다.
-- **로그 버킷의 쓰기 제한**: 쓰기는 이 계정의 로그 전송 서비스(`logging.s3.amazonaws.com`, `delivery.logs.amazonaws.com`)만 허용합니다.
-- **페이지가 불러오는 파일**: `index.html`은 `style.css`와 `app.js`만 불러오고, `app.js`는 같은 origin의 `data/recording.json`과 `data/extras.json`만 `fetch`합니다. 영상도 같은 origin의 `media/`에서 재생합니다.
-- **공개 데이터에서 가리는 값**: IP 주소(IPv4, IPv6, pod DNS 형식), 노드 이름, AWS endpoint 호스트, 계정 ID, ARN, EC2 리소스 ID, 토큰입니다. `record_tour.py`도 녹화 전에 같은 검사를 하고, 녹화에 쓴 데이터의 해시를 남겨 `deploy.sh`가 게시할 데이터와 다르면 경고합니다.
-- **업로드 허용 목록**: `index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`입니다.
+    | 계층 | 설정 | 방지하는 것 |
+    |---|---|---|
+    | 버킷 | Block Public Access 네 가지(`BlockPublicAcls`, `IgnorePublicAcls`, `BlockPublicPolicy`, `RestrictPublicBuckets`)를 모두 켬 | 버킷이나 객체가 정책이나 ACL로 공개되는 것 |
+    | 버킷 | Object Ownership `BucketOwnerEnforced` (ACL 비활성) | ACL을 통해 의도하지 않은 권한이 부여되는 경로. OAC 문서가 권장하는 설정입니다 |
+    | 버킷 | SSE-S3(`AES256`) 기본 암호화 | 저장된 객체가 암호화되지 않은 채 남는 것 |
+    | 버킷 정책 | `s3:GetObject`를 `cloudfront.amazonaws.com`에만 허용하고, `AWS:SourceArn`이 이 배포의 ARN일 때만 허용 | 다른 CloudFront 배포(다른 계정의 배포 포함)가 이 버킷을 읽는 것 |
+    | 버킷 정책 | `aws:SecureTransport`가 `false`인 모든 `s3:*` 요청 거부 | 평문 HTTP로 버킷에 접근하는 것 |
+    | OAC | `SigningBehavior: always`, `sigv4` | 서명 없는 origin 요청 |
+    | CloudFront | `ViewerProtocolPolicy: redirect-to-https` | 평문 HTTP로 페이지에 접속하는 것 |
+    | CloudFront | `AllowedMethods: [GET, HEAD]` | PUT, POST, DELETE 같은 쓰기 요청 |
+    | CloudFront | `DefaultRootObject: index.html` | 루트 URL을 요청했을 때 배포의 내용이 노출되는 것 |
+    | WAF | 배포에 연결한 web ACL(scope `CLOUDFRONT`, 기본 동작 Allow): rate limit, 영상 경로 제한, AWS managed rule group 세 개 | 한 IP의 과도한 요청과 영상 반복 다운로드로 생기는 전송 비용, 평판 목록에 있는 IP, 일반적인 웹 공격 패턴과 알려진 악성 입력 |
+    | 접근 로그 | CloudFront 표준 로깅 v2(CloudWatch Logs vended delivery: `AWS::Logs::DeliverySource`, `DeliveryDestination`, `Delivery`)를 로그 버킷으로 전송 | 공개 엔드포인트의 접근 기록이 남지 않는 것 |
+    | 접근 로그 | 사이트 버킷의 S3 서버 액세스 로그를 같은 로그 버킷의 `s3-access/` 접두사로 전송 | 버킷 접근 기록이 남지 않는 것 |
+    | 로그 버킷 | Block Public Access 네 가지, `BucketOwnerEnforced`, SSE-S3, 90일 뒤 만료, TLS가 아닌 요청 거부, 쓰기 제한, `DeletionPolicy: Retain` | 로그가 공개되거나 무기한 쌓이는 것, 스택을 지울 때 로그가 함께 사라지는 것 |
+    | 응답 헤더 | CSP `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` | 외부 스크립트, 스타일, 영상, 연결, 폼 전송, 다른 사이트의 프레임 삽입 |
+    | 응답 헤더 | HSTS `max-age` 63072000, `includeSubDomains` | HTTPS 대신 HTTP로 접속하는 것 |
+    | 응답 헤더 | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` | MIME sniffing, clickjacking, referrer 유출, 브라우저 기능 사용 |
+    | 페이지 | 기록의 값은 모두 text node로 삽입하고(차트는 SVG 요소와 text node로 그림) `innerHTML` 같은 HTML 삽입을 쓰지 않습니다 | 기록 안의 문자열(평가된 코드가 만든 오류 메시지의 끝부분, 정책 위반, 터미널 출력)이 HTML이나 스크립트로 실행되는 것 |
+    | 공개 데이터 | `build_extras.py`가 내부 주소와 식별자를 가리고, `deploy.sh`가 업로드 전에 같은 검사(`--check`)를 다시 실행 | 클러스터 로그에 들어 있는 내부 주소와 식별자가 공개되는 것, 영상에 검사하지 않은 데이터가 찍히는 것 |
+    | 업로드 | `aws s3 sync`가 허용 목록만 올리고, 데이터는 검사를 거친 두 파일만 따로 업로드 | `demo/site`에 남은 임시 파일이나 검사하지 않은 파일이 공개되는 것 |
 
-응답 헤더는 모두 `Override: true`로 설정되어 있어서, origin이 보낸 같은 이름의 헤더보다 정책 값이 우선합니다. 버킷 정책의 `AWS:SourceArn` 조건은 고정값이므로 S3는 이 정책을 public으로 판단하지 않습니다. 그래서 `BlockPublicPolicy`를 켠 상태에서도 이 정책을 적용할 수 있습니다(S3 문서의 "public" 정의).
+    - **OAC의 `always`**: 모든 origin 요청에 서명하도록(`always`) 설정하면 CloudFront와 S3 사이도 HTTPS로만 통신합니다(CloudFront 문서).
+    - **WAF 규칙**: IP마다 5분에 1000건을 넘는 요청 차단(rate limit), 영상 경로(`/media/`)는 IP마다 5분에 100건으로 따로 제한, AWS managed rule group `AWSManagedRulesAmazonIpReputationList`, `AWSManagedRulesCommonRuleSet`, `AWSManagedRulesKnownBadInputsRuleSet`입니다.
+    - **로그 버킷의 쓰기 제한**: 쓰기는 이 계정의 로그 전송 서비스(`logging.s3.amazonaws.com`, `delivery.logs.amazonaws.com`)만 허용합니다.
+    - **페이지가 불러오는 파일**: `index.html`은 `style.css`와 `app.js`만 불러오고, `app.js`는 같은 origin의 `data/recording.json`과 `data/extras.json`만 `fetch`합니다. 영상도 같은 origin의 `media/`에서 재생합니다.
+    - **공개 데이터에서 가리는 값**: IP 주소(IPv4, IPv6, pod DNS 형식), 노드 이름, AWS endpoint 호스트, 계정 ID, ARN, EC2 리소스 ID, 토큰입니다. `record_tour.py`도 녹화 전에 같은 검사를 하고, 녹화에 쓴 데이터의 해시를 남겨 `deploy.sh`가 게시할 데이터와 다르면 경고합니다.
+    - **업로드 허용 목록**: `index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`입니다.
 
-!!! warning "누구나 볼 수 있는 공개 페이지입니다"
-    이 데모는 의도적으로 공개하므로 템플릿에 인증이나 접근 제어가 없습니다. WAF는 rate limit과 managed rule로 비정상 요청만 차단합니다. URL을 아는 사람은 누구나 볼 수 있으니, 업로드하기 전에 2.5의 검토 항목을 확인하세요.
+    응답 헤더는 모두 `Override: true`로 설정되어 있어서, origin이 보낸 같은 이름의 헤더보다 정책 값이 우선합니다. 버킷 정책의 `AWS:SourceArn` 조건은 고정값이므로 S3는 이 정책을 public으로 판단하지 않습니다. 그래서 `BlockPublicPolicy`를 켠 상태에서도 이 정책을 적용할 수 있습니다(S3 문서의 "public" 정의).
 
-!!! warning "남은 위험: 기본 인증서의 TLS 1.0과 1.1"
-    기본 `*.cloudfront.net` 인증서에서는 viewer security policy가 TLSv1로 고정됩니다. 2026-11-18 배포에서 이 엔드포인트는 TLS 1.0과 1.1 handshake를 받아들였습니다(TLS 1.2와 1.3도 제공). `TLSv1.2_2021`은 us-east-1의 ACM 인증서를 쓰는 custom domain(`DEMO_DOMAIN`, `DEMO_CERT_ARN`)에서만 적용할 수 있으니 5절을 보세요. 이 실습 계정에는 Route 53 hosted zone이 없어 기본 인증서로 배포했습니다.
+    !!! warning "누구나 볼 수 있는 공개 페이지입니다"
+        이 데모는 의도적으로 공개하므로 템플릿에 인증이나 접근 제어가 없습니다. WAF는 rate limit과 managed rule로 비정상 요청만 차단합니다. URL을 아는 사람은 누구나 볼 수 있으니, 업로드하기 전에 2.5의 검토 항목을 확인하세요.
 
-!!! note "검증 상태"
-    로컬에서 `tests/test_demo.py`의 테스트 11개, `cfn-lint demo/infra/site.yaml`, `node --check demo/site/app.js`가 통과했습니다. 배포와 같은 CSP 헤더를 붙인 로컬 서버에서 Chromium으로 모든 기능을 눌러 봤고, CSP 위반은 없었습니다. 테스트가 확인하는 항목은 다음과 같습니다.
+    !!! warning "남은 위험: 기본 인증서의 TLS 1.0과 1.1"
+        기본 `*.cloudfront.net` 인증서에서는 viewer security policy가 TLSv1로 고정됩니다. 2026-11-18 배포에서 이 엔드포인트는 TLS 1.0과 1.1 handshake를 받아들였습니다(TLS 1.2와 1.3도 제공). `TLSv1.2_2021`은 us-east-1의 ACM 인증서를 쓰는 custom domain(`DEMO_DOMAIN`, `DEMO_CERT_ARN`)에서만 적용할 수 있으니 5절을 보세요. 이 실습 계정에는 Route 53 hosted zone이 없어 기본 인증서로 배포했습니다.
 
-    - 버킷의 Block Public Access 네 가지 설정
-    - 허용 문(statement)이 CloudFront service principal 하나뿐이고 `AWS:SourceArn` 조건이 있는지
-    - TLS가 아닌 요청 거부, `redirect-to-https`, GET과 HEAD만 허용
-    - CSP 지시문과 1년 이상의 HSTS
-    - 외부 리소스와 `innerHTML` 같은 HTML 삽입이 없고, `fetch` 대상이 `data/recording.json`과 `data/extras.json`뿐인지, CSP에 `media-src 'self'`가 있는지
-    - 샘플과 `demo/recordings/`의 기록마다 verdict가 기대값과 같고, reward가 `score_verdict`의 계산 결과와 같은지
-    - 공개 데이터 파일에 IP 주소, 노드 이름, 계정 ID, ARN, 토큰이 없고, 가림 규칙이 IMDS 주소는 그대로 두는지
-    - `extras.json`의 벤치마크, 학습, 버전 전환, 터미널 기록이 기대한 구조인지
-    - WAF가 `/media/` 요청을 IP마다 제한하고, `deploy.sh`가 허용 목록으로만 업로드하며 업로드 전에 `--check`를 실행하는지
-    - 패턴별 아키텍처 페이지도 외부 리소스와 HTML 삽입이 없고 아무것도 `fetch`하지 않는지, 아이콘 SVG에 스크립트나 외부 참조가 없는지
+    !!! note "검증 상태"
+        로컬에서 `tests/test_demo.py`의 테스트 11개, `cfn-lint demo/infra/site.yaml`, `node --check demo/site/app.js`가 통과했습니다. 배포와 같은 CSP 헤더를 붙인 로컬 서버에서 Chromium으로 모든 기능을 눌러 봤고, CSP 위반은 없었습니다. 테스트가 확인하는 항목은 다음과 같습니다.
 
-    us-east-1에 실제로 배포한 뒤 외부에서 다음을 확인했습니다([실행 기록](../reference/sources.md#aws-실행-기록)).
+        - 버킷의 Block Public Access 네 가지 설정
+        - 허용 문(statement)이 CloudFront service principal 하나뿐이고 `AWS:SourceArn` 조건이 있는지
+        - TLS가 아닌 요청 거부, `redirect-to-https`, GET과 HEAD만 허용
+        - CSP 지시문과 1년 이상의 HSTS
+        - 외부 리소스와 `innerHTML` 같은 HTML 삽입이 없고, `fetch` 대상이 `data/recording.json`과 `data/extras.json`뿐인지, CSP에 `media-src 'self'`가 있는지
+        - 샘플과 `demo/recordings/`의 기록마다 verdict가 기대값과 같고, reward가 `score_verdict`의 계산 결과와 같은지
+        - 공개 데이터 파일에 IP 주소, 노드 이름, 계정 ID, ARN, 토큰이 없고, 가림 규칙이 IMDS 주소는 그대로 두는지
+        - `extras.json`의 벤치마크, 학습, 버전 전환, 터미널 기록이 기대한 구조인지
+        - WAF가 `/media/` 요청을 IP마다 제한하고, `deploy.sh`가 허용 목록으로만 업로드하며 업로드 전에 `--check`를 실행하는지
+        - 패턴별 아키텍처 페이지도 외부 리소스와 HTML 삽입이 없고 아무것도 `fetch`하지 않는지, 아이콘 SVG에 스크립트나 외부 참조가 없는지
 
-    - **헤더:** CSP, HSTS(max-age 63072000, includeSubDomains), `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: strict-origin-when-cross-origin`, Permissions-Policy
-    - **요청:** POST, PUT, DELETE는 403, 없는 경로는 403, `http://`는 301. GET과 HEAD만 허용
-    - **버킷:** 두 버킷 모두 Block Public Access가 켜져 있고 policy status가 public이 아니며, 둘 다 SSE-S3
-    - **로깅:** S3로 가는 로그 전송(delivery)이 있음
+        us-east-1에 실제로 배포한 뒤 외부에서 다음을 확인했습니다([실행 기록](../reference/sources.md#aws-실행-기록)).
+
+        - **헤더:** CSP, HSTS(max-age 63072000, includeSubDomains), `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: strict-origin-when-cross-origin`, Permissions-Policy
+        - **요청:** POST, PUT, DELETE는 403, 없는 경로는 403, `http://`는 301. GET과 HEAD만 허용
+        - **버킷:** 두 버킷 모두 Block Public Access가 켜져 있고 policy status가 public이 아니며, 둘 다 SSE-S3
+        - **로깅:** S3로 가는 로그 전송(delivery)이 있음
 
 ## 확인 방법
 
