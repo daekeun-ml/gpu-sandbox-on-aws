@@ -103,42 +103,135 @@ python -m pytest -q
 > [!WARNING]
 > **Linux 호스트에서 서버를 직접 띄울 때:** 샌드박스 서버는 평가가 끝날 때마다 `/proc`에 보이는 프로세스 중 자신과 조상을 뺀 모두에 SIGKILL을 보냅니다. pod 안에서는 컨테이너 범위로 한정되지만, Linux 호스트에서 `gpusandbox-server`를 직접 띄우면 같은 사용자의 다른 프로세스도 대상이 되니 별도 컨테이너에서 실행하세요. pytest는 `tests/conftest.py`에서 이 동작을 끄므로 Linux 호스트에서도 위 명령을 그대로 실행할 수 있습니다([시작하기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/getting_started/)).
 
-### 2. 스크립트를 번호 순서대로 (AWS, 과금 발생)
+### 2. AWS에서 실행 (과금 발생)
 
-먼저 `cp scripts/config.env.example scripts/config.env`로 설정 파일을 만듭니다. `SCENARIO`(A, B1, B2, C)는 `02_create_cluster.sh`의 옵션으로도 고를 수 있고, `ADMIN_PRINCIPAL_ARN`을 비워 두면 지금 쓰는 IAM 역할이 클러스터 관리자가 됩니다. 역할 ARN에 경로(path)가 있으면 경로를 포함한 역할 ARN을 직접 넣으세요. 모든 스크립트는 이 파일을 읽고, 그 단계에 필요한 값이 비었거나 `__SET_ME__`를 포함하면 멈춥니다. HyperPod 전용 값(`HYPERPOD_LCS_BUCKET` 등)은 B1, B2를 시작하기 전에 채우세요.
+시나리오를 하나 고르고 아래 명령을 위에서부터 차례로 실행합니다. 처음이라면 **시나리오 C**부터 시작하세요. GPU 없이 시간당 약 0.57 USD로 클러스터 생성부터 정리까지 해 볼 수 있습니다. 단계별 확인 방법은 [핸즈온 00 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에 있습니다.
 
-인프라는 CDK 앱이 만들므로 `02_create_cluster.sh`를 실행하기 전에 한 번 준비합니다. Node.js 22 또는 24, AWS CDK CLI 2.1148.1 이상, AWS CLI용 Session Manager plugin을 설치하고, 가상 환경에 CDK 라이브러리를 넣은 뒤 계정과 리전마다 bootstrap을 한 번 실행하세요.
+#### 공통 준비 (한 번만)
+
+1. 설정 파일을 만듭니다. 모든 스크립트가 이 파일을 읽으며, 필요한 값이 비어 있으면 그 자리에서 멈춥니다. `ADMIN_PRINCIPAL_ARN`을 비워 두면 지금 쓰는 IAM 역할이 클러스터 관리자가 됩니다. 역할 ARN에 경로가 있으면 경로를 포함한 ARN을 직접 넣으세요.
+
+    ```bash
+    cp scripts/config.env.example scripts/config.env
+    ```
+
+2. CDK를 준비합니다. Node.js 22 또는 24와 AWS CLI용 Session Manager plugin을 먼저 설치하세요.
+
+    ```bash
+    npm install -g aws-cdk                 # AWS CDK CLI 2.1148.1 or later
+    uv pip install -r cdk/requirements.txt # into the activated .venv
+    source scripts/config.env              # exports AWS_REGION
+    cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
+    ```
+
+3. 아래 명령을 실행할 때 두 가지를 꼭 지키세요.
+    - **`cdk/tunnel.sh`는 두 번째 터미널에서 계속 켜 둡니다.** 클러스터 API가 비공개라서 kubectl과 helm은 이 터널로만 접속합니다.
+    - **`03_build_push_images.sh`가 마지막에 출력하는 `export` 줄은 `scripts/config.env`에 붙여 넣습니다.** 이미지 주소가 없으면 다음 단계가 멈춥니다.
+
+#### 시나리오 C: GPU 없이 시작 (추천)
+
+`c8i.2xlarge` 한 대에 세 런타임(gVisor, Kata + Cloud Hypervisor, Kata + QEMU)의 CPU 샌드박스를 띄우고, 모델 없이 채점과 버전 교체를 실습합니다. 시작 전에 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가하세요.
 
 ```bash
-npm install -g aws-cdk                 # AWS CDK CLI 2.1148.1 or later
-uv pip install -r cdk/requirements.txt # into the activated .venv
-source scripts/config.env              # exports AWS_REGION
-cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
+scripts/01_check_prereqs.sh                        # tools, identity, quotas (read-only)
+scripts/02_create_cluster.sh --cpu-only            # VPC, private EKS, nodes (about 20 min)
+cdk/tunnel.sh                                      # second terminal, keep it open
+scripts/03_build_push_images.sh --no-trainer       # paste the printed export lines into config.env
+scripts/kata/cpu_nodes.sh                          # Kata and gVisor runtimes on the c8i node
+ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh
+for rt in gvisor-cpu kata-clh-cpu kata-qemu-cpu; do
+  scripts/06_deploy_sandboxes.sh "${rt}" v1        # one sandbox pool per runtime
+  scripts/ops/verify.sh "${rt}" v1                 # isolation, blocked egress, expected verdicts
+done
+scripts/ops/simulate.sh 30 20                      # reward batches without a model (about 16 min)
+scripts/ops/rollout.sh kata-clh-cpu v1 v2          # another terminal, while simulate.sh runs
+scripts/08_cleanup.sh                              # delete everything
 ```
 
-번호가 붙은 01~08이 기본 순서이고, `scripts/kata/`는 선택 단계, `scripts/ops/`는 검증과 운영용 스크립트입니다.
+단계별 설명은 [핸즈온 10 c8i 단독 저비용 경로](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/10_cpu_only/)에 있습니다.
 
-| 순서 | 명령 | 하는 일 |
-|---|---|---|
-| 01 | `scripts/01_check_prereqs.sh` | 도구(aws, cdk, node, kubectl, helm, docker, python3, jq, session-manager-plugin), AWS identity, G and VT vCPU quota, nested virtualization 지원, GPU 인스턴스의 AZ별 제공 여부 확인 (읽기 전용) |
-| 02 | `scripts/02_create_cluster.sh` | CDK 스택(`cdk/deploy.sh`)으로 VPC, EKS(private API endpoint), 시나리오별 노드 그룹, SSM access instance 생성 (기본 A, `--hyperpod`면 B1, `--hyperpod-b2`면 B2, `--cpu-only`면 C). 실습 계정에서 약 20분 |
-| 터널 | `cdk/tunnel.sh` | 두 번째 터미널에서 켜 두는 SSM 포트 포워딩. private API endpoint를 `127.0.0.1:8443`으로 이어 주고 kubectl 컨텍스트 `<CLUSTER_NAME>-tunnel`을 만듦. kubectl과 helm을 쓰는 모든 단계에 필요 |
-| 03 | `scripts/03_build_push_images.sh` | sandbox, trainer, control 이미지를 `linux/amd64`로 빌드해 ECR에 push. 마지막에 출력되는 `export` 줄(이미지 URI)을 `scripts/config.env`에 붙여 넣어야 다음 단계가 진행됨. 시나리오 B1, B2는 `HYPERPOD=1`을 붙여 실행(trainer 이미지에 `hyperpodrun` 포함) |
-| 04 | `scripts/04_install_gpu_stack.sh` | NVIDIA device plugin(CDI 모드)을 설치한 뒤 `gvisor` RuntimeClass를 등록하고 GPU smoke pod를 실행. 시나리오 B2에서는 device plugin만 설치 (시나리오 C는 이 단계를 실행하지 않음) |
-| 선택 | `scripts/kata/cpu_nodes.sh` | Kata CPU 노드(`c8i.2xlarge`, nested virtualization)에 kata-deploy, `gvisor-cpu` RuntimeClass, smoke pod. 노드 그룹은 시나리오 C이거나 `WITH_KATA_CPU=1`로 `02_create_cluster.sh`를 다시 실행했을 때 생김 |
-| 선택 | `scripts/kata/gpu_nodes.sh` | 첫 실행은 IOMMU AMI를 빌드하고 멈춤. `KATA_IOMMU_AMI_ID`와 `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh`를 다시 실행해 `g4dn.metal`(시간당 약 7.8 USD)을 추가한 뒤, 다시 실행하면 GPU Operator와 kata-deploy 설치 |
-| 05 | `scripts/05_setup_namespaces_auth.sh` | namespace, NetworkPolicy, ServiceAccount, JWKS, routing ConfigMap. routing 표의 기본 active runtime은 `gvisor`라서 B2는 `ACTIVE_RUNTIME=gvisor-hyperpod`, C는 `ACTIVE_RUNTIME=kata-clh-cpu`를 붙여 실행 |
-| 06 | `scripts/06_deploy_sandboxes.sh gvisor v1` | 샌드박스 풀(Deployment + headless Service) 배포. 첫 인자는 런타임 프로필이고, B2는 `gvisor-hyperpod`, C는 `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`를 씀 (`ops/verify.sh`도 같은 이름). C에서는 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 넣어야 v2 풀까지 노드 한 대에 들어감 |
-| 운영 | `scripts/ops/verify.sh gvisor v1` | 격리 증거, egress 차단, golden verdict, NetworkPolicy 확인 |
-| 07 | `scripts/07_run_grpo.sh` | TRL GRPO 학습 Job (기본 60 step). Job을 제출한 뒤 로그를 계속 보여 주고, Ctrl-C는 로그 보기만 멈추며 학습은 계속됨 |
-| 운영 | `scripts/ops/simulate.sh` | (시나리오 C) 모델 없이 golden 제출물로 reward 배치를 차례로 보내는 루프. 학습이 아님 |
-| 운영 | `scripts/ops/rollout.sh gvisor v1 v2` | 학습 중 샌드박스를 v1에서 v2로 blue/green 교체. 07의 로그를 띄운 터미널과 다른 터미널에서 실행. 기본 A에서는 먼저 `sandbox-gvisor` 노드 그룹을 4대로 늘려야 함(G and VT 쿼터 24 vCPU, [핸즈온 06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/06_sandbox_update/)). C에서는 `ops/simulate.sh`를 돌리는 동안 `scripts/ops/rollout.sh kata-clh-cpu v1 v2`를 실행 |
-| 운영 | `scripts/ops/bench.sh` | (선택) 배포된 v1 풀의 cold start, 지연, speedup 비교. 교체한 런타임도 재려면 `scripts/ops/rollout.sh gvisor v1 v2 --finish`처럼 v1을 줄이기 전에 실행 |
-| 08 | `scripts/08_cleanup.sh` | 클러스터 이름을 확인한 뒤 `cdk/destroy.sh`로 스택 전체 삭제, AMI는 하나씩 물어봄, `--images`면 ECR 저장소까지 (HyperPod를 만들었다면 `scripts/hyperpod/delete.sh` 먼저) |
+#### 시나리오 A: EC2 GPU (기본)
 
-인프라(VPC, 클러스터, 노드 그룹)는 CDK 앱 하나가, 클러스터 안쪽 설치는 `scripts/`의 스크립트가 터널을 거쳐 실행합니다. eksctl은 private endpoint만 있는 클러스터를 만들 수 없어서(eksctl 문서) 쓰지 않습니다. 스택 구성과 보안 기본값은 [Production 09 CDK로 프로비저닝](https://daekeun-ml.github.io/gpu-sandbox-on-aws/production/09_cdk/)에 있습니다.
+trainer(`g5.2xlarge`)가 GRPO로 학습하고, reward는 gVisor GPU 샌드박스(`g5.xlarge` 두 대)가 채점합니다. `Running On-Demand G and VT instances` 쿼터가 16 vCPU 이상 필요합니다.
 
-GPU 없이 시작하려면 시나리오 C(`--cpu-only`, `c8i.2xlarge` 한 대)를 [핸즈온 10](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/10_cpu_only/)대로 따라가세요. HyperPod 시나리오(B1)는 `scripts/02_create_cluster.sh --hyperpod` 뒤에 `scripts/hyperpod/create.sh`를 실행하고, `07_run_grpo.sh` 대신 `scripts/hyperpod/run_grpo.sh`를 씁니다. B2(`--hyperpod-b2`)는 EKS에 system 노드만 만들므로, 06 전에 `scripts/hyperpod/build_b2_ami.sh`로 custom AMI를 빌드하고 `scripts/hyperpod/create.sh --b2`로 HyperPod 노드를 만드세요. 학습은 B1과 같이 `scripts/hyperpod/run_grpo.sh`로 시작합니다. 단계별 설명과 확인 방법은 [핸즈온 00 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에 있고, 막히면 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)을 보세요.
+```bash
+scripts/01_check_prereqs.sh                        # tools, identity, quotas (read-only)
+scripts/02_create_cluster.sh                       # VPC, private EKS, GPU nodes (20-30 min)
+cdk/tunnel.sh                                      # second terminal, keep it open
+scripts/03_build_push_images.sh                    # paste the printed export lines into config.env
+scripts/04_install_gpu_stack.sh                    # NVIDIA device plugin, gVisor, smoke pod
+scripts/05_setup_namespaces_auth.sh                # namespaces, auth, NetworkPolicy, routing
+scripts/06_deploy_sandboxes.sh gvisor v1           # gVisor sandbox pool
+scripts/ops/verify.sh gvisor v1                    # isolation, blocked egress, expected verdicts
+scripts/07_run_grpo.sh                             # GRPO training Job (60 steps by default)
+scripts/08_cleanup.sh                              # delete everything
+```
+
+학습 중에 샌드박스 버전을 바꾸려면(`scripts/ops/rollout.sh`) 먼저 노드를 4대로 늘려야 합니다. 절차는 [핸즈온 06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/06_sandbox_update/)에 있습니다.
+
+**Kata 런타임 추가 (선택):** 04와 05 사이에 실행합니다.
+
+- **Kata CPU:** `scripts/config.env`에서 `WITH_KATA_CPU`를 `"1"`로 바꾸고, `02_create_cluster.sh`를 다시 실행한 뒤 `scripts/kata/cpu_nodes.sh`를 실행합니다.
+- **Kata GPU (`g4dn.metal`, 시간당 약 7.8 USD):** `scripts/kata/gpu_nodes.sh`를 처음 실행하면 AMI를 만들고 멈춥니다. 출력된 `KATA_IOMMU_AMI_ID` 줄을 넣고 `WITH_KATA_GPU`를 `"1"`로 바꾼 뒤, `02_create_cluster.sh`와 `scripts/kata/gpu_nodes.sh`를 다시 실행합니다. 자세한 내용은 [핸즈온 03](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/03_kata/)에 있습니다.
+
+#### 시나리오 B1, B2: HyperPod
+
+AWS에서 아직 실행하지 않은 경로입니다. `scripts/hyperpod/create.sh`를 실행하기 전에 HyperPod 전용 값(`HYPERPOD_LCS_BUCKET` 등)을 채우고 training operator 전제조건을 준비하세요. 자세한 내용은 [핸즈온 07](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/)에 있습니다.
+
+<details>
+<summary><b>B1: trainer만 HyperPod에</b></summary>
+
+```bash
+scripts/01_check_prereqs.sh
+scripts/02_create_cluster.sh --hyperpod            # EKS with the gVisor nodes, no trainer node
+cdk/tunnel.sh                                      # second terminal, keep it open
+HYPERPOD=1 scripts/03_build_push_images.sh         # paste the printed export lines into config.env
+scripts/04_install_gpu_stack.sh
+scripts/hyperpod/create.sh                         # HyperPod trainer group (15-30 min)
+scripts/05_setup_namespaces_auth.sh
+scripts/06_deploy_sandboxes.sh gvisor v1
+scripts/ops/verify.sh gvisor v1
+scripts/hyperpod/run_grpo.sh                       # instead of 07_run_grpo.sh
+scripts/hyperpod/delete.sh                         # delete HyperPod first
+scripts/08_cleanup.sh
+```
+
+</details>
+
+<details>
+<summary><b>B2: trainer와 샌드박스 모두 HyperPod에 (실험)</b></summary>
+
+```bash
+scripts/01_check_prereqs.sh
+scripts/02_create_cluster.sh --hyperpod-b2         # EKS with system nodes only
+cdk/tunnel.sh                                      # second terminal, keep it open
+HYPERPOD=1 scripts/03_build_push_images.sh         # paste the printed export lines into config.env
+scripts/04_install_gpu_stack.sh
+ACTIVE_RUNTIME=gvisor-hyperpod scripts/05_setup_namespaces_auth.sh
+scripts/hyperpod/build_b2_ami.sh                   # custom AMI (20-40 min), paste HYPERPOD_B2_AMI_ID
+scripts/hyperpod/create.sh --b2                    # trainer and sandbox groups
+scripts/hyperpod/check_gvisor.sh                   # driver and gVisor support per node
+scripts/06_deploy_sandboxes.sh gvisor-hyperpod v1
+scripts/ops/verify.sh gvisor-hyperpod v1
+scripts/hyperpod/run_grpo.sh
+scripts/hyperpod/delete.sh                         # delete HyperPod first
+scripts/08_cleanup.sh
+```
+
+</details>
+
+#### 스크립트 폴더
+
+| 위치 | 용도 |
+|---|---|
+| `scripts/01_*.sh` ~ `08_*.sh` | 번호 순서대로 실행하는 기본 단계 |
+| `scripts/kata/` | Kata 런타임 설치 |
+| `scripts/ops/` | 풀 검증(`verify.sh`), 버전 교체(`rollout.sh`), 모델 없는 채점 루프(`simulate.sh`), 벤치마크(`bench.sh`) |
+| `scripts/hyperpod/` | HyperPod 클러스터 생성, 학습, 삭제 |
+| `scripts/extensions/` | Agent Sandbox 확장 |
+| `cdk/` | 인프라(VPC, EKS, 노드 그룹)를 만드는 CDK 앱과 터널 |
+
+막히면 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)을 보세요.
 
 ## 가이드북의 주요 페이지
 
@@ -155,15 +248,30 @@ GPU 없이 시작하려면 시나리오 C(`--cpu-only`, `c8i.2xlarge` 한 대)�
 
 ## Agent Sandbox 확장
 
-[kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) v1.0.11로 multi-turn episode마다 미리 띄운 샌드박스 하나를 빌려 쓰는 확장입니다. `k8s/extensions/agent-sandbox/`의 SandboxTemplate과 SandboxWarmPool이 이 저장소의 샌드박스 서버를 런타임 프로필(gvisor, kata-qemu, kata-clh-cpu 등)마다 감싸고, `src/gpusandbox/agent_sandbox.py`의 `EpisodeSandbox`가 SandboxClaim으로 하나를 받아 쓴 뒤 반납합니다. 설치와 풀 생성은 `scripts/extensions/agent_sandbox.sh install`, `scripts/extensions/agent_sandbox.sh pool <runtime> [n]`입니다.
+multi-turn episode마다 미리 띄워 둔 샌드박스를 하나씩 빌려 쓰는 확장입니다. [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) v1.0.11을 씁니다.
 
-template은 label이 붙은 trainer pod의 8000번 ingress만 허용하고 egress는 전부 막으며(`egress: []`), `dnsPolicy: None`에 nameserver 127.0.0.1을 명시해 controller가 공개 resolver를 넣지 못하게 합니다. 가짜 API를 쓰는 단위 테스트는 통과하지만 클러스터에서는 실행하지 않았고, SandboxTemplate 안의 Kata GPU는 미검증입니다. warm GPU 샌드박스는 쉬는 동안에도 GPU를 쥐고 있어 과금됩니다. 자세한 내용은 [06 Agent Sandbox로 확장](https://daekeun-ml.github.io/gpu-sandbox-on-aws/concepts/06_agent_sandbox/)에 있습니다.
+- 런타임 프로필(gvisor, kata-qemu, kata-clh-cpu 등)마다 샌드박스를 미리 띄워 둡니다(warm pool). episode가 시작되면 하나를 받아 쓰고, 끝나면 돌려줍니다(`src/gpusandbox/agent_sandbox.py`의 `EpisodeSandbox`).
+- 샌드박스는 label이 붙은 trainer pod의 8000번 포트 접속만 받고, 밖으로 나가는 연결은 모두 막습니다. DNS 서버도 127.0.0.1로 고정해 controller가 공개 DNS 서버를 넣지 못하게 합니다.
+- 가짜 API로 단위 테스트만 했고, 클러스터에서는 아직 실행하지 않았습니다. Kata GPU 런타임과 함께 쓰는 경우도 확인하지 않았습니다.
+- warm pool의 GPU 샌드박스는 쉬는 동안에도 GPU를 잡고 있어 계속 과금됩니다.
+
+```bash
+scripts/extensions/agent_sandbox.sh install                 # controller, CRDs, claim RBAC
+scripts/extensions/agent_sandbox.sh pool gvisor-cpu 2       # warm pool of two sandboxes
+scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3 # 2 episodes of 3 turns, no model
+```
+
+개념은 [06 Agent Sandbox로 확장](https://daekeun-ml.github.io/gpu-sandbox-on-aws/concepts/06_agent_sandbox/)에, 실습 순서는 [핸즈온 11 multi-turn 에피소드 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/11_multi_turn/)에 있습니다.
 
 ## 리플레이 데모 사이트
 
-`demo/`는 실행 기록을 재생할 뿐인 정적 리플레이 사이트(HTML, CSS, JS, 외부 스크립트 없음)라서, 방문자는 클러스터나 GPU에 닿지 않습니다. 클릭해 보는 아키텍처 그림, gVisor와 Kata에서 같은 코드를 채점하는 재생, 샌드박스 안에서 시도한 접근이 막히는 실제 터미널 출력, GRPO 학습과 버전 전환 차트, 벤치마크 차트, 약 2분짜리 둘러보기 영상, 그리고 시나리오별 흐름을 단계마다 움직여 보여 주는 패턴별 아키텍처 페이지를 담고 있습니다. 데이터는 `python -m gpusandbox.tools record`의 녹화와, `demo/build_extras.py`가 클러스터 로그에서 만든 `extras.json`입니다. 로그의 IP 주소와 노드 이름은 가리고, 배포 전에 한 번 더 검사합니다. 2026-11-18에 공개한 GPU 녹화는 `demo/recordings/`에 있습니다.
+https://dohbsn4kn34ya.cloudfront.net/ (영어판은 주소 뒤에 `?lang=en`)
 
-사이트는 Block Public Access를 켠 private S3 bucket에 두고 CloudFront가 Origin Access Control로만 읽습니다. bucket policy는 `AWS:SourceArn` 조건을 건 CloudFront 서비스 주체만 허용하고 TLS가 아닌 요청을 거부하며, 응답에는 엄격한 Content-Security-Policy, HSTS, nosniff, `frame-ancestors 'none'`, referrer policy를 붙입니다. AWS WAF(IP별 rate limit과 관리형 규칙)를 붙이고 접근 로그를 비공개 로그 버킷에 남깁니다. 배포는 `demo/deploy.sh`(us-east-1 고정), 삭제는 `demo/teardown.sh`입니다. 기본 `*.cloudfront.net` 인증서로는 viewer TLS 정책을 올릴 수 없으니, TLSv1.2_2021이 필요하면 custom domain과 us-east-1의 ACM 인증서를 쓰세요. 절차는 [09 데모 사이트 (CloudFront)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/09_demo_site/)에 있습니다.
+- 클러스터에서 녹화한 실행 기록을 브라우저에서 재생하는 정적 사이트입니다. 방문자는 클러스터나 GPU에 접속하지 않습니다.
+- gVisor와 Kata가 같은 코드를 채점하는 과정, 샌드박스 안의 접근 시도가 막히는 터미널 출력, GRPO 학습과 버전 전환 차트, 벤치마크, 시나리오별 아키텍처 흐름을 보여 줍니다. 약 2분짜리 둘러보기 영상도 있습니다.
+- 녹화 파일은 `demo/recordings/`에 있습니다. IP 주소와 노드 이름은 가리고, 올리기 전에 한 번 더 검사합니다.
+- 사이트는 비공개 S3 버킷에 두고 CloudFront로만 읽으며, AWS WAF와 보안 헤더(CSP, HSTS 등)를 붙였습니다.
+- 직접 배포하려면 `demo/deploy.sh`를, 지우려면 `demo/teardown.sh`를 실행합니다. 절차는 [09 데모 사이트 (CloudFront)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/09_demo_site/)에 있습니다.
 
 ## 검증 상태
 
@@ -173,7 +281,20 @@ template은 label이 붙은 trainer pod의 8000번 ingress만 허용하고 egres
 
 ## 비용
 
-GPU 인스턴스는 실행되는 동안 과금됩니다. 핸즈온의 gVisor 최소 경로는 컴퓨트만 시간당 약 3.42 USD(온디맨드 요금을 더한 추정)이고, `g4dn.metal`은 한 대에 시간당 7.824 USD입니다(us-east-1과 us-west-2 On-Demand, 2026-11 기준, 배포 전 재확인). 쉬는 동안에는 노드 그룹을 0으로 줄이고(예: `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`), 끝나면 `scripts/08_cleanup.sh`를 실행하세요. NAT gateway, EBS, ECR 같은 항목은 위 합계에 들어 있지 않습니다.
+GPU 인스턴스는 켜져 있는 동안 계속 과금됩니다. 아래 금액은 컴퓨트의 온디맨드 요금만 더한 추정입니다(us-east-1과 us-west-2, 2026-11 기준이니 배포 전에 다시 확인하세요).
+
+- 시나리오 C(system 노드 두 대와 `c8i.2xlarge` 한 대): 시간당 약 0.57 USD
+- 시나리오 A의 gVisor 최소 경로: 시간당 약 3.42 USD
+- Kata GPU용 `g4dn.metal`: 한 대에 시간당 7.824 USD
+- EKS 컨트롤 플레인, NAT gateway, EBS, ECR 같은 항목은 위 금액에 들어 있지 않습니다.
+- 쉬는 동안에는 노드 그룹을 0으로 줄이세요. 예를 들어 Kata GPU 노드는 다음과 같이 줄입니다.
+
+    ```bash
+    aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu \
+      --scaling-config minSize=0,maxSize=1,desiredSize=0
+    ```
+
+- 실습이 끝나면 `scripts/08_cleanup.sh`로 모두 지우세요.
 
 ## 보안
 

@@ -103,42 +103,135 @@ python -m pytest -q
 > [!WARNING]
 > **Starting a server directly on a Linux host:** after every evaluation, the sandbox server sends SIGKILL to every process in `/proc` except itself and its ancestors. Inside a pod this is limited to the container, but `gpusandbox-server` started directly on a Linux host also targets other processes of the same user, so run it in a separate container. pytest turns this behavior off in `tests/conftest.py`, so the commands above are safe on a Linux host as they are ([Getting started](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/getting_started/)).
 
-### 2. Run the scripts in numeric order (AWS, billable)
+### 2. Run on AWS (billable)
 
-First create the configuration file with `cp scripts/config.env.example scripts/config.env`. You can also pick `SCENARIO` (A, B1, B2, C) with the options of `02_create_cluster.sh`, and if you leave `ADMIN_PRINCIPAL_ARN` empty, the IAM role you are using becomes the cluster admin. If the role ARN has a path, set the full role ARN, path included, yourself. Every script reads this file and stops if a value that its step needs is empty or contains `__SET_ME__`. Fill the HyperPod-only values (such as `HYPERPOD_LCS_BUCKET`) before you start B1 or B2.
+Pick one scenario and run its commands from top to bottom. If this is your first time, start with **scenario C**. It needs no GPU and takes you from cluster creation to cleanup for about 0.57 USD per hour. What to check at each step is in [Hands-on 00 Overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/00_overview/).
 
-The CDK app creates the infrastructure, so set it up once before you run `02_create_cluster.sh`. Install Node.js 22 or 24, the AWS CDK CLI 2.1148.1 or later and the Session Manager plugin for the AWS CLI, add the CDK libraries to the virtual environment, and run bootstrap once per account and Region.
+#### Common setup (once)
+
+1. Create the configuration file. Every script reads it and stops where a value it needs is empty. If you leave `ADMIN_PRINCIPAL_ARN` empty, the IAM role you are using becomes the cluster admin. If the role ARN has a path, set the full ARN, path included.
+
+    ```bash
+    cp scripts/config.env.example scripts/config.env
+    ```
+
+2. Set up CDK. Install Node.js 22 or 24 and the Session Manager plugin for the AWS CLI first.
+
+    ```bash
+    npm install -g aws-cdk                 # AWS CDK CLI 2.1148.1 or later
+    uv pip install -r cdk/requirements.txt # into the activated .venv
+    source scripts/config.env              # exports AWS_REGION
+    cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
+    ```
+
+3. Two rules apply to the commands below.
+    - **Keep `cdk/tunnel.sh` running in a second terminal.** The cluster API is private, so kubectl and helm connect only through this tunnel.
+    - **Paste the `export` lines that `03_build_push_images.sh` prints at the end into `scripts/config.env`.** Without the image addresses the next steps stop.
+
+#### Scenario C: start without a GPU (recommended)
+
+One `c8i.2xlarge` runs CPU sandboxes for three runtimes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU), and you practice scoring and a version switch without a model. Before you start, add `export KATA_CPU_REPLICAS="1"` to `scripts/config.env`.
 
 ```bash
-npm install -g aws-cdk                 # AWS CDK CLI 2.1148.1 or later
-uv pip install -r cdk/requirements.txt # into the activated .venv
-source scripts/config.env              # exports AWS_REGION
-cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
+scripts/01_check_prereqs.sh                        # tools, identity, quotas (read-only)
+scripts/02_create_cluster.sh --cpu-only            # VPC, private EKS, nodes (about 20 min)
+cdk/tunnel.sh                                      # second terminal, keep it open
+scripts/03_build_push_images.sh --no-trainer       # paste the printed export lines into config.env
+scripts/kata/cpu_nodes.sh                          # Kata and gVisor runtimes on the c8i node
+ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh
+for rt in gvisor-cpu kata-clh-cpu kata-qemu-cpu; do
+  scripts/06_deploy_sandboxes.sh "${rt}" v1        # one sandbox pool per runtime
+  scripts/ops/verify.sh "${rt}" v1                 # isolation, blocked egress, expected verdicts
+done
+scripts/ops/simulate.sh 30 20                      # reward batches without a model (about 16 min)
+scripts/ops/rollout.sh kata-clh-cpu v1 v2          # another terminal, while simulate.sh runs
+scripts/08_cleanup.sh                              # delete everything
 ```
 
-The numbered scripts 01 to 08 are the main order, `scripts/kata/` holds optional steps and `scripts/ops/` holds verification and operations scripts.
+Step-by-step explanations are in [Hands-on 10 c8i-only low-cost path](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/10_cpu_only/).
 
-| Step | Command | What it does |
-|---|---|---|
-| 01 | `scripts/01_check_prereqs.sh` | Checks tools (aws, cdk, node, kubectl, helm, docker, python3, jq, session-manager-plugin), AWS identity, the G and VT vCPU quota, nested virtualization support and per-AZ availability of the GPU instance types (read-only) |
-| 02 | `scripts/02_create_cluster.sh` | Creates the VPC, EKS (private API endpoint), the node groups of the scenario and an SSM access instance with the CDK stack (`cdk/deploy.sh`) (A by default, B1 with `--hyperpod`, B2 with `--hyperpod-b2`, C with `--cpu-only`). About 20 minutes in the practice account |
-| Tunnel | `cdk/tunnel.sh` | SSM port forwarding that you keep running in a second terminal. It connects the private API endpoint to `127.0.0.1:8443` and creates the kubectl context `<CLUSTER_NAME>-tunnel`. Every step that uses kubectl or helm needs it |
-| 03 | `scripts/03_build_push_images.sh` | Builds the sandbox, trainer and control images for `linux/amd64` and pushes them to ECR. Paste the `export` lines (image URIs) it prints at the end into `scripts/config.env`, or the next steps stop. For scenarios B1 and B2, run it with `HYPERPOD=1` (adds `hyperpodrun` to the trainer image) |
-| 04 | `scripts/04_install_gpu_stack.sh` | Installs the NVIDIA device plugin (CDI mode), then registers the `gvisor` RuntimeClass and runs a GPU smoke pod. In scenario B2 it installs only the device plugin (scenario C does not run this step) |
-| Optional | `scripts/kata/cpu_nodes.sh` | kata-deploy, the `gvisor-cpu` RuntimeClass and smoke pods on the Kata CPU node (`c8i.2xlarge`, nested virtualization). The node group exists in scenario C or after you run `02_create_cluster.sh` again with `WITH_KATA_CPU=1` |
-| Optional | `scripts/kata/gpu_nodes.sh` | The first run builds the IOMMU AMI and stops. Add `KATA_IOMMU_AMI_ID` and `WITH_KATA_GPU=1`, run `02_create_cluster.sh` again to add `g4dn.metal` (about 7.8 USD per hour), then run it again to install the GPU Operator and kata-deploy |
-| 05 | `scripts/05_setup_namespaces_auth.sh` | Namespaces, NetworkPolicies, ServiceAccounts, JWKS, the routing ConfigMap. The routing table's default active runtime is `gvisor`, so run it with `ACTIVE_RUNTIME=gvisor-hyperpod` for B2 and `ACTIVE_RUNTIME=kata-clh-cpu` for C |
-| 06 | `scripts/06_deploy_sandboxes.sh gvisor v1` | Deploys a sandbox pool (Deployment + headless Service). The first argument is the runtime profile: B2 uses `gvisor-hyperpod`, C uses `gvisor-cpu`, `kata-clh-cpu` and `kata-qemu-cpu` (`ops/verify.sh` takes the same name). In C, add `export KATA_CPU_REPLICAS="1"` to `scripts/config.env` so that the v2 pool also fits on the one node |
-| Ops | `scripts/ops/verify.sh gvisor v1` | Checks isolation evidence, egress denial, golden verdicts and the NetworkPolicy |
-| 07 | `scripts/07_run_grpo.sh` | TRL GRPO training Job (60 steps by default). After submitting the Job it keeps following the logs; Ctrl-C stops following, not training |
-| Ops | `scripts/ops/simulate.sh` | (Scenario C) A loop that sends reward batches of golden submissions without a model. Not training |
-| Ops | `scripts/ops/rollout.sh gvisor v1 v2` | Blue/green switch of the sandbox from v1 to v2 during training. Run it in a terminal other than the one following 07's logs. In the default A, first scale the `sandbox-gvisor` node group to 4 (G and VT quota 24 vCPU, [hands-on 06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/06_sandbox_update/)). In C, run `scripts/ops/rollout.sh kata-clh-cpu v1 v2` while `ops/simulate.sh` is running |
-| Ops | `scripts/ops/bench.sh` | (Optional) Compares cold start, latency and speedup of the deployed v1 pools. To include a runtime you switched, run it before a command such as `scripts/ops/rollout.sh gvisor v1 v2 --finish` scales v1 down |
-| 08 | `scripts/08_cleanup.sh` | After you confirm the cluster name, deletes the whole stack with `cdk/destroy.sh`, asks about each AMI, and with `--images` also deletes the ECR repositories (if you created HyperPod, run `scripts/hyperpod/delete.sh` first) |
+#### Scenario A: EC2 GPU (default)
 
-One CDK app creates the infrastructure (VPC, cluster, node groups), and the scripts under `scripts/` do the in-cluster setup through the tunnel. eksctl cannot create a cluster with only a private endpoint (eksctl documentation), so it is not used. The stack layout and security defaults are in [Production 09 Provisioning with CDK](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/production/09_cdk/).
+The trainer (`g5.2xlarge`) trains with GRPO, and gVisor GPU sandboxes (two `g5.xlarge`) score the rewards. The `Running On-Demand G and VT instances` quota must be at least 16 vCPU.
 
-To start without a GPU, follow scenario C (`--cpu-only`, one `c8i.2xlarge`) in [Hands-on 10](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/10_cpu_only/). For the HyperPod scenario (B1), run `scripts/hyperpod/create.sh` after `scripts/02_create_cluster.sh --hyperpod`, and use `scripts/hyperpod/run_grpo.sh` instead of `07_run_grpo.sh`. B2 (`--hyperpod-b2`) creates only the system nodes in EKS, so before 06 build the custom AMI with `scripts/hyperpod/build_b2_ami.sh` and create the HyperPod nodes with `scripts/hyperpod/create.sh --b2`. Training starts with `scripts/hyperpod/run_grpo.sh`, as in B1. Explanations and checks per step are in [Hands-on 00 Overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/00_overview/), and if something fails, see [Troubleshooting](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/).
+```bash
+scripts/01_check_prereqs.sh                        # tools, identity, quotas (read-only)
+scripts/02_create_cluster.sh                       # VPC, private EKS, GPU nodes (20-30 min)
+cdk/tunnel.sh                                      # second terminal, keep it open
+scripts/03_build_push_images.sh                    # paste the printed export lines into config.env
+scripts/04_install_gpu_stack.sh                    # NVIDIA device plugin, gVisor, smoke pod
+scripts/05_setup_namespaces_auth.sh                # namespaces, auth, NetworkPolicy, routing
+scripts/06_deploy_sandboxes.sh gvisor v1           # gVisor sandbox pool
+scripts/ops/verify.sh gvisor v1                    # isolation, blocked egress, expected verdicts
+scripts/07_run_grpo.sh                             # GRPO training Job (60 steps by default)
+scripts/08_cleanup.sh                              # delete everything
+```
+
+To switch the sandbox version during training (`scripts/ops/rollout.sh`), first scale the nodes to 4. The procedure is in [Hands-on 06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/06_sandbox_update/).
+
+**Adding Kata runtimes (optional):** run these between 04 and 05.
+
+- **Kata CPU:** set `WITH_KATA_CPU` to `"1"` in `scripts/config.env`, run `02_create_cluster.sh` again, then run `scripts/kata/cpu_nodes.sh`.
+- **Kata GPU (`g4dn.metal`, about 7.8 USD per hour):** The first run of `scripts/kata/gpu_nodes.sh` builds an AMI and stops. Add the printed `KATA_IOMMU_AMI_ID` line, set `WITH_KATA_GPU` to `"1"`, then run `02_create_cluster.sh` and `scripts/kata/gpu_nodes.sh` again. Details are in [Hands-on 03](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/03_kata/).
+
+#### Scenarios B1 and B2: HyperPod
+
+These paths have not run on AWS yet. Before you run `scripts/hyperpod/create.sh`, fill the HyperPod-only values (such as `HYPERPOD_LCS_BUCKET`) and prepare the training operator prerequisites. Details are in [Hands-on 07](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod/).
+
+<details>
+<summary><b>B1: only the trainer on HyperPod</b></summary>
+
+```bash
+scripts/01_check_prereqs.sh
+scripts/02_create_cluster.sh --hyperpod            # EKS with the gVisor nodes, no trainer node
+cdk/tunnel.sh                                      # second terminal, keep it open
+HYPERPOD=1 scripts/03_build_push_images.sh         # paste the printed export lines into config.env
+scripts/04_install_gpu_stack.sh
+scripts/hyperpod/create.sh                         # HyperPod trainer group (15-30 min)
+scripts/05_setup_namespaces_auth.sh
+scripts/06_deploy_sandboxes.sh gvisor v1
+scripts/ops/verify.sh gvisor v1
+scripts/hyperpod/run_grpo.sh                       # instead of 07_run_grpo.sh
+scripts/hyperpod/delete.sh                         # delete HyperPod first
+scripts/08_cleanup.sh
+```
+
+</details>
+
+<details>
+<summary><b>B2: trainer and sandboxes on HyperPod (experimental)</b></summary>
+
+```bash
+scripts/01_check_prereqs.sh
+scripts/02_create_cluster.sh --hyperpod-b2         # EKS with system nodes only
+cdk/tunnel.sh                                      # second terminal, keep it open
+HYPERPOD=1 scripts/03_build_push_images.sh         # paste the printed export lines into config.env
+scripts/04_install_gpu_stack.sh
+ACTIVE_RUNTIME=gvisor-hyperpod scripts/05_setup_namespaces_auth.sh
+scripts/hyperpod/build_b2_ami.sh                   # custom AMI (20-40 min), paste HYPERPOD_B2_AMI_ID
+scripts/hyperpod/create.sh --b2                    # trainer and sandbox groups
+scripts/hyperpod/check_gvisor.sh                   # driver and gVisor support per node
+scripts/06_deploy_sandboxes.sh gvisor-hyperpod v1
+scripts/ops/verify.sh gvisor-hyperpod v1
+scripts/hyperpod/run_grpo.sh
+scripts/hyperpod/delete.sh                         # delete HyperPod first
+scripts/08_cleanup.sh
+```
+
+</details>
+
+#### Script folders
+
+| Location | Purpose |
+|---|---|
+| `scripts/01_*.sh` to `08_*.sh` | The main steps, run in numeric order |
+| `scripts/kata/` | Kata runtime setup |
+| `scripts/ops/` | Pool checks (`verify.sh`), version switch (`rollout.sh`), scoring loop without a model (`simulate.sh`), benchmark (`bench.sh`) |
+| `scripts/hyperpod/` | HyperPod cluster creation, training, deletion |
+| `scripts/extensions/` | Agent Sandbox extension |
+| `cdk/` | The CDK app that creates the infrastructure (VPC, EKS, node groups) and the tunnel |
+
+If something fails, see [Troubleshooting](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/).
 
 ## Key pages of the guidebook
 
@@ -155,15 +248,30 @@ To start without a GPU, follow scenario C (`--cpu-only`, one `c8i.2xlarge`) in [
 
 ## Agent Sandbox extension
 
-This extension uses [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) v1.0.11 to lend one pre-warmed sandbox to each multi-turn episode. The SandboxTemplate and SandboxWarmPool in `k8s/extensions/agent-sandbox/` wrap this repository's sandbox server for each runtime profile (gvisor, kata-qemu, kata-clh-cpu and others), and `EpisodeSandbox` in `src/gpusandbox/agent_sandbox.py` takes one through a SandboxClaim and returns it when the episode ends. Install and create pools with `scripts/extensions/agent_sandbox.sh install` and `scripts/extensions/agent_sandbox.sh pool <runtime> [n]`.
+This extension lends each multi-turn episode one sandbox that is already running. It uses [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) v1.0.11.
 
-The template admits ingress only from labeled trainer pods on port 8000, denies all egress (`egress: []`), and sets `dnsPolicy: None` with nameserver 127.0.0.1 explicitly so that the controller cannot inject public resolvers. The unit tests with a fake API pass, but it has not been run on a cluster, and Kata GPU inside a SandboxTemplate is unverified. Warm GPU sandboxes hold their GPU while idle and are billed. Details are in [06 Extending with Agent Sandbox](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/concepts/06_agent_sandbox/).
+- Sandboxes are started ahead of time for each runtime profile (gvisor, kata-qemu, kata-clh-cpu and others) in a warm pool. An episode takes one when it starts and returns it when it ends (`EpisodeSandbox` in `src/gpusandbox/agent_sandbox.py`).
+- A sandbox accepts connections only from labeled trainer pods on port 8000 and blocks every outbound connection. Its DNS server is fixed to 127.0.0.1 so that the controller cannot add a public one.
+- Only unit tests against a fake API have run; it has not run on a cluster yet. Use with the Kata GPU runtime is also unverified.
+- GPU sandboxes in a warm pool hold their GPU while idle, so they are billed the whole time.
+
+```bash
+scripts/extensions/agent_sandbox.sh install                 # controller, CRDs, claim RBAC
+scripts/extensions/agent_sandbox.sh pool gvisor-cpu 2       # warm pool of two sandboxes
+scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3 # 2 episodes of 3 turns, no model
+```
+
+The concepts are in [06 Extending with Agent Sandbox](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/concepts/06_agent_sandbox/), and the steps are in [Hands-on 11 Multi-turn episodes](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/11_multi_turn/).
 
 ## Replay demo site
 
-`demo/` is a static replay site (HTML, CSS, JS, no external scripts) that only replays run records, so visitors never reach the cluster or a GPU. It has a clickable architecture diagram, a replay of gVisor and Kata scoring the same code, real terminal output of access attempts being blocked inside the sandbox, GRPO training and version switch charts, benchmark charts, a tour video of about two minutes, and an architecture patterns page that animates each scenario's flows step by step. The data is a recording from `python -m gpusandbox.tools record` and an `extras.json` that `demo/build_extras.py` builds from cluster logs; IP addresses and node names in the logs are masked and scanned again before deployment. The GPU recording published on 2026-11-18 is in `demo/recordings/`.
+https://dohbsn4kn34ya.cloudfront.net/?lang=en
 
-The site sits in a private S3 bucket with Block Public Access on and is read only by CloudFront through Origin Access Control. The bucket policy allows only the CloudFront service principal with an `AWS:SourceArn` condition and denies non-TLS requests, and responses carry a strict Content-Security-Policy, HSTS, nosniff, `frame-ancestors 'none'` and a referrer policy. AWS WAF (a per-IP rate limit and managed rules) is attached and access logs go to a private log bucket. Deploy with `demo/deploy.sh` (always us-east-1) and remove with `demo/teardown.sh`. With the default `*.cloudfront.net` certificate the viewer TLS policy cannot be raised, so if you need TLSv1.2_2021, use a custom domain and an ACM certificate in us-east-1. The procedure is in [09 Demo site (CloudFront)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/09_demo_site/).
+- A static site that replays, in the browser, run records captured on the cluster. Visitors never reach the cluster or a GPU.
+- It shows gVisor and Kata scoring the same code, terminal output of access attempts blocked inside the sandbox, GRPO training and version switch charts, benchmarks and per-scenario architecture flows. A tour video of about two minutes is also there.
+- The recordings are in `demo/recordings/`. IP addresses and node names are masked and scanned again before upload.
+- The site sits in a private S3 bucket that only CloudFront reads, with AWS WAF and security headers (CSP, HSTS and others).
+- To deploy your own, run `demo/deploy.sh`; to remove it, run `demo/teardown.sh`. The procedure is in [09 Demo site (CloudFront)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/09_demo_site/).
 
 ## Validation status
 
@@ -173,7 +281,20 @@ The site sits in a private S3 bucket with Block Public Access on and is read onl
 
 ## Cost
 
-GPU instances are billed while they run. The hands-on minimal gVisor path costs about 3.42 USD per hour for compute alone (an estimate summing On-Demand list prices), and one `g4dn.metal` costs 7.824 USD per hour (us-east-1 and us-west-2 On-Demand, as of 2026-11, re-verify). While you take a break, scale node groups to zero (for example `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`), and when you finish, run `scripts/08_cleanup.sh`. Items such as the NAT gateway, EBS and ECR are not included in the totals above.
+GPU instances are billed for as long as they run. The amounts below are estimates that add up only the On-Demand compute prices (us-east-1 and us-west-2, as of 2026-11, so check again before you deploy).
+
+- Scenario C (two system nodes and one `c8i.2xlarge`): about 0.57 USD per hour
+- The minimal gVisor path of scenario A: about 3.42 USD per hour
+- `g4dn.metal` for Kata GPU: 7.824 USD per hour per node
+- Items such as the EKS control plane, the NAT gateway, EBS and ECR are not included above.
+- Scale node groups to zero while you take a break. For example, the Kata GPU nodes:
+
+    ```bash
+    aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu \
+      --scaling-config minSize=0,maxSize=1,desiredSize=0
+    ```
+
+- When you finish, delete everything with `scripts/08_cleanup.sh`.
 
 ## Security
 
