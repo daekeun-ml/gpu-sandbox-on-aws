@@ -41,6 +41,10 @@ theme:
 
 plugins:
   - search
+  # Click an image to see it full size (terminal screenshots are wide).
+  - glightbox:
+      zoomable: true
+      draggable: false
   - i18n:
       docs_structure: suffix
       fallback_to_default: true
