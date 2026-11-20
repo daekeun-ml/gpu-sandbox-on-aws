@@ -1,6 +1,7 @@
 # GPU 샌드박스가 필요한 경우
 
-**TL;DR** GPU 샌드박스는 reward를 GPU에서 측정하거나 샌드박스 안의 작업이 GPU를 사용할 때만 필요합니다. 이 에셋은 Triton 커널의 speedup 측정값을 reward로 쓰는 on-policy GRPO를 다룹니다.
+!!! info "TL;DR"
+    GPU 샌드박스는 reward를 GPU에서 측정하거나 샌드박스 안의 작업이 GPU를 사용할 때만 필요합니다. 이 에셋은 Triton 커널의 speedup 측정값을 reward로 쓰는 on-policy GRPO를 다룹니다.
 
 ## 기존 Pain Point
 

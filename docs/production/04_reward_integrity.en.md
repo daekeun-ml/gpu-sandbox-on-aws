@@ -1,6 +1,7 @@
 # 04 Reward integrity
 
-**TL;DR** Candidate code runs only in an untrusted child process. The child records the candidate's timings and output checksums; the trusted parent process times the reference on the same inputs and owns the correctness check, the speedup and the verdict.
+!!! info "TL;DR"
+    Candidate code runs only in an untrusted child process. The child records the candidate's timings and output checksums; the trusted parent process times the reference on the same inputs and owns the correctness check, the speedup and the verdict.
 
 ## Pain point
 

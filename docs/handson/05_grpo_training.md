@@ -1,6 +1,7 @@
 # 05 On-policy GRPO 학습
 
-**TL;DR** `Qwen/Qwen2.5-Coder-1.5B-Instruct`(LoRA)를 A10G 한 장에서 GRPO로 학습합니다. `reward_batch` 로그로 샌드박스 채점을 포함한 on-policy 루프가 끝까지 실행되는지 확인합니다.
+!!! info "TL;DR"
+    `Qwen/Qwen2.5-Coder-1.5B-Instruct`(LoRA)를 A10G 한 장에서 GRPO로 학습합니다. `reward_batch` 로그로 샌드박스 채점을 포함한 on-policy 루프가 끝까지 실행되는지 확인합니다.
 
 ## 기존 Pain Point
 

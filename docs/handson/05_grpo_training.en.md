@@ -1,6 +1,7 @@
 # 05 On-policy GRPO training
 
-**TL;DR** Train `Qwen/Qwen2.5-Coder-1.5B-Instruct` (LoRA) with GRPO on one A10G, and confirm with the `reward_batch` log that the on-policy loop, sandbox scoring included, runs end to end.
+!!! info "TL;DR"
+    Train `Qwen/Qwen2.5-Coder-1.5B-Instruct` (LoRA) with GRPO on one A10G, and confirm with the `reward_batch` log that the on-policy loop, sandbox scoring included, runs end to end.
 
 ## Pain point
 

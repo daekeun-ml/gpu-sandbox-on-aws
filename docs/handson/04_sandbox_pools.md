@@ -1,6 +1,7 @@
 # 04 샌드박스 풀 배포와 검증
 
-**TL;DR** 네임스페이스, NetworkPolicy, 인증 키, routing ConfigMap을 만들고 (runtime, version)마다 샌드박스 풀을 배포합니다. 그다음 격리, egress 차단, golden verdict, NetworkPolicy 네 가지를 검증합니다.
+!!! info "TL;DR"
+    네임스페이스, NetworkPolicy, 인증 키, routing ConfigMap을 만들고 (runtime, version)마다 샌드박스 풀을 배포합니다. 그다음 격리, egress 차단, golden verdict, NetworkPolicy 네 가지를 검증합니다.
 
 ## 기존 Pain Point
 

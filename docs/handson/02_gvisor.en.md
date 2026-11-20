@@ -1,6 +1,7 @@
 # 02 gVisor GPU sandboxes
 
-**TL;DR** Install the NVIDIA device plugin in CDI mode, register the `gvisor` RuntimeClass, and confirm with one smoke pod that CUDA runs on the A10G under the gVisor kernel.
+!!! info "TL;DR"
+    Install the NVIDIA device plugin in CDI mode, register the `gvisor` RuntimeClass, and confirm with one smoke pod that CUDA runs on the A10G under the gVisor kernel.
 
 ## Pain point
 

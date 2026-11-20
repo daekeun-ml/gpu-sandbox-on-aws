@@ -1,6 +1,7 @@
 # 04 Deploy and verify sandbox pools
 
-**TL;DR** Create the namespaces, NetworkPolicies, authentication keys and routing ConfigMap, deploy a sandbox pool per (runtime, version), then verify isolation, egress denial, golden verdicts and the NetworkPolicy.
+!!! info "TL;DR"
+    Create the namespaces, NetworkPolicies, authentication keys and routing ConfigMap, deploy a sandbox pool per (runtime, version), then verify isolation, egress denial, golden verdicts and the NetworkPolicy.
 
 ## Pain point
 

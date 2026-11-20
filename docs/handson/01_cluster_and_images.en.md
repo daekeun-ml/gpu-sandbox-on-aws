@@ -1,6 +1,7 @@
 # 01 Cluster and images
 
-**TL;DR** Check tools and quotas, create a private EKS cluster and its node groups as one CDK stack, check the nodes through the tunnel, then push three images to ECR.
+!!! info "TL;DR"
+    Check tools and quotas, create a private EKS cluster and its node groups as one CDK stack, check the nodes through the tunnel, then push three images to ECR.
 
 ## Pain point
 
@@ -203,6 +204,10 @@ cdk/tunnel.sh
 ```
 
 **What to look for:** the log line `kubectl context <CLUSTER_NAME>-tunnel -> 127.0.0.1:8443 -> <endpoint> (via i-...); Ctrl-C closes it`, followed by `Waiting for connections...`. The tunnel listens only on `127.0.0.1` of your workstation.
+
+![Output of cdk/tunnel.sh: the kubectl context gpu-sandbox-tunnel goes through 127.0.0.1:8443 to the cluster endpoint, the session starts, Port 8443 opened, Waiting for connections...](../images/terminal/tunnel.png)
+
+*Run in the practice account (2026-11-20, us-west-2). The session ID, cluster address and instance ID are masked. It is working when it stays here without returning to the prompt.*
 
 In the first terminal, list the nodes.
 

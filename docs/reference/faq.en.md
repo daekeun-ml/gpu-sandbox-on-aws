@@ -1,6 +1,7 @@
 # Misconceptions
 
-**TL;DR** This page corrects 21 misconceptions that come up when you first work with GPU sandboxes and on-policy RL.
+!!! info "TL;DR"
+    This page corrects 21 misconceptions that come up when you first work with GPU sandboxes and on-policy RL.
 
 ## Pain point
 

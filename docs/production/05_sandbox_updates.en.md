@@ -1,6 +1,7 @@
 # 05 Sandbox versioning
 
-**TL;DR** When the reward path changes, start a new sandbox version and change the routing table only after verification and parity pass. TRL uses the new version from the first reward batch (= optimizer step) it sends to the sandbox after reading the new routing, veRL from each newly pinned group. If an entire TRL batch hits the cache of one old pool, that batch keeps the cached results and logs no `reward_batch` line. Every result the sandbox scores records the version that scored it.
+!!! info "TL;DR"
+    When the reward path changes, start a new sandbox version and change the routing table only after verification and parity pass. TRL uses the new version from the first reward batch (= optimizer step) it sends to the sandbox after reading the new routing, veRL from each newly pinned group. If an entire TRL batch hits the cache of one old pool, that batch keeps the cached results and logs no `reward_batch` line. Every result the sandbox scores records the version that scored it.
 
 ## Pain point
 

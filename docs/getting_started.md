@@ -1,6 +1,7 @@
 # 시작하기
 
-**TL;DR** AWS 없이 로컬 CPU에서 파이프라인을 먼저 확인한 다음, `scripts/config.env`를 채우고 시나리오를 고릅니다.
+!!! info "TL;DR"
+    AWS 없이 로컬 CPU에서 파이프라인을 먼저 확인한 다음, `scripts/config.env`를 채우고 시나리오를 고릅니다.
 
 ## 기존 Pain Point
 

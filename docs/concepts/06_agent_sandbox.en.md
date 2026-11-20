@@ -1,6 +1,7 @@
 # 06 Extending with Agent Sandbox
 
-**TL;DR** Agent Sandbox (kubernetes-sigs/agent-sandbox) is an orchestrator that leaves isolation to the pod's RuntimeClass, so it works with both gVisor and Kata; this repository's extension puts the same GPU sandbox server in a warm pool and lends one sandbox to each multi-turn episode.
+!!! info "TL;DR"
+    Agent Sandbox (kubernetes-sigs/agent-sandbox) is an orchestrator that leaves isolation to the pod's RuntimeClass, so it works with both gVisor and Kata; this repository's extension puts the same GPU sandbox server in a warm pool and lends one sandbox to each multi-turn episode.
 
 ## Pain point
 

@@ -1,6 +1,7 @@
 # Production 레퍼런스 아키텍처
 
-**TL;DR** 운영 환경에서는 trainer가 sandbox gateway 하나만 호출합니다. 샌드박스 풀은 (runtime, version)마다 Deployment 하나로 배포하고, 풀이 쓰는 노드는 Karpenter NodePool이 0대부터, 배치할 pod 수에 맞춰 늘리고 줄입니다.
+!!! info "TL;DR"
+    운영 환경에서는 trainer가 sandbox gateway 하나만 호출합니다. 샌드박스 풀은 (runtime, version)마다 Deployment 하나로 배포하고, 풀이 쓰는 노드는 Karpenter NodePool이 0대부터, 배치할 pod 수에 맞춰 늘리고 줄입니다.
 
 ## 기존 Pain Point
 

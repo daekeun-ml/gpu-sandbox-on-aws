@@ -1,6 +1,7 @@
 # 02 Containers and sandboxes
 
-**TL;DR** A sandbox runtime puts up one more wall between the container and the server kernel: gVisor builds it as "a fake kernel kept separately for each pod," and Kata as "a small VM started separately for each pod."
+!!! info "TL;DR"
+    A sandbox runtime puts up one more wall between the container and the server kernel: gVisor builds it as "a fake kernel kept separately for each pod," and Kata as "a small VM started separately for each pod."
 
 ## Pain points
 

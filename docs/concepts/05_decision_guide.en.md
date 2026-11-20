@@ -1,6 +1,7 @@
 # Decision guide
 
-**TL;DR** If the sandbox needs no GPU, a CPU sandbox is enough; if it does, choose between "VM boundary + T4" (Kata + QEMU on `g4dn.metal`) and "current GPUs + a user-space kernel boundary" (gVisor on G/P family VMs) by your isolation requirement and measurement GPU.
+!!! info "TL;DR"
+    If the sandbox needs no GPU, a CPU sandbox is enough; if it does, choose between "VM boundary + T4" (Kata + QEMU on `g4dn.metal`) and "current GPUs + a user-space kernel boundary" (gVisor on G/P family VMs) by your isolation requirement and measurement GPU.
 
 ## Pain point
 

@@ -1,6 +1,7 @@
 # 자주 하는 오해
 
-**TL;DR** GPU 샌드박스와 on-policy RL을 처음 다룰 때 자주 생기는 오해 21가지를 바로잡습니다.
+!!! info "TL;DR"
+    GPU 샌드박스와 on-policy RL을 처음 다룰 때 자주 생기는 오해 21가지를 바로잡습니다.
 
 ## 기존 Pain Point
 

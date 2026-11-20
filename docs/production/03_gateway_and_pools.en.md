@@ -1,6 +1,7 @@
 # Gateway and sandbox pools
 
-**TL;DR** The sandbox gateway is a single scheduler in front of every trainer process: it authenticates callers, pins the sandbox version per batch or per GRPO group, sends one evaluation at a time to each pod and replaces draining pods with new ones.
+!!! info "TL;DR"
+    The sandbox gateway is a single scheduler in front of every trainer process: it authenticates callers, pins the sandbox version per batch or per GRPO group, sends one evaluation at a time to each pod and replaces draining pods with new ones.
 
 ## Pain point
 

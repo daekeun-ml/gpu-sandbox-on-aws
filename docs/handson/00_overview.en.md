@@ -1,6 +1,7 @@
 # 00 Hands-on overview
 
-**TL;DR** Run the numbered scripts in order on one EKS cluster built with CDK, starting with the gVisor-only minimal path (about 3.4 USD per hour of compute) and adding Kata CPU and Kata GPU (`g4dn.metal`, 7.824 USD per hour) when you need them (estimates from On-Demand list prices).
+!!! info "TL;DR"
+    Run the numbered scripts in order on one EKS cluster built with CDK, starting with the gVisor-only minimal path (about 3.4 USD per hour of compute) and adding Kata CPU and Kata GPU (`g4dn.metal`, 7.824 USD per hour) when you need them (estimates from On-Demand list prices).
 
 ## Pain point
 

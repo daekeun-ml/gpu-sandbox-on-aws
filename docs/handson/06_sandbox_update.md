@@ -1,6 +1,7 @@
 # 06 학습 중 샌드박스 업데이트
 
-**TL;DR** on-policy 학습을 멈추지 않고 blue/green 방식으로 샌드박스를 v1에서 v2로 교체합니다. 전환 시점은 `sandbox_version_switch` 이벤트로 확인합니다.
+!!! info "TL;DR"
+    on-policy 학습을 멈추지 않고 blue/green 방식으로 샌드박스를 v1에서 v2로 교체합니다. 전환 시점은 `sandbox_version_switch` 이벤트로 확인합니다.
 
 ## 기존 Pain Point
 

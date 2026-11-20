@@ -1,6 +1,7 @@
 # 99 Cleanup
 
-**TL;DR** GPU nodes are billed until you delete them, so delete what you used in this order: the Agent Sandbox extension and the demo site, HyperPod, then the EKS cluster (CDK stack), and query what is left (for a short break, scale the node groups to zero).
+!!! info "TL;DR"
+    GPU nodes are billed until you delete them, so delete what you used in this order: the Agent Sandbox extension and the demo site, HyperPod, then the EKS cluster (CDK stack), and query what is left (for a short break, scale the node groups to zero).
 
 ## Pain point
 

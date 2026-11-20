@@ -1,6 +1,7 @@
 # Getting started
 
-**TL;DR** Check the plumbing on a local CPU machine without AWS first, then fill in `scripts/config.env` and pick a scenario.
+!!! info "TL;DR"
+    Check the plumbing on a local CPU machine without AWS first, then fill in `scripts/config.env` and pick a scenario.
 
 ## Pain point
 

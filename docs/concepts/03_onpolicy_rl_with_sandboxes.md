@@ -1,6 +1,7 @@
 # On-policy RL과 샌드박스
 
-**TL;DR** GRPO는 같은 prompt의 completion끼리 비교해 advantage를 계산하므로 한 group은 한 샌드박스 버전으로 채점해야 합니다. 인프라 오류는 오답 점수로 처리하지 않고, 샌드박스 버전은 학습을 멈추지 않은 채 batch 경계에서 교체합니다.
+!!! info "TL;DR"
+    GRPO는 같은 prompt의 completion끼리 비교해 advantage를 계산하므로 한 group은 한 샌드박스 버전으로 채점해야 합니다. 인프라 오류는 오답 점수로 처리하지 않고, 샌드박스 버전은 학습을 멈추지 않은 채 batch 경계에서 교체합니다.
 
 ## 기존 Pain Point
 

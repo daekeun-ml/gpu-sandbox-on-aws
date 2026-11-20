@@ -1,6 +1,7 @@
 # 용량과 노드 관리
 
-**TL;DR** 샌드박스 노드는 Karpenter NodePool이 0대부터 늘리고 줄이며, 부팅이 느린 `g4dn.metal`만 warm placeholder로 한 대를 미리 띄워 둡니다. gVisor 노드의 AMI와 gVisor 릴리스는 CI에서 nvproxy 드라이버 호환성을 확인한 뒤 함께 업그레이드합니다.
+!!! info "TL;DR"
+    샌드박스 노드는 Karpenter NodePool이 0대부터 늘리고 줄이며, 부팅이 느린 `g4dn.metal`만 warm placeholder로 한 대를 미리 띄워 둡니다. gVisor 노드의 AMI와 gVisor 릴리스는 CI에서 nvproxy 드라이버 호환성을 확인한 뒤 함께 업그레이드합니다.
 
 ## 기존 Pain Point
 

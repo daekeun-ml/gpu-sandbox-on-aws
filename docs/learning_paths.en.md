@@ -1,6 +1,7 @@
 # Choose a learning path
 
-**TL;DR** Answer at most four questions to get one of paths 1 to 5. To add Kata GPU, go to path 6; to read only the operations design, go to path 7. If you are new, start with the free path 1 (reading) and path 2 (local run).
+!!! info "TL;DR"
+    Answer at most four questions to get one of paths 1 to 5. To add Kata GPU, go to path 6; to read only the operations design, go to path 7. If you are new, start with the free path 1 (reading) and path 2 (local run).
 
 ## Pain points
 

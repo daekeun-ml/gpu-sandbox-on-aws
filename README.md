@@ -2,7 +2,8 @@
 
 # GPU Sandbox on AWS
 
-**TL;DR** 모델이 작성한 GPU 커널을 격리된 GPU 샌드박스에서 채점하고, 그 점수를 reward로 삼아 on-policy RL post-training을 진행합니다. 이 환경을 Amazon EKS(EC2 자체 운영)와 SageMaker HyperPod에서 gVisor, Kata + QEMU, Kata + Cloud Hypervisor로 구축하는 코드와 가이드북입니다.
+> [!NOTE]
+> **TL;DR** 모델이 작성한 GPU 커널을 격리된 GPU 샌드박스에서 채점하고, 그 점수를 reward로 삼아 on-policy RL post-training을 진행합니다. 이 환경을 Amazon EKS(EC2 자체 운영)와 SageMaker HyperPod에서 gVisor, Kata + QEMU, Kata + Cloud Hypervisor로 구축하는 코드와 가이드북입니다.
 
 **가이드북:** https://daekeun-ml.github.io/gpu-sandbox-on-aws/ (English: https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/)
 

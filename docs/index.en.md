@@ -1,6 +1,7 @@
 # GPU Sandbox on AWS
 
-**TL;DR** A hands-on and production guide to on-policy RL post-training in which GPU code written by the model runs in an isolated GPU sandbox to earn its reward, built on Amazon EKS and SageMaker HyperPod with three isolation runtimes.
+!!! info "TL;DR"
+    A hands-on and production guide to on-policy RL post-training in which GPU code written by the model runs in an isolated GPU sandbox to earn its reward, built on Amazon EKS and SageMaker HyperPod with three isolation runtimes.
 
 <div class="grid cards" markdown>
 

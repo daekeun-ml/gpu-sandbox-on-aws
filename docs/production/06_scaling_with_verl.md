@@ -1,6 +1,7 @@
 # 06 veRL로 확장
 
-**TL;DR** 단일 GPU TRL 루프를 veRL 0.9.1을 써서 여러 GPU로 확장하려면 전용 이미지, parquet 데이터, gateway의 `group_key` 고정을 쓰는 async reward 함수, KubeRay `RayCluster`, 공유 스토리지 기반 재개가 필요합니다.
+!!! info "TL;DR"
+    단일 GPU TRL 루프를 veRL 0.9.1을 써서 여러 GPU로 확장하려면 전용 이미지, parquet 데이터, gateway의 `group_key` 고정을 쓰는 async reward 함수, KubeRay `RayCluster`, 공유 스토리지 기반 재개가 필요합니다.
 
 ## 기존 Pain Point
 

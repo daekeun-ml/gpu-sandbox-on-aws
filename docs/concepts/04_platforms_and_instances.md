@@ -1,6 +1,7 @@
 # 플랫폼과 인스턴스 선택
 
-**TL;DR** 시나리오 A와 B1은 샌드박스를 EC2 노드에서 실행하고, trainer만 EC2(`g5.2xlarge`, Scenario A)나 HyperPod(`ml.g5.2xlarge`, Scenario B1)에서 실행합니다. 실험 구성인 B2는 gVisor 샌드박스를 custom AMI의 HyperPod 그룹 `sandbox`에 둡니다. 샌드박스 노드로 gVisor는 `g5.xlarge`, Kata GPU는 `g4dn.metal`, Kata CPU는 `c8i.2xlarge`를 씁니다.
+!!! info "TL;DR"
+    시나리오 A와 B1은 샌드박스를 EC2 노드에서 실행하고, trainer만 EC2(`g5.2xlarge`, Scenario A)나 HyperPod(`ml.g5.2xlarge`, Scenario B1)에서 실행합니다. 실험 구성인 B2는 gVisor 샌드박스를 custom AMI의 HyperPod 그룹 `sandbox`에 둡니다. 샌드박스 노드로 gVisor는 `g5.xlarge`, Kata GPU는 `g4dn.metal`, Kata CPU는 `c8i.2xlarge`를 씁니다.
 
 ## 기존 Pain Point
 

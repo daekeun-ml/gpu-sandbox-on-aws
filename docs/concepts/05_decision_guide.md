@@ -1,6 +1,7 @@
 # 상황별 선택 가이드
 
-**TL;DR** GPU가 필요 없으면 CPU 샌드박스로 충분합니다. GPU가 필요하면 격리 요구와 측정 GPU에 따라 "VM 경계 + T4"(`g4dn.metal`의 Kata + QEMU)와 "최신 GPU + 사용자 공간 커널 경계"(G/P 계열 VM의 gVisor) 중 하나를 선택합니다.
+!!! info "TL;DR"
+    GPU가 필요 없으면 CPU 샌드박스로 충분합니다. GPU가 필요하면 격리 요구와 측정 GPU에 따라 "VM 경계 + T4"(`g4dn.metal`의 Kata + QEMU)와 "최신 GPU + 사용자 공간 커널 경계"(G/P 계열 VM의 gVisor) 중 하나를 선택합니다.
 
 ## 기존 Pain Point
 

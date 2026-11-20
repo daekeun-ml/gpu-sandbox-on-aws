@@ -1,6 +1,7 @@
 # 10 c8i 단독 저비용 경로 (시나리오 C)
 
-**TL;DR** GPU 없이 `c8i.2xlarge` 한 대(nested virtualization)에서 gVisor와 Kata(Cloud Hypervisor, QEMU)를 실행합니다. 모델 없이 reward 루프를 실행하는 동안 샌드박스를 v1에서 v2로 교체합니다(컴퓨트 시간당 약 0.57 USD 추정, 온디맨드 요금).
+!!! info "TL;DR"
+    GPU 없이 `c8i.2xlarge` 한 대(nested virtualization)에서 gVisor와 Kata(Cloud Hypervisor, QEMU)를 실행합니다. 모델 없이 reward 루프를 실행하는 동안 샌드박스를 v1에서 v2로 교체합니다(컴퓨트 시간당 약 0.57 USD 추정, 온디맨드 요금).
 
 ## 기존 Pain Point
 
@@ -111,6 +112,10 @@ scripts/02_create_cluster.sh --cpu-only
 cdk/tunnel.sh
 ```
 
+![cdk/tunnel.sh 실행 화면: kubectl context gpu-sandbox-tunnel이 127.0.0.1:8443을 거쳐 클러스터 endpoint로 연결된다는 로그, 세션 시작, Port 8443 opened, Waiting for connections...](../images/terminal/tunnel.png)
+
+*실습 계정에서 실행한 화면입니다(2026-11-20, us-west-2). 세션 ID, 클러스터 주소, 인스턴스 ID는 가렸습니다. 이 상태에서 프롬프트로 돌아오지 않고 멈춰 있으면 정상입니다.*
+
 첫 번째 터미널에서 노드를 확인합니다.
 
 ```bash
@@ -199,6 +204,10 @@ done
 
 **확인할 것:** 풀마다 `pool sandbox-<runtime>-v1 verified`로 끝납니다. golden verdict는 CPU 세트 4개가 모두 `PASS`여야 합니다(정답 1개는 `ok`, 오답과 벤치마크 치팅은 `wrong_answer`, 호스트 파일 읽기는 `policy_violation`).
 
+![kata-clh-cpu v1 풀의 verify.sh 실행 화면: 샌드박스 커널 6.18.56과 노드 커널 6.18.62가 다르고, IMDS, Kubernetes API, kubelet, S3 연결이 모두 blocked, 미리 준비한 코드 4개가 PASS, default namespace의 접속도 blocked, 마지막 줄 pool sandbox-kata-clh-cpu-v1 verified](../images/terminal/verify-kata-clh-cpu.png)
+
+*`kata-clh-cpu` 풀을 실습 계정에서 검증한 화면입니다(2026-11-20, us-west-2). 노드 이름과 IP 주소는 가렸습니다.*
+
 **문제가 생기면:** pod가 `Pending`이면 `kubectl -n sandbox describe pod <pod>`의 출력에 `Insufficient cpu` 또는 `Insufficient memory`가 있는지 확인하고, `KATA_CPU_REPLICAS=1`이 적용됐는지 확인하세요. 그 밖의 문제는 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
 
 ## 7단계: 모델 없는 reward 루프와 버전 교체 (`ops/simulate.sh`, `ops/rollout.sh`)
@@ -217,6 +226,10 @@ scripts/ops/simulate.sh 30 20
 scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
+![rollout.sh kata-clh-cpu v1 v2 실행 화면: 1) v2 배포, 2) v2 검증(커널 비교, 외부 연결 차단, PASS 4개, verified), 3) parity에서 4개 PASS와 PARITY PASS, 4) routing 전환, 마지막에 SWITCH 줄을 기다리라는 안내](../images/terminal/rollout-kata-clh-cpu.png)
+
+*실습 계정에서 실행한 `ops/rollout.sh` 화면입니다(2026-11-20, us-west-2). 노드 이름과 IP 주소는 가렸습니다.*
+
 **확인할 것:** 첫 번째 작업 터미널에 아래와 같은 이벤트가 나옵니다(위 검증 상태에서 설명한 로컬 실행 출력을 줄인 것입니다). 클러스터에서는 ConfigMap 변경이 kubelet 동기화와 캐시 전파를 거쳐 pod에 반영되고, 스크립트는 이 시간을 약 1분으로 안내합니다. 클라이언트도 routing 파일을 최대 2초에 한 번 다시 읽습니다. 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다. 1분이 지나도 전환 이벤트가 없으면 `batch` 줄의 풀(`kata-clh-cpu/v1` 또는 `v2`)을 확인하세요. 모든 필드가 담긴 원래 JSON은 다음 실행부터 `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`처럼 붙여 보고, 이미 돌고 있는 시뮬레이션은 `kubectl -n rl-trainer logs -f job/simulate-<번호>`로 봅니다.
 
 ```text
@@ -230,6 +243,10 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 - **`batch` 줄에 `MIXED VERSIONS`가 없습니다.** 한 배치의 verdict에 v1과 v2의 결과가 섞이지 않았다는 뜻입니다(원래 JSON에서는 `served_versions`에 버전이 하나만 있습니다). 학습에서 필요한 결과가 모두 같은 풀의 캐시에 있는 배치는 샌드박스를 부르지 않아 `reward_batch` 줄이 없습니다. 서로 다른 풀의 캐시가 섞이면 한 풀에서 다시 채점하고 그 줄을 남깁니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요합니다.
 - **교체 전후 결과가 같습니다.** 두 배치 모두 `ok` 1건, `wrong_answer` 2건, pass 33%입니다. 제출물마다 두 버전의 판정이 같은지는 `ops/rollout.sh` parity 출력의 `PASS` 줄로 확인합니다.
 
+실습 계정에서 같은 과정을 실행한 화면입니다(2026-11-20, us-west-2, `simulate.sh 16 15`). 배치 6까지는 v1, `SWITCH` 줄 뒤 배치 7부터는 v2로 채점됐고, 모든 배치가 `ok` 1건, `wrong_answer` 2건으로 같습니다.
+
+![simulate.sh 실행 화면: batch 1부터 6까지 kata-clh-cpu/v1, 05:37:31에 SWITCH kata-clh-cpu/v1 -> kata-clh-cpu/v2 줄, batch 7부터 16까지 kata-clh-cpu/v2, 모든 batch가 ok 1, wrong_answer 2, pass 33%](../images/terminal/simulate-switch.png)
+
 제출물은 4개인데 3건만 채점된 것은, 호스트 파일을 읽는 제출물을 trainer 쪽 AST 검사가 샌드박스에 보내기 전에 걸러 내기 때문입니다(원래 JSON의 `n`이 3). speedup(`mean_speedup`)은 CPU 측정 노이즈 때문에 배치마다 달라지므로(로컬 실행에서 0.66에서 1.65 사이) 런타임 비교에 쓰지 마세요.
 
 v2 전환을 확인했으면 v1을 0으로 줄입니다. v1 Deployment는 남지만 replica가 0이라 요청을 받지 못합니다. 되돌릴 때는 `scripts/ops/rollout.sh kata-clh-cpu v2 v1`이 v1 pod를 다시 띄우고 검증과 parity를 마친 뒤 routing을 바꿉니다. 8단계에서 세 런타임을 비교하려면 이 명령은 벤치마크를 마친 뒤에 실행하세요.
@@ -238,7 +255,7 @@ v2 전환을 확인했으면 v1을 0으로 줄입니다. v1 Deployment는 남지
 scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 ```
 
-**문제가 생기면:** `ops/simulate.sh`가 `no routing table`로 멈추면 5단계의 `05_setup_namespaces_auth.sh`를 다시 실행하세요. `ops/rollout.sh`가 parity에서 멈추면 v2는 트래픽을 받지 않고 v1이 그대로 active로 남습니다(자세한 내용은 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)).
+**문제가 생기면:** `ops/simulate.sh`가 `no routing table`로 멈추면 5단계의 `05_setup_namespaces_auth.sh`를 다시 실행하세요. `ops/rollout.sh`가 parity에서 멈추면 v2는 트래픽을 받지 않고 v1이 그대로 active로 남습니다(자세한 내용은 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)). CPU 풀은 측정 노이즈가 커서, 정답 제출물의 speedup이 크게 흔들리면 parity가 `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365`처럼 실패할 수 있습니다(2026-11-20 실행). 판정(`status`)이 같다면 같은 명령을 다시 실행하세요.
 
 ## 8단계 (선택): 세 런타임 비교 (`ops/bench.sh`)
 
@@ -248,7 +265,7 @@ v1 풀마다 cold start(pod 생성에서 Ready까지)와 평가 지연을 측정
 scripts/ops/bench.sh 16
 ```
 
-**확인할 것:** 풀마다 JSON 한 줄(`eval_p50_s`, `eval_p95_s`, `throughput_eval_per_s`)이 나오고 `bench-<timestamp>.jsonl`에 추가됩니다. 결과를 해석하는 방법은 [08 런타임 벤치마크](08_benchmark.md)에 있습니다.
+**확인할 것:** 풀마다 `bench` 요약 한 줄(p50, p95, 초당 평가 수, speedup)이 나오고, 모든 필드가 담긴 원래 JSON은 `bench-<timestamp>.jsonl`에 추가됩니다. 결과를 해석하는 방법은 [08 런타임 벤치마크](08_benchmark.md)에 있습니다.
 
 ## 9단계 (선택): Agent Sandbox로 확장
 

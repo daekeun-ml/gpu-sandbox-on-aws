@@ -1,6 +1,7 @@
 # 04 Reinforcement learning and sandboxes
 
-**TL;DR** In reinforcement learning (RL), the sandbox is the exam room and the grader that actually runs the model's code and scores it, so if the grader is fooled or answers to the same problem are graded by different standards, the model learns the wrong thing.
+!!! info "TL;DR"
+    In reinforcement learning (RL), the sandbox is the exam room and the grader that actually runs the model's code and scores it, so if the grader is fooled or answers to the same problem are graded by different standards, the model learns the wrong thing.
 
 ## Pain points
 

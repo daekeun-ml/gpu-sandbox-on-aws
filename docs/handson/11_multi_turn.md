@@ -1,6 +1,7 @@
 # 11 multi-turn 에피소드 실습
 
-**TL;DR** GPU와 모델 없이 시나리오 C의 `c8i.2xlarge` 노드에 Agent Sandbox warm pool을 만들고, golden 제출물을 정해진 순서로 제출하는 multi-turn 에피소드를 실행합니다. 이벤트 로그에서 에피소드마다 샌드박스 하나가 할당되고 에피소드가 끝나면 반납되는지 확인합니다(컴퓨트 시간당 약 0.57 USD 추정, 온디맨드 요금).
+!!! info "TL;DR"
+    GPU와 모델 없이 시나리오 C의 `c8i.2xlarge` 노드에 Agent Sandbox warm pool을 만들고, golden 제출물을 정해진 순서로 제출하는 multi-turn 에피소드를 실행합니다. 이벤트 로그에서 에피소드마다 샌드박스 하나가 할당되고 에피소드가 끝나면 반납되는지 확인합니다(컴퓨트 시간당 약 0.57 USD 추정, 온디맨드 요금).
 
 ## 기존 Pain Point
 

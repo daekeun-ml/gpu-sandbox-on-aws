@@ -1,6 +1,7 @@
 # Verified facts and sources
 
-**TL;DR** Every source this guide relies on, with the facts it supports in one line, plus a checklist of values to re-verify before deploying.
+!!! info "TL;DR"
+    Every source this guide relies on, with the facts it supports in one line, plus a checklist of values to re-verify before deploying.
 
 ## Pain point
 

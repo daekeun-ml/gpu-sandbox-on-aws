@@ -1,6 +1,7 @@
 # Glossary
 
-**TL;DR** The isolation runtime, Kubernetes and AWS infrastructure, and RL terms of this guidebook, each explained in one or two sentences with a link to the page that uses it.
+!!! info "TL;DR"
+    The isolation runtime, Kubernetes and AWS infrastructure, and RL terms of this guidebook, each explained in one or two sentences with a link to the page that uses it.
 
 ## Pain point
 

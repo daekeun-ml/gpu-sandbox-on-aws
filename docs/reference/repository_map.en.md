@@ -1,6 +1,7 @@
 # Repository map
 
-**TL;DR** What each file in the repository does, and a table that maps each docs page to its code files.
+!!! info "TL;DR"
+    What each file in the repository does, and a table that maps each docs page to its code files.
 
 ## Pain point
 

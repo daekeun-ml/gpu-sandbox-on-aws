@@ -1,6 +1,7 @@
 # 08 런타임 벤치마크
 
-**TL;DR** 배포된 v1 풀마다 같은 golden 커널로 cold start, 평가 지연, 처리량, speedup을 측정합니다. 결과는 GPU 종류가 같은 풀끼리만 비교합니다.
+!!! info "TL;DR"
+    배포된 v1 풀마다 같은 golden 커널로 cold start, 평가 지연, 처리량, speedup을 측정합니다. 결과는 GPU 종류가 같은 풀끼리만 비교합니다.
 
 ## 기존 Pain Point
 

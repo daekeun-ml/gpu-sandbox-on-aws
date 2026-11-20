@@ -1,6 +1,7 @@
 # Before you begin (beginner guide)
 
-**TL;DR** Six chapters for people new to "how to safely run and grade code that AI wrote": chapters 1 to 4 build the concepts (about an hour in total), in chapter 5 you launch it yourself (free on your own PC, or a few dollars on AWS if you want), and chapter 6 explains sandboxes for multi-turn agents.
+!!! info "TL;DR"
+    Six chapters for people new to "how to safely run and grade code that AI wrote": chapters 1 to 4 build the concepts (about an hour in total), in chapter 5 you launch it yourself (free on your own PC, or a few dollars on AWS if you want), and chapter 6 explains sandboxes for multi-turn agents.
 
 ## Pain points
 

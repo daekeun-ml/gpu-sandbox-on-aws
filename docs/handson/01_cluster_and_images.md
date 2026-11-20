@@ -1,6 +1,7 @@
 # 01 클러스터와 이미지
 
-**TL;DR** 도구와 쿼터를 확인한 뒤 CDK 스택 하나로 private EKS 클러스터와 노드 그룹을 만듭니다. 터널로 접속해 노드를 확인하고, 이미지 세 개를 ECR에 push합니다.
+!!! info "TL;DR"
+    도구와 쿼터를 확인한 뒤 CDK 스택 하나로 private EKS 클러스터와 노드 그룹을 만듭니다. 터널로 접속해 노드를 확인하고, 이미지 세 개를 ECR에 push합니다.
 
 ## 기존 Pain Point
 
@@ -203,6 +204,10 @@ cdk/tunnel.sh
 ```
 
 **확인할 것:** `kubectl context <CLUSTER_NAME>-tunnel -> 127.0.0.1:8443 -> <endpoint> (via i-...); Ctrl-C closes it` 로그 뒤에 `Waiting for connections...`가 나옵니다. 터널은 작업 PC의 `127.0.0.1`에서만 열립니다.
+
+![cdk/tunnel.sh 실행 화면: kubectl context gpu-sandbox-tunnel이 127.0.0.1:8443을 거쳐 클러스터 endpoint로 연결된다는 로그, 세션 시작, Port 8443 opened, Waiting for connections...](../images/terminal/tunnel.png)
+
+*실습 계정에서 실행한 화면입니다(2026-11-20, us-west-2). 세션 ID, 클러스터 주소, 인스턴스 ID는 가렸습니다. 이 상태에서 프롬프트로 돌아오지 않고 멈춰 있으면 정상입니다.*
 
 첫 번째 터미널에서 노드를 확인합니다.
 

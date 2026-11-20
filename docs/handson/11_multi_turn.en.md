@@ -1,6 +1,7 @@
 # 11 Multi-turn episodes
 
-**TL;DR** Without a GPU or a model, create an Agent Sandbox warm pool on the scenario C `c8i.2xlarge` node and run multi-turn episodes that submit golden submissions in a fixed order. Read the event log to confirm that each episode is assigned one sandbox and releases it when the episode ends (compute about 0.57 USD per hour, estimate, On-Demand pricing).
+!!! info "TL;DR"
+    Without a GPU or a model, create an Agent Sandbox warm pool on the scenario C `c8i.2xlarge` node and run multi-turn episodes that submit golden submissions in a fixed order. Read the event log to confirm that each episode is assigned one sandbox and releases it when the episode ends (compute about 0.57 USD per hour, estimate, On-Demand pricing).
 
 ## Pain points
 

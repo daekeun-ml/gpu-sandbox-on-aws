@@ -1,6 +1,7 @@
 # 06 Multi-turn agents and Agent Sandbox
 
-**TL;DR** Reward grading in this asset is single-turn: each completion gets one final verdict, with no step where the model reads the verdict and revises its answer, and each request is graded by one free pod of the reward pool. A multi-turn agent needs every turn of an episode graded in the same sandbox, so Agent Sandbox assigns one sandbox to each episode.
+!!! info "TL;DR"
+    Reward grading in this asset is single-turn: each completion gets one final verdict, with no step where the model reads the verdict and revises its answer, and each request is graded by one free pod of the reward pool. A multi-turn agent needs every turn of an episode graded in the same sandbox, so Agent Sandbox assigns one sandbox to each episode.
 
 ## Pain points
 

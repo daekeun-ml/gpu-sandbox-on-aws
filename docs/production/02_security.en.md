@@ -1,6 +1,7 @@
 # Security
 
-**TL;DR** Model-generated code is treated as untrusted input: pod, network, node, token and process controls are layered on top of runtime isolation (gVisor or Kata), and some risks remain that these layers do not stop, such as gVisor sharing the host driver.
+!!! info "TL;DR"
+    Model-generated code is treated as untrusted input: pod, network, node, token and process controls are layered on top of runtime isolation (gVisor or Kata), and some risks remain that these layers do not stop, such as gVisor sharing the host driver.
 
 ## Pain point
 

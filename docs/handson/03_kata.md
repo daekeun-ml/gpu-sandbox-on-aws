@@ -1,6 +1,7 @@
 # 03 Kata 샌드박스 (CLH, QEMU)
 
-**TL;DR** `c8i.2xlarge`의 nested virtualization으로 `kata-clh`와 `kata-qemu`를 적은 비용으로 먼저 리허설합니다. GPU passthrough가 필요할 때만 IOMMU AMI로 부팅한 `g4dn.metal`에서 VM마다 T4를 하나씩 직접 할당합니다.
+!!! info "TL;DR"
+    `c8i.2xlarge`의 nested virtualization으로 `kata-clh`와 `kata-qemu`를 적은 비용으로 먼저 리허설합니다. GPU passthrough가 필요할 때만 IOMMU AMI로 부팅한 `g4dn.metal`에서 VM마다 T4를 하나씩 직접 할당합니다.
 
 ## 기존 Pain Point
 

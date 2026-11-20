@@ -1,6 +1,7 @@
 # 08 Runtime benchmark
 
-**TL;DR** Measure cold start, evaluation latency, throughput and speedup of every deployed v1 pool with the same golden kernel, and compare only pools with the same GPU type.
+!!! info "TL;DR"
+    Measure cold start, evaluation latency, throughput and speedup of every deployed v1 pool with the same golden kernel, and compare only pools with the same GPU type.
 
 ## Pain point
 

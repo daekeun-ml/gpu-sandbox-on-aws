@@ -1,6 +1,7 @@
 # On-policy RL with sandboxes
 
-**TL;DR** GRPO compares completions of the same prompt to build advantages, so one group is scored by one sandbox version, infrastructure errors do not become wrong-answer scores, and versions switch at batch boundaries without stopping training.
+!!! info "TL;DR"
+    GRPO compares completions of the same prompt to build advantages, so one group is scored by one sandbox version, infrastructure errors do not become wrong-answer scores, and versions switch at batch boundaries without stopping training.
 
 ## Pain point
 

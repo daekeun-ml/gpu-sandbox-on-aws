@@ -1,6 +1,7 @@
 # Configuration
 
-**TL;DR** A reference of this repository's settings, with the code default next to the value the manifests actually set in the cluster.
+!!! info "TL;DR"
+    A reference of this repository's settings, with the code default next to the value the manifests actually set in the cluster.
 
 ## Pain point
 

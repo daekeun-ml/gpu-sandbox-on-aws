@@ -1,6 +1,7 @@
 # 06 Scaling with veRL
 
-**TL;DR** Spreading the single-GPU TRL loop over many GPUs with veRL 0.9.1 takes a separate image, parquet data, an async reward function that relies on the gateway's `group_key` pinning, a KubeRay `RayCluster`, and resumption from shared storage.
+!!! info "TL;DR"
+    Spreading the single-GPU TRL loop over many GPUs with veRL 0.9.1 takes a separate image, parquet data, an async reward function that relies on the gateway's `group_key` pinning, a KubeRay `RayCluster`, and resumption from shared storage.
 
 ## Pain point
 

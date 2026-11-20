@@ -1,6 +1,7 @@
 # Troubleshooting
 
-**TL;DR** Per-stage "symptom, cause, fix" tables for what commonly blocks installation and operation, with the diagnostic commands to run at each stage.
+!!! info "TL;DR"
+    Per-stage "symptom, cause, fix" tables for what commonly blocks installation and operation, with the diagnostic commands to run at each stage.
 
 ## Pain point
 

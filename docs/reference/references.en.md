@@ -1,6 +1,7 @@
 # All references
 
-**TL;DR** The full reference list for every page, in left-menu order. The collapsed "References" box at the end of each page has only the key links.
+!!! info "TL;DR"
+    The full reference list for every page, in left-menu order. The collapsed "References" box at the end of each page has only the key links.
 
 Which source supports which fact is in [Verified facts and sources](sources.md).
 

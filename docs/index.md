@@ -1,6 +1,7 @@
 # GPU Sandbox on AWS
 
-**TL;DR** 모델이 쓴 GPU 코드를 격리된 GPU 샌드박스에서 실행해 reward를 매기는 on-policy RL post-training 환경을 구축하는 가이드입니다. Amazon EKS와 SageMaker HyperPod에서 세 가지 격리 런타임으로 구성하는 핸즈온과 Production 설계를 다룹니다.
+!!! info "TL;DR"
+    모델이 쓴 GPU 코드를 격리된 GPU 샌드박스에서 실행해 reward를 매기는 on-policy RL post-training 환경을 구축하는 가이드입니다. Amazon EKS와 SageMaker HyperPod에서 세 가지 격리 런타임으로 구성하는 핸즈온과 Production 설계를 다룹니다.
 
 <div class="grid cards" markdown>
 

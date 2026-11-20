@@ -1,6 +1,7 @@
 # 02 gVisor GPU 샌드박스
 
-**TL;DR** NVIDIA device plugin을 CDI 모드로 설치하고 `gvisor` RuntimeClass를 등록합니다. 그다음 smoke pod 하나를 gVisor로 실행해 A10G에서 CUDA가 동작하는지 확인합니다.
+!!! info "TL;DR"
+    NVIDIA device plugin을 CDI 모드로 설치하고 `gvisor` RuntimeClass를 등록합니다. 그다음 smoke pod 하나를 gVisor로 실행해 A10G에서 CUDA가 동작하는지 확인합니다.
 
 ## 기존 Pain Point
 

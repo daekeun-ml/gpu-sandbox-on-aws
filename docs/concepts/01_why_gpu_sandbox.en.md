@@ -1,6 +1,7 @@
 # When the sandbox needs a GPU
 
-**TL;DR** A sandbox needs a GPU only when the reward is measured on one or the work inside uses one; this asset covers on-policy GRPO that rewards the measured speedup of Triton kernels.
+!!! info "TL;DR"
+    A sandbox needs a GPU only when the reward is measured on one or the work inside uses one; this asset covers on-policy GRPO that rewards the measured speedup of Triton kernels.
 
 ## Pain point
 

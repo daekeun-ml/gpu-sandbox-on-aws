@@ -1,6 +1,7 @@
 # 07 Observability와 운영
 
-**TL;DR** 샌드박스와 gateway의 Prometheus 지표와 trainer의 JSON 이벤트를 함께 모니터링하고, reward 품질 신호에 경보를 설정합니다. 경보가 발생하면 증상별 런북으로 대응합니다.
+!!! info "TL;DR"
+    샌드박스와 gateway의 Prometheus 지표와 trainer의 JSON 이벤트를 함께 모니터링하고, reward 품질 신호에 경보를 설정합니다. 경보가 발생하면 증상별 런북으로 대응합니다.
 
 ## 기존 Pain Point
 

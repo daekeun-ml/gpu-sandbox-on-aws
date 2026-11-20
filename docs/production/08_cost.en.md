@@ -1,6 +1,7 @@
 # 08 Cost
 
-**TL;DR** Cost splits into trainer GPUs, sandbox GPUs, the wait of empty bare-metal nodes, and the EKS control plane plus NAT gateway; the main levers are sizing the sandbox pool to the reward phase and returning empty nodes quickly (amounts are estimates from On-Demand list prices).
+!!! info "TL;DR"
+    Cost splits into trainer GPUs, sandbox GPUs, the wait of empty bare-metal nodes, and the EKS control plane plus NAT gateway; the main levers are sizing the sandbox pool to the reward phase and returning empty nodes quickly (amounts are estimates from On-Demand list prices).
 
 ## Pain point
 

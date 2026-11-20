@@ -1,6 +1,7 @@
 # 07 HyperPod scenario
 
-**TL;DR** Build B1, which moves only training to SageMaker HyperPod and keeps the GPU sandboxes on EC2 node groups in the same EKS cluster; on the experimental path B2, a custom AMI moves the sandboxes to HyperPod too.
+!!! info "TL;DR"
+    Build B1, which moves only training to SageMaker HyperPod and keeps the GPU sandboxes on EC2 node groups in the same EKS cluster; on the experimental path B2, a custom AMI moves the sandboxes to HyperPod too.
 
 ## Pain point
 

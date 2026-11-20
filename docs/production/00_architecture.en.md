@@ -1,6 +1,7 @@
 # Production reference architecture
 
-**TL;DR** In production the trainer calls only one sandbox gateway, and each sandbox pool is one Deployment per (runtime, version) whose nodes a Karpenter NodePool adds from zero as pods need room.
+!!! info "TL;DR"
+    In production the trainer calls only one sandbox gateway, and each sandbox pool is one Deployment per (runtime, version) whose nodes a Karpenter NodePool adds from zero as pods need room.
 
 ## Pain point
 

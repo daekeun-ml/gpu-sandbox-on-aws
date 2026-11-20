@@ -1,6 +1,7 @@
 # 03 Isolating the GPU too
 
-**TL;DR** GPU code sends commands to the driver inside the kernel, so the way you bring the GPU inside the wall decides the isolation level: gVisor checks those commands and passes them on, and Kata hands the whole GPU to a VM.
+!!! info "TL;DR"
+    GPU code sends commands to the driver inside the kernel, so the way you bring the GPU inside the wall decides the isolation level: gVisor checks those commands and passes them on, and Kata hands the whole GPU to a VM.
 
 ## Pain points
 

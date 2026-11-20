@@ -1,6 +1,7 @@
 # Isolation runtimes
 
-**TL;DR** GPU sandbox runtimes differ in who receives syscalls and GPU ioctls and where the NVIDIA driver lives; on AWS, Kata + GPU runs only on `g4dn.metal` in this repository's x86 setup, and gVisor + GPU on regular G/P family VMs.
+!!! info "TL;DR"
+    GPU sandbox runtimes differ in who receives syscalls and GPU ioctls and where the NVIDIA driver lives; on AWS, Kata + GPU runs only on `g4dn.metal` in this repository's x86 setup, and gVisor + GPU on regular G/P family VMs.
 
 ## Pain point
 

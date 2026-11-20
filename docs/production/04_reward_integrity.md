@@ -1,6 +1,7 @@
 # 04 Reward 무결성
 
-**TL;DR** 후보 코드는 신뢰하지 않는 자식 프로세스에서만 실행합니다. 자식은 후보의 실행 시간과 출력 checksum을 기록하고, 신뢰하는 부모 프로세스가 같은 입력으로 reference를 측정해 정답 비교, speedup 계산, verdict 결정을 맡습니다.
+!!! info "TL;DR"
+    후보 코드는 신뢰하지 않는 자식 프로세스에서만 실행합니다. 자식은 후보의 실행 시간과 출력 checksum을 기록하고, 신뢰하는 부모 프로세스가 같은 입력으로 reference를 측정해 정답 비교, speedup 계산, verdict 결정을 맡습니다.
 
 ## 기존 Pain Point
 

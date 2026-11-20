@@ -1,6 +1,7 @@
 # 06 Agent Sandbox로 확장
 
-**TL;DR** Agent Sandbox(kubernetes-sigs/agent-sandbox)는 격리를 pod의 RuntimeClass에 맡기는 오케스트레이터라서 gVisor와 Kata 모두에 사용할 수 있습니다. 이 저장소의 확장은 같은 GPU 샌드박스 서버를 warm pool로 미리 실행해 두고, multi-turn 에피소드마다 샌드박스를 하나씩 할당합니다.
+!!! info "TL;DR"
+    Agent Sandbox(kubernetes-sigs/agent-sandbox)는 격리를 pod의 RuntimeClass에 맡기는 오케스트레이터라서 gVisor와 Kata 모두에 사용할 수 있습니다. 이 저장소의 확장은 같은 GPU 샌드박스 서버를 warm pool로 미리 실행해 두고, multi-turn 에피소드마다 샌드박스를 하나씩 할당합니다.
 
 ## 기존 Pain Point
 

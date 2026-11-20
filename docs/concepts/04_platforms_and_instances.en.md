@@ -1,6 +1,7 @@
 # Platforms and instances
 
-**TL;DR** In Scenarios A and B1 the sandboxes stay on EC2 nodes and only the trainer moves between EC2 (`g5.2xlarge`, Scenario A) and HyperPod (`ml.g5.2xlarge`, Scenario B1). The experimental B2 puts the gVisor sandboxes in a HyperPod group `sandbox` that runs a custom AMI; gVisor uses `g5.xlarge`, Kata GPU `g4dn.metal` and Kata CPU `c8i.2xlarge`.
+!!! info "TL;DR"
+    In Scenarios A and B1 the sandboxes stay on EC2 nodes and only the trainer moves between EC2 (`g5.2xlarge`, Scenario A) and HyperPod (`ml.g5.2xlarge`, Scenario B1). The experimental B2 puts the gVisor sandboxes in a HyperPod group `sandbox` that runs a custom AMI; gVisor uses `g5.xlarge`, Kata GPU `g4dn.metal` and Kata CPU `c8i.2xlarge`.
 
 ## Pain point
 

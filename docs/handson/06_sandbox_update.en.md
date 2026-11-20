@@ -1,6 +1,7 @@
 # 06 Updating the sandbox during training
 
-**TL;DR** Move the sandbox from v1 to v2 with blue/green without stopping on-policy training, and confirm the switch point with the `sandbox_version_switch` event.
+!!! info "TL;DR"
+    Move the sandbox from v1 to v2 with blue/green without stopping on-policy training, and confirm the switch point with the `sandbox_version_switch` event.
 
 ## Pain point
 

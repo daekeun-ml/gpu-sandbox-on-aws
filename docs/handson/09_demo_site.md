@@ -1,6 +1,7 @@
 # 09 데모 사이트 (CloudFront)
 
-**TL;DR** 클러스터의 실행 기록(JSON)을 재생하는 정적 데모를 private S3 버킷과 CloudFront로 공개합니다. 방문자는 클러스터나 GPU에 접근할 수 없습니다.
+!!! info "TL;DR"
+    클러스터의 실행 기록(JSON)을 재생하는 정적 데모를 private S3 버킷과 CloudFront로 공개합니다. 방문자는 클러스터나 GPU에 접근할 수 없습니다.
 
 ## 기존 Pain Point
 

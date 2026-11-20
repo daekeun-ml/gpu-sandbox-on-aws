@@ -1,6 +1,7 @@
 # 01 Why AI-generated code needs isolation
 
-**TL;DR** Code that an AI model wrote has to run to be graded, so you lock it inside a "small computer you can throw away" (a sandbox) and need several layers of defense working together to really block it.
+!!! info "TL;DR"
+    Code that an AI model wrote has to run to be graded, so you lock it inside a "small computer you can throw away" (a sandbox) and need several layers of defense working together to really block it.
 
 ## Pain points
 

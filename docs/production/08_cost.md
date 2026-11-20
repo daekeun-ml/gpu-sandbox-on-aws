@@ -1,6 +1,7 @@
 # 08 비용
 
-**TL;DR** 비용은 trainer GPU, 샌드박스 GPU, 빈 bare metal 노드의 대기 시간, EKS control plane과 NAT gateway로 나뉩니다. 비용을 줄이는 주요 방법은 샌드박스 풀 크기를 reward 구간에 맞추고 빈 노드를 빨리 반납하는 것입니다(금액은 온디맨드 요금으로 계산한 추정치).
+!!! info "TL;DR"
+    비용은 trainer GPU, 샌드박스 GPU, 빈 bare metal 노드의 대기 시간, EKS control plane과 NAT gateway로 나뉩니다. 비용을 줄이는 주요 방법은 샌드박스 풀 크기를 reward 구간에 맞추고 빈 노드를 빨리 반납하는 것입니다(금액은 온디맨드 요금으로 계산한 추정치).
 
 ## 기존 Pain Point
 

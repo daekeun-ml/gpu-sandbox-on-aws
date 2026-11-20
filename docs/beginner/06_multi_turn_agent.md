@@ -1,6 +1,7 @@
 # 06 multi-turn 에이전트와 Agent Sandbox
 
-**TL;DR** 이 에셋의 reward 채점은 모델이 판정을 읽고 답안을 고쳐 내는 단계 없이 completion 하나에 최종 verdict 하나를 쓰는 single-turn 방식이고, 요청마다 reward 풀의 유휴 pod 하나가 채점합니다. multi-turn 에이전트는 한 에피소드의 모든 turn을 같은 샌드박스에서 채점해야 하므로, Agent Sandbox로 에피소드마다 샌드박스 하나를 할당합니다.
+!!! info "TL;DR"
+    이 에셋의 reward 채점은 모델이 판정을 읽고 답안을 고쳐 내는 단계 없이 completion 하나에 최종 verdict 하나를 쓰는 single-turn 방식이고, 요청마다 reward 풀의 유휴 pod 하나가 채점합니다. multi-turn 에이전트는 한 에피소드의 모든 turn을 같은 샌드박스에서 채점해야 하므로, Agent Sandbox로 에피소드마다 샌드박스 하나를 할당합니다.
 
 ## 기존 Pain Point
 

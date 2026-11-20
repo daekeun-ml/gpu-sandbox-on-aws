@@ -1,6 +1,7 @@
 # 05 샌드박스 버전 관리
 
-**TL;DR** reward를 계산하는 경로가 바뀌면 새 샌드박스 버전으로 배포하고, 검증과 parity를 통과한 뒤 routing 표를 바꿉니다. TRL은 새 routing을 읽은 뒤 샌드박스에 보내는 reward batch(= optimizer step)부터, veRL은 새로 고정되는 group부터 새 버전을 씁니다. TRL batch 전체가 한 구버전 풀의 캐시에 적중하면 그 batch는 기존 결과를 쓰고 `reward_batch` 줄도 남기지 않습니다. 샌드박스가 채점한 결과에는 채점한 버전이 기록됩니다.
+!!! info "TL;DR"
+    reward를 계산하는 경로가 바뀌면 새 샌드박스 버전으로 배포하고, 검증과 parity를 통과한 뒤 routing 표를 바꿉니다. TRL은 새 routing을 읽은 뒤 샌드박스에 보내는 reward batch(= optimizer step)부터, veRL은 새로 고정되는 group부터 새 버전을 씁니다. TRL batch 전체가 한 구버전 풀의 캐시에 적중하면 그 batch는 기존 결과를 쓰고 `reward_batch` 줄도 남기지 않습니다. 샌드박스가 채점한 결과에는 채점한 버전이 기록됩니다.
 
 ## 기존 Pain Point
 

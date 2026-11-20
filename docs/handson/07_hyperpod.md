@@ -1,6 +1,7 @@
 # 07 HyperPod 시나리오
 
-**TL;DR** B1은 학습만 SageMaker HyperPod로 옮기고 GPU 샌드박스는 같은 EKS 클러스터의 EC2 노드 그룹에 그대로 둡니다. 실험 경로인 B2는 custom AMI를 써서 샌드박스도 HyperPod 노드에서 실행합니다.
+!!! info "TL;DR"
+    B1은 학습만 SageMaker HyperPod로 옮기고 GPU 샌드박스는 같은 EKS 클러스터의 EC2 노드 그룹에 그대로 둡니다. 실험 경로인 B2는 custom AMI를 써서 샌드박스도 HyperPod 노드에서 실행합니다.
 
 ## 기존 Pain Point
 

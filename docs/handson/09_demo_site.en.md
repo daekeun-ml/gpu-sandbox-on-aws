@@ -1,6 +1,7 @@
 # 09 Demo site (CloudFront)
 
-**TL;DR** Publish a static demo that replays an execution record (JSON) from the cluster, served from a private S3 bucket through CloudFront. Visitors never reach the cluster or a GPU.
+!!! info "TL;DR"
+    Publish a static demo that replays an execution record (JSON) from the cluster, served from a private S3 bucket through CloudFront. Visitors never reach the cluster or a GPU.
 
 ## Pain point
 

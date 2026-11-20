@@ -1,6 +1,7 @@
 # 10 CPU-only path on c8i (scenario C)
 
-**TL;DR** Without any GPU, put gVisor and Kata (Cloud Hypervisor, QEMU) on one `c8i.2xlarge` (nested virtualization) and swap the sandbox from v1 to v2 during a reward loop without a model (compute about 0.57 USD per hour, estimate, On-Demand list price).
+!!! info "TL;DR"
+    Without any GPU, put gVisor and Kata (Cloud Hypervisor, QEMU) on one `c8i.2xlarge` (nested virtualization) and swap the sandbox from v1 to v2 during a reward loop without a model (compute about 0.57 USD per hour, estimate, On-Demand list price).
 
 ## Pain points
 
@@ -111,6 +112,10 @@ Keep the tunnel running in a second terminal. From the Kata CPU node add (`kata/
 cdk/tunnel.sh
 ```
 
+![Output of cdk/tunnel.sh: the kubectl context gpu-sandbox-tunnel goes through 127.0.0.1:8443 to the cluster endpoint, the session starts, Port 8443 opened, Waiting for connections...](../images/terminal/tunnel.png)
+
+*Run in the practice account (2026-11-20, us-west-2). The session ID, cluster address and instance ID are masked. It is working when it stays here without returning to the prompt.*
+
 Check the nodes from the first terminal.
 
 ```bash
@@ -199,6 +204,10 @@ done
 
 **What to look for:** each pool ends with `pool sandbox-<runtime>-v1 verified`. All four CPU golden verdicts must be `PASS` (the correct answer is `ok`, the wrong answer and the benchmark cheat are `wrong_answer`, reading a host file is `policy_violation`).
 
+![verify.sh on the kata-clh-cpu v1 pool: the sandbox kernel 6.18.56 differs from the node kernel 6.18.62, IMDS, the Kubernetes API, the kubelet and S3 are all blocked, the four prepared submissions PASS, the connection from the default namespace is blocked, and the last line is pool sandbox-kata-clh-cpu-v1 verified](../images/terminal/verify-kata-clh-cpu.png)
+
+*Verifying the `kata-clh-cpu` pool in the practice account (2026-11-20, us-west-2). Node names and IP addresses are masked.*
+
 **If it fails:** if a pod is `Pending`, look for `Insufficient cpu` or `Insufficient memory` in `kubectl -n sandbox describe pod <pod>` and check that `KATA_CPU_REPLICAS=1` is in effect. Everything else is under "Sandbox pools and readiness" in [Troubleshooting](../reference/troubleshooting.md).
 
 ## Step 7: A reward loop without a model, and a version swap (`ops/simulate.sh`, `ops/rollout.sh`)
@@ -217,6 +226,10 @@ A few batches in, swap `kata-clh-cpu` from v1 to v2 in the second work terminal.
 scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
+![rollout.sh kata-clh-cpu v1 v2: 1) deploy v2, 2) verify v2 (kernel comparison, blocked egress, four PASS, verified), 3) parity with four PASS and PARITY PASS, 4) the routing switch, and at the end the hint to watch for the SWITCH line](../images/terminal/rollout-kata-clh-cpu.png)
+
+*`ops/rollout.sh` run in the practice account (2026-11-20, us-west-2). Node names and IP addresses are masked.*
+
 **What to look for:** events like these in the first work terminal (the local run from the verification status, shortened). On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes. If no switch event appears after a minute, check the pool on the `batch` lines (`kata-clh-cpu/v1` or `v2`). For the raw JSON with every field, start the next run as `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`; for a simulation that is already running, use `kubectl -n rl-trainer logs -f job/simulate-<number>`.
 
 ```text
@@ -230,6 +243,10 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 - **No `batch` line shows `MIXED VERSIONS`.** The verdicts of one batch did not mix v1 and v2 (in the raw JSON, `served_versions` holds a single version). In training, a batch whose needed results are all cached from the same pool calls no sandbox and prints no `reward_batch` line; if the cache mixes pools, the batch is scored again on one pool and logs that line. On-policy training needs this to compute one batch's advantages against one standard.
 - **The results are the same before and after.** Both batches have 1 `ok`, 2 `wrong_answer` and pass 33%. Whether each submission got the same verdict on both versions shows in the `PASS` lines of the `ops/rollout.sh` parity output.
 
+The same steps run in the practice account (2026-11-20, us-west-2, `simulate.sh 16 15`): batches 1 to 6 ran on v1, and after the `SWITCH` line batches 7 on ran on v2, every batch with 1 `ok` and 2 `wrong_answer`.
+
+![simulate.sh output: batches 1 to 6 on kata-clh-cpu/v1, at 05:37:31 the line SWITCH kata-clh-cpu/v1 -> kata-clh-cpu/v2, batches 7 to 16 on kata-clh-cpu/v2, every batch ok 1, wrong_answer 2, pass 33%](../images/terminal/simulate-switch.png)
+
 There are 4 submissions but only 3 are scored, because the trainer-side AST check rejects the one that reads a host file before it reaches a sandbox (`n` is 3 in the raw JSON). The speedup (`mean_speedup`) moves from batch to batch with CPU timing noise (between 0.66 and 1.65 in the local run), so do not compare runtimes with it.
 
 Once v2 is active, scale v1 to zero. The v1 Deployment stays, but with 0 replicas it cannot take requests. To go back, `scripts/ops/rollout.sh kata-clh-cpu v2 v1` brings the v1 pods back, runs the verification and parity, and then switches the routing. To compare the three runtimes in step 8, run this command after the benchmark.
@@ -238,7 +255,7 @@ Once v2 is active, scale v1 to zero. The v1 Deployment stays, but with 0 replica
 scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 ```
 
-**If it fails:** if `ops/simulate.sh` stops with `no routing table`, run `05_setup_namespaces_auth.sh` from step 5 again. If `ops/rollout.sh` stops at parity, v2 receives no traffic and v1 stays active (more in [06 Updating the sandbox during training](06_sandbox_update.md)).
+**If it fails:** if `ops/simulate.sh` stops with `no routing table`, run `05_setup_namespaces_auth.sh` from step 5 again. If `ops/rollout.sh` stops at parity, v2 receives no traffic and v1 stays active (more in [06 Updating the sandbox during training](06_sandbox_update.md)). CPU pools measure with a lot of noise, so when the speedup of the correct submission swings far, parity can fail like `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365` (2026-11-20 run). If the verdicts (`status`) match, run the same command again.
 
 ## Step 8 (optional): Compare the three runtimes (`ops/bench.sh`)
 
@@ -248,7 +265,7 @@ Measure cold start (pod creation to Ready) and evaluation latency for each v1 po
 scripts/ops/bench.sh 16
 ```
 
-**What to look for:** one JSON line per pool (`eval_p50_s`, `eval_p95_s`, `throughput_eval_per_s`), also appended to `bench-<timestamp>.jsonl`. How to read the numbers is in [08 Runtime benchmark](08_benchmark.md).
+**What to look for:** one `bench` summary line per pool (p50, p95, evaluations per second, speedup); the raw JSON with every field is appended to `bench-<timestamp>.jsonl`. How to read the numbers is in [08 Runtime benchmark](08_benchmark.md).
 
 ## Step 9 (optional): Extend to Agent Sandbox
 

@@ -1,6 +1,7 @@
 # 03 Kata sandboxes (CLH, QEMU)
 
-**TL;DR** Rehearse `kata-clh` and `kata-qemu` cheaply with nested virtualization on `c8i.2xlarge`, then, only when you need GPU passthrough, hand one T4 to each VM on a `g4dn.metal` booted from an IOMMU AMI.
+!!! info "TL;DR"
+    Rehearse `kata-clh` and `kata-qemu` cheaply with nested virtualization on `c8i.2xlarge`, then, only when you need GPU passthrough, hand one T4 to each VM on a `g4dn.metal` booted from an IOMMU AMI.
 
 ## Pain point
 

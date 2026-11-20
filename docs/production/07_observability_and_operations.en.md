@@ -1,6 +1,7 @@
 # 07 Observability and operations
 
-**TL;DR** Watch the Prometheus metrics of the sandboxes and the gateway together with the trainer's JSON events, alarm on reward quality signals, and respond with a symptom-based runbook.
+!!! info "TL;DR"
+    Watch the Prometheus metrics of the sandboxes and the gateway together with the trainer's JSON events, alarm on reward quality signals, and respond with a symptom-based runbook.
 
 ## Pain point
 

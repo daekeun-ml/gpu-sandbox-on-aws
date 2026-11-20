@@ -1,6 +1,7 @@
 # 격리 런타임 비교
 
-**TL;DR** GPU 샌드박스 런타임은 syscall과 GPU ioctl을 처리하는 계층과 NVIDIA 드라이버의 위치로 구분됩니다. AWS에서 Kata + GPU는 이 저장소의 x86 구성 기준으로 `g4dn.metal`에서만 실행되고, gVisor + GPU는 일반 G/P 계열 VM에서 실행됩니다.
+!!! info "TL;DR"
+    GPU 샌드박스 런타임은 syscall과 GPU ioctl을 처리하는 계층과 NVIDIA 드라이버의 위치로 구분됩니다. AWS에서 Kata + GPU는 이 저장소의 x86 구성 기준으로 `g4dn.metal`에서만 실행되고, gVisor + GPU는 일반 G/P 계열 VM에서 실행됩니다.
 
 ## 기존 Pain Point
 

@@ -1,6 +1,7 @@
 # Capacity and nodes
 
-**TL;DR** Sandbox nodes scale from zero on Karpenter NodePools, a warm placeholder keeps only the slow `g4dn.metal` ready, and the gVisor node AMI and gVisor release go up together after CI confirms nvproxy driver support.
+!!! info "TL;DR"
+    Sandbox nodes scale from zero on Karpenter NodePools, a warm placeholder keeps only the slow `g4dn.metal` ready, and the gVisor node AMI and gVisor release go up together after CI confirms nvproxy driver support.
 
 ## Pain point
 

@@ -1,6 +1,7 @@
 # 05 Try it yourself
 
-**TL;DR** In Part 1 you grade a correct, a wrong, and a cheating answer with a sandbox server on your PC (free, about 30 minutes), and in Part 2 you check on one `c8i.2xlarge` on AWS that a regular container, gVisor, and Kata show different kernels, then delete everything cleanly (1 to 2 hours, a few dollars).
+!!! info "TL;DR"
+    In Part 1 you grade a correct, a wrong, and a cheating answer with a sandbox server on your PC (free, about 30 minutes), and in Part 2 you check on one `c8i.2xlarge` on AWS that a regular container, gVisor, and Kata show different kernels, then delete everything cleanly (1 to 2 hours, a few dollars).
 
 ## Pain points
 
