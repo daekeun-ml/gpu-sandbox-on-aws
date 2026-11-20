@@ -1,3 +1,5 @@
+**한국어** | [English](scenario-b1.guide.en.md)
+
 # 시나리오 B1: HyperPod trainer와 EKS 노드의 gVisor GPU 샌드박스
 
 시나리오 A와 같은 on-policy GRPO 루프인데, trainer만 같은 private EKS 클러스터에 붙은 SageMaker HyperPod instance group 위에서 HyperPodPyTorchJob으로 돕니다. gVisor(runsc + nvproxy) 샌드박스 pool은 EC2 node group에 그대로 남아요. 그래서 그림에서 달라진 곳은 trainer 아이콘과 그룹, 그리고 HyperPod가 부팅 때 읽는 S3 lifecycle bucket뿐입니다.

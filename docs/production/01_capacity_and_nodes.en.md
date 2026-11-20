@@ -13,7 +13,7 @@ A `g4dn.metal` takes minutes to boot, install kata-deploy and bind its GPUs to v
 - **When an automatic AMI update brings an NVIDIA driver nvproxy does not know (unknown)**: gVisor GPU sandboxes never become Ready and pool capacity drops to zero.
 - **The G and VT On-Demand quota**: it has a documented default of 0, so until it is raised you cannot launch a single 96-vCPU `g4dn.metal`.
 
-![a: on the metal node (sandbox-kata-gpu) a reward batch arrives, the g4dn.metal then spends minutes booting, installing kata-deploy and binding vfio-pci, and the batch waits; on the gVisor node (sandbox-gvisor) an automatic AMI update through al2023@latest brings a driver unknown to nvproxy, GPU initialization fails, sandboxes never become Ready and pool capacity drops to 0. b: on metal a warm placeholder with priority -10 is preempted and steps aside, the sandbox pods run on a node that is already up and Karpenter adds a new spare; on gVisor the AMI is pinned to al2023@v20261107, CI checks support with nvproxy list-supported-drivers, and the AMI and GVISOR_RELEASE are raised together only when it passes](../images/figures/production-01_capacity_and_nodes.svg)
+![a: on the metal node (sandbox-kata-gpu) a reward batch arrives, the g4dn.metal then spends minutes booting, installing kata-deploy and binding vfio-pci, and the batch waits; on the gVisor node (sandbox-gvisor) an automatic AMI update through al2023@latest brings a driver unknown to nvproxy, GPU initialization fails, sandboxes never become Ready and pool capacity drops to 0. b: on metal a warm placeholder with priority -10 is preempted and steps aside, the sandbox pods run on a node that is already up and Karpenter adds a new spare; on gVisor the AMI is pinned to al2023@v20261107, CI checks support with nvproxy list-supported-drivers, and the AMI and GVISOR_RELEASE are raised together only when it passes](../images/figures/production-01_capacity_and_nodes.en.svg)
 
 *Takeaway: Slow metal started on demand makes batches wait, and an automatic AMI update can drop the gVisor pool to zero capacity. A warm placeholder keeps one metal node ready, and the AMI and gVisor are pinned together and raised only after CI confirms support.*
 
@@ -73,6 +73,8 @@ If it fails:
 `spec.cpuOptions.nestedVirtualization` (values `enabled` or `disabled`), used by `sandbox-kata-cpu`, is a field of the v1.15.2 CRD. If the FIELDS list of `kubectl explain ec2nodeclass.spec.cpuOptions` lacks `nestedVirtualization`, your Karpenter predates the feature; upgrade it first.
 
 ## NodePool design
+
+A NodePool determines what capacity can be provisioned for pods. The EC2NodeClass supplies node settings such as the AMI and bootstrap. For a Pending GPU pod, check provisioning first, then runtime and device registration.
 
 | NodePool | Requirements | Taint | Labels |
 |---|---|---|---|

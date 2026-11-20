@@ -11,7 +11,7 @@
 - **샌드박스 Deployment를 rolling update로 교체할 때**: 구버전과 신버전 pod가 동시에 요청을 처리합니다. 그러면 같은 GRPO group의 completion이 서로 다른 채점 규칙으로 점수를 받아 group 기준 advantage가 잘못 계산됩니다.
 - **Karpenter `alias: al2023@latest`를 쓸 때**: 새 노드에 별도 알림 없이 최신 AMI가 적용됩니다. gVisor nvproxy는 드라이버 버전을 엄격히 확인하므로, 드라이버가 바뀐 노드에서는 샌드박스가 Ready가 되지 않을 수 있습니다.
 
-![a: rolling update 중인 Deployment에서는 GRPO group 하나의 completion 8개를 구버전 pod(기존 채점 규칙)와 신버전 pod(새 채점 규칙)가 나눠 채점합니다. 그래서 group 기준 advantage에 두 규칙의 점수가 섞입니다. b: (runtime, version)마다 풀을 하나씩 둡니다. active인 sandbox-gvisor-v1이 group 전체를 채점하고, 롤백용으로 유지됩니다. sandbox-gvisor-v2는 검증과 parity 전에는 트래픽을 받지 않고, 통과하면 다음 batch(TRL)나 새로 고정되는 group(veRL)부터 전환됩니다. advantage에는 TRL이면 rank별 batch 안에서, veRL이면 유효한 group_key pin 안에서 한 버전의 점수만 들어갑니다.](../images/figures/production-05_sandbox_updates.svg)
+![a: rolling update 중인 Deployment에서는 GRPO group 하나의 completion 8개를 구버전 pod(기존 채점 규칙)와 신버전 pod(새 채점 규칙)가 나눠 채점합니다. 그래서 group 기준 advantage에 두 규칙의 점수가 섞입니다. b: (runtime, version)마다 풀을 하나씩 둡니다. active인 sandbox-gvisor-v1이 group 전체를 채점하고, 롤백용으로 유지됩니다. sandbox-gvisor-v2는 검증과 parity 전에는 트래픽을 받지 않고, 통과하면 다음 batch(TRL)나 새로 고정되는 group(veRL)부터 전환됩니다. advantage에는 TRL이면 rank별 batch 안에서, veRL이면 유효한 group_key pin 안에서 한 버전의 점수만 들어갑니다.](../images/figures/production-05_sandbox_updates.ko.svg)
 
 *그림 요약: rolling update 도중에는 한 group을 두 버전이 나눠 채점하므로, advantage에 서로 다른 규칙의 점수가 섞입니다. 새 버전을 별도 풀로 시작하고 검증과 parity를 통과한 뒤 전환하면, TRL은 rank별 batch 안에서, veRL은 유효한 `group_key` pin 안에서 한 버전을 씁니다.*
 
@@ -192,6 +192,8 @@ TRL은 `steps_per_generation` 기본값(= `gradient_accumulation_steps`)에서 g
 veRL 경로의 gateway는 group 고정 정보를 메모리에 저장하므로 replica 하나로 실행됩니다. 전환 직후 gateway가 재시작하면 진행 중인 group의 고정 정보가 사라집니다. 고정은 TTL이 지나야 해제되므로, 전환 후 최소 TTL 동안 구버전 풀을 유지해야 고정된 group이 끝까지 채점됩니다.
 
 ## 전환 확인
+
+운영에서는 라우팅 설정이 적용된 시점과 학습이 실제로 새 풀의 결과를 받은 시점이 다를 수 있습니다. 아래 절차로 trainer 로그의 버전과 채점 상태를 확인한 뒤 구버전 정리 여부를 판단하세요.
 
 trainer는 버전이 바뀐 뒤 샌드박스를 호출하는 첫 reward batch에서 아래 두 줄을 차례로 로그에 남깁니다(다른 필드 생략, 값은 예시).
 

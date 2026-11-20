@@ -104,6 +104,8 @@ device plugin은 노드의 GPU를 `nvidia.com/gpu`로 등록하고 할당한 GPU
 
 ## RuntimeClass와 smoke pod
 
+노드에 GPU가 표시되면 device plugin이 장치를 등록한 것입니다. `cuda ok:`는 한 단계 더 나아가 gVisor pod 안에서 CUDA 계산이 실행됐다는 뜻입니다. GPU 수는 보이지만 계산이 실패하면 pod 이벤트에서 런타임이나 드라이버 오류를 확인하세요.
+
 device plugin 설치가 끝나면 같은 스크립트가 RuntimeClass를 등록하고 gVisor 노드에서 smoke pod 하나를 실행합니다. 이 부분을 위해 따로 실행할 명령은 없습니다.
 
 스크립트는 먼저 `k8s/runtimes/runtimeclass-gvisor.yaml`을 적용합니다.

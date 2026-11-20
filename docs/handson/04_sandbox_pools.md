@@ -281,6 +281,8 @@ Deployment는 평가 pod를 띄우고, headless Service는 준비된 pod의 주�
 
 ## 네 가지 검증: `ops/verify.sh`
 
+풀 배포가 끝나면 Kubernetes가 pod를 평가 요청에 사용할 수 있다고 판단한 상태입니다. `verify.sh`는 실제로 trainer 쪽에서 답안을 보내 예상한 판정이 돌아오는지 확인하고, 허용 범위 밖의 연결도 검사합니다.
+
 `06_deploy_sandboxes.sh`로 배포한 풀마다 `scripts/ops/verify.sh <runtime> [version]`(버전 기본값 `v1`)을 실행합니다.
 
 ```bash

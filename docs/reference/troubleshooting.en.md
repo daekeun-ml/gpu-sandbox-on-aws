@@ -1,22 +1,23 @@
 # Troubleshooting
 
 !!! info "TL;DR"
-    Per-stage "symptom, cause, fix" tables for what commonly blocks installation and operation, with the diagnostic commands to run at each stage.
+    Start with the symptom you see or the step that failed. Replace example pod and node names with the names in your cluster.
 
-## Pain point
+| Symptom | Start here |
+|---|---|
+| `kubectl` cannot connect | [CDK and the tunnel](#cdk-and-the-tunnel) |
+| Node missing or pod `Pending` | [Cluster and nodes](#cluster-and-nodes) |
+| GPU smoke test fails | [gVisor](#gvisor), [Kata](#kata) |
+| Sandbox pool stays unready | [Sandbox pools and readiness](#sandbox-pools-and-readiness) |
+| HTTP `401` or `403` | [Authentication responses](#401-and-403-responses) |
+| Training stalls or `sandbox_error` repeats | [Training](#training), [HyperPod](#hyperpod) |
+| New version does not grade requests | [Version switches](#version-switches-routing) |
+| Claim is still waiting | [Agent Sandbox](#agent-sandbox-and-multi-turn-episodes) |
+| Resources remain after cleanup | [Cleanup and cost](#cleanup-and-cost) |
 
-Symptoms appear far from their cause: a node user data error shows up several steps later as "pod Pending" or "no GPU".
+If the symptom is unclear, start with the events from `kubectl describe pod`.
 
-- **Node versus inside the pod**: the kernel, devices and network seen inside gVisor and Kata pods differ from the node's. You need to separate what to check on the node from what to check inside the pod.
-- **Errors that do not stop training**: authentication failures and NetworkPolicy blocks only make that sample a `sandbox_error` and do not stop training.
-- **How they show in the training log**: TRL returns `None` for all three rewards and leaves the sample out of the group baseline, and veRL records a format score of 0.1 and `sandbox_error: 1`. So the training log shows them only as a count of `sandbox_error`.
-
-## Why
-
-- **The namespaces, labels and paths in the diagnostic commands are the names the repository scripts create.**
-- **Causes marked "(presumed)" are not confirmed by code or documentation.** Check them with the pod events and node logs.
-
-!!! warning "Basis of this page"
+??? note "Basis of this page"
     - **Ran in a practice account**: scenario C, scenario A (`g5`), Kata GPU (`g4dn.metal`), the runtime benchmark and the demo site.
     - **Scenario A cluster**: created without GPU node groups, which were added with updates (see "When there is no GPU capacity" below).
     - **Rows from the Kata GPU run**: the Kata GPU `vfio_iommu_type1` row and the AMI builder row below.
@@ -24,16 +25,6 @@ Symptoms appear far from their cause: a node user data error shows up several st
     - **Experimental CLH GPU**: the pool was deployed, but the VM did not start.
     - **Dated run record**: in [Verified facts and sources](sources.md#aws-run-record).
     - **Where symptoms and causes come from**: the scripts' error messages, the code's behavior and official documentation. The wording can differ by tool version.
-
-??? note "Terms"
-    - **readiness**: the check the kubelet runs to see whether a pod is ready to receive requests. In this repository a pod becomes Ready only when both the GPU probe and the egress denial check pass.
-    - **`kubectl debug node`**: a command that starts a privileged debug pod on a node so that you can see the node's file system (`/host`) and processes.
-    - **user data, cloud-init**: user data is the script an EC2 instance runs at first boot, and cloud-init is the tool that runs it. Its output goes to `/var/log/cloud-init-output.log`.
-    - **nodeadm, NodeConfig**: the bootstrap tool that joins EKS AL2023 nodes to the cluster, and its configuration. The containerd runtime settings are merged here too.
-    - **EndpointSlice**: the list of pod addresses behind a Service, with the Ready state of each address. The DNS of a headless Service returns only Ready addresses.
-    - **SSM Session Manager**: an AWS Systems Manager feature that opens a shell on an instance with IAM permissions, without SSH.
-
-    More terms are in the [Glossary](glossary.md).
 
 ## Diagnostic tools
 
@@ -280,6 +271,59 @@ kubectl -n kube-system get ds nvdp-nvidia-device-plugin -o yaml | grep -A1 CDI_D
 
 The last command should print `name: CDI_DISABLE_HOOKS` and, on the next line, `value: disable-device-node-modification`.
 
+### Symptoms of an unsupported driver
+
+1. **Node boot:** `install-gvisor.sh` leaves `WARNING: NVIDIA driver <version> is not supported by gVisor <release> nvproxy` in the user data log.
+2. **The `04_install_gpu_stack.sh` smoke pod:** runsc refuses to start the container.
+    - The script warns `smoke pod did not succeed; its state and events follow (the pod is deleted when this script exits)` and prints the last 25 lines of `kubectl describe pod`, whose events carry the runsc error.
+    - If the container never started, it also warns `no logs from gvisor-smoke-<n>: the container did not start`.
+    - The pod is deleted when the script ends, so there is nothing to clean up by hand.
+3. **Pool deployment (`06_deploy_sandboxes.sh`):** sandbox pods never turn Ready (fail closed, as with a CUDA initialization failure for any other reason), and the deployment fails.
+    - The script waits up to 30 minutes in `rollout status`. The Deployment's progress deadline (`progressDeadlineSeconds`) is also 1800 seconds, the same as this wait.
+    - The headless Service publishes only Ready pod IPs, so the trainer never gets such a pod.
+
+The fix is one of these.
+
+- Raise `GVISOR_RELEASE` to a gVisor release that supports the driver.
+- Use an AMI with a supported driver.
+
+Either way, before the switch run `runsc nvproxy list-supported-drivers` from the release you are adopting (the `https://storage.googleapis.com/gvisor/releases/release/<release>/x86_64/gvisor.tar.bz2` that `install-gvisor.sh` downloads) and compare it with the driver version of the new AMI. The method below checks the combination installed on a node that has already booted.
+
+### Checking on the node itself
+
+Find a gVisor node name and open a debug pod shell on it (`<gvisor-node>` is a name printed by the first command).
+
+```bash
+kubectl get nodes -l gpusandbox/role=sandbox-gvisor
+kubectl debug node/<gvisor-node> -it --profile=sysadmin --image=public.ecr.aws/amazonlinux/amazonlinux:2023
+```
+
+**What to look for:** a shell prompt after the second command. The node's root file system is mounted at `/host`.
+
+Run the following in the debug shell.
+
+```bash
+cat /proc/driver/nvidia/version                         # loaded kernel module version
+/host/usr/local/bin/runsc --version                      # installed gVisor release
+/host/usr/local/bin/runsc nvproxy list-supported-drivers | grep -Fw 580.178.04   # use the version from the first line
+```
+
+**What to look for:**
+
+- **First command**: it prints a module version line containing `580.178.04` (`NVIDIA UNIX x86_64 Kernel Module  580.178.04` for the proprietary module on `g5`).
+- **Second command**: it prints a version line containing `release-20261109.0`.
+- **If the first shows a different version**: put that version in place of `580.178.04` in the third.
+- **Third command**: if it prints the version, the combination is supported; if it prints nothing, it is not.
+
+Debug pods are not deleted automatically, so find and delete it after leaving the shell.
+
+```bash
+kubectl get pods -n default -o name | grep node-debugger
+kubectl delete -n default pod/<name>
+```
+
+**What to look for:** the first command shows a `pod/node-debugger-...` name, and the second prints `pod "node-debugger-..." deleted`.
+
 ## Kata
 
 | Symptom | Cause | Fix |
@@ -339,6 +383,29 @@ cat /proc/cmdline                                    # must contain intel_iommu=
 ls /sys/kernel/iommu_groups | wc -l                  # 0 means the IOMMU is off
 lsmod | grep -E 'vfio|nvidia'                        # vfio_pci and vfio_iommu_type1 loaded, nvidia not loaded
 ```
+
+### Pods stuck with `create container timeout` (vfio_iommu_type1)
+
+The 2026-11-18 run hit this problem. The current `build-iommu-ami.sh` makes the module load at boot; nodes from an AMI built before that fix have the problem.
+
+- **Symptom:** `kata-qemu-nvidia-gpu` pods stay in `ContainerCreating` with the event `failed to create shim task: create container timeout`. The node log shows the QEMU error `vfio 0000:e7:00.0: failed to setup container for group 87: No available IOMMU models` (the PCI address and group number differ per node).
+- **Cause:** AL2023 kernels build the VFIO type1 IOMMU backend as a module (`CONFIG_VFIO_IOMMU_TYPE1=m`), and nothing loaded it on that node; `lsmod` showed only `vfio`, `vfio_pci` and `vfio_pci_core`. The IOMMU (257 groups, `intel_iommu=on` on the kernel command line), the `vfio-pci` binding of all 8 T4s and `nvidia.com/pgpu=8` were all fine, so the pgpu check of `kata/gpu_nodes.sh` does not reveal it.
+- **Fix (new AMI):** the current `infra/kata/build-iommu-ami.sh` writes `/etc/modules-load.d/vfio-iommu-type1.conf` (`vfio_iommu_type1`) into the AMI. If you run an older AMI, rebuild it with this script, put the printed `KATA_IOMMU_AMI_ID` into `scripts/config.env`, and rerun `02_create_cluster.sh`.
+- **Fix (current node):** on a node from an older AMI, load the module by hand from the debug shell above. It has to be loaded again after a reboot.
+
+```bash
+# In the debug shell on the Kata GPU node (kubectl debug node/<kata-gpu-node> ... --profile=sysadmin)
+chroot /host
+journalctl --since "30 min ago" --no-pager | grep "No available IOMMU models" | tail -3   # the symptom
+modprobe vfio_iommu_type1
+grep vfio_iommu_type1 /proc/modules                                                     # one line now
+exit
+```
+
+**What to look for:**
+
+- The last `grep` prints the `vfio_iommu_type1` line.
+- Check with `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu` that READY turns `1/1`. In the 2026-11-18 run the 4 `kata-qemu` pods became Ready after this fix.
 
 ## Sandbox pools and readiness
 

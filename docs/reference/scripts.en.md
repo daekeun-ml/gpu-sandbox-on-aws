@@ -1,13 +1,20 @@
 # Script reference
 
 !!! info "TL;DR"
-    Each script listed with the same fields: what it does, how to run it, what happens when you run it again, and the success signal. Most scripts are safe to run again. The exceptions are `03_build_push_images.sh` with the same `IMAGE_TAG`, `hyperpod/create.sh` when the cluster already exists, and the AMI build steps, which build a new AMI on every run.
+    Choose a task below. Each entry explains how to run the script, how to recognize success, and what happens if you run it again.
 
-The order and the path for each scenario are in [00 Hands-on overview](../handson/00_overview.md); symptoms, causes and fixes are in [Troubleshooting](troubleshooting.md). Run the scripts that use kubectl or helm with `cdk/tunnel.sh` open in a second terminal.
+Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for steps that use `kubectl` or Helm. See the [hands-on overview](../handson/00_overview.md) to choose a scenario.
 
-![The hands-on scripts in run order across three zones: the workstation, the AWS account and the cluster. On the workstation 01_check_prereqs.sh reads the tools and quotas (it creates nothing), and 02_create_cluster.sh deploys the CDK stack (VPC, private EKS, node groups, access instance) in the AWS account. Next, cdk/tunnel.sh forwards 127.0.0.1:8443 on the workstation to the private EKS API through SSM, and every later kubectl step goes through it. 03_build_push_images.sh pushes the sandbox, trainer and control images to ECR and prints export lines for config.env. In the cluster the order is 04_install_gpu_stack.sh (NVIDIA device plugin, gvisor RuntimeClass, smoke pod), 05_setup_namespaces_auth.sh (namespaces, NetworkPolicy, JWKS, routing ConfigMap), 06_deploy_sandboxes.sh (sandbox pool: Deployment and headless Service), ops/verify.sh (isolation, blocked egress, golden verdicts from a probe Job) and 07_run_grpo.sh (the GRPO training Job of scenario A). Dashed boxes are optional steps: kata/cpu_nodes.sh and kata/gpu_nodes.sh install the Kata runtimes between 04 and 05; instead of 07, scenario C runs ops/simulate.sh and scenario B runs hyperpod/run_grpo.sh; and ops/rollout.sh deploys the v2 pool and switches routing while 07 (or the script that replaces it) runs. Last, 08_cleanup.sh deletes the CDK stack; scenario B runs hyperpod/delete.sh before it.](../images/figures/reference-scripts.svg)
-
-*Takeaway: Run the scripts in number order, and keep `cdk/tunnel.sh`, opened between 02 and 03, running until you finish. 02 creates the CDK stack in the AWS account, 03 puts the images in ECR, and 04 to 07 run inside the cluster. Dashed boxes are steps you add or swap in depending on the scenario. When you are done, `08_cleanup.sh` deletes the stack.*
+| Task | Script |
+|---|---|
+| Check AWS setup, create EKS, and build images | [Steps 01–03 and the tunnel](#main-order) |
+| Install runtimes and deploy pools | [Steps 04–06](#scripts04_install_gpu_stacksh), [Kata](#kata) |
+| Run GRPO on EC2 (A) | [07_run_grpo.sh](#scripts07_run_grposh) |
+| Run GRPO on HyperPod (B1 and B2) | [hyperpod/run_grpo.sh](#scriptshyperpodrun_grposh) |
+| Verify, simulate, switch versions, or measure latency | [Verification and operations](#verification-and-operations) |
+| Assign sandboxes per episode | [Extensions](#extensions) |
+| Publish a recording | [Demo site](#demo-site) |
+| Remove exercise resources | [Cleanup exercise](../handson/99_cleanup.md) |
 
 ## Main order
 
@@ -229,15 +236,34 @@ The order and the path for each scenario are in [00 Hands-on overview](../handso
 - **Success signal**: `driver 580.178.04: SUPPORTED by gVisor ...: mode B2 is possible` on the two sandbox nodes. `driver 595.91.07: NOT supported ...` on the trainer node is expected.
 - **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)
 
-### `scripts/hyperpod/run_grpo.sh`
+### `scripts/hyperpod/run_grpo.sh` { #scriptshyperpodrun_grposh }
 
-- **What it does**: Submits the GRPO trainer as the HyperPodPyTorchJob `grpo-<RUN_ID>` to the HyperPod node. It does not follow the log; it prints the command to do so.
-- **Usage**: `scripts/hyperpod/run_grpo.sh [max_steps]` (default 60). The trainer image must be built with `HYPERPOD=1`.
-- **When**: In B1 and B2, instead of `07_run_grpo.sh`.
-- **Time and cost**: Not recorded in the docs (see [07](../handson/07_hyperpod.md)). Nothing new is billed (the HyperPod instances start in `hyperpod/create.sh`).
-- **Running it again**: `RUN_ID` defaults to the current time, so every run submits a new job, and earlier jobs are not deleted. The trainer instance has one GPU, so while an earlier job runs the new one waits for the GPU.
-- **Success signal**: `HyperPodPyTorchJob grpo-<RUN_ID> submitted` and one job line. The trainer log, followed with the printed command, shows `{"event": "routing", ...}` within 20 min, then `reward_batch` lines.
-- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [Troubleshooting: Training](troubleshooting.md#training)
+Submit a GRPO Job to a HyperPod trainer in B1 or B2. The existing sandbox pool grades the model-generated code, and the trainer updates the model from those scores.
+
+**Before you run it**　Prepare the training operator, trainer node, and sandbox pool in the [HyperPod exercise](../handson/07_hyperpod.md). `HYPERPOD=1 scripts/03_build_push_images.sh` builds a trainer image with `hyperpodrun`. Set `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, and `HYPERPOD_TRAINER_INSTANCE_TYPE` in `scripts/config.env`.
+
+```bash
+scripts/hyperpod/run_grpo.sh 5
+```
+
+The argument is the number of optimizer steps. It defaults to 60. The default model is `Qwen/Qwen2.5-Coder-1.5B-Instruct`. The script renders `k8s/trainer/hyperpod-job-grpo.yaml.tpl` and submits a `HyperPodPyTorchJob` named `grpo-<RUN_ID>` in `rl-trainer`. The operator schedules a pod that requests one GPU. The pod reads the routing ConfigMap and token to reach the pool.
+
+| Check | Meaning |
+|---|---|
+| `HyperPodPyTorchJob grpo-<RUN_ID> submitted` | The API accepted the Job. Check the pod separately. |
+| `routing` | The trainer read the pool route. The template expects this event within 20 minutes. |
+| `reward_batch` and advancing steps | Check the sample verdicts and training progress. Investigate repeated `sandbox_error`. |
+
+The script prints the log command and exits. If previous runs exist, select the pod for this Job before following logs.
+
+```bash
+kubectl -n rl-trainer get pods -l app=grpo-trainer -o wide
+kubectl -n rl-trainer logs -f <trainer-pod> -c pytorch
+```
+
+`RUN_ID` defaults to the current timestamp. A new ID creates another Job, which may wait for the GPU if a previous Job is running. `/outputs` is an `emptyDir`, so replacing the pod removes checkpoints stored there.
+
+See [HyperPod troubleshooting](troubleshooting.md#hyperpod) for operator and scheduling issues, or [training troubleshooting](troubleshooting.md#training) for missing scoring logs.
 
 ### `scripts/hyperpod/delete.sh`
 

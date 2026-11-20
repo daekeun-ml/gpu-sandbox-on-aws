@@ -10,7 +10,7 @@
 - **Using 4 of the 8 T4s on a metal node**: billing is per node, so this doubles the price per T4 used.
 - **Two blue/green gVisor pools that overlap for long**: a gVisor pool uses one node per pod, so sandbox GPUs bill twice for that whole time.
 
-![a: through the trainer's generation, reward and update phases the sandbox GPU is busy only during reward but bills per node throughout, and a pool kept after the run leaves g4dn.metal billing 7.824 USD per hour (375.552 USD over a 48-hour weekend). Using only 4 of the 8 T4s costs 1.956 USD/hour per T4 used. b: with the pool sized to the reward phase and replicas 0 after the run, the empty node becomes eligible for release after consolidateAfter 30 min, about 3.912 USD per empty period and billed until the node ends, and with all 8 T4s in use one T4 costs 0.978 USD/hour](../images/figures/production-08_cost.svg)
+![a: through the trainer's generation, reward and update phases the sandbox GPU is busy only during reward but bills per node throughout, and a pool kept after the run leaves g4dn.metal billing 7.824 USD per hour (375.552 USD over a 48-hour weekend). Using only 4 of the 8 T4s costs 1.956 USD/hour per T4 used. b: with the pool sized to the reward phase and replicas 0 after the run, the empty node becomes eligible for release after consolidateAfter 30 min, about 3.912 USD per empty period and billed until the node ends, and with all 8 T4s in use one T4 costs 0.978 USD/hour](../images/figures/production-08_cost.en.svg)
 
 *Takeaway: Sandbox nodes bill per node whether busy or idle, and keep billing when left running after the run. Size the pool to the reward phase, scale it to 0 after the run so empty nodes go back quickly, and fill all 8 T4s of a metal node to halve the price per T4.*
 
@@ -34,6 +34,8 @@
     More terms are in the [Glossary](../reference/glossary.md).
 
 ## Cost model
+
+Allocated GPU time includes idle time between evaluations. Check idle node counts and warm-pool GPU reservations alongside instance rates.
 
 ```text
 hourly cost ≈ trainer GPU nodes

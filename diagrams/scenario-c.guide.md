@@ -1,3 +1,5 @@
+**한국어** | [English](scenario-c.guide.en.md)
+
 # 시나리오 C: nested virtualization c8i 노드 하나의 CPU 전용 샌드박스
 
 GPU가 전혀 없는 가장 싼 경로입니다. EC2 nested virtualization을 쓰는 c8i.2xlarge 노드 하나에서 CPU 샌드박스 runtime 세 가지(gVisor runsc, Cloud Hypervisor 위의 Kata, QEMU 위의 Kata)가 나란히 돌고, system 노드의 모델 없는 reward 루프 Job이 trainer 대신 routing과 v1에서 v2로의 rollout을 실제로 돌려 봐요. 학습은 하지 않습니다.

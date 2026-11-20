@@ -3,17 +3,26 @@
 !!! info "TL;DR"
     현재 모델이 만든 여러 답을 같은 기준으로 채점하고 그 점수 차이로 모델을 업데이트합니다. 그래서 한 묶음에는 같은 샌드박스 버전을 쓰고 인프라 장애로 채점하지 못한 답은 따로 표시합니다.
 
-## 모델은 무엇을 보고 학습하나요?
+## GRPO의 생성, 채점, 업데이트
 
 같은 문제에 모델이 커널 세 개를 냈다고 해 봅시다. 하나는 형식만 맞고 하나는 실행은 되지만 답이 틀리고 하나는 정답을 냅니다. GRPO는 같은 문제에서 나온 답 묶음 안에서 어느 답이 더 높은 점수를 받았는지 봅니다. 샌드박스는 각 코드를 실행해 점수 계산에 필요한 결과를 돌려줍니다.
 
 이 실습에서는 **현재 모델로 답 생성 → 샌드박스 채점 → 모델 업데이트**를 반복합니다. 업데이트 직전 모델이 만든 데이터로 학습하므로 on-policy라고 부릅니다. 여기서는 생성한 배치를 optimizer step 한 번에 씁니다.
 
+**Group**은 같은 질문에서 나온 답 묶음입니다. **Batch**는 trainer가 한 번에 채점하는 단위로, 여러 group을 담을 수 있습니다. GRPO에서 **advantage**는 답의 reward가 같은 group에서 상대적으로 얼마나 좋은지 나타내는 값입니다. 점수가 `0.1`, `0.3`, `0.5`라면 평균 `0.3`을 기준으로 첫 답은 아래, 마지막 답은 위에 있습니다. 모두 `0.3`이면 이 비교에서 어느 답을 더 자주 만들지 알려 줄 신호가 없습니다.
+
 ## 한 group을 한 버전으로 채점해야 하는 이유
 
 같은 답인데 채점기 버전에 따라 점수가 다르다면 두 답의 점수 차이가 코드 때문인지 채점기 때문인지 알기 어렵습니다. trainer는 배치에 사용할 샌드박스 버전을 먼저 정하고 그 배치가 끝날 때까지 유지합니다. 새 버전으로 전환하는지는 다음 배치에서 확인할 수 있습니다.
 
-## 채점하지 못한 답은 어떻게 하나요?
+예를 들어 v2에서 더 엄격한 정확도 기준을 적용했다고 가정해 봅시다. 성능이 같은 두 답을 각각 v1과 v2로 채점하면 점수 차이에 채점 기준의 변화가 섞입니다. 실습에서는 v2 풀을 따로 띄워 기준 답안으로 비교한 뒤 라우팅을 바꿉니다. 판정이 다르면 기존 풀을 유지한 채 차이의 원인을 확인할 수 있습니다.
+
+??? note "v1에서 v2로 전환하는 순서"
+    ![v2 검증과 비교가 끝나면 라우팅을 전환합니다. 이미 v1에 보낸 배치는 v1에서 마치고, 갱신된 라우팅을 읽은 배치부터 v2를 사용합니다.](../images/figures/concepts-03_onpolicy_rl_with_sandboxes--version-swap.ko.svg)
+
+    전환 시점은 라우팅 반영과 trainer가 다음 배치를 처리하는 시점에 따라 달라집니다.
+
+## 인프라 오류와 채점 제외
 
 코드가 틀렸다면 그 결과를 점수에 반영합니다. 이 실습의 TRL 경로에서는 샌드박스 장애로 실행 결과를 얻지 못했다면 `sandbox_error`로 남기고 해당 답을 group 평균 계산에서 제외합니다. 이렇게 해야 일시적인 장애가 답의 품질에 대한 신호로 들어가지 않습니다.
 
@@ -21,7 +30,7 @@
 
 ## 더 살펴보기
 
-??? note "이 저장소이 버전을 고정하는 방법"
+??? note "배치와 group의 버전을 고정하는 방법"
     | trainer | 고정 단위 | 구현 |
     |---|---|---|
     | TRL (핸즈온, direct) | reward batch | `SandboxClient.evaluate_batch`가 호출마다 `RoutingTable.snapshot()`을 한 번 읽고, 그 호출의 모든 요청을 그 snapshot의 pool로 보냄 |
@@ -45,11 +54,6 @@
         프로세스마다 snapshot을 따로 만들므로 전환 직후에는 한 group이 두 버전으로 나뉘어 채점될 수 있습니다. `routing_revision`은 프로세스마다 따로 세는 값이라 rank끼리 비교할 수 없습니다. 같은 `global_step`에서 모든 rank의 `version`과 `served_versions`를 비교하거나, veRL 경로처럼 `group_key` 단위로 고정하세요.
 
 ??? note "학습 중 샌드박스 업데이트"
-    ![두 줄로 된 타임라인입니다. 위 줄은 운영자가 실행하는 버전 교체 스크립트 scripts/ops/rollout.sh의 단계입니다. 1 v2 배포(트래픽 없음), 2 v2 검증(격리 증거, golden verdict), 3 parity(v1과 v2의 golden 결과 일치 확인) 순서로 진행합니다. parity가 실패하면 v1을 유지하고 v2에는 트래픽을 보내지 않습니다. 통과하면 4 routing 전환(다음 reward batch부터 v2), 5 --finish(v1을 0으로 축소하고 롤백용으로 보존)로 진행합니다. 아래 줄은 trainer의 reward batch 칸입니다. trainer는 샌드박스를 호출할 때마다 routing snapshot을 가져오고, 한 batch는 한 버전으로 채점합니다. 4단계 아래의 점선(약 1분 안에 반영)을 기준으로 왼쪽은 v1 batch, 오른쪽은 v2 batch입니다. 첫 전환에서는 v1에 보낸 batch가 v1에서 끝나고, v2로 넘어가는 지점에서 sandbox_version_switch가 기록됩니다. 맨 아래 화살표는 시간 축이며, 그동안 학습은 멈추지 않습니다.](../images/figures/concepts-03_onpolicy_rl_with_sandboxes--version-swap.svg)
-
-    *그림 요약: v2는 검증과 parity를 통과한 뒤에만 트래픽을 받고, 전환 중에도 한 reward batch 안에서는 버전이 섞이지 않습니다. 전환 전이나 배포, 검증, parity 단계에서 실패하면 v1이 계속 채점합니다.*
-
-
     1. **blue/green Deployment:** (runtime, version)마다 Deployment와 headless Service가 따로 있습니다(`sandbox-<runtime>-<version>`). v2는 v1과 함께 배포되고, routing 표에 지정되기 전까지는 요청을 받지 않습니다.
     2. **검증:** `scripts/ops/verify.sh`가 pod별 격리 증거, IMDS, API server, 노드 kubelet, 인터넷 접근 차단, golden verdict, 다른 namespace에서의 접근 거부를 확인합니다.
         - **Production gateway를 설치했다면**: 검증 Job과 parity Job이 `rl-trainer`에서 샌드박스로 직접 연결할 수 있도록 [운영편 03](../production/03_gateway_and_pools.md)의 검증 Job용 NetworkPolicy를 먼저 추가하세요.

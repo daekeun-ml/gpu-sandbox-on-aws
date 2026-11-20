@@ -3,11 +3,11 @@
 !!! info "TL;DR"
     Answer at most four questions to get one of paths 1 to 5. To add Kata GPU, go to path 6; to read only the operations design, go to path 7. If you are new, start with the free path 1 (reading) and path 2 (local run).
 
-## Pain points
+## Choosing a starting point
 
-There are 46 pages and four scenarios (A, B1, B2, C), so it is hard to decide what to read first. Starting without telling apart readers who only need the concepts from those who need to run it makes it easy to overspend on GPU nodes, which cost a few dollars per hour while they run.
+Start with reading or the local exercise to learn the workflow. To deploy on AWS, choose the CPU, EC2 GPU, or HyperPod path that matches your goal.
 
-![a: a new reader facing 46 pages and scenarios A, B1, B2, C starts a GPU path without needing it, and pays a few dollars per hour while it runs. b: the free path 1 (reading) and path 2 (local run) come first, and the AWS paths 3 to 6 come after them, with quota and cost shown up front](images/figures/learning_paths.svg)
+![a: a new reader facing 46 pages and scenarios A, B1, B2, C starts a GPU path without needing it, and pays a few dollars per hour while it runs. b: the free path 1 (reading) and path 2 (local run) come first, and the AWS paths 3 to 6 come after them, with quota and cost shown up front](images/figures/learning_paths.en.svg)
 
 *Takeaway: Picking a GPU path without knowing where to start adds cost for every hour the nodes stay up. Do the free paths 1 and 2 first, and choose a paid path after checking its quota and hourly cost.*
 
@@ -17,8 +17,6 @@ There are 46 pages and four scenarios (A, B1, B2, C), so it is hard to decide wh
 - **Each path needs a different account, quota and hourly cost.** Check them in the table below before you start.
 - **Three paths cost nothing.** Reading and a local run (paths 1 and 2) already show the core (isolation, scoring, version swaps), and path 7 (Production design) is also a free reading path.
 - **Each path has a point where you can stop.** For example, path 2 is done when all four golden probe items show `PASS`.
-
-**Before you start:** nothing.
 
 ## Pick a path with a few questions
 

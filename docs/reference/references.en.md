@@ -1,9 +1,13 @@
 # All references
 
-!!! info "TL;DR"
-    The full reference list for every page, in left-menu order. The collapsed "References" box at the end of each page has only the key links.
+Sources are listed by page. See [Verified facts and sources](sources.md) for what the repository tested directly.
 
-Which source supports which fact is in [Verified facts and sources](sources.md).
+| Guide section | First source list |
+|---|---|
+| Beginner guide | [Code isolation](#ref-beginner-01-why-sandbox) |
+| Concepts | [GPU sandbox requirements](#ref-concepts-01-why-gpu-sandbox) |
+| Hands-on | [Overview](#ref-handson-00-overview) |
+| Production | [Reference architecture](#ref-production-00-architecture) |
 
 ## 01 Why AI-generated code needs isolation { #ref-beginner-01-why-sandbox }
 
@@ -84,27 +88,6 @@ Page: [06 Multi-turn agents and Agent Sandbox](../beginner/06_multi_turn_agent.m
 | AWS docs | EKS sandboxing limitations | https://docs.aws.amazon.com/eks/latest/userguide/sandboxing-limitations.html |
 | AWS docs | Amazon EC2 On-Demand pricing | https://aws.amazon.com/ec2/pricing/on-demand/ |
 | GitHub | This repository's Agent Sandbox extension | https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/k8s/extensions/agent-sandbox |
-
-## Getting started { #ref-getting-started }
-
-Page: [Getting started](../getting_started.md)
-
-| Topic | Link |
-|---|---|
-| Install AWS CLI v2 | https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html |
-| EC2 instance type quotas | https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-quotas.html |
-| EKS Kubernetes versions | https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html |
-| HyperPod (EKS) prerequisites | https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html |
-| EC2 On-Demand pricing | https://aws.amazon.com/ec2/pricing/on-demand/ |
-| AWS CDK v2 Developer Guide, bootstrapping | https://docs.aws.amazon.com/cdk/v2/guide/home.html , https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html |
-| Install the Session Manager plugin | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html |
-| eksctl cluster access (no private-only creation) | https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html |
-| Kubernetes version skew policy | https://kubernetes.io/releases/version-skew-policy/ |
-| TRL docs, GitHub | https://huggingface.co/docs/trl , https://github.com/huggingface/trl |
-| uv | https://github.com/astral-sh/uv |
-| Test workflow | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/.github/workflows/tests.yml |
-| Sandbox server, auth, reaper | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/auth.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py |
-| GRPO trainer, example settings | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/trl/train_grpo.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example |
 
 ## When the sandbox needs a GPU { #ref-concepts-01-why-gpu-sandbox }
 
@@ -240,6 +223,27 @@ Repository files described on this page:
 - [rl/verl/sandbox_tool.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool.py), [rl/verl/sandbox_tool_config.yaml](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool_config.yaml)
 - [tests/test_agent_sandbox.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/tests/test_agent_sandbox.py), [tests/test_multiturn.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/tests/test_multiturn.py), [tests/test_manifests.py](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/tests/test_manifests.py)
 - [k8s/base/networkpolicies.yaml](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/networkpolicies.yaml), [infra/karpenter/nodepools.yaml](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodepools.yaml)
+
+## Getting started { #ref-getting-started }
+
+Page: [Getting started](../getting_started.md)
+
+| Topic | Link |
+|---|---|
+| Install AWS CLI v2 | https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html |
+| EC2 instance type quotas | https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-quotas.html |
+| EKS Kubernetes versions | https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html |
+| HyperPod (EKS) prerequisites | https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html |
+| EC2 On-Demand pricing | https://aws.amazon.com/ec2/pricing/on-demand/ |
+| AWS CDK v2 Developer Guide, bootstrapping | https://docs.aws.amazon.com/cdk/v2/guide/home.html , https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html |
+| Install the Session Manager plugin | https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html |
+| eksctl cluster access (no private-only creation) | https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html |
+| Kubernetes version skew policy | https://kubernetes.io/releases/version-skew-policy/ |
+| TRL docs, GitHub | https://huggingface.co/docs/trl , https://github.com/huggingface/trl |
+| uv | https://github.com/astral-sh/uv |
+| Test workflow | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/.github/workflows/tests.yml |
+| Sandbox server, auth, reaper | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/auth.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py |
+| GRPO trainer, example settings | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/trl/train_grpo.py , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/config.env.example |
 
 ## 00 Hands-on overview { #ref-handson-00-overview }
 

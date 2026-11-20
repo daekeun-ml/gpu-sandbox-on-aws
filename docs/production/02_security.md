@@ -11,12 +11,12 @@
 - **노드 IP 예외**: VPC CNI는 pod와 그 pod가 실행 중인 노드 IP 사이의 통신을 정책과 관계없이 허용합니다.
 - **같은 pod에서 이어지는 평가**: 같은 pod에서 다음 평가를 실행하면 이전 평가가 남긴 프로세스, 캐시, GPU 상태가 그대로 남아 있을 수도 있습니다.
 
-![a: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 NVIDIA 드라이버를 그대로 공유합니다. 또 pod 안의 ServiceAccount token과 시크릿을 읽고, NetworkPolicy와 관계없이 허용되는 자기 노드 IP의 로컬 서비스에 접속하며, 같은 pod에서 이어서 실행되는 다음 평가에 남은 프로세스, 캐시, GPU 상태를 넘깁니다. b: 샌드박스 pod(gVisor 또는 Kata)에서는 네 경로를 각각 다른 통제로 막거나 줄입니다. 커널 경로는 gVisor Sentry 또는 Kata VM이 차단하고(gVisor는 호스트 드라이버를 공유), 토큰과 시크릿은 pod에 넣지 않습니다. 노드 경로는 노드 가드가 차단하고 readiness가 그 차단을 확인합니다. 다음 평가로 가는 경로는 프로세스 정리와 요청별 캐시로 줄일 뿐 막지는 못합니다(점선). v1은 pod 재활용을 끄고, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 씁니다.](../images/figures/production-02_security.svg)
+![a: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 NVIDIA 드라이버를 그대로 공유합니다. 또 pod 안의 ServiceAccount token과 시크릿을 읽고, NetworkPolicy와 관계없이 허용되는 자기 노드 IP의 로컬 서비스에 접속하며, 같은 pod에서 이어서 실행되는 다음 평가에 남은 프로세스, 캐시, GPU 상태를 넘깁니다. b: 샌드박스 pod(gVisor 또는 Kata)에서는 네 경로를 각각 다른 통제로 막거나 줄입니다. 커널 경로는 gVisor Sentry 또는 Kata VM이 차단하고(gVisor는 호스트 드라이버를 공유), 토큰과 시크릿은 pod에 넣지 않습니다. 노드 경로는 노드 가드가 차단하고 readiness가 그 차단을 확인합니다. 다음 평가로 가는 경로는 프로세스 정리와 요청별 캐시로 줄일 뿐 막지는 못합니다(점선). v1은 pod 재활용을 끄고, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 씁니다.](../images/figures/production-02_security.ko.svg)
 
 *그림 요약: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 드라이버, pod 안의 자격 증명, 자기 노드, 다음 평가에 모두 접근할 수 있습니다. 샌드박스 pod에서는 계층마다 이 중 한 경로를 막습니다. 다음 평가로 가는 경로는 프로세스 정리와 요청별 캐시로 줄이지만, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 계속 쓰고 v1은 pod 재활용을 끕니다.*
 
 
-## 계층별 통제
+## 방어 설계 요약
 
 - **계층마다 다른 위험을 차단합니다.** 런타임은 커널 접근을, NetworkPolicy는 egress를, 노드 가드는 VPC CNI의 노드 IP 예외를 담당합니다. pod는 egress가 실제로 차단됐는지 확인한 뒤에만 Ready가 됩니다.
 - **pod에 없는 자격 증명은 탈취할 수 없습니다.** 샌드박스 pod에는 API token도 시크릿도 넣지 않습니다.
@@ -37,6 +37,8 @@
 
 ## 위협 모델
 
+운영할 때는 제출 코드가 파일을 열 수 있는지, 다른 서비스로 연결할 수 있는지, 누가 평가 API를 호출할 수 있는지를 따로 확인합니다. 런타임 격리, 네트워크 정책, 토큰 검증은 각각 다른 경계를 통제합니다.
+
 이 페이지가 가정하는 공격자는 학습 중인 policy입니다. policy는 악의가 없어도 reward를 높이는 과정에서 위험한 코드를 만들 수 있고, 프롬프트나 데이터셋이 오염되면 의도적인 공격 코드를 생성할 수도 있습니다.
 
 | 보호 대상 | 위협 | 주요 통제 |
@@ -47,7 +49,7 @@
 | 다른 테넌트와 다음 평가 | 남은 프로세스, 캐시 오염, GPU 상태 | 프로세스 정리, 요청별 캐시, pod 재활용, VFIO 해제 시 GPU reset(Kata) |
 | reward 무결성 | 측정 조작 | 2-프로세스 harness와 정적 정책 ([04 Reward 무결성](04_reward_integrity.md)) |
 
-![학습 중인 policy가 만든 후보 코드를 다섯 겹의 통제가 둘러쌉니다. 안쪽부터 자식 프로세스(env allowlist, 요청별 캐시, timeout), pod(non-root, 읽기 전용 root FS, capability 없음, 토큰 없음), 런타임(gVisor Sentry 또는 Kata VM, 격리 경계로 강조), 노드(전용 taint, 노드 가드, IMDS hop 1), 네트워크(기본 거부, gateway만 ingress) 순서입니다.](../images/figures/production-02_security--threat-model.svg)
+![학습 중인 policy가 만든 후보 코드를 다섯 겹의 통제가 둘러쌉니다. 안쪽부터 자식 프로세스(env allowlist, 요청별 캐시, timeout), pod(non-root, 읽기 전용 root FS, capability 없음, 토큰 없음), 런타임(gVisor Sentry 또는 Kata VM, 격리 경계로 강조), 노드(전용 taint, 노드 가드, IMDS hop 1), 네트워크(기본 거부, gateway만 ingress) 순서입니다.](../images/figures/production-02_security--threat-model.ko.svg)
 
 *그림 요약: 후보 코드는 다섯 겹의 통제 안에서 실행되므로, 한 겹의 통제가 실패해도 바깥쪽 통제가 계속 적용됩니다.*
 

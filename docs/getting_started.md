@@ -7,7 +7,7 @@
 
 로컬 CPU 테스트로 설치와 채점을 먼저 확인하세요. 그다음 AWS 실습 경로를 고릅니다. 이미지 URI와 AMI ID는 앞 단계에서 만든 값을 사용합니다.
 
-![a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 109개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.](images/figures/getting_started.svg)
+![a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 109개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.](images/figures/getting_started.ko.svg)
 
 *그림 요약: (a)는 GPU 노드부터 띄우는 순서이고, (b)는 로컬 CPU에서 pytest와 dry run을 마치고 설정 파일을 채운 뒤 경로를 고르는 순서입니다. AWS 노드는 그다음에 띄우고, 시나리오 C에서는 GPU 노드 없이 CPU 샌드박스를 실행합니다.*
 

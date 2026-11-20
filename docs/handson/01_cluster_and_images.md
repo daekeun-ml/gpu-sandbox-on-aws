@@ -465,6 +465,8 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 
 ## 확인 방법
 
+클러스터 생성과 이미지 빌드는 다음 단계에 서로 다른 입력을 넘깁니다. `kubectl get nodes`로 배치할 노드를 확인하고, 빌드가 출력한 이미지 URI를 `scripts/config.env`에 넣으세요. 다음 단계의 smoke pod는 여기서 지정한 샌드박스 이미지를 가져옵니다.
+
 sandbox 리포지토리의 태그를 읽기 전용으로 조회해 push를 확인합니다.
 
 ```bash

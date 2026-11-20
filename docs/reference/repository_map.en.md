@@ -1,32 +1,17 @@
 # Repository map
 
 !!! info "TL;DR"
-    What each file in the repository does, and a table that maps each docs page to its code files.
+    Use this page to find implementation files. For a command you can run, use the [script reference](scripts.md).
 
-## Pain point
+| Code | Location |
+|---|---|
+| Sandbox server, scorer, client | [`src/gpusandbox`](#srcgpusandbox) |
+| Training and rewards | [`rl`](#rl) |
+| Exercise commands | [`scripts`](#scripts) |
+| Infrastructure and node bootstrap | [`cdk`](#cdk), [`infra`](#infra) |
+| Deployment templates | [`k8s`](#k8s) |
 
-These are the places where values and files are hard to follow in the repository.
-
-- **Values merge from several files**: deploying one sandbox pool combines the values of `scripts/config.env`, a runtime profile, a version file and the Deployment template, so tracing a value back to its source is hard.
-- **Templates are not directly applicable**: `.tpl` files must go through `scripts/render.py`, and the Karpenter EC2NodeClass template pulls shell scripts in with `@@include@@`.
-- **Node group user data**: it is built separately by `infra/eks/userdata.py`.
-- **Image names differ from directories**: the image built from `gateway/Dockerfile` is called `control` in ECR, and besides the gateway it also runs probe, parity, bench and the JWKS sync.
-
-## Why
-
-- **No container image contains the NVIDIA kernel driver.** gVisor uses the host driver, and Kata uses the driver inside the guest VM.
-- **A pool's settings come together in `scripts/06_deploy_sandboxes.sh`.** That script reads the runtime profile and the version file and renders the Deployment template.
-
-**Before you start:** nothing in particular. With the repository checked out as in [Getting started](../getting_started.md), you can open the files while you read.
-
-??? note "Terms"
-    - **template (`.tpl`), rendering**: a manifest source with `${VAR}` placeholders, and the step that fills them with real values to produce applicable YAML. In this repository `scripts/render.py` does the rendering.
-    - **profile, version file**: a profile (`k8s/sandbox/profiles/*.env`) holds per-runtime values (RuntimeClass, nodes, accelerator); a version file (`k8s/sandbox/versions/*.env`) holds the harness settings of one sandbox version.
-    - **harness**: the evaluation code that runs candidate code, checks correctness and speed, and produces the verdict (`src/gpusandbox/harness/`).
-    - **control image**: an image with only HTTP and Kubernetes clients and no torch. The gateway and the operator tools run on it.
-    - **golden submission**: candidate code whose verdict is known in advance, used as the reference point for checking that a sandbox behaves correctly.
-
-    More terms are in the [Glossary](glossary.md).
+See [how values and templates come together](#how-values-and-templates-come-together) for pool configuration.
 
 ## Top level
 

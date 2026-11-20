@@ -123,6 +123,8 @@ scripts/ops/bench.sh 64     # more requests per pool
 
 ## 해석하는 방법
 
+속도 표를 읽기 전에 런타임별로 제출이 성공했는지 확인하세요. 실패 요청이 많거나 GPU 종류가 다르면 p50이 낮아도 런타임 차이로 해석하기 어렵습니다. 같은 GPU와 입력으로 성공한 평가의 지연을 비교하세요.
+
 | 비교 | 조건 | 볼 지표 |
 |---|---|---|
 | Kata CLH CPU 대 Kata QEMU CPU | 같은 `c8i.2xlarge` 노드(nested virtualization), 같은 이미지, 같은 golden, RuntimeClass만 다른 같은 profile | cold start, `eval_p50_s`, `eval_p95_s` |

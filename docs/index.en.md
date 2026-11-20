@@ -1,7 +1,7 @@
 # GPU Sandbox on AWS
 
 !!! info "TL;DR"
-    A hands-on and production guide to on-policy RL post-training in which GPU code written by the model runs in an isolated GPU sandbox to earn its reward, built on Amazon EKS and SageMaker HyperPod with three isolation runtimes.
+    Build a GPU sandbox on AWS. Compare running EC2 nodes in EKS with training on HyperPod, and check the requirements for gVisor and Kata. The GRPO exercise turns evaluation results into rewards.
 
 <div class="grid cards" markdown>
 
@@ -23,7 +23,7 @@
 
 </div>
 
-## Pain point
+## Why GPU sandboxes are useful
 
 For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, but **tasks whose reward is itself measured on a GPU** (rewarding "how much faster did the CUDA or Triton kernel get") need a GPU inside the sandbox. Untrusted code from the policy then reaches the GPU driver.
 
@@ -32,7 +32,7 @@ For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, b
 - **gVisor and Kata**: they handle GPUs differently, so the AWS instance requirements come first.
 - **When you change versions during training**: when the sandbox image or the scoring harness changes during on-policy training that runs for days, versions that mix within one GRPO group break the advantage computation.
 
-![a: two separate problems. In the top row, kernel code from the policy shares the host kernel and GPU driver in a runc container. In the bottom row, changing the image or harness during training mixes v1 and v2 rewards in one GRPO group whatever the runtime, so the advantage goes wrong. b: in the top row, gVisor or Kata, chosen by RuntimeClass, stands between the code and the host kernel; in the bottom row, one version scores each batch (or group), so rewards stay consistent](images/figures/index.svg)
+![a: two separate problems. In the top row, kernel code from the policy shares the host kernel and GPU driver in a runc container. In the bottom row, changing the image or harness during training mixes v1 and v2 rewards in one GRPO group whatever the runtime, so the advantage goes wrong. b: in the top row, gVisor or Kata, chosen by RuntimeClass, stands between the code and the host kernel; in the bottom row, one version scores each batch (or group), so rewards stay consistent](images/figures/index.en.svg)
 
 *Takeaway: (a) In a plain container the model's code shares the host kernel and driver. Separately, changing the version during training can mix rewards from two versions in one group, whatever the runtime. (b) gVisor or Kata, chosen by RuntimeClass, sits between the code and the host kernel, and the trainer scores each batch (or group) on a pool of one version.*
 
@@ -47,7 +47,7 @@ For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, b
 
 ### What you build
 
-![Left: the policy model + vLLM (GRPO, on-policy, g5.2xlarge or ml.g5.2xlarge) inside training on an EC2 GPU node or a HyperPod node. Right: sandbox pools on EC2 nodes with gVisor + nvproxy (g5.xlarge, A10G), Kata + QEMU (g4dn.metal, T4) and Kata + Cloud Hypervisor (CPU tier on c8i with nested virt, GPU experimental), one image, with a profile per pool setting the RuntimeClass and the nodes. Kernel code goes to the pools with its version pinned per group, and correctness and speedup come back](images/figures/index--what-we-build.svg)
+![Left: the policy model + vLLM (GRPO, on-policy, g5.2xlarge or ml.g5.2xlarge) inside training on an EC2 GPU node or a HyperPod node. Right: sandbox pools on EC2 nodes with gVisor + nvproxy (g5.xlarge, A10G), Kata + QEMU (g4dn.metal, T4) and Kata + Cloud Hypervisor (CPU tier on c8i with nested virt, GPU experimental), one image, with a profile per pool setting the RuntimeClass and the nodes. Kernel code goes to the pools with its version pinned per group, and correctness and speedup come back](images/figures/index--what-we-build.en.svg)
 
 *Takeaway: Kernel code from the policy model goes to the sandbox pool of the selected runtime with its version pinned per group, and correctness and speedup come back as the reward. GPU scoring runs on the gVisor and Kata + QEMU pools; Kata + Cloud Hypervisor runs on CPU by default.*
 

@@ -10,7 +10,7 @@
 - **If the pinning rules live separately in each trainer's code**: it is also hard to version environments independently of the trainer.
 - **Another case**: INTELLECT-3 reported that `kubectl exec` through the API grew to about 2.5 s per command, and switched to a gateway, headless Service and sidecar design (arXiv 2512.16144).
 
-![a: TRL rank 0 and a veRL reward worker each see sandbox pod A as free and send to the same pod, which answers 503 and makes them retry; sample 1 of group 17 is scored by v1 and sample 2, after a routing switch, by v2, so one group spans two versions. b: all four requests pass one sandbox gateway, which counts in-flight requests in one place and sends one at a time to pod A and pod B, and its group_key pin scores both samples with the pinned version v1 (group pin, TTL 900 s)](../images/figures/production-03_gateway_and_pools.svg)
+![a: TRL rank 0 and a veRL reward worker each see sandbox pod A as free and send to the same pod, which answers 503 and makes them retry; sample 1 of group 17 is scored by v1 and sample 2, after a routing switch, by v2, so one group spans two versions. b: all four requests pass one sandbox gateway, which counts in-flight requests in one place and sends one at a time to pod A and pod B, and its group_key pin scores both samples with the pinned version v1 (group pin, TTL 900 s)](../images/figures/production-03_gateway_and_pools.en.svg)
 
 *Takeaway: Callers that pick pods on their own collide on the same pod, and scoring samples separately lets one group span two versions. One gateway counts in-flight requests and pins each group to its first sample's version.*
 
@@ -61,6 +61,8 @@ print(info.runtime, info.version, info.revision, results[0]["status"])
 The gateway metrics are `gateway_evaluations_total{runtime, version, status}`, `gateway_evaluation_seconds` and `gateway_recycled_pods_total`. Dashboards and alerts are covered in [07 Observability and operations](07_observability_and_operations.md).
 
 ## Group pins and TTL
+
+A group pin records the scoring version for answers to one prompt. The TTL determines how long that record is kept. The pin must last through the final evaluation to provide a common standard across workers.
 
 ```mermaid
 sequenceDiagram

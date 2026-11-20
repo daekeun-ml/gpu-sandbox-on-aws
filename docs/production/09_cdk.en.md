@@ -10,7 +10,7 @@
 - **Account security checks**: they flag a public API endpoint, IMDSv1, unencrypted volumes or a wide-open security group right away (for example Security Hub control EKS.1).
 - **eksctl**: it cannot create a cluster with a private-only endpoint (eksctl documentation), so a public endpoint stays, which is why this asset removed the eksctl path.
 
-![a: several scripts run in order create the cluster in step 1, node groups in step 2 and launch templates and log groups in step 3, and deletion goes step by step, resource by resource, so one leftover costs money or makes the next creation fail. b: cdk/deploy.sh deploys the same resources as one CDK stack (CloudFormation) and cdk/destroy.sh deletes the whole stack with everything in it, while the HyperPod cluster, AMIs and ECR are deleted separately](../images/figures/production-09_cdk.svg)
+![a: several scripts run in order create the cluster in step 1, node groups in step 2 and launch templates and log groups in step 3, and deletion goes step by step, resource by resource, so one leftover costs money or makes the next creation fail. b: cdk/deploy.sh deploys the same resources as one CDK stack (CloudFormation) and cdk/destroy.sh deletes the whole stack with everything in it, while the HyperPod cluster, AMIs and ECR are deleted separately](../images/figures/production-09_cdk.en.svg)
 
 *Takeaway: Resources made in each step must be deleted in each step, and missing one costs money or blocks the next creation. With one CDK stack, the resources in the stack are deleted as one unit.*
 
@@ -209,6 +209,8 @@ Build the images as in the hands-on with `scripts/03_build_push_images.sh`.
 - **For B1 and B2 with `HyperPodPyTorchJob`**: build with `HYPERPOD=1 scripts/03_build_push_images.sh` so the trainer image includes `hyperpodrun`.
 
 ## Step 4: Delete (cdk/destroy.sh)
+
+Check stack ownership before cleanup. CloudFormation can finish deleting the stack while separately created resources such as HyperPod or ECR still remain.
 
 Before you start deleting anything, check that `kubectl config current-context` is `<CLUSTER_NAME>-tunnel`; both scripts below use the current context as is.
 

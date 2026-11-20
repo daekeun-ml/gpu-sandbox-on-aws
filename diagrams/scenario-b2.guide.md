@@ -1,3 +1,5 @@
+**한국어** | [English](scenario-b2.guide.en.md)
+
 # 시나리오 B2: HyperPod instance group 위의 HyperPod trainer와 gVisor 샌드박스 (실험)
 
 trainer와 GPU 샌드박스가 모두 private EKS 클러스터에 붙은 SageMaker HyperPod instance group에서 돌고, EKS에는 system node group만 남는 구성입니다. 샌드박스 instance group은 custom AMI로 부팅하는데, 이 AMI는 HyperPod public base AMI에서 gVisor nvproxy가 지원하는 NVIDIA 드라이버로 바꿔 한 번 구운 것이에요. 저자들이 AWS에서 직접 돌려 보지 않은 실험 경로입니다(docs/handson/07_hyperpod.md:70).

@@ -1,3 +1,5 @@
+**한국어** | [English](scenario-a.guide.en.md)
+
 # 시나리오 A: 하나의 EKS 클러스터에서 EC2 trainer와 gVisor GPU 샌드박스
 
 private EKS 클러스터 하나에서 on-policy GRPO post-training을 돌리는 구성입니다. 자기 EC2 GPU 노드에 있는 trainer Job이 모델이 쓴 kernel을 별도 GPU 노드의 gVisor(runsc + nvproxy) 샌드박스 pool로 보내고, 돌아온 verdict를 reward로 바꿔요. 운영자는 SSM 터널로만 클러스터에 닿고, 모델 weight는 NAT gateway를 거쳐 Hugging Face Hub에서 들어옵니다.

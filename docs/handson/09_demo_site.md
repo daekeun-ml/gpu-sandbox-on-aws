@@ -409,6 +409,8 @@ python demo/record_local.py
 
 ## 4. 배포 (demo/deploy.sh)
 
+공개 사이트에는 이 단계에서 선택한 기록이 올라갑니다. 샘플을 배포할지, 클러스터에서 가져온 기록을 배포할지 먼저 정하고 브라우저에서 보일 파일을 확인하세요.
+
 `demo/deploy.sh`는 CloudFormation 스택 하나(사이트 버킷, 로그 버킷, OAC, 응답 헤더 정책, WAF web ACL, CloudFront 배포와 로그 전송, 버킷 정책)를 만들고 정적 파일과 기록을 업로드한 뒤 공개 상태를 확인합니다.
 
 ```bash

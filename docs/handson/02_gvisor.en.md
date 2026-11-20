@@ -1,22 +1,9 @@
 # 02 gVisor GPU sandboxes
 
 !!! info "TL;DR"
-    Install the NVIDIA device plugin in CDI mode, register the `gvisor` RuntimeClass, and confirm with one smoke pod that CUDA runs on the A10G under the gVisor kernel.
+    Run a small GPU calculation inside gVisor before deploying a pool.
 
-## Pain point
-
-gVisor's own kernel (the Sentry) receives the container's system calls. The `nvidia-container-runtime` hook that attaches GPUs under runc therefore does not apply, and the devices need a path of their own. nvproxy also accepts only driver versions it knows, so an AMI change that brings a different driver can keep sandboxes from starting at all.
-
-![a: on a runc node the nvidia-container-runtime hook injects the GPU, but on a gVisor node the Sentry receives syscalls, the same hook does not apply and the sandbox container has no path for the devices; an AMI change to a driver version nvproxy does not know keeps the sandbox from starting. b: the same device plugin (cdi-cri) hands CDI devices to both the runc trainer node and the gVisor node, where runsc turns on nvproxy, and the g5 (A10G) node's proprietary driver 580.178.04 (GSP off) is a version on the gVisor support list, so the sandbox starts and a mismatch is never Ready (fail closed)](../images/figures/handson-02_gvisor.svg)
-
-*Takeaway: The way runc attaches GPUs does not work under gVisor, and a driver version change can make nvproxy block the sandbox from starting. With devices handed over through CDI and only a driver on the support list, the sandbox container gets its GPU and a mismatch fails closed.*
-
-
-## Why
-
-- **Use the CDI path gVisor documents.** The trainer nodes, running runc, use the same device plugin.
-- **Driver mismatches do not pass silently.** Nodes warn at boot, and a pod whose GPU probe fails never turns Ready (fail closed).
-- **Use only a driver on the support list.** The default is `g5` (A10G) with driver 580.178.04. The gVisor documentation does not cover this combination; this repository verified it in a practice account. `runsc.toml` opens only the `compute,utility` capabilities.
+    **Completion check** A successful smoke pod confirms that this node can execute CUDA work inside gVisor.
 
 **Before you start:** finish [01 Cluster and images](01_cluster_and_images.md) so that the two gVisor nodes and `SANDBOX_IMAGE_URI` are ready, and run kubectl and helm in a second terminal with `cdk/tunnel.sh` running. The concepts are in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md).
 
@@ -48,69 +35,74 @@ If the stack runs scenario B2 or C, there are no EC2 gVisor GPU nodes, so the sc
 
 ## NVIDIA device plugin (CDI mode)
 
-`04_install_gpu_stack.sh` works in this order. The script runs the `kubectl` command in step 2, so you do not run it yourself.
+The device plugin advertises `nvidia.com/gpu` and passes allocated devices to the runtime through CDI.
 
-1. It adds the `nvdp` Helm repository, installs `nvdp/nvidia-device-plugin` with `--version "${NVIDIA_DEVICE_PLUGIN_VERSION}"` (default 0.20.1) into `kube-system`, and waits for the DaemonSet with `--wait`.
-2. It sets the plugin's `--cdi-disable-hooks` flag with the command below and waits for the rollout. Chart v0.20.1 does not expose this flag as a value, so it goes in as an environment variable.
+??? note "Details"
+    `04_install_gpu_stack.sh` works in this order. The script runs the `kubectl` command in step 2, so you do not run it yourself.
 
-    ```bash
-    kubectl -n kube-system set env ds/nvdp-nvidia-device-plugin CDI_DISABLE_HOOKS=disable-device-node-modification
+    1. It adds the `nvdp` Helm repository, installs `nvdp/nvidia-device-plugin` with `--version "${NVIDIA_DEVICE_PLUGIN_VERSION}"` (default 0.20.1) into `kube-system`, and waits for the DaemonSet with `--wait`.
+    2. It sets the plugin's `--cdi-disable-hooks` flag with the command below and waits for the rollout. Chart v0.20.1 does not expose this flag as a value, so it goes in as an environment variable.
+
+        ```bash
+        kubectl -n kube-system set env ds/nvdp-nvidia-device-plugin CDI_DISABLE_HOOKS=disable-device-node-modification
+        ```
+
+    ??? note "Why the CDI hook is turned off"
+        - nvidia-container-toolkit 1.20.1 on the AMI adds a `disable-device-node-modification` CDI hook, which reads `<rootfs>/proc/driver/nvidia/params`.
+        - runsc runs CDI hooks in the gofer, before the container has a `/proc`, so the hook fails.
+        - As a result every gVisor GPU pod ends in `StartError` with `OCI runtime start failed: starting container: reading mounts file: error unmarshaling mounts: unexpected end of JSON input`. The runsc debug log shows `error opening nvidia driver params file: openat proc/driver/nvidia/params: no such file or directory`.
+        - The problem does not depend on the GPU model, so `g6` is affected too. A gVisor pod without a GPU on the same node ran fine.
+        - runc pods (the trainer) lose only this hook. Without `CAP_MKNOD` they cannot create device nodes anyway.
+
+    **What to look for:**
+
+    - GPU 1 on every node (example shape; scenario B has no trainer line).
+    - Right after the plugin restarts, the gVisor node can briefly show `0`. The smoke pod requests one GPU and is placed once a node has its GPU registered again, so judge success by the final `cuda ok:` log.
+
+    ```text
+    daemonset.apps/nvdp-nvidia-device-plugin env updated
+    daemon set "nvdp-nvidia-device-plugin" successfully rolled out
+    [hh:mm:ss] allocatable GPUs per node
+    NODE                                         ROLE             GPU
+    ip-192-168-x-x.us-west-2.compute.internal    trainer          1
+    ip-192-168-x-x.us-west-2.compute.internal    sandbox-gvisor   1
+    ip-192-168-x-x.us-west-2.compute.internal    sandbox-gvisor   1
     ```
 
-??? note "Why the CDI hook is turned off"
-    - nvidia-container-toolkit 1.20.1 on the AMI adds a `disable-device-node-modification` CDI hook, which reads `<rootfs>/proc/driver/nvidia/params`.
-    - runsc runs CDI hooks in the gofer, before the container has a `/proc`, so the hook fails.
-    - As a result every gVisor GPU pod ends in `StartError` with `OCI runtime start failed: starting container: reading mounts file: error unmarshaling mounts: unexpected end of JSON input`. The runsc debug log shows `error opening nvidia driver params file: openat proc/driver/nvidia/params: no such file or directory`.
-    - The problem does not depend on the GPU model, so `g6` is affected too. A gVisor pod without a GPU on the same node ran fine.
-    - runc pods (the trainer) lose only this hook. Without `CAP_MKNOD` they cannot create device nodes anyway.
+    **If it fails:** if the GPU column is empty or `<none>`, `nvidia.com/gpu` is not registered in that node's `status.allocatable`. Check in `kube-system` whether a device plugin pod was placed on that node and read its logs. The commands are in the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md).
 
-**What to look for:**
+    The settings in `infra/gpu/nvidia-device-plugin-values.yaml`:
 
-- GPU 1 on every node (example shape; scenario B has no trainer line).
-- Right after the plugin restarts, the gVisor node can briefly show `0`. The smoke pod requests one GPU and is placed once a node has its GPU registered again, so judge success by the final `cuda ok:` log.
+    | Setting | Value | Reason |
+    |---|---|---|
+    | `deviceListStrategy` | `cdi-cri` | passes CDI devices through the CRI `CDIDevices` field, the injection path gVisor documents |
+    | `nvidiaDriverRoot` | `/` | the EKS AL2023 NVIDIA AMI installs the driver at the host root |
+    | `nodeSelector` | `gpusandbox/device-plugin: cdi` | installs only on the EC2 trainer and gVisor nodes and the B2 HyperPod sandbox nodes |
+    | `affinity` | `{}` | the chart's default affinity requires NFD labels, so it is cleared |
+    | `tolerations` | `nvidia.com/gpu`, `gpusandbox/role` (Exists) | so the plugin also runs on nodes with the dedicated taints |
 
-```text
-daemonset.apps/nvdp-nvidia-device-plugin env updated
-daemon set "nvdp-nvidia-device-plugin" successfully rolled out
-[hh:mm:ss] allocatable GPUs per node
-NODE                                         ROLE             GPU
-ip-192-168-x-x.us-west-2.compute.internal    trainer          1
-ip-192-168-x-x.us-west-2.compute.internal    sandbox-gvisor   1
-ip-192-168-x-x.us-west-2.compute.internal    sandbox-gvisor   1
-```
+    !!! note "Where the device plugin runs"
+        This plugin runs only on nodes labelled `gpusandbox/device-plugin=cdi`: the EC2 trainer and gVisor nodes, and the B2 HyperPod sandbox instance group (`sandbox`). The Kata GPU node uses the GPU Operator's sandbox device plugin (`nvidia.com/pgpu`, [03 Kata sandboxes](03_kata.md)), and the HyperPod trainer nodes the plugin in the HyperPod Helm chart ([07 HyperPod scenario](07_hyperpod.md)).
 
-**If it fails:** if the GPU column is empty or `<none>`, `nvidia.com/gpu` is not registered in that node's `status.allocatable`. Check in `kube-system` whether a device plugin pod was placed on that node and read its logs. The commands are in the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md).
+    ### Why CDI
 
-The settings in `infra/gpu/nvidia-device-plugin-values.yaml`:
+    ```mermaid
+    flowchart LR
+        DP["device plugin<br/>deviceListStrategy cdi-cri"] -->|"CDI device names"| CT["containerd 2.3.7<br/>edits the OCI spec"]
+        TK["nvidia-container-toolkit 1.20.1<br/>(host, required)"] -.-> CT
+        CT -->|"spec with /dev/nvidia*"| RS["runsc"]
+        RS -->|"detects NVIDIA devices, enables nvproxy"| S["sandbox container"]
+    ```
 
-| Setting | Value | Reason |
-|---|---|---|
-| `deviceListStrategy` | `cdi-cri` | passes CDI devices through the CRI `CDIDevices` field, the injection path gVisor documents |
-| `nvidiaDriverRoot` | `/` | the EKS AL2023 NVIDIA AMI installs the driver at the host root |
-| `nodeSelector` | `gpusandbox/device-plugin: cdi` | installs only on the EC2 trainer and gVisor nodes and the B2 HyperPod sandbox nodes |
-| `affinity` | `{}` | the chart's default affinity requires NFD labels, so it is cleared |
-| `tolerations` | `nvidia.com/gpu`, `gpusandbox/role` (Exists) | so the plugin also runs on nodes with the dedicated taints |
+    *Takeaway: runsc turns on nvproxy from the NVIDIA devices in the OCI spec alone, without a prestart hook, so the device plugin only has to hand the devices over through CDI.*
 
-!!! note "Where the device plugin runs"
-    This plugin runs only on nodes labelled `gpusandbox/device-plugin=cdi`: the EC2 trainer and gVisor nodes, and the B2 HyperPod sandbox instance group (`sandbox`). The Kata GPU node uses the GPU Operator's sandbox device plugin (`nvidia.com/pgpu`, [03 Kata sandboxes](03_kata.md)), and the HyperPod trainer nodes the plugin in the HyperPod Helm chart ([07 HyperPod scenario](07_hyperpod.md)).
-
-### Why CDI
-
-```mermaid
-flowchart LR
-    DP["device plugin<br/>deviceListStrategy cdi-cri"] -->|"CDI device names"| CT["containerd 2.3.7<br/>edits the OCI spec"]
-    TK["nvidia-container-toolkit 1.20.1<br/>(host, required)"] -.-> CT
-    CT -->|"spec with /dev/nvidia*"| RS["runsc"]
-    RS -->|"detects NVIDIA devices, enables nvproxy"| S["sandbox container"]
-```
-
-*Takeaway: runsc turns on nvproxy from the NVIDIA devices in the OCI spec alone, without a prestart hook, so the device plugin only has to hand the devices over through CDI.*
-
-- **runsc and CDI**: per the gVisor documentation, runsc is fully CDI-compatible and configures the devices itself (skipping `nvidia-container-runtime-hook`), so no `nvidia-container-runtime` shim is needed, but the host still needs nvidia-container-toolkit.
-- **What the AMI holds**: the EKS AL2023 NVIDIA AMI (v20261107) has the driver, nvidia-container-toolkit 1.20.1 and containerd 2.3.7 but no device plugin.
-- **CDI enablement**: nodeadm enables CDI for kubelet 1.32 and later.
+    - **runsc and CDI**: per the gVisor documentation, runsc is fully CDI-compatible and configures the devices itself (skipping `nvidia-container-runtime-hook`), so no `nvidia-container-runtime` shim is needed, but the host still needs nvidia-container-toolkit.
+    - **What the AMI holds**: the EKS AL2023 NVIDIA AMI (v20261107) has the driver, nvidia-container-toolkit 1.20.1 and containerd 2.3.7 but no device plugin.
+    - **CDI enablement**: nodeadm enables CDI for kubelet 1.32 and later.
 
 ## RuntimeClass and smoke pod
+
+An advertised GPU confirms device registration. `cuda ok:` confirms a CUDA calculation completed inside gVisor. If the first succeeds and the latter fails, check pod events.
 
 Once the device plugin is installed, the same script registers the RuntimeClass and runs one smoke pod on a gVisor node. There is no separate command to run for this part.
 
@@ -167,139 +159,96 @@ cuda ok: NVIDIA A10G 2048.0
 
 ## nvproxy driver version matching
 
-nvproxy works only when the driver version matches exactly, and gVisor sorts drivers into three classes.
+The driver version must match nvproxy. For a failed CUDA initialization, see [gVisor troubleshooting](../reference/troubleshooting.md#gvisor).
 
-| Class | Meaning | runsc behavior |
-|---|---|---|
-| supported | versions gVisor has verified | runs normally |
-| unsupported | defined in the source but not verified | fails to start by default; with `--nvproxy-allow-unsupported-driver` it logs a warning and tries to run |
-| unknown | not defined in the source | always fails to start, even with the flag |
+??? note "Details"
+    nvproxy works only when the driver version matches exactly, and gVisor sorts drivers into three classes.
 
-This hands-on's combinations:
+    | Class | Meaning | runsc behavior |
+    |---|---|---|
+    | supported | versions gVisor has verified | runs normally |
+    | unsupported | defined in the source but not verified | fails to start by default; with `--nvproxy-allow-unsupported-driver` it logs a warning and tries to run |
+    | unknown | not defined in the source | always fails to start, even with the flag |
 
-| Driver | Where it comes from | gVisor release-20261109.0 | Result |
-|---|---|---|---|
-| 580.178.04 | default driver of the EKS AL2023 NVIDIA AMI v20261107; loaded as the proprietary module (GSP off) on `g5` and as the open module on `g6` | supported (since release-20260831.0) | works |
-| 595.91.07 | in the same AMI but for `g7` only; the driver of the HyperPod EKS AMI | unknown | container fails to start |
+    This hands-on's combinations:
 
-Reward sandboxes run untrusted code, so this repository sticks to supported combinations instead of `--nvproxy-allow-unsupported-driver`.
+    | Driver | Where it comes from | gVisor release-20261109.0 | Result |
+    |---|---|---|---|
+    | 580.178.04 | default driver of the EKS AL2023 NVIDIA AMI v20261107; loaded as the proprietary module (GSP off) on `g5` and as the open module on `g6` | supported (since release-20260831.0) | works |
+    | 595.91.07 | in the same AMI but for `g7` only; the driver of the HyperPod EKS AMI | unknown | container fails to start |
 
-### Symptoms of an unsupported driver
+    Reward sandboxes run untrusted code, so this repository sticks to supported combinations instead of `--nvproxy-allow-unsupported-driver`.
 
-1. **Node boot:** `install-gvisor.sh` leaves `WARNING: NVIDIA driver <version> is not supported by gVisor <release> nvproxy` in the user data log.
-2. **The `04_install_gpu_stack.sh` smoke pod:** runsc refuses to start the container.
-    - The script warns `smoke pod did not succeed; its state and events follow (the pod is deleted when this script exits)` and prints the last 25 lines of `kubectl describe pod`, whose events carry the runsc error.
-    - If the container never started, it also warns `no logs from gvisor-smoke-<n>: the container did not start`.
-    - The pod is deleted when the script ends, so there is nothing to clean up by hand.
-3. **Pool deployment (`06_deploy_sandboxes.sh`):** sandbox pods never turn Ready (fail closed, as with a CUDA initialization failure for any other reason), and the deployment fails.
-    - The script waits up to 30 minutes in `rollout status`. The Deployment's progress deadline (`progressDeadlineSeconds`) is also 1800 seconds, the same as this wait.
-    - The headless Service publishes only Ready pod IPs, so the trainer never gets such a pod.
+### Common blockers
 
-The fix is one of these.
-
-- Raise `GVISOR_RELEASE` to a gVisor release that supports the driver.
-- Use an AMI with a supported driver.
-
-Either way, before the switch run `runsc nvproxy list-supported-drivers` from the release you are adopting (the `https://storage.googleapis.com/gvisor/releases/release/<release>/x86_64/gvisor.tar.bz2` that `install-gvisor.sh` downloads) and compare it with the driver version of the new AMI. The method below checks the combination installed on a node that has already booted.
-
-### Checking on the node itself
-
-Find a gVisor node name and open a debug pod shell on it (`<gvisor-node>` is a name printed by the first command).
-
-```bash
-kubectl get nodes -l gpusandbox/role=sandbox-gvisor
-kubectl debug node/<gvisor-node> -it --profile=sysadmin --image=public.ecr.aws/amazonlinux/amazonlinux:2023
-```
-
-**What to look for:** a shell prompt after the second command. The node's root file system is mounted at `/host`.
-
-Run the following in the debug shell.
-
-```bash
-cat /proc/driver/nvidia/version                         # loaded kernel module version
-/host/usr/local/bin/runsc --version                      # installed gVisor release
-/host/usr/local/bin/runsc nvproxy list-supported-drivers | grep -Fw 580.178.04   # use the version from the first line
-```
-
-**What to look for:**
-
-- **First command**: it prints a module version line containing `580.178.04` (`NVIDIA UNIX x86_64 Kernel Module  580.178.04` for the proprietary module on `g5`).
-- **Second command**: it prints a version line containing `release-20261109.0`.
-- **If the first shows a different version**: put that version in place of `580.178.04` in the third.
-- **Third command**: if it prints the version, the combination is supported; if it prints nothing, it is not.
-
-Debug pods are not deleted automatically, so find and delete it after leaving the shell.
-
-```bash
-kubectl get pods -n default -o name | grep node-debugger
-kubectl delete -n default pod/<name>
-```
-
-**What to look for:** the first command shows a `pod/node-debugger-...` name, and the second prints `pod "node-debugger-..." deleted`.
+If the node temporarily reports zero GPUs, wait for the device plugin. If the smoke pod fails with a GPU available, check its events and [driver diagnostics](../reference/troubleshooting.md#gvisor).
 
 ## runsc.toml settings
 
-The `/etc/containerd/runsc.toml` written by `install-gvisor.sh`:
+??? note "Details"
+    The `/etc/containerd/runsc.toml` written by `install-gvisor.sh`:
 
-```toml
-# Read by containerd-shim-runsc-v1 through the runtime's ConfigPath option.
-[runsc_config]
-  # GPU support turns on automatically when NVIDIA devices are in the OCI spec; being explicit
-  # documents intent and is harmless.
-  nvproxy = "true"
-  # compute,utility is the default. Do not add profiling, rdma or graphics for reward sandboxes.
-  nvproxy-allowed-driver-capabilities = "compute,utility"
-```
+    ```toml
+    # Read by containerd-shim-runsc-v1 through the runtime's ConfigPath option.
+    [runsc_config]
+      # GPU support turns on automatically when NVIDIA devices are in the OCI spec; being explicit
+      # documents intent and is harmless.
+      nvproxy = "true"
+      # compute,utility is the default. Do not add profiling, rdma or graphics for reward sandboxes.
+      nvproxy-allowed-driver-capabilities = "compute,utility"
+    ```
 
-- runsc flags are set in this file, the one the NodeConfig `ConfigPath` points to, not in the RuntimeClass or the pod spec.
-- `compute,utility` (the default) allows only CUDA compute (compute) and management interfaces such as nvidia-smi and NVML (utility). The gVisor documentation warns that each additional capability widens the host driver surface exposed to the sandbox, and running and timing kernels needs only these two.
-- `g5.xlarge` is a virtual instance, so gVisor runs on systrap; the KVM platform is for bare metal only.
+    - runsc flags are set in this file, the one the NodeConfig `ConfigPath` points to, not in the RuntimeClass or the pod spec.
+    - `compute,utility` (the default) allows only CUDA compute (compute) and management interfaces such as nvidia-smi and NVML (utility). The gVisor documentation warns that each additional capability widens the host driver surface exposed to the sandbox, and running and timing kernels needs only these two.
+    - `g5.xlarge` is a virtual instance, so gVisor runs on systrap; the KVM platform is for bare metal only.
 
 ## Driver and verification scope of g5 nodes
 
-The EKS AL2023 NVIDIA AMI (v20261107) loads the proprietary kernel module with GSP off on `g4dn`, `g5` and `g5g`, and the open kernel module 580.178.04 on `g6`. On a `g5.xlarge` node deployed on 2026-11-18, `/proc/driver/nvidia/version` showed `NVIDIA UNIX x86_64 Kernel Module  580.178.04` and `/proc/driver/nvidia/params` showed `EnableGpuFirmware: 0`.
+??? note "Details"
+    The EKS AL2023 NVIDIA AMI (v20261107) loads the proprietary kernel module with GSP off on `g4dn`, `g5` and `g5g`, and the open kernel module 580.178.04 on `g6`. On a `g5.xlarge` node deployed on 2026-11-18, `/proc/driver/nvidia/version` showed `NVIDIA UNIX x86_64 Kernel Module  580.178.04` and `/proc/driver/nvidia/params` showed `EnableGpuFirmware: 0`.
 
-The gVisor documentation describes nvproxy against NVIDIA's open driver and does not mention the proprietary driver. Regardless of the driver flavor, 580.178.04 is in the supported list of runsc `release-20261109.0` (`runsc nvproxy list-supported-drivers`).
+    The gVisor documentation describes nvproxy against NVIDIA's open driver and does not mention the proprietary driver. Regardless of the driver flavor, 580.178.04 is in the supported list of runsc `release-20261109.0` (`runsc nvproxy list-supported-drivers`).
 
-| Instance | GPU | Kernel module loaded (AMI v20261107) | Driver flavor in the gVisor documentation | This repository | On-Demand (USD/hour) |
-|---|---|---|---|---|---|
-| `g5.xlarge` (default) | 1x A10G | proprietary 580.178.04, GSP off | not covered | verified in the practice account (2026-11-18) | 1.006 |
-| `g6.xlarge` (alternative) | 1x L4 | open 580.178.04 | covered | not run | 0.8048 |
-| `g4dn.xlarge` | 1x T4 | proprietary, GSP off | not covered | not tested (unverified) | 0.526 |
+    | Instance | GPU | Kernel module loaded (AMI v20261107) | Driver flavor in the gVisor documentation | This repository | On-Demand (USD/hour) |
+    |---|---|---|---|---|---|
+    | `g5.xlarge` (default) | 1x A10G | proprietary 580.178.04, GSP off | not covered | verified in the practice account (2026-11-18) | 1.006 |
+    | `g6.xlarge` (alternative) | 1x L4 | open 580.178.04 | covered | not run | 0.8048 |
+    | `g4dn.xlarge` | 1x T4 | proprietary, GSP off | not covered | not tested (unverified) | 0.526 |
 
-Prices are us-east-1 and us-west-2 list prices.
+    Prices are us-east-1 and us-west-2 list prices.
 
-**What this repository verified** (2026-11-18, us-west-2, practice account, `g5.xlarge` with the proprietary, GSP-off module):
+    **What this repository verified** (2026-11-18, us-west-2, practice account, `g5.xlarge` with the proprietary, GSP-off module):
 
-- The gVisor smoke test printed `cuda ok: NVIDIA A10G 2048.0`.
-- `ops/verify.sh gvisor v1` passed: 6 golden verdicts PASS (including `vector_add_triton` and `relu_bias_triton`), 4 egress targets blocked, and the NetworkPolicy blocked connections from the `default` namespace.
-- A 5-step GRPO run with the trainer on `g5.2xlarge` finished.
+    - The gVisor smoke test printed `cuda ok: NVIDIA A10G 2048.0`.
+    - `ops/verify.sh gvisor v1` passed: 6 golden verdicts PASS (including `vector_add_triton` and `relu_bias_triton`), 4 egress targets blocked, and the NetworkPolicy blocked connections from the `default` namespace.
+    - A 5-step GRPO run with the trainer on `g5.2xlarge` finished.
 
-This combination was verified by this repository in a practice account, so after changing the instance type, driver, AMI or gVisor version, re-run the `04_install_gpu_stack.sh` smoke test and `scripts/ops/verify.sh`.
+    This combination was verified by this repository in a practice account, so after changing the instance type, driver, AMI or gVisor version, re-run the `04_install_gpu_stack.sh` smoke test and `scripts/ops/verify.sh`.
 
-If the default pool (`sandbox-gvisor-v1`, 2 replicas) holds the GPUs of both nodes, the smoke pod cannot get a GPU. The script then stops before it starts the smoke pod, with `every GPU on the sandbox-gvisor nodes is in use` and the command to scale the pool down.
+    If the default pool (`sandbox-gvisor-v1`, 2 replicas) holds the GPUs of both nodes, the smoke pod cannot get a GPU. The script then stops before it starts the smoke pod, with `every GPU on the sandbox-gvisor nodes is in use` and the command to scale the pool down.
 
-1. Free one GPU with `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=1` and run it again.
-2. Once you see `cuda ok:`, bring the pool back to 2 with `scripts/06_deploy_sandboxes.sh gvisor v1` and run `verify.sh`.
+    1. Free one GPU with `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=1` and run it again.
+    2. Once you see `cuda ok:`, bring the pool back to 2 with `scripts/06_deploy_sandboxes.sh gvisor v1` and run `verify.sh`.
 
-`g6` is a supported alternative. It loads the open driver, which the gVisor documentation covers, and it costs less (`g6.xlarge` 0.8048, `g6.2xlarge` 0.9776). To use it, change `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` (`HYPERPOD_*` for HyperPod) in `scripts/config.env`.
+    `g6` is a supported alternative. It loads the open driver, which the gVisor documentation covers, and it costs less (`g6.xlarge` 0.8048, `g6.2xlarge` 0.9776). To use it, change `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` (`HYPERPOD_*` for HyperPod) in `scripts/config.env`.
 
-!!! question "❓ Misconception: gVisor does not support T4"
-    The GPU list in the gVisor documentation includes T4, A100/A10G, L4 and H100, and says other GPUs of the same architectures will likely work. T4 (`g4dn`) has the same driver condition as `g5` (proprietary, GSP off), so the driver flavor is not a reason to exclude it. It has not been tested under gVisor in this repository, though, so it stays unverified. T4 is the Kata QEMU GPU on `g4dn.metal`.
+    !!! question "❓ Misconception: gVisor does not support T4"
+        The GPU list in the gVisor documentation includes T4, A100/A10G, L4 and H100, and says other GPUs of the same architectures will likely work. T4 (`g4dn`) has the same driver condition as `g5` (proprietary, GSP off), so the driver flavor is not a reason to exclude it. It has not been tested under gVisor in this repository, though, so it stays unverified. T4 is the Kata QEMU GPU on `g4dn.metal`.
 
-!!! question "❓ Misconception: the gVisor sandbox image needs the NVIDIA driver"
-    The kernel driver lives on the host and the container uses it through nvproxy, so the image only needs the CUDA user-space libraries (included in the PyTorch wheel). The GPU is the host's real A10G, not a virtual GPU.
+    !!! question "❓ Misconception: the gVisor sandbox image needs the NVIDIA driver"
+        The kernel driver lives on the host and the container uses it through nvproxy, so the image only needs the CUDA user-space libraries (included in the PyTorch wheel). The GPU is the host's real A10G, not a virtual GPU.
 
 ## Isolation strength and operating rules
 
-Despite the nvproxy ioctl allowlist, the gVisor documentation states that it is much less effective at mitigating vulnerabilities within the NVIDIA driver itself. Things like DMA buffers are not validated. So this setup treats the gVisor + GPU boundary as weaker than a VM boundary (Kata).
+??? note "Details"
+    Despite the nvproxy ioctl allowlist, the gVisor documentation states that it is much less effective at mitigating vulnerabilities within the NVIDIA driver itself. Things like DMA buffers are not validated. So this setup treats the gVisor + GPU boundary as weaker than a VM boundary (Kata).
 
-- **Do not share GPUs.** The GKE Sandbox documentation also advises against GPU time-sharing in sandbox pods, and this repository runs one A10G per node, one sandbox pod per GPU and one evaluation per pod at a time (503 when busy).
-- **Open the minimum driver capabilities.** The `compute,utility` setting above.
-- **Consider Kata when you need a stronger boundary.** See GPU passthrough in [03 Kata sandboxes](03_kata.md) or [02 Isolation runtimes](../concepts/02_isolation_runtimes.md).
+    - **Do not share GPUs.** The GKE Sandbox documentation also advises against GPU time-sharing in sandbox pods, and this repository runs one A10G per node, one sandbox pod per GPU and one evaluation per pod at a time (503 when busy).
+    - **Open the minimum driver capabilities.** The `compute,utility` setting above.
+    - **Consider Kata when you need a stronger boundary.** See GPU passthrough in [03 Kata sandboxes](03_kata.md) or [02 Isolation runtimes](../concepts/02_isolation_runtimes.md).
 
-!!! note "EKS isolated pods (Nitro Sandboxes)"
-    EKS isolated pods, launched on 2026-11-09 (`runtimeClassName: isolated-sandbox` and others, Kubernetes 1.36+), do not support GPU or device passthrough at launch, so treat them as a CPU-only managed alternative.
+    !!! note "EKS isolated pods (Nitro Sandboxes)"
+        EKS isolated pods, launched on 2026-11-09 (`runtimeClassName: isolated-sandbox` and others, Kubernetes 1.36+), do not support GPU or device passthrough at launch, so treat them as a CPU-only managed alternative.
 
 ## Scope and limits
 

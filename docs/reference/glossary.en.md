@@ -1,18 +1,9 @@
 # Glossary
 
 !!! info "TL;DR"
-    The isolation runtime, Kubernetes and AWS infrastructure, and RL terms of this guidebook, each explained in one or two sentences with a link to the page that uses it.
+    Terms are in alphabetical order. Each entry points to a page that uses the term.
 
-## Pain point
-
-Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms, and on-policy RL terms appear together on one page. Some words, such as "rollout" and "warm", mean different things in different contexts (see the ❓ misconception notes below). Definitions are scattered across the pages that first explained each term, so you have to find that page to learn what a word means.
-
-## Why
-
-- **rollout means different things by context.** In RL it is the step where the policy generates completions; in Kubernetes it is moving a Deployment to a new version.
-- **warm also has two meanings.** The production warm placeholder requests no GPU, while an Agent Sandbox SandboxWarmPool built from a GPU profile holds GPUs even while idle.
-
-**Before you start:** nothing. Entries are in alphabetical order of the English term, and "Used in" at the end of each entry is the page that covers the term in detail.
+In RL, a rollout generates answers. In Kubernetes, a rollout updates a deployment. See [W](#w) for how warm pools and warm placeholders use GPU capacity.
 
 ## A
 

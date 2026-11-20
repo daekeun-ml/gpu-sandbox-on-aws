@@ -1,27 +1,9 @@
 # 99 Cleanup
 
 !!! info "TL;DR"
-    GPU nodes are billed until you delete them, so delete what you used in this order: the Agent Sandbox extension and the demo site, HyperPod, then the EKS cluster (CDK stack), and query what is left (for a short break, scale the node groups to zero).
+    Delete resources in dependency order. If you used HyperPod, delete it before the EKS stack.
 
-## Pain point
-
-`g4dn.metal` costs 7.824 USD per hour, so a single forgotten node group costs about 188 USD per day (us-east-1 and us-west-2 On-Demand).
-
-- **HyperPod**: it uses the EKS cluster as its orchestrator, so the cleanup script assumes HyperPod is deleted first.
-- **Agent Sandbox warm pool**: GPU sandboxes in it hold their GPU even while idle.
-- **Demo site**: it is a separate CloudFormation stack that `08_cleanup.sh` does not delete.
-- **Resources outside the CDK stack**: AMIs and snapshots, ECR images, HyperPod's S3 bucket and IAM role, and the CDK bootstrap stack also remain after the CDK stack is gone.
-
-![Two panels. a: deleting the CDK stack (cdk destroy) removes only the cluster, node groups, VPC and NAT gateway, while AMIs and snapshots, ECR images, the HyperPod S3 bucket and IAM role, the demo site stack and the CDK bootstrap stack (CDKToolkit) remain. b: 08_cleanup.sh deletes the CDK stack after you type the cluster name and the AMIs, snapshots and, with --images, ECR images after you type ami and images; hyperpod/delete.sh deletes the S3 bucket and IAM role after you type the HyperPod name and bucket; demo/teardown.sh deletes the demo site stack after you type the stack name; CDKToolkit is deleted by hand only for an account you retire.](../images/figures/handson-99_cleanup.svg)
-
-*Takeaway: The CDK stack deletes only what it created, so images, buckets, roles and other stacks outside it stay behind, and the AMIs, ECR images, HyperPod resources and demo stack outside it are deleted by their own scripts, while CDKToolkit stays for the next deployment.*
-
-
-## Why
-
-- **Every step asks for a confirmation word.** This reduces the chance of deleting the wrong cluster or stack.
-- **Each thing you created has its own delete command.** The extension, the demo, HyperPod and the cluster go separately, so it is clear what each removes, and the infrastructure is one CDK stack, so one `cdk destroy` is enough.
-- **The remaining instances are listed at the end.** A table shows any instance still tagged `project=gpu-sandbox-on-aws`.
+    **Completion check** Check for remaining stacks, instances, and resources created outside the stack.
 
 **Before you start:** check what you created. The cluster and images come from [01 Cluster and images](01_cluster_and_images.md), HyperPod from [07 HyperPod scenario](07_hyperpod.md), the demo site from [09 Demo site (CloudFront)](09_demo_site.md), and the Agent Sandbox extension from [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
 
@@ -262,6 +244,8 @@ Keep the following in mind while you pause.
     These commands do not stop HyperPod instances either. The `CreateCluster` API allows 0 as the minimum `InstanceCount` of an instance group, but this repository neither scripts nor verifies that path, so when you are not using HyperPod, deleting it with `hyperpod/delete.sh` is the recommended option.
 
 ## 3. Check what remains
+
+After deletion, query the account for remaining resources. Check separately created deployments such as HyperPod and the demo site, along with AMIs and snapshots.
 
 ### Instances
 

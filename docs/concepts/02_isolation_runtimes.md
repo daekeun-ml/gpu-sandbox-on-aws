@@ -23,7 +23,15 @@
 
 GPU를 작은 VM에 직접 연결하고 VM 안의 NVIDIA 드라이버가 장치를 제어합니다. 이 저장소의 x86 GPU 실습에서는 T4가 있는 `g4dn.metal`을 씁니다. CPU만 쓰는 Kata는 `c8i`의 중첩 가상화로 실습할 수 있습니다.
 
-![gVisor는 노드 드라이버로 GPU 요청을 전달하고, Kata의 VM은 연결된 GPU를 자체 드라이버로 사용합니다.](../images/figures/concepts-02_isolation_runtimes--gpu-paths.svg)
+![gVisor는 노드 드라이버로 GPU 요청을 전달하고, Kata의 VM은 연결된 GPU를 자체 드라이버로 사용합니다.](../images/figures/concepts-02_isolation_runtimes--gpu-paths.ko.svg)
+
+GPU **passthrough**는 물리 GPU를 VM에 직접 할당하는 방식입니다. Linux의 **VFIO**는 VM이 그 장치를 사용할 수 있게 하고, **IOMMU**는 GPU가 직접 접근할 수 있는 메모리 범위를 제한합니다. CPU 전용 Kata는 GPU를 직접 할당하지 않으므로, 지원되는 EC2 VM에서 **nested virtualization**을 켜 VM 안에 Kata VM을 띄울 수 있습니다.
+
+## 격리 경계와 운영 조건
+
+파일 요청을 가로채는 위치와 GPU 드라이버가 실행되는 위치를 함께 보세요. gVisor는 Sentry를 거치지만 GPU 요청 일부는 노드 드라이버에 도달합니다. 그래서 이미지가 같아도 노드의 드라이버를 바꾸면 GPU 실행 여부가 달라질 수 있습니다. Kata에서는 드라이버를 VM 안에 둡니다. 대신 VM이 쓸 메모리를 확보하고 장치를 직접 할당해야 합니다.
+
+QEMU와 Cloud Hypervisor는 Kata가 VM을 시작할 때 쓰는 **hypervisor**입니다. 이 저장소에서 검증한 Kata GPU 경로는 QEMU이고, Cloud Hypervisor는 CPU 실습에 사용합니다. 각 방식의 배포 가능 여부는 GPU 모델과 노드 조건을 아래 표에서 함께 확인하세요.
 
 ## AWS에서 각 런타임을 실행할 수 있는 위치
 
@@ -55,7 +63,7 @@ GPU를 작은 VM에 직접 연결하고 VM 안의 NVIDIA 드라이버가 장치�
     | 항목 | QEMU | Cloud Hypervisor (CLH) |
     |---|---|---|
     | CPU 샌드박스 | 지원 (`kata-qemu`) | 지원 (`kata-clh`) |
-    | GPU passthrough | upstream 지원 (`kata-qemu-nvidia-gpu`) | upstream 미지원. 이 저장소은 실험용 `kata-clh-nvidia-gpu`만 제공 |
+    | GPU passthrough | upstream 지원 (`kata-qemu-nvidia-gpu`) | upstream 미지원. 이 저장소는 실험용 `kata-clh-nvidia-gpu`만 제공 |
     | RuntimeClass `overhead.podFixed` (Kata 4.3.1) | 320Mi, 250m. GPU class는 10240Mi, 1 CPU | 130Mi, 250m. 실험용 `kata-clh-nvidia-gpu`는 10240Mi, 1 CPU |
     | boot to workload (Kata metrics CI, 3.28.0) | 0.71 s | 0.39 s |
 
@@ -68,7 +76,7 @@ GPU를 작은 VM에 직접 연결하고 VM 안의 NVIDIA 드라이버가 장치�
     - **Go `kata-clh` shim**: 3.29.0부터 VFIO cold-plug 코드가 있지만, upstream 테스트가 없고 배포 설정에서는 비활성화돼 있습니다.
     - **runtime-rs**: CLH 설정에는 VFIO 키가 없습니다.
 
-    그래서 Kata에서 upstream이 GPU를 지원하는 hypervisor는 QEMU뿐입니다. 이 저장소은 CLH + GPU를 `infra/kata/experimental-clh-gpu/`에서 평가용(CI 없음)으로만 제공합니다. CLH는 CPU 샌드박스에서는 지원되며, CPU 계층(`kata-clh-cpu` 프로필)이 이 조합을 사용합니다.
+    그래서 Kata에서 upstream이 GPU를 지원하는 hypervisor는 QEMU뿐입니다. 이 저장소는 CLH + GPU를 `infra/kata/experimental-clh-gpu/`에서 평가용(CI 없음)으로만 제공합니다. CLH는 CPU 샌드박스에서는 지원되며, CPU 계층(`kata-clh-cpu` 프로필)이 이 조합을 사용합니다.
 
     !!! warning "오버헤드 수치를 읽는 법"
         - **위 boot 시간**: Kata metrics CI(3.28.0)가 서로 다른 머신에서 넓은 허용 오차로 측정한 값이며 AWS 측정값이 아닙니다.

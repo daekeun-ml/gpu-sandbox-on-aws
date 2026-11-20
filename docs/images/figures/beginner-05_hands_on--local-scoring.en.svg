@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760px" height="204px" viewBox="0 0 760 204" role="img" aria-labelledby="title desc">
+  <title id="title">Local grading test</title>
+  <desc id="desc">pytest sends prepared answers to two CPU servers and checks their verdicts against expectations and each other.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 10 5 0 10Z" fill="#1d4e9e"/>
+    </marker>
+  </defs>
+  <rect width="760" height="204" rx="14" fill="#fff"/>
+  <g font-family="system-ui, 'Noto Sans KR', 'NanumGothic', sans-serif" text-anchor="middle" fill="#18263b">
+    <rect x="24" y="28" width="192" height="148" rx="12" fill="#f5f7fb" stroke="#909fb3"/>
+    <rect x="284" y="28" width="192" height="148" rx="12" fill="#edf4ff" stroke="#3765a8"/>
+    <rect x="544" y="28" width="192" height="148" rx="12" fill="#f5f7fb" stroke="#909fb3"/>
+    <g font-size="22" font-weight="700">
+      <text x="120" y="78">Test submissions</text><text x="380" y="78">CPU graders</text><text x="640" y="78">pytest checks</text>
+    </g>
+    <g font-size="17">
+      <text x="120" y="112">Mixed outcomes</text><text x="120" y="137">Known verdicts</text>
+      <text x="380" y="112">Two local servers</text><text x="380" y="137">Return a verdict</text>
+      <text x="640" y="112">Match expectations</text><text x="640" y="137">Compare the servers</text>
+    </g>
+    <g fill="none" stroke="#1d4e9e" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M226 102 H274"/><path d="M486 102 H534"/>
+    </g>
+  </g>
+</svg>

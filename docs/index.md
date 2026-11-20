@@ -32,7 +32,7 @@
 - **gVisor와 Kata**: GPU를 연결하는 방식이 서로 달라서 쓸 수 있는 AWS 인스턴스부터 확인해야 합니다.
 - **학습 도중 버전을 고칠 때**: 며칠씩 진행되는 on-policy 학습 도중 샌드박스 이미지나 채점 harness를 고치다가 같은 GRPO group 안에 버전이 섞이면 advantage가 잘못 계산됩니다.
 
-![a: 서로 다른 두 문제입니다. 위 줄에서는 policy가 쓴 커널 코드가 runc 컨테이너에서 실행되어 host 커널과 GPU 드라이버를 그대로 공유합니다. 아래 줄에서는 학습 중에 이미지나 harness를 바꾸면, 런타임과 관계없이 한 GRPO group 안에 v1과 v2의 reward가 섞여 advantage가 잘못 계산됩니다. b: 위 줄은 RuntimeClass로 선택한 gVisor 또는 Kata가 코드와 host 커널 사이에 들어갑니다. 아래 줄은 배치(또는 group) 단위로 한 버전만 채점하므로 reward가 일관되게 유지됩니다.](images/figures/index.svg)
+![a: 서로 다른 두 문제입니다. 위 줄에서는 policy가 쓴 커널 코드가 runc 컨테이너에서 실행되어 host 커널과 GPU 드라이버를 그대로 공유합니다. 아래 줄에서는 학습 중에 이미지나 harness를 바꾸면, 런타임과 관계없이 한 GRPO group 안에 v1과 v2의 reward가 섞여 advantage가 잘못 계산됩니다. b: 위 줄은 RuntimeClass로 선택한 gVisor 또는 Kata가 코드와 host 커널 사이에 들어갑니다. 아래 줄은 배치(또는 group) 단위로 한 버전만 채점하므로 reward가 일관되게 유지됩니다.](images/figures/index.ko.svg)
 
 *그림 요약: (a) 일반 컨테이너에서는 모델이 쓴 코드가 host 커널과 드라이버를 공유합니다. 이와 별개로, 학습 중 버전을 바꾸면 런타임과 관계없이 두 버전의 reward가 한 group에 섞일 수 있습니다. (b) RuntimeClass로 고른 gVisor나 Kata가 코드와 host 커널 사이에 들어가고, trainer는 배치(또는 group)마다 한 버전의 풀로 채점합니다.*
 
@@ -47,7 +47,7 @@
 
 ### 만드는 것
 
-![왼쪽은 학습 노드(EC2 GPU 노드 또는 HyperPod 노드)이고, 그 안에서 policy 모델과 vLLM이 GRPO로 on-policy 학습을 합니다(g5.2xlarge 또는 ml.g5.2xlarge). 오른쪽은 EC2 노드의 샌드박스 풀입니다. gVisor + nvproxy(g5.xlarge, A10G), Kata + QEMU(g4dn.metal, T4), Kata + Cloud Hypervisor(CPU 계층, c8i, nested virt, GPU는 실험적)의 세 풀이 같은 이미지를 쓰고, 풀마다 프로필이 RuntimeClass와 노드를 정합니다. 커널 코드는 group 단위로 버전을 고정해 풀로 보내고, 풀은 정확성과 speedup을 돌려줍니다.](images/figures/index--what-we-build.svg)
+![왼쪽은 학습 노드(EC2 GPU 노드 또는 HyperPod 노드)이고, 그 안에서 policy 모델과 vLLM이 GRPO로 on-policy 학습을 합니다(g5.2xlarge 또는 ml.g5.2xlarge). 오른쪽은 EC2 노드의 샌드박스 풀입니다. gVisor + nvproxy(g5.xlarge, A10G), Kata + QEMU(g4dn.metal, T4), Kata + Cloud Hypervisor(CPU 계층, c8i, nested virt, GPU는 실험적)의 세 풀이 같은 이미지를 쓰고, 풀마다 프로필이 RuntimeClass와 노드를 정합니다. 커널 코드는 group 단위로 버전을 고정해 풀로 보내고, 풀은 정확성과 speedup을 돌려줍니다.](images/figures/index--what-we-build.ko.svg)
 
 *그림 요약: policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 선택한 런타임의 샌드박스 풀에 전달되고, 풀이 측정한 정확성과 speedup이 reward로 쓰입니다. GPU 채점은 gVisor와 Kata + QEMU 풀이 맡고, Kata + Cloud Hypervisor는 기본적으로 CPU에서 실행합니다.*
 

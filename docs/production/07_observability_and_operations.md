@@ -11,12 +11,12 @@
 - **풀의 Ready pod가 줄어도**: Ready가 아닌 pod는 headless Service DNS에서 제외될 뿐이므로, 남은 pod로 요청이 몰려 step만 느려집니다.
 - **reward hacking이 일어날 때**: reward 값은 오히려 올라갑니다. 이를 알려 주는 flag(`implausible_speedup`, `timed_output_mismatch` 등)는 verdict에만 기록되고 지표로 집계되지 않습니다.
 
-![a: 인증 실패(401 응답이 대량으로 발생)가 나면 sandbox_error 샘플이 None으로 제외되고 그 샘플의 advantage는 0이 됩니다. 모든 샘플이 제외되면 학습 신호 없이 step만 진행됩니다. 풀이 줄면 Ready가 아닌 pod가 DNS에서 빠지고 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking은 flag가 verdict에만 기록되고 지표로 집계되지 않아 reward가 오르는 것처럼 보입니다. 세 경우 모두 학습은 멈추지 않습니다. b: 같은 세 고장을 각각 경보에 연결합니다. status.sandbox_error / n으로 sandbox_error 비율 경보(TRL 5% 초과, 3 batch 연속)를, 활성 풀 Deployment별 available과 desired replicas 비교로 Ready pod 부족 경보(available이 desired 미만인 상태 10분)를, flag 개수(저장소에 없는 확장, 점선)로 reward hacking 신호 경보(flag 비율 상승 추세)를 만듭니다.](../images/figures/production-07_observability_and_operations.svg)
+![a: 인증 실패(401 응답이 대량으로 발생)가 나면 sandbox_error 샘플이 None으로 제외되고 그 샘플의 advantage는 0이 됩니다. 모든 샘플이 제외되면 학습 신호 없이 step만 진행됩니다. 풀이 줄면 Ready가 아닌 pod가 DNS에서 빠지고 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking은 flag가 verdict에만 기록되고 지표로 집계되지 않아 reward가 오르는 것처럼 보입니다. 세 경우 모두 학습은 멈추지 않습니다. b: 같은 세 고장을 각각 경보에 연결합니다. status.sandbox_error / n으로 sandbox_error 비율 경보(TRL 5% 초과, 3 batch 연속)를, 활성 풀 Deployment별 available과 desired replicas 비교로 Ready pod 부족 경보(available이 desired 미만인 상태 10분)를, flag 개수(저장소에 없는 확장, 점선)로 reward hacking 신호 경보(flag 비율 상승 추세)를 만듭니다.](../images/figures/production-07_observability_and_operations.ko.svg)
 
 *그림 요약: 샌드박스 쪽 고장이 나도 학습은 멈추지 않습니다. 모든 샘플이 채점 불가가 되면 학습 신호 없이 step만 진행되고, 풀이 줄면 step이 느려지며, reward hacking이 일어나면 reward가 실제보다 좋아 보입니다. 세 고장은 각각 `sandbox_error` 비율, Ready pod 수, flag 개수 경보로 잡습니다.*
 
 
-## 어느 로그에서 무엇을 볼까요?
+## 계층별 로그와 지표
 
 - **세 계층을 함께 모니터링합니다.** 샌드박스 pod(평가 하나), gateway(스케줄과 버전 고정), trainer(reward batch와 step)가 각각 다른 범위의 상태를 보고합니다.
 - **지표 엔드포인트도 인증합니다.** `/metrics`도 `/v1/evaluate`와 같은 토큰 검증을 거치며, 인증 없이 호출할 수 있는 경로는 kubelet probe용 `/healthz`, `/readyz`뿐입니다.
@@ -226,6 +226,8 @@ fields @timestamp, @message
 어떤 수집기를 쓰든 위의 인증과 NetworkPolicy 조건은 같습니다. CloudWatch agent도 allowlist에 등록된 주체의 토큰이 있어야 `/metrics`를 읽을 수 있습니다.
 
 ## 운영 런북
+
+학습 step이 계속되면 먼저 trainer 로그에서 `sandbox_error` 비율을 봅니다. 비율이 늘었다면 gateway의 대기와 샌드박스의 Ready 상태를 대조해, 답이 틀린 경우와 답을 채점하지 못한 경우를 구분하세요.
 
 | 증상 | 가능한 원인 | 조치 |
 |---|---|---|

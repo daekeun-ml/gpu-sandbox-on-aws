@@ -1,26 +1,9 @@
 # 11 Multi-turn episodes
 
 !!! info "TL;DR"
-    Without a GPU or a model, create an Agent Sandbox warm pool on the scenario C `c8i.2xlarge` node and run multi-turn episodes that submit golden submissions in a fixed order. Read the event log to confirm that each episode is assigned one sandbox and releases it when the episode ends (compute about 0.57 USD per hour, estimate, On-Demand pricing).
+    Assign one sandbox from a warm pool to each episode. The same sandbox handles all turns, and the scoring server clears its working directory after each submission.
 
-## Pain points
-
-A reward pool picks a free pod for every request, so the turns of one episode can be graded on different pods.
-
-- **After each request**: the server removes that request's work directory and leftover processes.
-- **A new sandbox per episode**: it means waiting until it is Ready, and a Kata GPU VM can take minutes to reach its first Ready (deployment template comment).
-- **If you first try this on a GPU warm pool**: every waiting sandbox holds one GPU even while it evaluates nothing, and you pay for that GPU time.
-
-![Two panels. a without per-episode sandboxes: in one episode the turn 1 submission goes to pod A of the reward pool (Deployment) and the revised turn 2 submission to pod B, and both pods clear the request's work directory and leftover processes after each request. On the dashed red path, a new sandbox per episode means waiting for Ready, which can take minutes for a Kata GPU VM. b Agent Sandbox in scenario C: on the c8i.2xlarge node (nested virtualization) the SandboxWarmPool kernel-eval-gvisor-cpu keeps 2 sandboxes waiting. The Job episodes in the rl-trainer namespace (ServiceAccount sandbox-episode) creates one SandboxClaim per episode (1) and gets one waiting sandbox assigned (2). The Job submits turns 1, 2 and 3 to that sandbox (3) and gets each verdict back as feedback (4); the turns are graded on the same pod, but the work directory is removed after each submission. When the episode ends the Job deletes the claim (5), and the sandbox is deleted with it.](../images/figures/handson-11_multi_turn.svg)
-
-*Takeaway: In a reward pool the turns of one episode can be graded on different pods, and the working directory and leftover processes are cleaned up after every request. In scenario C the Job claims one gvisor-cpu sandbox from the warm pool per episode, sends turns 1, 2 and 3 to it, and deletes the claim when the episode ends.*
-
-
-## Why
-
-- **The whole multi-turn path at the lowest cost.** Without a GPU or a model you run every part: controller install, warm pool, claim, turns and release. The sandbox server, authentication and NetworkPolicy are the same as on the GPU path. Being a CPU profile, it differs in the RuntimeClass, the node, the resources (no accelerator), `device=cpu` and the input size (`SANDBOX_SIZE=smoke`).
-- **The episode lifecycle in events.** The `episode_start`, `turn`, `episode_end` and `multiturn_summary` events that the Job prints record the claim, sandbox, pod and reward.
-- **Multi-turn and single-turn under the same conditions.** Only `max_turns` changes (3, then 1) on the same warm pool with the same submission order, so the episode reward and the first turn's reward compare directly.
+    **Completion check** Check that the turns share one sandbox and that the claim is deleted at episode end.
 
 **Before you start:** you need the scenario C cluster from [10 CPU-only path on c8i](10_cpu_only.md); the concepts are in [Beginner 06 Multi-turn agents and Agent Sandbox](../beginner/06_multi_turn_agent.md) and [Concepts 06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
 
@@ -41,43 +24,46 @@ A reward pool picks a free pod for every request, so the turns of one episode ca
 
 ## One episode, step by step
 
-The Job `episodes-<unix time>` runs in the `rl-trainer` namespace as the ServiceAccount `sandbox-episode` and runs its episodes one after another. One episode goes like this.
+The runner creates a claim, sends each turn to the same sandbox, and deletes the claim at episode end.
 
-```mermaid
-sequenceDiagram
-    participant J as Job episodes (rl-trainer)
-    participant API as Kubernetes API and agent-sandbox controller
-    participant P as SandboxWarmPool kernel-eval-gvisor-cpu
-    participant S as assigned sandbox (gvisor-cpu)
-    J->>API: create SandboxClaim (warmPoolRef, shutdownTime)
-    API->>P: assign one waiting sandbox to the claim
-    P->>P: start a new sandbox to keep replicas
-    API-->>J: claim Ready, status.sandbox.serviceFQDN
-    J->>S: GET /info (runtime, version, pod)
-    loop from turn 1 up to max_turns
-        J->>S: POST /v1/evaluate (audience token)
-        S-->>J: verdict
-        J->>J: write feedback, check stop condition
-    end
-    J->>API: delete SandboxClaim
-    API->>S: delete sandbox and pod
-```
+??? note "Details"
+    The Job `episodes-<unix time>` runs in the `rl-trainer` namespace as the ServiceAccount `sandbox-episode` and runs its episodes one after another. One episode goes like this.
 
-*Takeaway: one episode takes one sandbox through one claim, sends every turn to that sandbox and deletes the claim at the end. The next episode gets another sandbox through a new claim.*
+    ```mermaid
+    sequenceDiagram
+        participant J as Job episodes (rl-trainer)
+        participant API as Kubernetes API and agent-sandbox controller
+        participant P as SandboxWarmPool kernel-eval-gvisor-cpu
+        participant S as assigned sandbox (gvisor-cpu)
+        J->>API: create SandboxClaim (warmPoolRef, shutdownTime)
+        API->>P: assign one waiting sandbox to the claim
+        P->>P: start a new sandbox to keep replicas
+        API-->>J: claim Ready, status.sandbox.serviceFQDN
+        J->>S: GET /info (runtime, version, pod)
+        loop from turn 1 up to max_turns
+            J->>S: POST /v1/evaluate (audience token)
+            S-->>J: verdict
+            J->>J: write feedback, check stop condition
+        end
+        J->>API: delete SandboxClaim
+        API->>S: delete sandbox and pod
+    ```
 
-An episode ends on any of these.
+    *Takeaway: one episode takes one sandbox through one claim, sends every turn to that sandbox and deletes the claim at the end. The next episode gets another sandbox through a new claim.*
 
-- The kernel is solved (`solved`)
-- After `max_turns` submissions
-- On a `sandbox_error` verdict. An episode that ends on `sandbox_error` has the reward `None` and is left out of the means.
+    An episode ends on any of these.
 
-| Component | In this lab | File |
-|---|---|---|
-| Job `episodes-<unix time>` | namespace `rl-trainer`, ServiceAccount `sandbox-episode`. A Kubernetes API token is mounted only in this Job's pod, next to the sandbox-audience token and the label `gpusandbox/client=true` | `k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl` |
-| ServiceAccount `sandbox-episode` | token automount is off by default | `k8s/base/trainer-rbac.yaml` |
-| Role and RoleBinding `sandbox-claims` | only create, get, list, watch and delete on `sandboxclaims` in the `sandbox` namespace | `k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml` |
-| SandboxTemplate and SandboxWarmPool `kernel-eval-gvisor-cpu` | profile `gvisor-cpu` (1 CPU, 2Gi of memory, c8i node). Ingress only from `gpusandbox/client=true` pods in `rl-trainer` on TCP 8000; all egress denied | `k8s/extensions/agent-sandbox/template.yaml.tpl` |
-| Episode runner | `python -m gpusandbox.tools multiturn`. Claims through `EpisodeSandbox` per episode and calls `/v1/evaluate` per turn | `src/gpusandbox/multiturn.py`, `src/gpusandbox/agent_sandbox.py`, `src/gpusandbox/tools.py` |
+    - The kernel is solved (`solved`)
+    - After `max_turns` submissions
+    - On a `sandbox_error` verdict. An episode that ends on `sandbox_error` has the reward `None` and is left out of the means.
+
+    | Component | In this lab | File |
+    |---|---|---|
+    | Job `episodes-<unix time>` | namespace `rl-trainer`, ServiceAccount `sandbox-episode`. A Kubernetes API token is mounted only in this Job's pod, next to the sandbox-audience token and the label `gpusandbox/client=true` | `k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl` |
+    | ServiceAccount `sandbox-episode` | token automount is off by default | `k8s/base/trainer-rbac.yaml` |
+    | Role and RoleBinding `sandbox-claims` | only create, get, list, watch and delete on `sandboxclaims` in the `sandbox` namespace | `k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml` |
+    | SandboxTemplate and SandboxWarmPool `kernel-eval-gvisor-cpu` | profile `gvisor-cpu` (1 CPU, 2Gi of memory, c8i node). Ingress only from `gpusandbox/client=true` pods in `rl-trainer` on TCP 8000; all egress denied | `k8s/extensions/agent-sandbox/template.yaml.tpl` |
+    | Episode runner | `python -m gpusandbox.tools multiturn`. Claims through `EpisodeSandbox` per episode and calls `/v1/evaluate` per turn | `src/gpusandbox/multiturn.py`, `src/gpusandbox/agent_sandbox.py`, `src/gpusandbox/tools.py` |
 
 ## Preparation
 
@@ -276,6 +262,8 @@ The CLI exits with 1 in these cases.
 - **Stopping the script with Ctrl-C**: it does not stop the Job, which keeps running in the cluster and deletes each episode's claim. If the Job's pod was killed and claims were left, delete them with `kubectl -n sandbox delete sandboxclaim -l gpusandbox/run=<Job name>`. Otherwise they expire at `shutdownTime` (3600 seconds after creation).
 
 ## Step 4: Single-turn baseline (`episodes gvisor-cpu 2 1`)
+
+The preceding exercise checks that turns share a claim and end with `released: true`. This baseline keeps the same submission sequence and stops after the first turn.
 
 Run the same warm pool again with `max_turns` set to 1. The sandboxes claimed in step 3 were deleted, so wait until `readyReplicas` is back at the warm count (2 by default, 1 if you ran `pool gvisor-cpu 1`).
 

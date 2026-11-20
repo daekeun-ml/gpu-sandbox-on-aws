@@ -11,7 +11,7 @@
 - **7B 모델의 메모리**: `Qwen/Qwen2.5-Coder-7B-Instruct`는 파라미터가 약 7.6B라 bf16 가중치만 약 15 GB입니다. 생성과 학습을 한 GPU에서 실행하는 colocate 방식으로는 메모리 여유가 거의 없습니다.
 - **여러 GPU에서의 reward 호출**: 여러 GPU로 옮기면 reward 호출 방식도 달라집니다. veRL은 샘플을 하나씩 채점해서 TRL처럼 batch 전체를 한 버전으로 채점할 수 없습니다.
 
-![a: trainer A10G 한 장(24 GB)의 vLLM 생성, 별도 샌드박스 GPU의 reward 채점, trainer의 업데이트가 차례로 이어집니다. 샌드박스를 부를 때마다 routing snapshot 하나를 잡으므로 한 batch는 한 버전으로 채점됩니다. GPU 메모리 24 GB 가운데 7B bf16 가중치만 약 15 GB를 차지합니다. b: RayCluster verl(rl-trainer)의 GPU worker(actor, vLLM rollout, reward worker) ×N이 샘플마다 POST /v1/evaluate 요청에 group_key를 붙여 sandbox gateway로 보냅니다. gateway가 group_key마다 버전을 고정하므로, 같은 group은 같은 버전의 샌드박스 풀(runtime별, version별)에서 채점됩니다.](../images/figures/production-06_scaling_with_verl.svg)
+![a: trainer A10G 한 장(24 GB)의 vLLM 생성, 별도 샌드박스 GPU의 reward 채점, trainer의 업데이트가 차례로 이어집니다. 샌드박스를 부를 때마다 routing snapshot 하나를 잡으므로 한 batch는 한 버전으로 채점됩니다. GPU 메모리 24 GB 가운데 7B bf16 가중치만 약 15 GB를 차지합니다. b: RayCluster verl(rl-trainer)의 GPU worker(actor, vLLM rollout, reward worker) ×N이 샘플마다 POST /v1/evaluate 요청에 group_key를 붙여 sandbox gateway로 보냅니다. gateway가 group_key마다 버전을 고정하므로, 같은 group은 같은 버전의 샌드박스 풀(runtime별, version별)에서 채점됩니다.](../images/figures/production-06_scaling_with_verl.ko.svg)
 
 *그림 요약: trainer GPU 한 장으로는 생성, 샌드박스 채점, 업데이트가 차례로 이어져 step이 길고, 7B 가중치를 올리면 메모리 여유가 거의 없습니다. 여러 GPU로 확장하면 샘플마다 채점 요청을 보내므로, reward 함수가 group_key를 붙이고 gateway가 group마다 버전을 고정합니다.*
 
@@ -36,6 +36,8 @@
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ## TRL 경로와 veRL 경로
+
+여러 worker로 확장하면 같은 문제의 답들이 서로 다른 요청으로 들어올 수 있습니다. veRL 경로에서는 `group_key`로 묶음을 구분하고, gateway가 그 묶음에 같은 채점 버전을 유지합니다. 처리량과 채점 버전 일관성을 각각 확인하세요.
 
 | 항목 | TRL (핸즈온) | veRL (Production) |
 |---|---|---|

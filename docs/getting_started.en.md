@@ -3,11 +3,11 @@
 !!! info "TL;DR"
     Check the plumbing on a local CPU machine without AWS first, then fill in `scripts/config.env` and pick a scenario.
 
-## Pain point
+## Before starting GPU nodes
 
-If an import error or a missing setting shows up only after the GPU nodes are running, the nodes keep billing while you fix it. Some of the values the scripts read (image URIs, AMI IDs) only exist after an earlier step has finished. EC2 only, HyperPod attached, or the production setup also each runs a different set of scripts.
+Use the local CPU test to check installation and scoring first. Then choose an AWS path. Later steps use image URIs and AMI IDs produced by earlier commands.
 
-![a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 109 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing](images/figures/getting_started.svg)
+![a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 109 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing](images/figures/getting_started.en.svg)
 
 *Takeaway: (a) starts the GPU nodes first. (b) runs pytest and the dry run on a local CPU, fills in the settings file and picks a path. The AWS nodes start after that, and scenario C runs CPU sandboxes with no GPU node.*
 

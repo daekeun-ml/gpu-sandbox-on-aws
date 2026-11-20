@@ -326,6 +326,8 @@ kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '"event
 
 ## 확인 방법
 
+HyperPod 클러스터가 `InService`가 되면 인스턴스가 준비된 것입니다. 학습까지 확인하려면 trainer pod가 HyperPod 노드에 배치됐는지, 이어서 `routing`과 평가 결과가 로그에 남는지 보세요.
+
 1. `hyperpod/create.sh`의 마지막 표에서 HyperPod 노드의 `node-health-status`가 `Schedulable`이고 instance type이 `ml.g5.2xlarge`입니다.
 2. HyperPod 클러스터의 상태와 실패 메시지를 확인합니다.
 

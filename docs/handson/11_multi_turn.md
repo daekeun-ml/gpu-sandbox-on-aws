@@ -263,6 +263,8 @@ CLI는 다음 경우에 종료 코드 1로 끝납니다.
 
 ## 4단계: single-turn 기준선 (`episodes gvisor-cpu 2 1`)
 
+3단계에서는 동일 에피소드의 `claim`이 턴마다 유지되고, 종료 시 `released: true`가 나오는지 확인했습니다. 아래 기준선은 같은 제출 순서에서 턴 수만 하나로 제한해 첫 답에서 멈췄을 때의 결과를 보여 줍니다.
+
 같은 warm pool에서 `max_turns`만 1로 바꿔 실행합니다. 3단계에서 claim된 샌드박스는 삭제되었으므로, `readyReplicas`가 다시 대기 수(기본 2, `pool gvisor-cpu 1`로 줄였다면 1)가 된 뒤 실행하세요.
 
 ```bash

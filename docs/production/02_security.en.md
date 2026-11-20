@@ -11,12 +11,12 @@
 - **Node IP exception**: the VPC CNI allows traffic to the pod's own node IP regardless of policy.
 - **Consecutive evaluations in the same pod**: they can inherit leftover processes, caches and GPU state.
 
-![a: candidate code in an unhardened runc pod shares the host kernel and NVIDIA driver directly, reads the ServiceAccount token and secrets in the pod, reaches node-local services on its own node IP, which is allowed regardless of NetworkPolicy, and passes leftover processes, caches and GPU state to the next evaluation in the same pod. b: in a sandbox pod (gVisor or Kata) the first three paths are stopped by gVisor Sentry or a Kata VM (gVisor still shares the host driver), no token or secrets mounted, and the node guard, which readiness checks. The path to the next evaluation is only narrowed by process reaping and per-request caches (dashed): v1 turns pod recycling off, and under gVisor a new pod still uses the same host driver and GPU](../images/figures/production-02_security.svg)
+![a: candidate code in an unhardened runc pod shares the host kernel and NVIDIA driver directly, reads the ServiceAccount token and secrets in the pod, reaches node-local services on its own node IP, which is allowed regardless of NetworkPolicy, and passes leftover processes, caches and GPU state to the next evaluation in the same pod. b: in a sandbox pod (gVisor or Kata) the first three paths are stopped by gVisor Sentry or a Kata VM (gVisor still shares the host driver), no token or secrets mounted, and the node guard, which readiness checks. The path to the next evaluation is only narrowed by process reaping and per-request caches (dashed): v1 turns pod recycling off, and under gVisor a new pod still uses the same host driver and GPU](../images/figures/production-02_security.en.svg)
 
 *Takeaway: Candidate code in an unhardened runc pod can reach the host kernel and driver, the credentials in the pod, its own node and the next evaluation, and in a sandbox pod each layer closes one of these paths. Process reaping and per-request caches narrow the path to the next evaluation, but under gVisor a new pod still uses the same host driver and GPU, and v1 turns pod recycling off.*
 
 
-## Controls at each boundary
+## Defense summary
 
 - **Each layer stops a different failure.** The runtime protects the kernel, NetworkPolicy closes the exits, the node guard covers the VPC CNI node-IP exception, and a pod becomes Ready only after it has checked that egress is actually blocked.
 - **What is not there cannot be stolen.** Sandbox pods get no API token and no secrets.
@@ -37,6 +37,8 @@
 
 ## Threat model
 
+Check what files a submission can reach, where it can connect, and which callers can reach the evaluation API. Runtime isolation, network policy, and token verification control different boundaries.
+
 The attacker is the policy being trained. Even without malice, a policy searching for higher reward can produce dangerous code, and a poisoned prompt or dataset can bring in deliberately hostile code.
 
 | Asset | Threat | Main controls |
@@ -47,7 +49,7 @@ The attacker is the policy being trained. Even without malice, a policy searchin
 | Other tenants and the next evaluation | Leftover processes, cache poisoning, GPU state | Process reaping, per-request caches, pod recycling, GPU reset on VFIO release (Kata) |
 | Reward integrity | Gaming the measurement | Two-process harness and static policy ([04 Reward integrity](04_reward_integrity.md)) |
 
-![Candidate code written by the policy in training sits inside five nested layers of controls. From the inside out: child process (env allowlist, per-request caches, timeout), pod (non-root, read-only root FS, no capabilities, no token), runtime (gVisor Sentry or Kata VM, highlighted as the isolation boundary), node (dedicated taint, node guard, IMDS hop 1) and network (default deny, gateway-only ingress)](../images/figures/production-02_security--threat-model.svg)
+![Candidate code written by the policy in training sits inside five nested layers of controls. From the inside out: child process (env allowlist, per-request caches, timeout), pod (non-root, read-only root FS, no capabilities, no token), runtime (gVisor Sentry or Kata VM, highlighted as the isolation boundary), node (dedicated taint, node guard, IMDS hop 1) and network (default deny, gateway-only ingress)](../images/figures/production-02_security--threat-model.en.svg)
 
 *Takeaway: Candidate code runs inside five layers of controls, and if one layer fails the outer layers remain.*
 

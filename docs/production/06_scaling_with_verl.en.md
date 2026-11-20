@@ -11,7 +11,7 @@ The hands-on trains a 1.5B model with LoRA on one A10G (24 GB).
 - **Memory for a 7B model**: `Qwen/Qwen2.5-Coder-7B-Instruct` has about 7.6B parameters, so its bf16 weights alone are about 15 GB, which leaves little headroom when generation and training share one GPU (colocate mode).
 - **Reward calls on many GPUs**: moving to many GPUs also changes how rewards are called. veRL scores samples one at a time, so it cannot score a whole batch with one version as TRL does.
 
-![a: vLLM generation on one trainer A10G (24 GB), reward scoring on a separate sandbox GPU and the update on the trainer run in turn; each sandbox call takes one routing snapshot, so one batch is scored by one version, and the 7B bf16 weights alone take about 15 of the 24 GB. b: GPU workers (actor, vLLM rollout, reward worker) xN in RayCluster verl send each sample to the sandbox gateway with POST /v1/evaluate and a group_key, and the gateway pins a version per group_key, so one group is scored by one version of the sandbox pools (per runtime, per version)](../images/figures/production-06_scaling_with_verl.svg)
+![a: vLLM generation on one trainer A10G (24 GB), reward scoring on a separate sandbox GPU and the update on the trainer run in turn; each sandbox call takes one routing snapshot, so one batch is scored by one version, and the 7B bf16 weights alone take about 15 of the 24 GB. b: GPU workers (actor, vLLM rollout, reward worker) xN in RayCluster verl send each sample to the sandbox gateway with POST /v1/evaluate and a group_key, and the gateway pins a version per group_key, so one group is scored by one version of the sandbox pools (per runtime, per version)](../images/figures/production-06_scaling_with_verl.en.svg)
 
 *Takeaway: With one trainer GPU, generation, sandbox scoring and the update run in turn, so steps are long, and with 7B weights loaded there is almost no headroom. On many GPUs samples are scored one at a time, so the reward function attaches a group_key and the gateway pins one version per group.*
 
@@ -36,6 +36,8 @@ The hands-on trains a 1.5B model with LoRA on one A10G (24 GB).
     More terms are in the [Glossary](../reference/glossary.md).
 
 ## TRL path and veRL path
+
+Multiple workers can score answers to one prompt in separate requests. veRL uses `group_key` so the gateway can keep their grading version consistent. Check throughput and version consistency independently.
 
 | Item | TRL (hands-on) | veRL (production) |
 |---|---|---|

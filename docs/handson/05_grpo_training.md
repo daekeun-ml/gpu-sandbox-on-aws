@@ -90,6 +90,8 @@ kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 
 ## 로그 읽는 법
 
+`routing`은 사용할 풀을 읽었다는 신호입니다. 그 뒤 `reward_batch`의 판정과 optimizer step을 함께 확인하세요. 샌드박스 요청이 모두 `sandbox_error`라면 로그가 찍혀도 채점 경로를 점검해야 합니다.
+
 로그에는 두 종류의 줄이 함께 출력됩니다. 첫째는 TRL이 step마다 출력하는 Python dict입니다(`loss` 키가 있어 스크립트 필터를 통과).
 
 | TRL 지표 | 의미 |
@@ -140,7 +142,7 @@ completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라
 
 ## 1.5B 모델에서 기대할 것
 
-이 저장소은 on-policy 루프가 끝까지 실행되는지 확인하는 용도이고, 학습 곡선이 개선된다고 보장하지 않습니다.
+이 저장소는 on-policy 루프가 끝까지 실행되는지 확인하는 용도이고, 학습 곡선이 개선된다고 보장하지 않습니다.
 
 | level | task |
 |---|---|

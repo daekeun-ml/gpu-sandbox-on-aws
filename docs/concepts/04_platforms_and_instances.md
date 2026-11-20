@@ -7,7 +7,9 @@
 
 학습과 채점에서 GPU가 하는 일이 다릅니다. trainer는 모델을 메모리에 올려 생성과 업데이트를 반복합니다. 샌드박스는 제출물을 실행합니다. 여기서는 작업의 격리 방식과 측정할 GPU가 중요합니다. 노드를 분리하면 학습 쪽을 바꿀 때 샌드박스 런타임도 함께 바꿀 필요가 줄어듭니다.
 
-## A, B1, B2 중 무엇을 고르나요?
+**Amazon EKS**는 Kubernetes 클러스터를 운영하는 서비스입니다. **EC2** 인스턴스는 그 클러스터에 연결하는 실행 노드로 쓸 수 있습니다. 이 가이드에서 **HyperPod**는 학습용 노드를 관리하며, B1에서는 그 노드가 기존 EKS 클러스터에 합류합니다. trainer와 샌드박스는 같은 클러스터에서 통신하면서 서로 다른 종류의 노드에서 실행됩니다.
+
+## 시나리오 A, B1, B2 비교
 
 | 시나리오 | trainer | GPU 샌드박스 | 언제 보나요? |
 |---|---|---|---|
@@ -16,6 +18,11 @@
 | B2 | HyperPod | 별도 HyperPod 그룹 | 지원 드라이버를 담은 custom AMI로 gVisor를 올리는 실험을 할 때 |
 
 A는 실습 계정에서 실행했습니다. B1과 B2는 이 저장소에서 AWS 실행을 확인하지 않았습니다. GPU 없이 흐름만 익히려면 [시나리오 C](../handson/10_cpu_only.md)가 있습니다.
+
+B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타임 조건을 따로 맞추기 위해서입니다. HyperPod trainer가 Job 재시작 기능을 쓰는 동안, EC2 샌드박스는 gVisor가 지원하는 드라이버나 Kata에 필요한 가상화 환경을 그대로 사용할 수 있습니다. B2에서는 gVisor의 드라이버 조건을 맞추기 위해 노드 시작에 쓰는 이미지인 **AMI**를 별도로 준비합니다.
+
+??? note "B1의 trainer와 샌드박스 위치"
+    ![HyperPod의 trainer와 EC2의 샌드박스가 같은 EKS 클러스터에 연결된 구성](../images/architecture/scenario-b1.drawio.png)
 
 ## 복구 기능과 체크포인트는 각각 필요합니다
 
@@ -38,7 +45,7 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
     - **그 밖의 기능:** CLI `hyp`(`pip install sagemaker-hyperpod`), task governance와 observability add-on, Karpenter 기반 autoscaling(`AutoScalerType: Karpenter`, `NodeProvisioningMode: Continuous`)이 있습니다.
 
     !!! warning "training operator와 Kubernetes 버전"
-        이 저장소은 Kubernetes 1.36을 씁니다. HyperPod EKS AMI 릴리스 노트에는 1.36 AMI가 있지만, HyperPod 사전 요구 사항 페이지에는 1.30에서 1.35까지, training operator 문서에는 1.28부터 1.33까지가 명시돼 있습니다(문서가 갱신되지 않았을 수 있음). 클러스터를 만들기 전에 아래 읽기 전용 명령으로 add-on 호환 버전을 확인하세요.
+        이 저장소는 Kubernetes 1.36을 씁니다. HyperPod EKS AMI 릴리스 노트에는 1.36 AMI가 있지만, HyperPod 사전 요구 사항 페이지에는 1.30에서 1.35까지, training operator 문서에는 1.28부터 1.33까지가 명시돼 있습니다(문서가 갱신되지 않았을 수 있음). 클러스터를 만들기 전에 아래 읽기 전용 명령으로 add-on 호환 버전을 확인하세요.
 
         ```bash
         aws eks describe-addon-versions \
@@ -190,7 +197,7 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
         HyperPod의 노드 복구, deep health check, job 재시작은 노드와 job의 복원력 기능입니다. 노드 복구는 클러스터 설정이라 B2의 `sandbox` 그룹에도 적용되지만, 샌드박스 런타임 설치, 격리 검증, 버전 고정은 HyperPod가 제공하지 않습니다.
 
     !!! question "❓ 오해: T4가 더 저렴하니 gVisor 노드도 `g4dn`을 쓰면 된다"
-        `g4dn.xlarge`(0.526)는 `g5.xlarge`(1.006)보다 요금이 낮습니다. `g4dn`의 드라이버 조건은 `g5`와 같습니다(AMI가 GSP를 끈 proprietary 커널 모듈을 로드). 그래서 드라이버 종류 때문에 제외할 이유는 없지만, 이 저장소은 T4에서 실행하는 gVisor를 테스트하지 않아 미검증입니다. T4는 Kata + QEMU(`g4dn.metal`)의 GPU로 쓰고, gVisor에 쓰려면 직접 검증하세요.
+        `g4dn.xlarge`(0.526)는 `g5.xlarge`(1.006)보다 요금이 낮습니다. `g4dn`의 드라이버 조건은 `g5`와 같습니다(AMI가 GSP를 끈 proprietary 커널 모듈을 로드). 그래서 드라이버 종류 때문에 제외할 이유는 없지만, 이 저장소는 T4에서 실행하는 gVisor를 테스트하지 않아 미검증입니다. T4는 Kata + QEMU(`g4dn.metal`)의 GPU로 쓰고, gVisor에 쓰려면 직접 검증하세요.
 
 ??? note "적용 범위와 한계"
     - 시나리오 A의 `g5` 구성은 실습 계정에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). gVisor 샌드박스(1 replica)와 `scripts/ops/verify.sh gvisor v1`이 통과했고, trainer 설정(1.5B + LoRA + vLLM colocate on A10G 하나)으로 GRPO 5 step을 마쳤습니다.

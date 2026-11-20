@@ -13,7 +13,7 @@
 - **AMI가 자동으로 바뀌면서 nvproxy가 인식하지 못하는(unknown) NVIDIA 드라이버가 설치되면**: gVisor GPU 샌드박스가 Ready가 되지 않아 풀 용량이 0이 됩니다.
 - **G and VT On-Demand quota**: 문서상 기본값이 0이라, quota를 늘리기 전에는 96 vCPU짜리 `g4dn.metal`을 한 대도 띄우지 못합니다.
 
-![a: metal 노드(sandbox-kata-gpu)에서는 reward batch가 도착한 뒤에 g4dn.metal 부팅, kata-deploy, vfio-pci 바인딩이 진행되어 수 분이 걸리고, batch는 그동안 대기합니다. gVisor 노드(sandbox-gvisor)에서는 al2023@latest의 AMI 자동 갱신(drift 교체)으로 nvproxy가 지원하지 않는 드라이버가 설치될 수 있습니다. 그러면 GPU 초기화가 실패해 샌드박스가 Ready가 되지 않고 풀 용량이 0이 됩니다. b: metal에서는 우선순위 -10인 warm placeholder가 선점되어 종료되고, 샌드박스 pod는 이미 실행 중인 노드에 배치됩니다. Karpenter는 새 예비 노드를 추가합니다. gVisor에서는 AMI를 al2023@v20261107로 고정하고, CI에서 nvproxy list-supported-drivers로 지원 여부를 확인해 통과할 때만 AMI와 GVISOR_RELEASE를 함께 승격합니다.](../images/figures/production-01_capacity_and_nodes.svg)
+![a: metal 노드(sandbox-kata-gpu)에서는 reward batch가 도착한 뒤에 g4dn.metal 부팅, kata-deploy, vfio-pci 바인딩이 진행되어 수 분이 걸리고, batch는 그동안 대기합니다. gVisor 노드(sandbox-gvisor)에서는 al2023@latest의 AMI 자동 갱신(drift 교체)으로 nvproxy가 지원하지 않는 드라이버가 설치될 수 있습니다. 그러면 GPU 초기화가 실패해 샌드박스가 Ready가 되지 않고 풀 용량이 0이 됩니다. b: metal에서는 우선순위 -10인 warm placeholder가 선점되어 종료되고, 샌드박스 pod는 이미 실행 중인 노드에 배치됩니다. Karpenter는 새 예비 노드를 추가합니다. gVisor에서는 AMI를 al2023@v20261107로 고정하고, CI에서 nvproxy list-supported-drivers로 지원 여부를 확인해 통과할 때만 AMI와 GVISOR_RELEASE를 함께 승격합니다.](../images/figures/production-01_capacity_and_nodes.ko.svg)
 
 *그림 요약: 부팅이 느린 metal 노드를 수요가 생긴 뒤에 시작하면 batch가 기다려야 하고, AMI 자동 갱신은 gVisor 풀 용량을 0으로 만들 수 있습니다. metal은 warm placeholder로 한 대를 미리 확보하고, AMI와 gVisor 버전은 함께 고정한 뒤 CI 확인을 통과할 때만 올립니다.*
 
@@ -73,6 +73,8 @@ kubectl get ec2nodeclass,nodepool
 `sandbox-kata-cpu`가 쓰는 `spec.cpuOptions.nestedVirtualization`(값 `enabled` 또는 `disabled`)은 v1.15.2 CRD의 필드입니다. `kubectl explain ec2nodeclass.spec.cpuOptions` 출력의 FIELDS 목록에 `nestedVirtualization`이 없으면 설치한 Karpenter가 이 필드를 지원하지 않는 이전 버전이니 먼저 업그레이드하세요.
 
 ## NodePool 설계
+
+**NodePool**은 어떤 pod에 어떤 종류의 노드를 공급할지 정합니다. 반면 EC2NodeClass에는 AMI와 부팅 설정처럼 노드 자체에 적용할 값을 둡니다. GPU pod가 `Pending`이면 노드를 추가할 조건과, 시작한 노드에 런타임과 GPU가 등록될 조건을 차례대로 확인하세요.
 
 | NodePool | requirements | taint | label |
 |---|---|---|---|

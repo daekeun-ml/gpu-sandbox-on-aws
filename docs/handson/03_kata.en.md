@@ -1,28 +1,9 @@
 # 03 Kata sandboxes (CLH, QEMU)
 
 !!! info "TL;DR"
-    Rehearse `kata-clh` and `kata-qemu` cheaply with nested virtualization on `c8i.2xlarge`, then, only when you need GPU passthrough, hand one T4 to each VM on a `g4dn.metal` booted from an IOMMU AMI.
+    Start Kata VMs on a c8i node. For GPU passthrough, add a separate metal node and assign a T4 directly to each VM.
 
-## Pain point
-
-Kata starts a lightweight VM per pod, so the node needs `/dev/kvm` (QEMU and Cloud Hypervisor use KVM).
-
-- **Regular GPU VMs**: instances such as `g5.xlarge` do not have `/dev/kvm`.
-- **Passing a GPU through to the VM**: it needs the IOMMU turned on and a host that leaves the NVIDIA driver unloaded and binds the GPU to `vfio-pci` to hand it to the VM. On AWS the only x86 NVIDIA instance that meets this is the bare-metal `g4dn.metal` (7.824 USD per hour).
-- **Mistakes unrelated to the GPU**: kata-deploy, containerd drop-ins or RuntimeClasses then get debugged on this node too.
-- **AL2023 kernel**: it does not turn the IOMMU on by default.
-- **nodeadm**: it rewrites `/etc/containerd/config.toml` on every boot, so the runtime handlers kata-deploy adds may disappear after a reboot.
-
-![a: settings unrelated to the GPU (kata-deploy and containerd drop-ins, RuntimeClasses and NetworkPolicy, node guard and boot time) and GPU passthrough (VFIO, IOMMU) are all checked on g4dn.metal (7.824 USD per hour), the only x86 NVIDIA instance that can hand a GPU to a Kata VM. b: the GPU-unrelated settings are checked first on c8i.2xlarge (0.37484 USD per hour) with nested virtualization (/dev/kvm), and only GPU passthrough on g4dn.metal booted from the IOMMU AMI](../images/figures/handson-03_kata.svg)
-
-*Takeaway: `g4dn.metal` is the only x86 NVIDIA instance on AWS that can hand a GPU to a Kata VM, so even GPU-unrelated debugging lands on a 7.824 USD per hour node. Checking the GPU-unrelated parts on `c8i.2xlarge` (0.37484 USD per hour) first leaves only GPU passthrough for `g4dn.metal`.*
-
-
-## Why
-
-- **Split into two stages to cut cost.** The CPU stage (`c8i.2xlarge`) installs kata-deploy and the RuntimeClasses and checks the kernels of the three runtimes. If you deploy the CPU pools of [04](04_sandbox_pools.md) before adding the GPU node, `scripts/ops/verify.sh` checks the network blocking (NetworkPolicy, node guard) and `scripts/ops/bench.sh` shows the time from pod creation to Ready.
-- **Bake the kernel arguments into an AMI.** A cheap `m6i.large` builder puts `intel_iommu=on iommu=pt` into the AMI. `g4dn.metal` applies them from its first boot, so it needs no reboot for this setting.
-- **The upstream-supported GPU path is the default.** That is QEMU, cold-plug and the Go shim (`kata-qemu-nvidia-gpu`); Cloud Hypervisor GPU is an experiment that turns on only with an environment variable (RuntimeClass label `gpusandbox/support: experimental`).
+    **Completion check** The CPU smoke test checks VM startup. The GPU smoke test also checks device access. Stop after stage 1 for CPU only.
 
 **Before you start:** finish [01 Cluster and images](01_cluster_and_images.md). How Kata handles GPUs is in the "Kata + VFIO passthrough" section of [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and unfamiliar terms in the "Terms" box below and the [Glossary](../reference/glossary.md).
 
@@ -88,53 +69,55 @@ The script first checks that the `sandbox-kata-cpu` node group exists. In the pr
 
 ### Launch template of the Kata CPU node (CDK stack)
 
-The CDK stack (`cdk/gpusandbox_cdk/stack.py`) creates this node group's EC2 launch template, `nested_cpu_node` in `infra/eks/userdata.py` builds its user data, and the CPU options go straight into the CloudFormation launch template resource.
+??? note "Details"
+    The CDK stack (`cdk/gpusandbox_cdk/stack.py`) creates this node group's EC2 launch template, `nested_cpu_node` in `infra/eks/userdata.py` builds its user data, and the CPU options go straight into the CloudFormation launch template resource.
 
-| Item | Value | Reason |
-|---|---|---|
-| `CpuOptions` | `CoreCount` 4, `ThreadsPerCore` 2 (`c8i.2xlarge`), `NestedVirtualization: enabled` | creates `/dev/kvm` inside a virtual instance |
-| `MetadataOptions` | `HttpTokens: required`, `HttpPutResponseHopLimit: 1` | IMDSv2 only, so pods cannot reach node credentials |
-| `BlockDeviceMappings` | `/dev/xvda` 100 GB gp3, encrypted | images and VM assets |
-| `UserData` (MIME multipart) | NodeConfig (containerd `imports` and the gVisor `runsc` handler), creates `/etc/containerd/conf.d`, installs pinned gVisor (no nvproxy), node guard | explained below |
-| `ImageId` | not set | EKS picks the EKS-optimized AMI (`AL2023_x86_64_STANDARD`) and merges its own bootstrap user data |
-| Node group | desired 1, min 0, max 2, labels `gpusandbox/role=sandbox-kata` and `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | dedicated to Kata sandboxes. The smoke pods and the CPU pools select this node with `gpusandbox/kata-gpu=false` |
+    | Item | Value | Reason |
+    |---|---|---|
+    | `CpuOptions` | `CoreCount` 4, `ThreadsPerCore` 2 (`c8i.2xlarge`), `NestedVirtualization: enabled` | creates `/dev/kvm` inside a virtual instance |
+    | `MetadataOptions` | `HttpTokens: required`, `HttpPutResponseHopLimit: 1` | IMDSv2 only, so pods cannot reach node credentials |
+    | `BlockDeviceMappings` | `/dev/xvda` 100 GB gp3, encrypted | images and VM assets |
+    | `UserData` (MIME multipart) | NodeConfig (containerd `imports` and the gVisor `runsc` handler), creates `/etc/containerd/conf.d`, installs pinned gVisor (no nvproxy), node guard | explained below |
+    | `ImageId` | not set | EKS picks the EKS-optimized AMI (`AL2023_x86_64_STANDARD`) and merges its own bootstrap user data |
+    | Node group | desired 1, min 0, max 2, labels `gpusandbox/role=sandbox-kata` and `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | dedicated to Kata sandboxes. The smoke pods and the CPU pools select this node with `gpusandbox/kata-gpu=false` |
 
-- **Core and thread counts in `CpuOptions`**: the API wants the core and thread counts together with other CPU options. The values come from the table in `cdk/gpusandbox_cdk/config.py`.
-- **gVisor in `UserData`**: it is installed too so that all three runtimes can be compared on one node ([10 CPU-only path on c8i](10_cpu_only.md)).
+    - **Core and thread counts in `CpuOptions`**: the API wants the core and thread counts together with other CPU options. The values come from the table in `cdk/gpusandbox_cdk/config.py`.
+    - **gVisor in `UserData`**: it is installed too so that all three runtimes can be compared on one node ([10 CPU-only path on c8i](10_cpu_only.md)).
 
-The EKS documentation does not say whether a managed node group passes the launch template's `NestedVirtualization` on to the node. It was passed in the practice account (2026-11-14, the node had `/dev/kvm`), but this may change, so check it after the first deployment. The command below reads the instance ID from the Kata CPU node of the current kubectl context (the tunnel), so it never reads a node of another cluster that this repository created in the same Region.
+    The EKS documentation does not say whether a managed node group passes the launch template's `NestedVirtualization` on to the node. It was passed in the practice account (2026-11-14, the node had `/dev/kvm`), but this may change, so check it after the first deployment. The command below reads the instance ID from the Kata CPU node of the current kubectl context (the tunnel), so it never reads a node of another cluster that this repository created in the same Region.
 
-```bash
-provider_id="$(kubectl get nodes -l gpusandbox/kata-gpu=false -o jsonpath='{.items[0].spec.providerID}')"
-aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "${provider_id##*/}" \
-  --query 'Reservations[].Instances[].CpuOptions'
-```
+    ```bash
+    provider_id="$(kubectl get nodes -l gpusandbox/kata-gpu=false -o jsonpath='{.items[0].spec.providerID}')"
+    aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "${provider_id##*/}" \
+      --query 'Reservations[].Instances[].CpuOptions'
+    ```
 
-**What to look for:** the result must contain `"NestedVirtualization": "enabled"`. Without it, the Kata smoke pods cannot open KVM and fail.
+    **What to look for:** the result must contain `"NestedVirtualization": "enabled"`. Without it, the Kata smoke pods cannot open KVM and fail.
 
-The NodeConfig in user data adds `imports = ["/etc/containerd/conf.d/*.toml"]` to the containerd configuration so that, even when nodeadm rewrites `config.toml` on every boot, the runtime handlers in the drop-in directory are read again. This is an inference, not documented behavior, so after rebooting a node, check that a pod still starts with a Kata RuntimeClass.
+    The NodeConfig in user data adds `imports = ["/etc/containerd/conf.d/*.toml"]` to the containerd configuration so that, even when nodeadm rewrites `config.toml` on every boot, the runtime handlers in the drop-in directory are read again. This is an inference, not documented behavior, so after rebooting a node, check that a pod still starts with a Kata RuntimeClass.
 
 ### kata-deploy 4.3.1 (DaemonSet mode)
 
-`kata/cpu_nodes.sh` runs this command internally (you do not run it), and `kata/gpu_nodes.sh` runs `upgrade --install` on the same chart.
+??? note "Details"
+    `kata/cpu_nodes.sh` runs this command internally (you do not run it), and `kata/gpu_nodes.sh` runs `upgrade --install` on the same chart.
 
-```bash
-helm upgrade --install kata-deploy oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy \
-  --version "${KATA_VERSION}" --namespace kube-system \
-  -f "${REPO_ROOT}/infra/kata/kata-deploy-values.yaml" --wait --timeout 20m
-```
+    ```bash
+    helm upgrade --install kata-deploy oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy \
+      --version "${KATA_VERSION}" --namespace kube-system \
+      -f "${REPO_ROOT}/infra/kata/kata-deploy-values.yaml" --wait --timeout 20m
+    ```
 
-| Setting (`infra/kata/kata-deploy-values.yaml`) | Value | Reason |
-|---|---|---|
-| `deploymentMode` | `daemonset` | the chart default `job` installs only on nodes that exist at install time. These node groups scale from zero, so a DaemonSet that also covers later nodes is used |
-| `nodeSelector`, `tolerations` | `gpusandbox/role: sandbox-kata` | installs only on Kata nodes (CPU, GPU) |
-| `shims.disableAll` | `true` | enables only the shims in use |
-| Enabled shims | `qemu`, `clh`, `qemu-nvidia-gpu` (amd64) | the RuntimeClass table above |
-| `allowedHypervisorAnnotations` | `[]` | empty, so pod annotations cannot change hypervisor settings |
-| `qemu-nvidia-gpu.runtimeClass.nodeSelector` | `nvidia.com/cc.ready.state: "false"` | the label the GPU Operator's cc-manager sets on nodes with confidential computing off. T4 has no CC |
-| `qemu-nvidia-gpu.nvrc.enableDCGM` | `false` | turns off the DCGM feature of the NVIDIA guest stack (NVRC) |
-| `defaultShim.amd64` | `qemu` | default shim |
-| `runtimeClasses` | `enabled: true`, `createDefault: false`, `overheadEnabled: true` | creates the RuntimeClasses and keeps the overhead so the scheduler accounts for each VM's own memory and CPU |
+    | Setting (`infra/kata/kata-deploy-values.yaml`) | Value | Reason |
+    |---|---|---|
+    | `deploymentMode` | `daemonset` | the chart default `job` installs only on nodes that exist at install time. These node groups scale from zero, so a DaemonSet that also covers later nodes is used |
+    | `nodeSelector`, `tolerations` | `gpusandbox/role: sandbox-kata` | installs only on Kata nodes (CPU, GPU) |
+    | `shims.disableAll` | `true` | enables only the shims in use |
+    | Enabled shims | `qemu`, `clh`, `qemu-nvidia-gpu` (amd64) | the RuntimeClass table above |
+    | `allowedHypervisorAnnotations` | `[]` | empty, so pod annotations cannot change hypervisor settings |
+    | `qemu-nvidia-gpu.runtimeClass.nodeSelector` | `nvidia.com/cc.ready.state: "false"` | the label the GPU Operator's cc-manager sets on nodes with confidential computing off. T4 has no CC |
+    | `qemu-nvidia-gpu.nvrc.enableDCGM` | `false` | turns off the DCGM feature of the NVIDIA guest stack (NVRC) |
+    | `defaultShim.amd64` | `qemu` | default shim |
+    | `runtimeClasses` | `enabled: true`, `createDefault: false`, `overheadEnabled: true` | creates the RuntimeClasses and keeps the overhead so the scheduler accounts for each VM's own memory and CPU |
 
 ### Smoke pods: gvisor-cpu, kata-clh and kata-qemu
 
@@ -174,6 +157,8 @@ pod "kata-qemu-smoke-34567" deleted
     `c8i.2xlarge` is itself a virtual instance, so even a plain runc container usually sees the `hypervisor` flag; on this node the proof of Kata is a guest kernel version that differs from the host's, not the flag. A bare-metal host such as `g4dn.metal` does not have the flag, so there the flag is evidence too.
 
 ## Stage 2: GPU passthrough on g4dn.metal (`kata/gpu_nodes.sh`)
+
+The CPU smoke test checks whether a VM can start. This stage checks whether the VM can also use a physical GPU for CUDA.
 
 !!! warning "Cost: g4dn.metal is 7.824 USD per hour"
     That is the On-Demand list price in us-east-1 and us-west-2; in the Seoul Region it is 9.624 USD. When you rerun `02_create_cluster.sh` with `WITH_KATA_GPU=1`, `cdk/deploy.sh` asks `This adds g4dn.metal (about 7.8 USD/hour) to the stack. Type 'metal' to continue:`, and the node enters the stack only after you type `metal`. When you are not using it, scale it to zero right away with the commands at the end of this page.
@@ -234,83 +219,86 @@ Without the `vfio_iommu_type1` module QEMU cannot attach the GPU and the Kata GP
 
 ### The sandbox-kata-gpu node group
 
-| Item | Value | Reason |
-|---|---|---|
-| Instance | `${KATA_GPU_INSTANCE_TYPE}` (`g4dn.metal`, 8x T4, 96 vCPU, 384 GiB) | the only x86 bare-metal type with NVIDIA GPUs |
-| AMI | `AmiType: CUSTOM`, `${KATA_IOMMU_AMI_ID}` as the launch template's `ImageId` | the IOMMU AMI baked above |
-| Size | desired 1, min 0, max 1, 200 GB | one node is enough |
-| IMDS | IMDSv2 and hop limit 1 from the launch template | the same setting as every node, so pods cannot reach node credentials |
-| Labels | `gpusandbox/role=sandbox-kata`, `gpusandbox/kata-gpu=true`, `nvidia.com/gpu.workload.config=vm-passthrough` | the GPU Operator binds this node's GPUs to vfio-pci |
-| Taint | `gpusandbox/role=sandbox-kata:NoSchedule` | dedicated to Kata sandboxes |
-| NodeConfig | `cluster` (name, API endpoint, certificate, service CIDR `172.20.0.0/16`), containerd `imports = ["/etc/containerd/conf.d/*.toml"]`, kubelet `runtimeRequestTimeout: 20m` | the cluster fields are written here (list below) |
-| User data shell parts | creates `/etc/containerd/conf.d`, `node-guard.sh` | for the node guard see [01](01_cluster_and_images.md) |
+??? note "Details"
+    | Item | Value | Reason |
+    |---|---|---|
+    | Instance | `${KATA_GPU_INSTANCE_TYPE}` (`g4dn.metal`, 8x T4, 96 vCPU, 384 GiB) | the only x86 bare-metal type with NVIDIA GPUs |
+    | AMI | `AmiType: CUSTOM`, `${KATA_IOMMU_AMI_ID}` as the launch template's `ImageId` | the IOMMU AMI baked above |
+    | Size | desired 1, min 0, max 1, 200 GB | one node is enough |
+    | IMDS | IMDSv2 and hop limit 1 from the launch template | the same setting as every node, so pods cannot reach node credentials |
+    | Labels | `gpusandbox/role=sandbox-kata`, `gpusandbox/kata-gpu=true`, `nvidia.com/gpu.workload.config=vm-passthrough` | the GPU Operator binds this node's GPUs to vfio-pci |
+    | Taint | `gpusandbox/role=sandbox-kata:NoSchedule` | dedicated to Kata sandboxes |
+    | NodeConfig | `cluster` (name, API endpoint, certificate, service CIDR `172.20.0.0/16`), containerd `imports = ["/etc/containerd/conf.d/*.toml"]`, kubelet `runtimeRequestTimeout: 20m` | the cluster fields are written here (list below) |
+    | User data shell parts | creates `/etc/containerd/conf.d`, `node-guard.sh` | for the node guard see [01](01_cluster_and_images.md) |
 
-- **`cluster` in the NodeConfig**: EKS does not merge its bootstrap when the launch template sets an AMI, so the cluster fields are written here.
-- **containerd `imports` in the NodeConfig**: keeps kata-deploy's drop-ins.
-- **kubelet `runtimeRequestTimeout` in the NodeConfig**: waits while VFIO pins guest memory.
+    - **`cluster` in the NodeConfig**: EKS does not merge its bootstrap when the launch template sets an AMI, so the cluster fields are written here.
+    - **containerd `imports` in the NodeConfig**: keeps kata-deploy's drop-ins.
+    - **kubelet `runtimeRequestTimeout` in the NodeConfig**: waits while VFIO pins guest memory.
 
 ### GPU Operator v26.7.2 (sandbox mode)
 
-`kata/gpu_nodes.sh` runs this command internally (you do not run it).
+??? note "Details"
+    `kata/gpu_nodes.sh` runs this command internally (you do not run it).
 
-```bash
-helm upgrade --install gpu-operator nvidia/gpu-operator --version "${GPU_OPERATOR_VERSION}" \
-  --namespace gpu-operator --create-namespace \
-  -f "${REPO_ROOT}/infra/kata/gpu-operator-values.yaml" --wait --timeout 20m
-```
+    ```bash
+    helm upgrade --install gpu-operator nvidia/gpu-operator --version "${GPU_OPERATOR_VERSION}" \
+      --namespace gpu-operator --create-namespace \
+      -f "${REPO_ROOT}/infra/kata/gpu-operator-values.yaml" --wait --timeout 20m
+    ```
 
-```mermaid
-flowchart TB
-    subgraph Node["g4dn.metal (sandbox-kata-gpu), no NVIDIA driver on the host"]
-        VF["vfio-manager<br/>binds the 8 T4s to vfio-pci"]
-        DP["kata sandbox device plugin<br/>nvidia.com/pgpu: 8"]
-        subgraph VM["Kata VM (QEMU, kata-qemu-nvidia-gpu)"]
-            GS["NVIDIA guest stack<br/>kernel, rootfs, NVRC, 615.71.09"]
-            C["sandbox container"]
+    ```mermaid
+    flowchart TB
+        subgraph Node["g4dn.metal (sandbox-kata-gpu), no NVIDIA driver on the host"]
+            VF["vfio-manager<br/>binds the 8 T4s to vfio-pci"]
+            DP["kata sandbox device plugin<br/>nvidia.com/pgpu: 8"]
+            subgraph VM["Kata VM (QEMU, kata-qemu-nvidia-gpu)"]
+                GS["NVIDIA guest stack<br/>kernel, rootfs, NVRC, 615.71.09"]
+                C["sandbox container"]
+            end
         end
-    end
-    VF --> DP -->|"cold-plug one T4"| VM
-```
+        VF --> DP -->|"cold-plug one T4"| VM
+    ```
 
-*Takeaway: the host only holds the GPUs with vfio-pci; the driver exists only in the guest stack inside the VM.*
+    *Takeaway: the host only holds the GPUs with vfio-pci; the driver exists only in the guest stack inside the VM.*
 
-| Setting (`infra/kata/gpu-operator-values.yaml`) | Value | Reason |
-|---|---|---|
-| `sandboxWorkloads` | `enabled: true`, `defaultWorkload: container`, `mode: kata` | only nodes labelled `vm-passthrough` are handled as VM passthrough |
-| `ccManager.defaultMode` | `"off"` | T4 has no confidential computing. With `on`, cc-manager exits and the `kata-qemu-nvidia-gpu` nodeSelector (`cc.ready.state=false`) never matches the node |
-| `nfd` | `enabled: true`, `nodefeaturerules: true` | detects the node's NVIDIA PCI devices |
-| `cdi.enabled` | `true` | uses CDI |
-| `driver`, `toolkit`, `devicePlugin`, `dcgmExporter`, `gfd`, `migManager`, `vgpuDeviceManager` | all `enabled: false` | the host loads no NVIDIA driver, and no container-mode components are used |
-| `vfioManager.enabled` | `true` | binds the 8 T4s to vfio-pci |
-| `kataSandboxDevicePlugin.enabled` | `true` | advertises the T4s as `nvidia.com/pgpu` |
+    | Setting (`infra/kata/gpu-operator-values.yaml`) | Value | Reason |
+    |---|---|---|
+    | `sandboxWorkloads` | `enabled: true`, `defaultWorkload: container`, `mode: kata` | only nodes labelled `vm-passthrough` are handled as VM passthrough |
+    | `ccManager.defaultMode` | `"off"` | T4 has no confidential computing. With `on`, cc-manager exits and the `kata-qemu-nvidia-gpu` nodeSelector (`cc.ready.state=false`) never matches the node |
+    | `nfd` | `enabled: true`, `nodefeaturerules: true` | detects the node's NVIDIA PCI devices |
+    | `cdi.enabled` | `true` | uses CDI |
+    | `driver`, `toolkit`, `devicePlugin`, `dcgmExporter`, `gfd`, `migManager`, `vgpuDeviceManager` | all `enabled: false` | the host loads no NVIDIA driver, and no container-mode components are used |
+    | `vfioManager.enabled` | `true` | binds the 8 T4s to vfio-pci |
+    | `kataSandboxDevicePlugin.enabled` | `true` | advertises the T4s as `nvidia.com/pgpu` |
 
-The trainer and gVisor nodes carry the label `nvidia.com/gpu.deploy.operands=false`, so the GPU Operator deploys no NVIDIA GPU operands there. The NFD worker, though, is set to tolerate the `gpusandbox/role` taint and runs on these nodes too. Per the NVIDIA documentation a node runs one container runtime mode at a time, so container GPU workloads and VM passthrough do not share a node.
+    The trainer and gVisor nodes carry the label `nvidia.com/gpu.deploy.operands=false`, so the GPU Operator deploys no NVIDIA GPU operands there. The NFD worker, though, is set to tolerate the `gpusandbox/role` taint and runs on these nodes too. Per the NVIDIA documentation a node runs one container runtime mode at a time, so container GPU workloads and VM passthrough do not share a node.
 
 ### kata-qemu-nvidia-gpu and VM sizing
 
-`kata-qemu-nvidia-gpu` uses Kata's Go shim instead of runtime-rs, the default since 4.0.0.
+??? note "Details"
+    `kata-qemu-nvidia-gpu` uses Kata's Go shim instead of runtime-rs, the default since 4.0.0.
 
-??? note "Why the Go shim and cold-plug"
-    - runtime-rs GPU cold-plug needs IOMMUFD, and AL2023 kernels have no `CONFIG_IOMMUFD`.
-    - The Kata documentation states that only cold-plug is supported for NVIDIA GPU passthrough.
-    - kata-deploy ships the NVIDIA guest stack (kernel, rootfs, NVRC, open kernel modules 615.71.09), and the README of these modules lists Tesla T4.
+    ??? note "Why the Go shim and cold-plug"
+        - runtime-rs GPU cold-plug needs IOMMUFD, and AL2023 kernels have no `CONFIG_IOMMUFD`.
+        - The Kata documentation states that only cold-plug is supported for NVIDIA GPU passthrough.
+        - kata-deploy ships the NVIDIA guest stack (kernel, rootfs, NVRC, open kernel modules 615.71.09), and the README of these modules lists Tesla T4.
 
-| Item | Value |
-|---|---|
-| `default_memory` of the Go NVIDIA shim | 8192 MiB |
-| Container limits (`kata-qemu` profile) | 8 CPUs, 16 GiB memory, `nvidia.com/pgpu: 1` |
-| VM memory | 8 GiB + 16 GiB = 24 GiB; VFIO type1 pins all guest RAM (no overcommit) |
-| RuntimeClass overhead | 10240Mi, 1 CPU |
-| Memory the scheduler reserves per pod | 16 GiB + 10 GiB = 26 GiB |
-| With all 8 T4s in use | memory 8 x 26 = 208 GiB (node 384 GiB), CPU 8 x (8 + 1) = 72 vCPU (node 96 vCPU) |
-| Default replicas | 4 (change with `KATA_QEMU_REPLICAS`, at most 8, one per T4) |
+    | Item | Value |
+    |---|---|
+    | `default_memory` of the Go NVIDIA shim | 8192 MiB |
+    | Container limits (`kata-qemu` profile) | 8 CPUs, 16 GiB memory, `nvidia.com/pgpu: 1` |
+    | VM memory | 8 GiB + 16 GiB = 24 GiB; VFIO type1 pins all guest RAM (no overcommit) |
+    | RuntimeClass overhead | 10240Mi, 1 CPU |
+    | Memory the scheduler reserves per pod | 16 GiB + 10 GiB = 26 GiB |
+    | With all 8 T4s in use | memory 8 x 26 = 208 GiB (node 384 GiB), CPU 8 x (8 + 1) = 72 vCPU (node 96 vCPU) |
+    | Default replicas | 4 (change with `KATA_QEMU_REPLICAS`, at most 8, one per T4) |
 
-- **Reserved memory and pinned memory**: the overhead (10 GiB) is larger than `default_memory` (8 GiB), which the limits do not count, so the memory the scheduler reserves is never smaller than what VFIO actually pins.
-- **Time to the first Ready**: a GPU VM pins all its memory before booting and initializes CUDA inside the guest, so the first Ready can take minutes (30 to 36 seconds per pod with cached images on 2026-11-18, see [08 Runtime benchmark](08_benchmark.md)).
-- **Longer waits**: kubelet's `runtimeRequestTimeout` is therefore raised to 20 minutes and the sandbox Deployment's startupProbe waits up to 10 minutes ([04 Deploy and verify sandbox pools](04_sandbox_pools.md)).
+    - **Reserved memory and pinned memory**: the overhead (10 GiB) is larger than `default_memory` (8 GiB), which the limits do not count, so the memory the scheduler reserves is never smaller than what VFIO actually pins.
+    - **Time to the first Ready**: a GPU VM pins all its memory before booting and initializes CUDA inside the guest, so the first Ready can take minutes (30 to 36 seconds per pod with cached images on 2026-11-18, see [08 Runtime benchmark](08_benchmark.md)).
+    - **Longer waits**: kubelet's `runtimeRequestTimeout` is therefore raised to 20 minutes and the sandbox Deployment's startupProbe waits up to 10 minutes ([04 Deploy and verify sandbox pools](04_sandbox_pools.md)).
 
-!!! note "Security properties"
-    The IOMMU confines the GPU's DMA to that VM's memory, so the unsafe noiommu mode, which turns the IOMMU off, is not used. vfio-pci resets the function (or the bus) when it releases a device, and T4 has been reported with `reset_method=bus` (a third-party report, not an NVIDIA guarantee).
+    !!! note "Security properties"
+        The IOMMU confines the GPU's DMA to that VM's memory, so the unsafe noiommu mode, which turns the IOMMU off, is not used. vfio-pci resets the function (or the bus) when it releases a device, and T4 has been reported with `reset_method=bus` (a third-party report, not an NVIDIA guarantee).
 
 ### Checking the result of `kata/gpu_nodes.sh`
 
@@ -365,28 +353,9 @@ The actual GPU VMs are started with `scripts/06_deploy_sandboxes.sh kata-qemu` a
 - 6 golden verdicts PASS, including `vector_add_triton` and `relu_bias_triton`
 - the NetworkPolicy blocks callers from the `default` namespace
 
-### Pods stuck with `create container timeout` (vfio_iommu_type1)
+### Common blocker
 
-The 2026-11-18 run hit this problem. The current `build-iommu-ami.sh` makes the module load at boot; nodes from an AMI built before that fix have the problem.
-
-- **Symptom:** `kata-qemu-nvidia-gpu` pods stay in `ContainerCreating` with the event `failed to create shim task: create container timeout`. The node log shows the QEMU error `vfio 0000:e7:00.0: failed to setup container for group 87: No available IOMMU models` (the PCI address and group number differ per node).
-- **Cause:** AL2023 kernels build the VFIO type1 IOMMU backend as a module (`CONFIG_VFIO_IOMMU_TYPE1=m`), and nothing loaded it on that node; `lsmod` showed only `vfio`, `vfio_pci` and `vfio_pci_core`. The IOMMU (257 groups, `intel_iommu=on` on the kernel command line), the `vfio-pci` binding of all 8 T4s and `nvidia.com/pgpu=8` were all fine, so the pgpu check of `kata/gpu_nodes.sh` does not reveal it.
-- **Fix (new AMI):** the current `infra/kata/build-iommu-ami.sh` writes `/etc/modules-load.d/vfio-iommu-type1.conf` (`vfio_iommu_type1`) into the AMI. If you run an older AMI, rebuild it with this script, put the printed `KATA_IOMMU_AMI_ID` into `scripts/config.env`, and rerun `02_create_cluster.sh`.
-- **Fix (current node):** on a node from an older AMI, load the module by hand from the debug shell above. It has to be loaded again after a reboot.
-
-```bash
-# In the debug shell on the Kata GPU node (kubectl debug node/<kata-gpu-node> ... --profile=sysadmin)
-chroot /host
-journalctl --since "30 min ago" --no-pager | grep "No available IOMMU models" | tail -3   # the symptom
-modprobe vfio_iommu_type1
-grep vfio_iommu_type1 /proc/modules                                                     # one line now
-exit
-```
-
-**What to look for:**
-
-- The last `grep` prints the `vfio_iommu_type1` line.
-- Check with `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu` that READY turns `1/1`. In the 2026-11-18 run the 4 `kata-qemu` pods became Ready after this fix.
+If the GPU pod stays in `ContainerCreating` and the node reports `No available IOMMU models`, see the [Kata diagnostics](../reference/troubleshooting.md#kata).
 
 ## Stage 3 (optional, experimental): Kata + Cloud Hypervisor GPU
 

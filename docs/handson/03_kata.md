@@ -160,6 +160,8 @@ pod "kata-qemu-smoke-34567" deleted
 
 ## 2단계: g4dn.metal GPU passthrough (`kata/gpu_nodes.sh`)
 
+CPU smoke test는 VM을 시작할 수 있는지 확인합니다. 아래 GPU 실습에서는 VM이 물리 GPU를 받아 CUDA 계산까지 마치는지 따로 확인합니다.
+
 !!! warning "비용: g4dn.metal은 시간당 7.824 USD입니다"
     us-east-1과 us-west-2 온디맨드 요금이고, 서울 리전은 9.624 USD입니다. `WITH_KATA_GPU=1`로 `02_create_cluster.sh`를 다시 실행하면 `cdk/deploy.sh`가 `This adds g4dn.metal (about 7.8 USD/hour) to the stack. Type 'metal' to continue:` 메시지로 확인을 요청하고, `metal`을 입력해야 `g4dn.metal` 노드 그룹이 스택에 추가됩니다. 노드를 쓰지 않을 때는 이 페이지 끝의 명령으로 바로 0으로 줄이세요.
 

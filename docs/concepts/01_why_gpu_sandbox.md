@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     모델이 만든 코드를 GPU에서 실행하거나 속도를 재야 할 때 GPU 샌드박스가 필요합니다. 문법 검사나 CPU 단위 테스트만으로 채점할 수 있다면 CPU로 충분합니다.
 
-## 어떤 순간에 GPU가 필요할까요?
+## GPU가 필요한 작업
 
 모델에 “행렬 곱을 더 빠르게 만드는 Triton 커널을 작성해 줘”라고 요청했다고 해 봅시다. 답을 읽으면 코드 형태는 확인할 수 있습니다. 하지만 실제로 실행되는지, 결과가 맞는지, 기준 구현보다 빠른지는 목표 GPU에서 돌려 봐야 압니다. 이때 GPU 샌드박스가 모델이 만든 코드를 받아 실행하고 결과를 돌려줍니다.
 
@@ -19,7 +19,15 @@
 
 앞 단계에서 걸러진 답에는 GPU 시간을 쓰지 않아도 됩니다. GPU까지 도달한 답은 정확도를 먼저 봅니다. 틀린 답이 빨리 끝났더라도 성능 개선으로 볼 수 없기 때문입니다.
 
-![CPU에서 형식과 기본 검사를 마친 답만 GPU에서 실행하고 측정하는 흐름](../images/figures/concepts-01_why_gpu_sandbox--two-tier.svg)
+**Speedup**은 기준 구현의 실행 시간을 제출 코드의 실행 시간으로 나눈 값입니다. 기준이 4 ms이고 제출 코드가 2 ms라면 speedup은 2배입니다. 비교할 때는 같은 GPU와 같은 입력을 쓰고, 먼저 두 구현이 같은 답을 내는지 확인합니다.
+
+![CPU에서 형식과 기본 검사를 마친 답만 GPU에서 실행하고 측정하는 흐름](../images/figures/concepts-01_why_gpu_sandbox--two-tier.ko.svg)
+
+## CPU 검사와 GPU 채점의 역할
+
+컴파일이나 형식 검사에서 이미 실패한 답은 GPU에 보낼 필요가 없습니다. 반대로 문법은 맞지만 계산 결과가 틀린 GPU 코드는 실제 실행으로 걸러야 합니다. 채점 비용을 줄이려면 CPU에서 판단할 수 있는 항목을 먼저 확인하고, GPU에서는 정확도와 실행 시간을 봅니다.
+
+학습 서버에 GPU가 있어도 채점 서버에 GPU가 필요한지는 별개의 문제입니다. 예를 들어 모델을 GPU에서 학습시키더라도 보상이 단위 테스트 통과 여부라면 CPU 샌드박스를 쓸 수 있습니다. 코드의 실행 시간이 reward에 들어간다면 측정 환경까지 채점 기준의 일부가 됩니다.
 
 GPU 작업의 격리 방식은 [런타임 비교](02_isolation_runtimes.md), 점수가 학습에 들어가는 과정은 [On-policy RL과 샌드박스](03_onpolicy_rl_with_sandboxes.md)에서 이어집니다. GPU 없이 채점 흐름을 보려면 [CPU 핸즈온](../handson/10_cpu_only.md)부터 시작하세요.
 
@@ -73,7 +81,7 @@ GPU 작업의 격리 방식은 [런타임 비교](02_isolation_runtimes.md), 점
 
     ### RL 루프
 
-    ![시계 방향 루프입니다. 데이터셋의 과제 prompt마다 vLLM이 completion 8개를 생성합니다. trainer가 CPU에서 코드 추출과 AST 정책 검사를 한 뒤, GPU 1개가 할당된 샌드박스 pod로 보냅니다. pod 안에서는 untrusted child가 후보 코드를 실행하고, trusted parent가 그 출력을 reference와 timing으로 판정해 verdict를 냅니다. 이어서 reward 3요소(format, correctness, speedup) 계산, GRPO의 group 기준 advantage 계산, LoRA 업데이트(optimizer step 1회)를 거치고, 점선 화살표의 가중치 동기화로 생성 단계로 돌아갑니다.](../images/figures/concepts-01_why_gpu_sandbox--rl-loop.svg)
+    ![시계 방향 루프입니다. 데이터셋의 과제 prompt마다 vLLM이 completion 8개를 생성합니다. trainer가 CPU에서 코드 추출과 AST 정책 검사를 한 뒤, GPU 1개가 할당된 샌드박스 pod로 보냅니다. pod 안에서는 untrusted child가 후보 코드를 실행하고, trusted parent가 그 출력을 reference와 timing으로 판정해 verdict를 냅니다. 이어서 reward 3요소(format, correctness, speedup) 계산, GRPO의 group 기준 advantage 계산, LoRA 업데이트(optimizer step 1회)를 거치고, 점선 화살표의 가중치 동기화로 생성 단계로 돌아갑니다.](../images/figures/concepts-01_why_gpu_sandbox--rl-loop.ko.svg)
 
     *그림 요약: 샌드박스는 생성 단계와 업데이트 단계 사이에 있습니다. 그래서 채점이 느리면 학습 전체가 느려지고, 채점이 틀리면 학습이 잘못된 방향으로 진행됩니다.*
 

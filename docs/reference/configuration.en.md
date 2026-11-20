@@ -1,33 +1,16 @@
 # Configuration
 
 !!! info "TL;DR"
-    A reference of this repository's settings, with the code default next to the value the manifests actually set in the cluster.
+    Find the file that controls the value. Deployed pods use the environment and arguments in the manifest, with code defaults for settings the manifest omits.
 
-## Pain point
+| Change | Edit |
+|---|---|
+| AWS Region, cluster name, image URI, or model | [`scripts/config.env`](#1-scriptsconfigenv) |
+| RuntimeClass, GPU type, pod CPU or memory | [Runtime profiles](#8-runtime-profiles-k8ssandboxprofiles) |
+| Correctness checks and measurement options | [Version files](#9-version-files-k8ssandboxversions) |
+| Pool used by the trainer | [Routing](#10-routingjson) |
 
-The code defaults (`127.0.0.1` bind, egress self-test off, auth unconfigured) are for local tests, and in the cluster the manifests set different values.
-
-- **Many stages**: a value passes from `config.env` through a script, `render.py` and the manifest `env` or command-line arguments to the process, so if you miss one stage the cause is hard to find.
-- **Same name, different meaning**: some names, such as `SANDBOX_RUNTIME` and `SANDBOX_VERSION`, have a different meaning and default on the server and on the client.
-- **Different parsing rules per variable**: `SANDBOX_AUTH_TEST_BYPASS` turns on only when it is exactly `1`, while `HARNESS_ALLOW_CUDA_CPP` accepts `1`, `true` and `yes`.
-
-## Why
-
-- **If the docs and the code disagree, the code wins.** The defaults come from `Settings.from_env`, `AuthConfig.from_env`, the argparse definitions and the gateway's `create_app`.
-- **The cluster uses the manifest values.** A value that no manifest sets falls back to the code default in the cluster too. For example, no manifest sets `HARNESS_WARMUP`, so the server uses the default `3`.
-- **Each value is changed in a different file.** Pool CPU and memory live in the runtime profile, the number of correctness seeds in the version file, and the model to train in `scripts/config.env`.
-
-**Before you start:** "How values and templates come together" in the [Repository map](repository_map.md) shows where the tables on this page are used. To follow the local commands, finish the installation in [Getting started](../getting_started.md).
-
-??? note "Terms"
-    - **environment variable (env)**: a name and value pair a process receives when it starts. The server, the gateway and the trainer in this repository take most of their settings this way.
-    - **code default, manifest value**: the code default is what the code uses when the variable is absent; the manifest value is what a Kubernetes Deployment or Job actually sets. In the cluster the manifest value applies.
-    - **downward API**: the Kubernetes feature that passes a pod's own information, such as its name, node name and node IP, as environment variables.
-    - **projected ServiceAccount token**: a token kubelet writes into a pod file. It has a chosen audience and lifetime, and kubelet replaces it periodically at the same path.
-    - **fail closed**: rejecting instead of allowing when a setting is missing or cannot be checked.
-    - **Guaranteed QoS**: the highest resource guarantee class Kubernetes gives to pods whose requests equal their limits.
-
-    More terms are in the [Glossary](glossary.md).
+If the change is missing at runtime, trace [how values flow](#how-values-flow).
 
 ## How values flow
 

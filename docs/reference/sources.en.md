@@ -1,27 +1,11 @@
 # Verified facts and sources
 
 !!! info "TL;DR"
-    Every source this guide relies on, with the facts it supports in one line, plus a checklist of values to re-verify before deploying.
+    Find which AWS runs were performed and which figures come from official documents or third-party reports.
 
-## Pain point
-
-gVisor releases, nvproxy driver lists, the drivers shipped in AMIs, prices and quotas change within weeks. When several pages cite the same fact, it is hard to find which document is the basis. Numbers measured in a blog or by upstream CI are also easily mistaken for measurements of this repository.
-
-## Why
-
-- **The warm pool's roughly 55 ms is a measurement from an AWS blog.** The pool latencies this repository measured are in the 2026-11-18 run record ([08 Runtime benchmark](../handson/08_benchmark.md)).
-- **Evidence levels are local tests, official documentation, third-party reports, blog measurements, inference and AWS run records.**
-- **Re-check prices and quotas in the account and Region you deploy to.** The checklist below lists the values most likely to have changed and how to check them.
-
-**Before you start:** read "Validation status" on [Home](../index.md) and [Misconceptions](faq.md) first.
-
-??? note "Terms"
-    - **What's New**: the AWS announcement page for new features and launches.
-    - **third-party report**: content that someone else observed and published, such as blogs, issues and case studies.
-    - **inference**: a judgment derived from the evidence that was not checked directly.
-    - **quota**: the resource usage limit set per account and Region.
-
-    More terms are in the [Glossary](glossary.md).
+- [AWS run record](#aws-run-record) lists the runs performed for this repository.
+- [Predeployment checks](#re-verify-checklist-before-deploying) cover prices, quotas, and driver compatibility.
+- [All references](references.md) lists the original sources.
 
 ## Reading the evidence levels
 

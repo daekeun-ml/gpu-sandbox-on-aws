@@ -245,6 +245,8 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 ## 3. 남은 리소스 확인
 
+삭제 명령의 성공 출력 뒤에는 리소스 상태를 조회하세요. HyperPod와 데모 사이트처럼 별도로 만든 리소스는 각 삭제 절차가 끝났는지 확인하고, AMI와 스냅샷이 남았는지도 살펴봅니다.
+
 ### 인스턴스
 
 다음은 스크립트 마지막 단계와 같은 명령으로, `project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스를 표로 출력합니다.

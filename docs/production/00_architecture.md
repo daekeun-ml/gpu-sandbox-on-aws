@@ -12,7 +12,7 @@
 - **노드 그룹 desired 값을 수동으로 조정**: GPU 노드가 부하와 상관없이 계속 떠 있거나 늦게 늘어납니다.
 - **`scripts/ops/sync_jwks.sh`를 수동으로 실행**: issuer 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 샌드박스가 새 키로 서명한 토큰을 모두 거부합니다(fail closed).
 
-![a: 핸즈온 구성을 그대로 확장하면 네 가지 문제가 생깁니다. trainer 프로세스가 각자 빈 pod를 판단해 요청이 샌드박스 pod A에 몰리고, 503 재시도가 늘어납니다. veRL reward worker는 샘플마다 따로 routing하므로 한 group 안에서 v1과 v2가 섞일 수 있습니다. 노드 그룹 desired 값을 수동으로 조정하면 GPU 노드 수가 부하와 맞지 않습니다(계속 실행되거나 늦게 증설). scripts/ops/sync_jwks.sh를 수동으로 실행하는 방식에서는 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 새 키로 서명한 토큰이 모두 거부됩니다(fail closed). b: Production에서는 trainer가 sandbox gateway만 호출하고, gateway가 pod마다 평가 1건만 보냅니다. 버전은 TRL이 batch 스냅샷으로 batch마다, veRL이 group_key pin으로 group마다 하나씩 씁니다. Karpenter NodePool은 자기가 만든 노드를 0부터 limits 안에서 수요에 맞춰 늘리고 줄입니다(g4dn.metal은 warm 한 대). 핸즈온 CDK가 만든 관리형 노드 그룹은 그대로 남으므로 desired 값을 직접 줄입니다. jwks-sync CronJob은 매시 17분에 ConfigMap을 갱신해 서명 키 회전을 반영합니다.](../images/figures/production-00_architecture.svg)
+![a: 핸즈온 구성을 그대로 확장하면 네 가지 문제가 생깁니다. trainer 프로세스가 각자 빈 pod를 판단해 요청이 샌드박스 pod A에 몰리고, 503 재시도가 늘어납니다. veRL reward worker는 샘플마다 따로 routing하므로 한 group 안에서 v1과 v2가 섞일 수 있습니다. 노드 그룹 desired 값을 수동으로 조정하면 GPU 노드 수가 부하와 맞지 않습니다(계속 실행되거나 늦게 증설). scripts/ops/sync_jwks.sh를 수동으로 실행하는 방식에서는 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 새 키로 서명한 토큰이 모두 거부됩니다(fail closed). b: Production에서는 trainer가 sandbox gateway만 호출하고, gateway가 pod마다 평가 1건만 보냅니다. 버전은 TRL이 batch 스냅샷으로 batch마다, veRL이 group_key pin으로 group마다 하나씩 씁니다. Karpenter NodePool은 자기가 만든 노드를 0부터 limits 안에서 수요에 맞춰 늘리고 줄입니다(g4dn.metal은 warm 한 대). 핸즈온 CDK가 만든 관리형 노드 그룹은 그대로 남으므로 desired 값을 직접 줄입니다. jwks-sync CronJob은 매시 17분에 ConfigMap을 갱신해 서명 키 회전을 반영합니다.](../images/figures/production-00_architecture.ko.svg)
 
 *그림 요약: 핸즈온 구성을 그대로 확장하면 같은 pod에 요청이 몰리고, group 안에서 버전이 섞일 수 있으며, 노드 수와 서명 키를 수동으로 관리해야 합니다. Production에서는 gateway가 pod 선택과 버전 고정을, Karpenter NodePool이 노드 수 조정을, jwks-sync CronJob이 서명 키 갱신을 맡습니다.*
 
@@ -40,9 +40,11 @@
 
 ## 전체 구성
 
+역할을 나눠 보면 trainer는 답안을 생성하고, gateway는 평가를 맡길 pod와 버전을 고르며, 샌드박스는 답안을 실행합니다. 어느 단계에서 지연이 생겼는지 알려면 목록에 있는 AWS 리소스보다 요청 경로를 먼저 따라가세요.
+
 실선은 평가 요청, 점선은 Kubernetes API 호출이며, `aud`는 요청 토큰의 audience입니다.
 
-![rl-trainer namespace(trainer NodePool g6e, p5 또는 HyperPod 인스턴스 그룹)의 TRL ranks(Job)와 veRL Ray workers(RayCluster)는 aud가 gpu-sandbox-gateway인 토큰으로 sandbox-gateway namespace(system 노드)의 sandbox gateway만 호출합니다. sandbox gateway는 TokenReview, routing, group pin, pod당 요청 1건, recycling을 처리합니다. gateway는 aud가 gpu-sandbox인 토큰으로 sandbox namespace의 풀을 호출합니다. 풀은 sandbox-kata-qemu-v1(kata-qemu-nvidia-gpu), sandbox-gvisor-v1, v2(gvisor), sandbox-kata-clh-cpu-v1(kata-clh)이고, warm placeholder가 metal 노드 한 대를 확보해 둡니다. 풀 아래에는 Karpenter NodePool sandbox-kata-gpu(g4dn.metal), sandbox-gvisor(g5.xlarge, g5.2xlarge), sandbox-kata-cpu(c8i, m8i, r8i)가 있습니다. 점선은 Kubernetes API 호출입니다. gateway는 TokenReview와 draining pod 삭제를 호출하고, jwks-sync CronJob은 JWKS 읽기와 ConfigMap patch를 호출합니다.](../images/figures/production-00_architecture--overview.svg)
+![rl-trainer namespace(trainer NodePool g6e, p5 또는 HyperPod 인스턴스 그룹)의 TRL ranks(Job)와 veRL Ray workers(RayCluster)는 aud가 gpu-sandbox-gateway인 토큰으로 sandbox-gateway namespace(system 노드)의 sandbox gateway만 호출합니다. sandbox gateway는 TokenReview, routing, group pin, pod당 요청 1건, recycling을 처리합니다. gateway는 aud가 gpu-sandbox인 토큰으로 sandbox namespace의 풀을 호출합니다. 풀은 sandbox-kata-qemu-v1(kata-qemu-nvidia-gpu), sandbox-gvisor-v1, v2(gvisor), sandbox-kata-clh-cpu-v1(kata-clh)이고, warm placeholder가 metal 노드 한 대를 확보해 둡니다. 풀 아래에는 Karpenter NodePool sandbox-kata-gpu(g4dn.metal), sandbox-gvisor(g5.xlarge, g5.2xlarge), sandbox-kata-cpu(c8i, m8i, r8i)가 있습니다. 점선은 Kubernetes API 호출입니다. gateway는 TokenReview와 draining pod 삭제를 호출하고, jwks-sync CronJob은 JWKS 읽기와 ConfigMap patch를 호출합니다.](../images/figures/production-00_architecture--overview.ko.svg)
 
 *그림: trainer는 gateway만 호출하고, trainer의 평가 요청은 gateway를 거쳐 샌드박스 pod에 전달됩니다.*
 

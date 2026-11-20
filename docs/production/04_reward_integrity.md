@@ -12,7 +12,7 @@ speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측�
 - **정답 비교를 한 번만 하면**: 정확성 검사 때만 맞고 벤치마크 때 틀리는 출력, 결과 캐싱, 계산을 측정 구간 밖으로 미루는 lazy 출력을 찾아낼 수 없습니다.
 - **반대로 샌드박스 장애를 오답으로 채점하면**: 정답을 낸 completion이 낮은 reward를 받아, policy가 그런 출력을 오히려 덜 만들게 됩니다.
 
-![a: 후보 코드(ModelNew)가 채점 코드와 같은 Python 프로세스에서 실행되면 harness의 timer와 reference, 비교 함수를 바꿔치기할 수 있습니다. 추가 stream, 캐시, lazy 출력으로 측정 구간을 조작해, 더 빠른 커널 없이 높은 reward를 받습니다. b: 후보 코드는 신뢰하지 않는 자식 프로세스에서만 실행됩니다. timer 교체는 정적 정책의 속성 대입 거부로 막고, reference 출력과 비교는 부모 프로세스가 맡습니다. 자식도 과제 모듈을 불러오지만, 현재 요청의 reference 출력은 자식이 끝난 뒤 부모가 만듭니다. 측정 구간은 synchronize, 새 입력, checksum으로 보호합니다.](../images/figures/production-04_reward_integrity.svg)
+![a: 후보 코드(ModelNew)가 채점 코드와 같은 Python 프로세스에서 실행되면 harness의 timer와 reference, 비교 함수를 바꿔치기할 수 있습니다. 추가 stream, 캐시, lazy 출력으로 측정 구간을 조작해, 더 빠른 커널 없이 높은 reward를 받습니다. b: 후보 코드는 신뢰하지 않는 자식 프로세스에서만 실행됩니다. timer 교체는 정적 정책의 속성 대입 거부로 막고, reference 출력과 비교는 부모 프로세스가 맡습니다. 자식도 과제 모듈을 불러오지만, 현재 요청의 reference 출력은 자식이 끝난 뒤 부모가 만듭니다. 측정 구간은 synchronize, 새 입력, checksum으로 보호합니다.](../images/figures/production-04_reward_integrity.ko.svg)
 
 *그림 요약: 후보 코드가 채점 코드와 같은 프로세스에서 실행되면, 더 빠른 커널을 쓰지 않고 측정 코드와 비교 코드를 바꿔 reward를 얻을 수 있습니다. 후보 코드를 자식 프로세스로 분리하고 측정 절차를 고정해 이 경로를 차단합니다.*
 
@@ -43,7 +43,7 @@ speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측�
 
 샌드박스 서버는 평가 요청마다 새 프로세스 트리를 만들고 부모와 자식 프로세스에 역할을 나눕니다. 후보의 실행 시간과 출력 checksum은 자식이 측정해 보고하고, reference 계산과 측정, 결과 비교는 부모가 맡습니다. 후보 코드가 무엇을 출력하든 부모가 자신의 reference로 채점합니다.
 
-![torch를 import하지 않는 샌드박스 서버(uvicorn)가 요청마다 새 프로세스를 시작합니다. 신뢰하는 부모 evaluate.py가 1. 정적 정책 검사(AST, check_source)와 2. 요청마다 새 seed 생성(정확성 seed, timing seed)을 한 뒤, 후보 코드와 seed를 신뢰하지 않는 자식 runner.py에 전달합니다(env allowlist, 새 session, timeout). 자식은 3. 후보 ModelNew를 실행해 seed별 출력을 저장하고, timing과 checksum을 runner.json에 씁니다. seed별 출력과 runner.json이 부모로 돌아옵니다. runner.json은 1 MiB 크기 제한과 타입 검사를 거칩니다. 부모는 4. seed별 출력을 크기 검사 없이 weights_only=True로 읽어 같은 seed로 만든 reference 출력과 비교하고, 5. reference timing과 timed 출력 checksum을 비교하고, 6. runner.py가 끝난 뒤 마지막에 verdict JSON을 작성합니다. 자식에게는 reference 출력과 토큰 같은 pod env가 없습니다.](../images/figures/production-04_reward_integrity--two-process.svg)
+![torch를 import하지 않는 샌드박스 서버(uvicorn)가 요청마다 새 프로세스를 시작합니다. 신뢰하는 부모 evaluate.py가 1. 정적 정책 검사(AST, check_source)와 2. 요청마다 새 seed 생성(정확성 seed, timing seed)을 한 뒤, 후보 코드와 seed를 신뢰하지 않는 자식 runner.py에 전달합니다(env allowlist, 새 session, timeout). 자식은 3. 후보 ModelNew를 실행해 seed별 출력을 저장하고, timing과 checksum을 runner.json에 씁니다. seed별 출력과 runner.json이 부모로 돌아옵니다. runner.json은 1 MiB 크기 제한과 타입 검사를 거칩니다. 부모는 4. seed별 출력을 크기 검사 없이 weights_only=True로 읽어 같은 seed로 만든 reference 출력과 비교하고, 5. reference timing과 timed 출력 checksum을 비교하고, 6. runner.py가 끝난 뒤 마지막에 verdict JSON을 작성합니다. 자식에게는 reference 출력과 토큰 같은 pod env가 없습니다.](../images/figures/production-04_reward_integrity--two-process.ko.svg)
 
 *그림 요약: 후보 코드는 자식 프로세스에서 실행하고, reference 계산, 시간 비교, verdict 작성은 부모 프로세스에서만 합니다. 두 프로세스는 같은 pod와 UID를 쓰므로 파일 접근까지 나뉘지는 않습니다([02 보안](02_security.md)의 "다루지 않는 위험" 3).*
 
@@ -73,6 +73,8 @@ speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측�
 - **verdict는 부모가 마지막에 씁니다.** 부모는 runner가 종료되면 결과를 검증하고 마지막에 verdict를 쓰므로, 자식이 미리 써 둔 파일이 있어도 덮어씁니다. 남은 프로세스는 평가가 끝난 뒤 서버가 정리합니다.
 
 ## 측정 계약
+
+채점의 정확성과 측정의 유효성은 따로 봅니다. 기준 답과 일치해야 성능 비교가 의미 있고, GPU 작업을 끝까지 기다려야 기록한 시간이 실제 실행 시간을 반영합니다. 그 결과를 어떤 reward로 바꾸는지는 학습 쪽 규칙에서 확인합니다.
 
 측정 계약은 시계, 입력, 출력 검사 방법을 정한 규칙이고, 구현은 `harness/timing.py`와 `harness/evaluate.py`에 있습니다.
 

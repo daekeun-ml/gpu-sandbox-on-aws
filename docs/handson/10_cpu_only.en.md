@@ -1,27 +1,9 @@
 # 10 CPU-only path on c8i (scenario C)
 
 !!! info "TL;DR"
-    Without any GPU, put gVisor and Kata (Cloud Hypervisor, QEMU) on one `c8i.2xlarge` (nested virtualization) and swap the sandbox from v1 to v2 during a reward loop without a model (compute about 0.57 USD per hour, estimate, On-Demand list price).
+    Run three sandbox runtimes on a c8i node and grade prepared inputs without a model or GPU.
 
-## Pain points
-
-Scenario A needs GPU nodes.
-
-- **GPU quota**: many accounts have a `Running On-Demand G and VT instances` quota of 0, so you cannot even start while the quota request is pending.
-- **Cost**: even the minimal path costs about 3.42 USD per hour for compute alone, and adding Kata GPU takes it past 11 USD.
-- **Comparison conditions**: gVisor runs on `g5.xlarge` (A10G) and Kata GPU on `g4dn.metal` (T4), so it is hard to isolate the runtime's effect.
-- **The bare metal misconception**: many people postpone Kata because it supposedly needs bare metal, but only Kata + GPU passthrough needs `.metal`.
-
-![Two panels. a: with a G and VT quota of 0 you wait for approval and cannot start; once approved, scenario A (about 3.42 USD per hour, over 11 USD with Kata GPU) puts the gVisor pool on g5.xlarge, A10G and the Kata GPU pool on g4dn.metal, T4, so with different nodes and GPUs the runtime effect is hard to isolate. b: scenario C needs only the Standard quota (about 0.57 USD per hour, a sixth of A, estimate) and puts the gVisor, Kata CLH and Kata QEMU pools on one c8i.2xlarge, so with the same CPU, memory and kernel the differences are easier to pin on the runtime.](../images/figures/handson-10_cpu_only.svg)
-
-*Takeaway: Scenario A cannot start without GPU quota, costs more, and puts the two runtimes on different nodes and GPUs, while scenario C runs all three runtimes on one c8i.2xlarge at about a sixth of the compute cost and compares them under the same conditions.*
-
-
-## Why
-
-- **All three runtimes on the same node.** The three pools share one node with the same CPU, memory and kernel, so differences in boot time and evaluation latency are easier to attribute to the runtime.
-- **The sandbox side is the same code as the GPU path.** Image, `/v1/evaluate` API, authentication, NetworkPolicy and verification script (`scripts/ops/verify.sh`) stay. The CPU pools use a CPU RuntimeClass, `device=cpu` and a small input size (`SANDBOX_SIZE=smoke`). For example, the `relu_bias` input shrinks from 4096×4096 to 64×128.
-- **A reward loop instead of training.** The reward loop simulation (`scripts/ops/simulate.sh`) scores the golden submissions batch by batch with the trainer's own reward functions (`KernelRewards`), which is enough to watch a version swap during training (`scripts/ops/rollout.sh`).
+    **Completion check** Verify the pools, then check the simulator log for the change from v1 to v2.
 
 **Before you start:** read the architecture in [00 Overview](00_overview.md) and run the local smoke test in [Getting started](../getting_started.md). Runtime differences are in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and why version pinning matters is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
 
@@ -41,36 +23,39 @@ Scenario A needs GPU nodes.
 
 ## Architecture
 
-[![Scenario C: CPU pools of three runtimes on one c8i.2xlarge, no GPU](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
+The c8i node runs gVisor and Kata; the simulator sends prepared submissions and the rollout script changes the pool.
 
-*Takeaway: In AWS resources there is no GPU node, and one c8i.2xlarge serves as the sandbox node group.*
+??? note "Details"
+    [![Scenario C: CPU pools of three runtimes on one c8i.2xlarge, no GPU](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
-```mermaid
-flowchart LR
-    subgraph SYS["system: m6i.large x2, runc"]
-        J["Job simulate (ops/simulate.sh)<br/>ns rl-trainer"]
-        CM[("ConfigMap sandbox-routing")]
-    end
-    subgraph C8I["sandbox-kata-cpu: c8i.2xlarge (nested virtualization)"]
-        G["pool gvisor-cpu<br/>runsc, systrap"]
-        K1["pool kata-clh-cpu v1, v2<br/>Cloud Hypervisor VM"]
-        K2["pool kata-qemu-cpu<br/>QEMU VM"]
-    end
-    CM -. "active runtime, version per batch" .-> J
-    J == "POST /v1/evaluate :8000" ==> K1
-    J -.-> G & K2
-```
+    *Takeaway: In AWS resources there is no GPU node, and one c8i.2xlarge serves as the sandbox node group.*
 
-*Takeaway: three kinds of sandbox pools share one c8i node, and the routing ConfigMap decides which pool is called.*
+    ```mermaid
+    flowchart LR
+        subgraph SYS["system: m6i.large x2, runc"]
+            J["Job simulate (ops/simulate.sh)<br/>ns rl-trainer"]
+            CM[("ConfigMap sandbox-routing")]
+        end
+        subgraph C8I["sandbox-kata-cpu: c8i.2xlarge (nested virtualization)"]
+            G["pool gvisor-cpu<br/>runsc, systrap"]
+            K1["pool kata-clh-cpu v1, v2<br/>Cloud Hypervisor VM"]
+            K2["pool kata-qemu-cpu<br/>QEMU VM"]
+        end
+        CM -. "active runtime, version per batch" .-> J
+        J == "POST /v1/evaluate :8000" ==> K1
+        J -.-> G & K2
+    ```
 
-| Component in scenario A | In scenario C | Same? |
-|---|---|---|
-| GRPO trainer (`g5.2xlarge`, vLLM generation, gradients) | none; the `simulate` Job puts golden submissions where completions would be | different (no training) |
-| Reward functions `KernelRewards` | same code, `require_triton=False` | same |
-| One version per batch (routing snapshot) | same code | same |
-| Sandbox image, API, authentication, NetworkPolicy | the same | same |
-| Sandbox runtimes | `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu` | only the RuntimeClass differs |
-| Harness measurement | CPU timing (`device=cpu`), small inputs (`SANDBOX_SIZE=smoke`), no Triton | different (no GPU timing) |
+    *Takeaway: three kinds of sandbox pools share one c8i node, and the routing ConfigMap decides which pool is called.*
+
+    | Component in scenario A | In scenario C | Same? |
+    |---|---|---|
+    | GRPO trainer (`g5.2xlarge`, vLLM generation, gradients) | none; the `simulate` Job puts golden submissions where completions would be | different (no training) |
+    | Reward functions `KernelRewards` | same code, `require_triton=False` | same |
+    | One version per batch (routing snapshot) | same code | same |
+    | Sandbox image, API, authentication, NetworkPolicy | the same | same |
+    | Sandbox runtimes | `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu` | only the RuntimeClass differs |
+    | Harness measurement | CPU timing (`device=cpu`), small inputs (`SANDBOX_SIZE=smoke`), no Triton | different (no GPU timing) |
 
 ## Preparation
 
@@ -242,6 +227,8 @@ done
 - **Everything else**: see "Sandbox pools and readiness" in [Troubleshooting](../reference/troubleshooting.md).
 
 ## Step 7: A reward loop without a model, and a version swap (`ops/simulate.sh`, `ops/rollout.sh`)
+
+`ops/simulate.sh` sends the prepared submissions. Compare verdicts and the actual pool version before and after changing routing.
 
 Keep the terminal with the SSM tunnel from step 2 open, and use two more work terminals. The reward loop in the first work terminal scores 30 batches one after another and waits 20 seconds between batches. On the c8i node on 2026-11-17 it took about 16 minutes.
 

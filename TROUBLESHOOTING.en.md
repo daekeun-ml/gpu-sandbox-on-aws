@@ -2,25 +2,34 @@
 
 # Troubleshooting
 
-Common problems for beginners, step by step. For other symptoms and detailed diagnostic commands, see [Troubleshooting](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/) in the guidebook.
+Find the symptom you see below. For more diagnostic commands, see the [troubleshooting guide](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/).
+
+| Symptom | Start here |
+|---|---|
+| `set ... in scripts/config.env`, `missing tool` | [Configuration and scripts](#configuration-and-scripts) |
+| `kubectl` cannot connect, or nodes are missing | [CDK, tunnel and cluster](#cdk-tunnel-and-cluster) |
+| GPU smoke test fails | [gVisor](#gvisor), [Kata](#kata) |
+| `Pending`, `ContainerCreating`, or `Running` with `0/1` ready | [Sandbox pools](#sandbox-pools) |
+| HTTP `401` or `403` | [Authentication errors](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/#401-and-403-responses) |
+| `CUDA out of memory` or repeated `sandbox_error` | [Training](#training) |
+| Missing `hyperpodrun` or a failed cluster creation | [HyperPod](#hyperpod) |
+| A switch leaves the old version grading requests | [Version switches](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/#version-switches-routing) |
+| Resources or charges remain after cleanup | [Cleanup and cost](#cleanup-and-cost) |
 
 ## Check these first
 
-- **If `kubectl` cannot connect, check the tunnel first.** With the default setup the cluster API is private and reachable only through the tunnel. Run `cdk/tunnel.sh` again in a second terminal, and check that `kubectl config current-context` is `<CLUSTER_NAME>-tunnel`.
-- **A Running pod with READY `0/1` does not accept new evaluations.** A sandbox becomes Ready only after it passes the device check (on a GPU pool, that the GPU works) and the blocked-egress check. Look at the `device probe ok=` and `egress is open` lines of the pod log first.
-- **Training does not stop when the sandbox fails.** With TRL, check the `sandbox_error` count on the `reward_batch` lines of the trainer log. With veRL, check `sandbox_error` in `reward_extra_info`.
-
-These commands show the pods and the recent events:
+1. If `kubectl` cannot connect, check `cdk/tunnel.sh` in a separate terminal. `kubectl config current-context` should show `<CLUSTER_NAME>-tunnel`.
+2. Once connected, replace `<pod>` with the pod name from the first command below.
 
 ```bash
-source scripts/config.env      # CLUSTER_NAME and AWS_REGION
 kubectl -n sandbox get pods -o wide -L gpusandbox/runtime,gpusandbox/version
-kubectl -n sandbox describe pod <pod>          # Events: scheduling, RuntimeClass, probe failures
-kubectl -n sandbox logs <pod>                  # "device probe ok=..." and "egress is open, refusing work: ..."
-kubectl get events -A --sort-by=.lastTimestamp | tail -30
+kubectl -n sandbox describe pod <pod>
+kubectl -n sandbox logs <pod>
 ```
 
-More: [Diagnostic tools](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/#diagnostic-tools)
+- For `Pending` or `ContainerCreating`, read the events in `describe`.
+- For `Running` with `0/1` ready, check `device probe ok=` and `egress is open`. The pod takes new requests when it is Ready.
+- For repeated scoring failures during training, check `sandbox_error` in TRL's `reward_batch` or veRL's `reward_extra_info`.
 
 ## Configuration and scripts
 
@@ -110,6 +119,8 @@ More: [Training](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/tr
 More: [HyperPod](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/#hyperpod)
 
 ## Cleanup and cost
+
+Run `source scripts/config.env` from the repository root before checking the Region or using the AWS CLI below.
 
 - **Charges remain after `08_cleanup.sh`**: check that you ran it in the right Region and whether AMIs or snapshots remain.
     - **If you created HyperPod**: `08_cleanup.sh` does not delete HyperPod. Run `scripts/hyperpod/delete.sh` before `scripts/08_cleanup.sh`.

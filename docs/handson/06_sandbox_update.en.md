@@ -1,25 +1,9 @@
 # 06 Updating the sandbox during training
 
 !!! info "TL;DR"
-    Move the sandbox from v1 to v2 with blue/green without stopping on-policy training, and confirm the switch point with the `sandbox_version_switch` event.
+    Deploy a separate v2 pool while training is running. Compare verdicts on the same inputs before switching routing.
 
-## Pain point
-
-- **A gap in the measurement**: when the policy finds a gap in the measurement mid-training (an unrealistic speedup, for example), the harness must be fixed right away.
-- **Vulnerability patches**: patches for gVisor, Kata or the base image are hard to postpone until training ends.
-- **Restarting from scratch**: it can cost days.
-- **Scoring that changes with the version**: a new Triton or CUDA user-space library can change the verdict and timing of the same code. So if different versions score the 8 answers of one GRPO group, the advantage mistakes the difference in measurement rules for a learning signal.
-
-![a: during a rolling update, the v1 pool (3 seeds, no cap) and the v2 pool (5 seeds, cap 10x) score parts of one group, so the rule difference leaks into the advantage. b: with one version per group and never two versions in one batch, the completions in a group are compared under the same rules, so the difference in seed count and speedup cap between v1 and v2 stays out of the advantage](../images/figures/handson-06_sandbox_update.svg)
-
-*Takeaway: Each group is scored by one version, and even during a switch one batch never mixes two versions. That keeps the difference in seed count and speedup cap between v1 and v2 out of the score comparison within a group.*
-
-
-## Why
-
-- **A separate Deployment and headless Service per version (blue/green).** Pods of two versions never mix behind one Service, and the old Deployment stays at zero replicas, so rollback is fast.
-- **Check parity on golden submissions before switching.** Traffic moves only if the statuses match and the speedup ratio is within 35%.
-- **The trainer keeps the results of one reward batch on one pool version.** Each sandbox call reads one routing snapshot, and the new version scores from the first call that reads the updated routing table. If one batch's results span two pools, the batch is scored again on the pool of the last call so it ends on one version.
+    **Completion check** Verify that v2 has graded a submission before scaling down v1.
 
 **Before you start:** the training from [05 On-policy GRPO training](05_grpo_training.md) should be running. Why versions are pinned per group is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and terms are in the [Glossary](../reference/glossary.md).
 
@@ -92,8 +76,6 @@ Run this while the training from [05](05_grpo_training.md) runs in another termi
 # steps 1-4: deploy, verify, parity, switch
 scripts/ops/rollout.sh gvisor v1 v2
 
-# step 5, only after a reward_batch on v2 shows a status other than sandbox_error (see below)
-scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
 
 The first argument is also the active runtime, so pass the runtime training uses (`gvisor` here).
@@ -189,79 +171,91 @@ Speedups wobble between pods even on the same GPU type, so this check leaves roo
 
 ## How the trainer picks up the switch
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Op as operator (ops/rollout.sh)
-    participant V1 as sandbox-gvisor-v1
-    participant V2 as sandbox-gvisor-v2
-    participant CM as ConfigMap sandbox-routing
-    participant T as trainer (RoutingTable, KernelRewards)
-    T->>CM: snapshot for batch N is gvisor/v1
-    T->>V1: evaluate batch N
-    Op->>V2: 06_deploy_sandboxes.sh gvisor v2
-    Op->>V2: ops/verify.sh gvisor v2
-    Op->>V1: parity (golden set)
-    Op->>V2: parity (golden set)
-    Op->>CM: set active to gvisor/v2
-    Note over CM,T: kubelet updates the mounted file (within about a minute, per the script)
-    V1-->>T: batch N results (first switch, cache holds only v1, finished on v1)
-    T->>CM: snapshot for batch N+1 is gvisor/v2
-    T->>V2: evaluate batch N+1
-    V2-->>T: batch N+1 results
-    T->>T: print sandbox_version_switch, reward_batch
-    Op->>V1: --finish scales to 0 replicas
-```
+The trainer pins routing for a batch. Check the version and verdicts after the switch.
 
-*Takeaway: one batch is scored by one version. On the first switch the cache holds only v1 results, so batch N, sent to v1 before the switch, ends on v1, and v2 scores from batch N+1, the first batch that reads the updated routing table. If the ConfigMap update is late, more batches can still run on v1.*
+??? note "Details"
+    ```mermaid
+    sequenceDiagram
+        autonumber
+        participant Op as operator (ops/rollout.sh)
+        participant V1 as sandbox-gvisor-v1
+        participant V2 as sandbox-gvisor-v2
+        participant CM as ConfigMap sandbox-routing
+        participant T as trainer (RoutingTable, KernelRewards)
+        T->>CM: snapshot for batch N is gvisor/v1
+        T->>V1: evaluate batch N
+        Op->>V2: 06_deploy_sandboxes.sh gvisor v2
+        Op->>V2: ops/verify.sh gvisor v2
+        Op->>V1: parity (golden set)
+        Op->>V2: parity (golden set)
+        Op->>CM: set active to gvisor/v2
+        Note over CM,T: kubelet updates the mounted file (within about a minute, per the script)
+        V1-->>T: batch N results (first switch, cache holds only v1, finished on v1)
+        T->>CM: snapshot for batch N+1 is gvisor/v2
+        T->>V2: evaluate batch N+1
+        V2-->>T: batch N+1 results
+        T->>T: print sandbox_version_switch, reward_batch
+        Op->>V1: --finish scales to 0 replicas
+    ```
 
-1. The ConfigMap is mounted as a directory, so kubelet updates the file (the delay can reach the kubelet sync period plus the cache propagation delay, per the Kubernetes documentation).
-2. `RoutingTable` rereads the file at most every 2 seconds and bumps `revision` by 1 when the content changes. If the file is mid-write and unreadable, it keeps the last good table.
-3. `KernelRewards` keeps the results of one batch on one pool version. Each client call picks the pool from the snapshot at that moment.
-    - **What is sent**: the default batch is 2 groups, 16 completions, and only the completions that need a sandbox evaluation are sent. Cache hits from the same pool, answers with no code and answers caught by the trainer-side policy check are not sent.
-    - **Answers cached from another pool**: they are sent again to the pool that scored this batch, so one batch can call the client more than once.
-    - **If the pool switches again during scoring**: the third call sends the whole batch in one request, so a batch always ends on one version.
-    - **When every result the batch needs is cached from one pool**: no sandbox is called and no `reward_batch` line is printed.
-    - **`n` in `reward_batch`**: the number of distinct completions sent to the sandbox.
-4. Requests sent with the v1 snapshot are scored by v1. Either way, run `--finish` after the batches sent to v1 are done.
-    - **On the first switch**: the cache holds only v1 verdicts, so a batch sent to v1 before the switch ends on v1.
-    - **If cached verdicts from another pool force another call and the routing changes in between**: the whole batch is scored again on the pool of the last call.
-5. After the results of the first batch on the new snapshot come back, the switch event is printed once, right before that batch's `reward_batch`. The `07_run_grpo.sh` terminal shows it like the first line; the pod log and `GPUSANDBOX_LOG=json` show it like the second.
+    *Takeaway: one batch is scored by one version. On the first switch the cache holds only v1 results, so batch N, sent to v1 before the switch, ends on v1, and v2 scores from batch N+1, the first batch that reads the updated routing table. If the ConfigMap update is late, more batches can still run on v1.*
 
-```text
-[hh:mm:ss] SWITCH  gvisor/v1 -> gvisor/v2  (routing rev <int>, step <int>)
-{"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", "routing_revision": <int>, "global_step": <int>, "ts": <float>}
-```
+    1. The ConfigMap is mounted as a directory, so kubelet updates the file (the delay can reach the kubelet sync period plus the cache propagation delay, per the Kubernetes documentation).
+    2. `RoutingTable` rereads the file at most every 2 seconds and bumps `revision` by 1 when the content changes. If the file is mid-write and unreadable, it keeps the last good table.
+    3. `KernelRewards` keeps the results of one batch on one pool version. Each client call picks the pool from the snapshot at that moment.
+        - **What is sent**: the default batch is 2 groups, 16 completions, and only the completions that need a sandbox evaluation are sent. Cache hits from the same pool, answers with no code and answers caught by the trainer-side policy check are not sent.
+        - **Answers cached from another pool**: they are sent again to the pool that scored this batch, so one batch can call the client more than once.
+        - **If the pool switches again during scoring**: the third call sends the whole batch in one request, so a batch always ends on one version.
+        - **When every result the batch needs is cached from one pool**: no sandbox is called and no `reward_batch` line is printed.
+        - **`n` in `reward_batch`**: the number of distinct completions sent to the sandbox.
+    4. Requests sent with the v1 snapshot are scored by v1. Either way, run `--finish` after the batches sent to v1 are done.
+        - **On the first switch**: the cache holds only v1 verdicts, so a batch sent to v1 before the switch ends on v1.
+        - **If cached verdicts from another pool force another call and the routing changes in between**: the whole batch is scored again on the pool of the last call.
+    5. After the results of the first batch on the new snapshot come back, the switch event is printed once, right before that batch's `reward_batch`. The `07_run_grpo.sh` terminal shows it like the first line; the pod log and `GPUSANDBOX_LOG=json` show it like the second.
 
-After that, the pool on the `batch` lines becomes `gvisor/v2`. In the raw JSON, `version` in `reward_batch` is `v2` and `served_versions` is `{"v2": <int>}`. `MIXED VERSIONS` on a summary line means two versions scored one batch. Use `global_step` (`step` in the summary) to mark the switch point on the learning curve.
+    ```text
+    [hh:mm:ss] SWITCH  gvisor/v1 -> gvisor/v2  (routing rev <int>, step <int>)
+    {"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", "routing_revision": <int>, "global_step": <int>, "ts": <float>}
+    ```
+
+    After that, the pool on the `batch` lines becomes `gvisor/v2`. In the raw JSON, `version` in `reward_batch` is `v2` and `served_versions` is `{"v2": <int>}`. `MIXED VERSIONS` on a summary line means two versions scored one batch. Use `global_step` (`step` in the summary) to mark the switch point on the learning curve.
 
 ## Recycling v2 pods (SANDBOX_MAX_EVALS=200)
 
-After 200 evaluations a v2 pod turns draining and leaves Ready. The golden requests sent in steps 2 and 3 before the switch count toward the 200.
+??? note "Details"
+    After 200 evaluations a v2 pod turns draining and leaves Ready. The golden requests sent in steps 2 and 3 before the switch count toward the 200.
 
-- **In production**: the gateway's recycler deletes such pods ([03 Gateway and pools](../production/03_gateway_and_pools.md)).
-- **In the hands-on's direct mode**: the pod just stays, not Ready.
+    - **In production**: the gateway's recycler deletes such pods ([03 Gateway and pools](../production/03_gateway_and_pools.md)).
+    - **In the hands-on's direct mode**: the pod just stays, not Ready.
 
-The two v2 pods have 400 evaluations in total. After the 12 golden requests, evaluating 16 completions once per step leaves about 24 steps.
+    The two v2 pods have 400 evaluations in total. After the 12 golden requests, evaluating 16 completions once per step leaves about 24 steps.
 
-- **When the cache keeps `n` small**: they last longer.
-- **When cached verdicts from another pool, or the whole batch, are sent again**: they run out sooner.
-- **When both are draining**: requests become `sandbox_error` and drop out of the reward.
+    - **When the cache keeps `n` small**: they last longer.
+    - **When cached verdicts from another pool, or the whole batch, are sent again**: they run out sooner.
+    - **When both are draining**: requests become `sandbox_error` and drop out of the reward.
 
-For long runs, delete v2 pods that served evaluations at `1/1` for a while and then turned READY `0/1`. Tell them apart from the pods below, which also show `0/1`.
+    For long runs, delete v2 pods that served evaluations at `1/1` for a while and then turned READY `0/1`. Tell them apart from the pods below, which also show `0/1`.
 
-- **A pod that is still starting, or that failed the GPU probe or the egress check**: it also shows `0/1`.
-- **A pod that hit a `gpu_fault` during an evaluation**: it also turns `0/1`, but the liveness probe restarts its container within about 30 seconds, so `RESTARTS` goes up.
-- **A pod failing the egress check**: while the check fails, the server re-checks every 5 seconds and logs `egress is open, refusing work` each time. If recent logs, such as `kubectl -n sandbox logs <pod> --since=1m`, keep showing that line, do not delete the pod; start with the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md).
+    - **A pod that is still starting, or that failed the GPU probe or the egress check**: it also shows `0/1`.
+    - **A pod that hit a `gpu_fault` during an evaluation**: it also turns `0/1`, but the liveness probe restarts its container within about 30 seconds, so `RESTARTS` goes up.
+    - **A pod failing the egress check**: while the check fails, the server re-checks every 5 seconds and logs `egress is open, refusing work` each time. If recent logs, such as `kubectl -n sandbox logs <pod> --since=1m`, keep showing that line, do not delete the pod; start with the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md).
 
-The first command below lists the v2 pods. Run the second one only for a v2 pod that served evaluations at `1/1` for a while and then turned READY `0/1`.
+    The first command below lists the v2 pods. Run the second one only for a v2 pod that served evaluations at `1/1` for a while and then turned READY `0/1`.
+
+    ```bash
+    kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v2
+    kubectl -n sandbox delete pod <READY-0/1-pod-name>
+    ```
+
+    **What to look for:** after the deletion the Deployment creates a new pod, and a few minutes later the first command shows every pod at `1/1` again.
+
+## Finish after confirming v2
+
+Use the trainer log to confirm that a `reward_batch` from v2 contains at least one verdict other than `sandbox_error`. Then scale v1 to zero.
 
 ```bash
-kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v2
-kubectl -n sandbox delete pod <READY-0/1-pod-name>
+scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
-
-**What to look for:** after the deletion the Deployment creates a new pod, and a few minutes later the first command shows every pod at `1/1` again.
 
 ## Rollback
 

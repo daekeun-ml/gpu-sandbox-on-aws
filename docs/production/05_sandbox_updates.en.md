@@ -11,7 +11,7 @@ Security patches, Triton upgrades and harness setting changes happen mid-run too
 - **When the sandbox Deployment is replaced by a rolling update**: old and new pods answer side by side. Completions of one GRPO group are then scored by different rules and the group-relative advantage is corrupted.
 - **When you use Karpenter `alias: al2023@latest`**: new nodes silently get the latest AMI. gVisor nvproxy checks the driver version strictly, so on a node with a new driver the sandbox may never become Ready.
 
-![a: in a Deployment during a rolling update, the old pod (old scoring rules) and the new pod (new scoring rules) score parts of the 8 completions of one GRPO group, so the group-relative advantage mixes scores of two rules. b: with one pool per (runtime, version), the active sandbox-gvisor-v1 scores the whole group, and sandbox-gvisor-v2 gets no traffic before its checks and takes over from the next batch (TRL) or the next newly pinned group (veRL), so the advantage holds scores of one version within each rank's batch (TRL) or within a valid group_key pin (veRL)](../images/figures/production-05_sandbox_updates.svg)
+![a: in a Deployment during a rolling update, the old pod (old scoring rules) and the new pod (new scoring rules) score parts of the 8 completions of one GRPO group, so the group-relative advantage mixes scores of two rules. b: with one pool per (runtime, version), the active sandbox-gvisor-v1 scores the whole group, and sandbox-gvisor-v2 gets no traffic before its checks and takes over from the next batch (TRL) or the next newly pinned group (veRL), so the advantage holds scores of one version within each rank's batch (TRL) or within a valid group_key pin (veRL)](../images/figures/production-05_sandbox_updates.en.svg)
 
 *Takeaway: During the rollout one group is scored by two versions, so the advantage mixes scores from different rules. Start the new version as a separate pool and switch after verification and parity pass: TRL then uses one version within each rank's batch, and veRL one version within each valid `group_key` pin.*
 
@@ -192,6 +192,8 @@ With the TRL default `steps_per_generation` (= `gradient_accumulation_steps`), o
 On the veRL path the gateway holds the group pins in memory, so it runs as a single replica, and restarting it right after a switch drops the pins of in-flight groups. A pin is released only after its TTL, so keep the old pool running for at least the TTL after the switch so that pinned groups can finish.
 
 ## Observing the switch
+
+Applying routing does not tell you when the trainer first received a successful result from the new pool. Check the version and verdict in the trainer logs before retiring the old pool.
 
 In the first reward batch that calls the sandbox after a version change, the trainer writes these two lines in order (other fields omitted, values are examples).
 

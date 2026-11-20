@@ -10,7 +10,7 @@
 - **버전 고정 규칙이 trainer 코드마다 따로 있으면**: 샌드박스 환경의 버전을 trainer와 독립적으로 관리하기도 어렵습니다.
 - **다른 사례**: INTELLECT-3는 API를 거친 `kubectl exec`의 지연이 명령당 약 2.5초까지 늘어나자 gateway, headless Service, sidecar 구성으로 바꿨다고 보고했습니다(arXiv 2512.16144).
 
-![a: TRL rank 0과 veRL reward worker가 각자 샌드박스 pod A를 빈 pod로 판단해 같은 pod로 요청을 보내고, 503 응답과 재시도가 발생합니다. group 17의 샘플 1은 v1로, routing 전환 뒤에 보낸 샘플 2는 v2로 채점되어 같은 group이 서로 다른 버전으로 채점됩니다. b: 네 요청이 모두 sandbox gateway 하나를 거칩니다. gateway가 in-flight 요청 수를 한곳에서 집계해 pod A와 pod B에 동시 1건씩 보내고, group_key pin으로 두 샘플을 첫 샘플의 버전인 v1로 채점합니다(group pin, TTL 900초).](../images/figures/production-03_gateway_and_pools.svg)
+![a: TRL rank 0과 veRL reward worker가 각자 샌드박스 pod A를 빈 pod로 판단해 같은 pod로 요청을 보내고, 503 응답과 재시도가 발생합니다. group 17의 샘플 1은 v1로, routing 전환 뒤에 보낸 샘플 2는 v2로 채점되어 같은 group이 서로 다른 버전으로 채점됩니다. b: 네 요청이 모두 sandbox gateway 하나를 거칩니다. gateway가 in-flight 요청 수를 한곳에서 집계해 pod A와 pod B에 동시 1건씩 보내고, group_key pin으로 두 샘플을 첫 샘플의 버전인 v1로 채점합니다(group pin, TTL 900초).](../images/figures/production-03_gateway_and_pools.ko.svg)
 
 *그림 요약: 호출자마다 따로 pod를 고르면 같은 pod에 요청이 몰리고, 샘플마다 따로 routing하면 한 group이 두 버전으로 채점됩니다. gateway 하나가 in-flight 요청 수를 집계하고 group을 첫 샘플의 버전에 고정해 두 문제를 해결합니다.*
 
@@ -61,6 +61,8 @@ print(info.runtime, info.version, info.revision, results[0]["status"])
 gateway 메트릭은 `gateway_evaluations_total{runtime, version, status}`, `gateway_evaluation_seconds`, `gateway_recycled_pods_total`입니다. 대시보드와 알람은 [07 Observability와 운영](07_observability_and_operations.md)에서 다룹니다.
 
 ## Group pin과 TTL
+
+**Group pin**은 같은 문제에서 생성한 답을 채점하는 동안 사용할 풀의 버전을 기억하는 기능입니다. **TTL**은 그 기록을 유지하는 시간입니다. 요청이 여러 worker에서 오더라도 같은 group의 비교가 성립하려면 pin이 마지막 평가까지 남아 있어야 합니다.
 
 ```mermaid
 sequenceDiagram

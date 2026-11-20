@@ -9,7 +9,28 @@
 2. **생성한 코드를 어떤 GPU에서 돌릴 건가요?** 속도가 점수라면 목표 GPU에서 측정하세요. 이 저장소의 기본 gVisor GPU 실습은 A10G를 씁니다.
 3. **pod마다 별도 VM이 필요한가요?** 이 저장소의 Kata GPU 경로는 `g4dn.metal`의 T4를 사용합니다. VM 경계와 목표 GPU를 둘 다 만족하는 구성을 먼저 확인하세요.
 
-## 경로를 고른 뒤 무엇을 확인하나요?
+```mermaid
+flowchart TD
+    GPU{"채점에 GPU 필요"}
+    CPU["CPU 실습"]
+    TARGET["측정할 GPU와 입력 결정"]
+    VM{"별도 VM 경계 필요"}
+    GVISOR["gVisor 후보: 드라이버 지원 확인"]
+    KATA["Kata 후보: 목표 GPU와 passthrough 지원 확인"]
+    GPU -->|아니요| CPU
+    GPU -->|예| TARGET
+    TARGET --> VM
+    VM -->|아니요| GVISOR
+    VM -->|예| KATA
+```
+
+예를 들어 L4에서 서비스할 코드를 속도로 채점한다면, T4에서 얻은 순위가 L4에서도 같다고 가정할 수 없습니다. 측정할 GPU가 정해졌다면 후보 런타임이 그 GPU를 지원하는지 확인한 뒤, 필요한 격리 경계와 운영 비용을 비교하세요.
+
+## 두 조건을 동시에 만족하기 어려운 경우
+
+L4에서 측정하면서 샌드박스마다 별도 VM을 요구하는 경우, 이 저장소의 기본 GPU 경로 중 두 조건을 모두 충족하는 구성은 없습니다. gVisor의 L4 경로와 Kata의 T4 경로는 각각 다른 조건을 충족합니다. 실제 운영에 적용하려면 어느 GPU에서 측정해야 결과가 유효한지와 어떤 격리 경계가 필수인지 먼저 정해야 합니다.
+
+## 실습 경로별 확인 항목
 
 | 경로 | 첫 확인 |
 |---|---|
@@ -25,7 +46,7 @@
 ??? note "고객 상황 예시"
     | 고객 상황 | 조합 | 이유 |
     |---|---|---|
-    | 사내 연구팀이 자체 모델로 L4 서빙용 Triton 커널을 학습 | `g6.xlarge`의 gVisor (이 저장소이 지원하는 대안. 기본값은 `g5.xlarge`) | 한 팀만 쓰는 풀이라 VM 경계까지는 요구하지 않고, 측정 GPU를 배포 GPU(L4)에 맞출 수 있음 |
+    | 사내 연구팀이 자체 모델로 L4 서빙용 Triton 커널을 학습 | `g6.xlarge`의 gVisor (이 저장소가 지원하는 대안. 기본값은 `g5.xlarge`) | 한 팀만 쓰는 풀이라 VM 경계까지는 요구하지 않고, 측정 GPU를 배포 GPU(L4)에 맞출 수 있음 |
     | 여러 고객의 학습 작업이 같은 GPU 노드를 쓰고, T4 기준 순위로 충분 | `g4dn.metal`의 Kata + QEMU, 고객별 풀 | 고객별로 풀을 나누고 요청도 그 풀로 보내야 고객 간 작업이 VM 경계로 나뉨(표 아래 목록). T4에서 측정하는 조건을 수용 |
     | 여러 고객이 공유하는 풀에서 H100 서빙용 커널을 학습 | `p5`의 gVisor + 보완 통제, 고객별 노드 분리 검토, 위험 수용 기록 | EC2에 VM 경계 + H100 조합이 없음 |
     | 단위 테스트로 채점하는 code RL | `c8i`의 Kata + CLH 또는 관리형 CPU 샌드박스 | reward 계산에 GPU가 필요 없음 |
@@ -39,7 +60,7 @@
     | 항목 | gVisor + nvproxy | Kata + QEMU (GPU) | Kata + CLH (CPU) | Kata + CLH (GPU, 실험) | Nitro Sandboxes, EKS isolated pods |
     |---|---|---|---|---|---|
     | 격리 경계 | 사용자 공간 커널. GPU는 ioctl allowlist라 VM보다 약함 | VM + IOMMU | VM | VM + IOMMU (upstream 미검증) | AWS 관리형 (세부는 문서 확인) |
-    | AWS에서 쓸 수 있는 GPU | G/P 계열 VM. 이 저장소은 A10G (`g5`, 기본)와 L4 (`g6`, 대안) | T4 (`g4dn.metal`)만 | 없음 | T4 (`g4dn.metal`) | 없음 (출시 시점) |
+    | AWS에서 쓸 수 있는 GPU | G/P 계열 VM. 이 저장소는 A10G (`g5`, 기본)와 L4 (`g6`, 대안) | T4 (`g4dn.metal`)만 | 없음 | T4 (`g4dn.metal`) | 없음 (출시 시점) |
     | 설치 난이도 | 중간: user data로 runsc 설치, containerd handler, RuntimeClass, device plugin `cdi-cri` | 높음: IOMMU AMI 빌드, GPU Operator, kata-deploy, `.metal` 노드 | 중간: nested virtualization launch template, kata-deploy | 높음: QEMU 구성 외에 실험용 values 적용. 이 저장소의 실습에서는 VM이 시작되지 않음 | 낮음: Kubernetes 1.36 이상 |
     | 밀도 (이 저장소 구성) | `g5.xlarge` 노드당 1개 | `g4dn.metal`당 VM 최대 8개, guest RAM 전체 pin | pod당 CPU 1.25개(요청 1 + overhead 250m)와 메모리 2 GiB + 130Mi. 노드의 할당 가능 CPU와 메모리 중 먼저 소진되는 쪽이 상한 | `kata-qemu`와 노드 공유 | 문서 확인 |
     | upstream 지원 | 지원 (nvproxy 문서) | 지원 (NVIDIA CI는 A100, H100) | 지원 | 미지원 | AWS 지원 (2026-11-09 출시) |

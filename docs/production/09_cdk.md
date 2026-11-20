@@ -8,9 +8,9 @@
 - **여러 스크립트로 나눠 만들 때**: 클러스터, 노드 그룹, launch template을 여러 스크립트로 나눠 만들면 이해하기는 쉽지만, 환경을 다시 만들거나 팀에 공유할 때 순서를 놓치기 쉽습니다.
 - **여러 스크립트로 나눠 만든 구성을 삭제할 때**: 단계별 리소스(launch template, 로그 그룹 등)를 따로 삭제해야 하고, 하나라도 남으면 비용이 계속 발생하거나 다음 생성이 실패합니다.
 - **계정 보안 점검**: 공개된 API endpoint, IMDSv1, 암호화하지 않은 볼륨, 넓게 열린 security group은 계정 보안 점검에서 바로 지적됩니다(예: Security Hub 컨트롤 EKS.1).
-- **eksctl**: private endpoint만 활성화한 클러스터를 처음부터 만들 수 없어(eksctl 문서) public endpoint가 활성화된 상태로 남습니다. 그래서 이 저장소은 eksctl을 쓰는 방법을 제거했습니다.
+- **eksctl**: private endpoint만 활성화한 클러스터를 처음부터 만들 수 없어(eksctl 문서) public endpoint가 활성화된 상태로 남습니다. 그래서 이 저장소는 eksctl을 쓰는 방법을 제거했습니다.
 
-![a: 여러 스크립트를 순서대로 실행해 단계 1에서 클러스터, 단계 2에서 노드 그룹, 단계 3에서 launch template과 로그 그룹을 만듭니다. 삭제할 때도 단계마다 리소스별로 따로 삭제해야 하고, 하나라도 남으면 비용이 나가거나 다음 생성이 실패합니다. b: cdk/deploy.sh가 같은 리소스를 CDK 스택 하나(CloudFormation)로 배포하고, cdk/destroy.sh가 스택 전체를 삭제합니다. 스택 안의 리소스는 함께 삭제되고, HyperPod 클러스터, AMI, ECR은 따로 삭제합니다.](../images/figures/production-09_cdk.svg)
+![a: 여러 스크립트를 순서대로 실행해 단계 1에서 클러스터, 단계 2에서 노드 그룹, 단계 3에서 launch template과 로그 그룹을 만듭니다. 삭제할 때도 단계마다 리소스별로 따로 삭제해야 하고, 하나라도 남으면 비용이 나가거나 다음 생성이 실패합니다. b: cdk/deploy.sh가 같은 리소스를 CDK 스택 하나(CloudFormation)로 배포하고, cdk/destroy.sh가 스택 전체를 삭제합니다. 스택 안의 리소스는 함께 삭제되고, HyperPod 클러스터, AMI, ECR은 따로 삭제합니다.](../images/figures/production-09_cdk.ko.svg)
 
 *그림 요약: 단계마다 만든 리소스는 단계마다 따로 삭제해야 하고, 하나만 놓쳐도 비용이 나가거나 다음 생성이 실패합니다. CDK 스택 하나로 만들면 스택에 든 리소스를 스택 단위로 삭제할 수 있습니다.*
 
@@ -209,6 +209,8 @@ aws ec2 describe-instances --region "$AWS_REGION" \
 - **B1과 B2에서 `HyperPodPyTorchJob`으로 학습하려면**: trainer 이미지에 `hyperpodrun`이 들어가도록 `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드하세요.
 
 ## 4단계: 지우기 (cdk/destroy.sh)
+
+정리 전에 스택이 소유한 리소스와 스크립트가 별도로 만든 리소스를 확인하세요. CloudFormation이 삭제를 마쳐도 HyperPod 클러스터나 ECR 저장소 등 스택 밖 리소스는 별도 확인이 필요합니다.
 
 삭제를 시작하기 전에 `kubectl config current-context`가 `<CLUSTER_NAME>-tunnel`인지 확인하세요. 아래 두 스크립트 모두 현재 컨텍스트를 그대로 씁니다.
 

@@ -11,7 +11,7 @@ Sandbox-side failures usually do not stop training.
 - **Even when the pool shrinks**: a pod that is not Ready only disappears from the headless Service DNS, so requests pile onto the remaining pods and steps just get slower.
 - **Under reward hacking**: it even looks like improving rewards, because flags (`implausible_speedup`, `timed_output_mismatch` and others) live only in the verdicts and are not aggregated into metrics.
 
-![a: authentication failures (a flood of 401s) drop sandbox_error samples with None, giving those samples an advantage of 0, and when every sample is dropped steps go by with no learning signal; a shrinking pool takes pods that are not Ready out of DNS and loads the remaining pods, so steps just get slower; reward hacking flags live only in verdicts and are not aggregated into metrics, so rewards seem to improve. Training stops in none of the three. b: the same failures map to alarms: status.sandbox_error / n to the sandbox_error rate (TRL over 5%, 3 batches in a row), available versus desired replicas per active pool Deployment to Ready pods short (available below desired for 10 minutes), and flag counts (an extension not in the repository, dashed) to a reward hacking signal (flag rate trending up)](../images/figures/production-07_observability_and_operations.svg)
+![a: authentication failures (a flood of 401s) drop sandbox_error samples with None, giving those samples an advantage of 0, and when every sample is dropped steps go by with no learning signal; a shrinking pool takes pods that are not Ready out of DNS and loads the remaining pods, so steps just get slower; reward hacking flags live only in verdicts and are not aggregated into metrics, so rewards seem to improve. Training stops in none of the three. b: the same failures map to alarms: status.sandbox_error / n to the sandbox_error rate (TRL over 5%, 3 batches in a row), available versus desired replicas per active pool Deployment to Ready pods short (available below desired for 10 minutes), and flag counts (an extension not in the repository, dashed) to a reward hacking signal (flag rate trending up)](../images/figures/production-07_observability_and_operations.en.svg)
 
 *Takeaway: Sandbox-side failures do not stop training. When every sample becomes unscorable, steps go by without learning; a shrinking pool slows steps down; reward hacking makes rewards look better than they are. The three failures are caught by alarms on the `sandbox_error` rate, the number of Ready pods and the flag count.*
 
@@ -226,6 +226,8 @@ fields @timestamp, @message
 Whichever collector you use, the authentication and NetworkPolicy requirements above stay the same, so the CloudWatch agent also needs a token of an allowlisted subject to read `/metrics`.
 
 ## Operations runbook
+
+If steps continue while `sandbox_error` increases, compare gateway queues with pool readiness. This separates ungraded submissions from incorrect answers.
 
 | Symptom | Likely cause | Action |
 |---|---|---|
