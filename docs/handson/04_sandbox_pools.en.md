@@ -275,6 +275,8 @@ PASS read_host_file               status=policy_violation  speedup=None
 [hh:mm:ss] pool sandbox-gvisor-v1 verified
 ```
 
+![verify.sh gvisor v1 output: the sandbox kernel 4.19.0-gvisor differs from the node kernel, four egress targets blocked, both pods on NVIDIA A10G with egress blocked, the six prepared submissions PASS (Triton answer speedup 1.76), the default namespace blocked, and the last line pool sandbox-gvisor-v1 verified](../images/terminal/verify-gvisor-a.png)
+
 - Check 3 prints one `pod` line per endpoint with the pool, kernel, GPU and whether egress is blocked. An endpoint that is not blocked shows `EGRESS OPEN`.
 - In Kata pools the `kernel` value is the guest kernel version, and the GPU slot for `kata-qemu` shows `Tesla T4`. CPU pools (`*-cpu`) show `no GPU` in the GPU slot and skip the two Triton goldens.
 - Prefix the script with `GPUSANDBOX_LOG=json` (`GPUSANDBOX_LOG=json scripts/ops/verify.sh gvisor`) to see the raw JSON lines with every field (`endpoint`, `kernel_release`, `gpu`, `egress_blocked` and so on) instead of the `pod` lines. The raw JSON also stays in the log of the `probe-...` Job that ran in the `rl-trainer` namespace.

@@ -158,7 +158,7 @@ kubectl이나 helm을 쓰는 단계(`04_install_gpu_stack.sh` 이후, HyperPod �
 | `scripts/04_install_gpu_stack.sh` | NVIDIA device plugin (CDI 모드)을 설치한 뒤 `gvisor` RuntimeClass와 smoke pod | device plugin은 Helm `--wait`, smoke pod timeout 15분 | 없음 |
 | `scripts/05_setup_namespaces_auth.sh` | 네임스페이스, NetworkPolicy, ServiceAccount, JWKS, routing ConfigMap | 짧음 | 없음 |
 | `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]` | 샌드박스 풀 (Deployment + headless Service) | rollout timeout 30분 | 없음 (기존 노드 사용) |
-| `scripts/07_run_grpo.sh [max_steps]` | GRPO 학습 Job (기본 60 step) | [05](05_grpo_training.md) 참고. 5 step은 이미지 pull과 모델 다운로드를 포함해 약 12분 (실측, `g5.2xlarge`) | 없음 |
+| `scripts/07_run_grpo.sh [max_steps]` | GRPO 학습 Job (기본 60 step) | [05](05_grpo_training.md) 참고. 기본 60 step은 약 50분, 5 step은 약 12분 (실측, 이미지 pull과 모델 다운로드 포함, `g5.2xlarge`) | 없음 |
 | `scripts/08_cleanup.sh` (`--images`) | 풀, Job, CDK 스택(클러스터, 노드 그룹, VPC, access instance), AMI, (ECR) 삭제 | 기록 없음 (CloudFormation 삭제를 기다림) | CDK 스택의 리소스 해제(secrets용 KMS 키는 7일 삭제 대기). AMI는 `config.env`에 ID가 있을 때 확인 후 삭제, ECR은 `--images`를 붙일 때만 삭제. 마지막에 남은 인스턴스를 조회 |
 
 `06_deploy_sandboxes.sh`로 풀을 배포한 뒤에는 풀 검증(`scripts/ops/verify.sh`)을 실행하고, `07_run_grpo.sh`로 학습을 시작한 뒤에는 버전 교체(`scripts/ops/rollout.sh`)를 실행합니다. 두 스크립트는 아래 표에 있고, 전체 실행 순서는 "최소 경로와 전체 경로"의 그림에 있습니다.

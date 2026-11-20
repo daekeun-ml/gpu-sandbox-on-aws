@@ -37,7 +37,8 @@ kubectl get events -A --sort-by=.lastTimestamp | tail -30
 - **`python3 cannot import aws_cdk` 또는 `ModuleNotFoundError: No module named 'aws_cdk'`**: 가상 환경이 활성화되지 않은 터미널입니다. `source .venv/bin/activate`를 실행한 뒤 다시 실행하세요. 가상 환경이 없으면 README의 「공통 준비」대로 `uv pip install -r cdk/requirements.txt`를 먼저 실행합니다.
 - **`Cloud assembly schema version mismatch`**: CDK CLI가 오래됐습니다. `npm install -g aws-cdk`로 2.1148.1 이상으로 올리세요.
 - **`ADMIN_PRINCIPAL_ARN must list IAM role or user ARNs, not sts assumed-role ARNs`**: 넣은 값 중에 IAM 역할이나 사용자 ARN 형식이 아닌 것이 있습니다. STS 세션 ARN(`arn:aws:sts::...:assumed-role/...`)을 넣었다면 그 역할의 ARN으로 바꾸거나 값을 비워 두세요.
-- **`cdk/tunnel.sh`가 `TargetNotConnected`로 끝남**: 배포 직후에는 접속 인스턴스가 아직 준비되지 않았을 수 있습니다. 몇 분 뒤 다시 실행하세요.
+- **`cdk/tunnel.sh`가 `TargetNotConnected`로 끝남**: 배포 직후에는 접속 인스턴스가 아직 준비되지 않았을 수 있습니다. 몇 분 뒤 다시 실행하세요. 10분이 지나도 같으면 접속 인스턴스의 SSM 상태(`PingStatus`)를 확인하세요. `ConnectionLost`이면 `aws ec2 reboot-instances --instance-ids <instance-id>`로 재부팅하고, `Online`으로 돌아온 뒤 다시 실행합니다. 인스턴스 ID는 `tunnel.sh`가 출력하는 `via i-...` 값입니다.
+- **kubectl이 `TLS handshake timeout`으로 실패**: 이전 클러스터의 터널이 아직 `127.0.0.1:8443`을 쓰고 있을 수 있습니다. 예전 터널을 띄운 터미널을 Ctrl-C로 닫고 `cdk/tunnel.sh`를 다시 실행하세요.
 - **노드 그룹 생성이 vCPU 한도 오류로 실패**: GPU 노드 그룹이면 Service Quotas에서 `Running On-Demand G and VT instances`를 올리세요. 시나리오 A는 trainer 8과 gVisor 노드 두 대의 4씩, 합쳐서 16 vCPU가 필요합니다. system 노드나 CPU 노드가 실패했다면 `Running On-Demand Standard` 쿼터를 확인하세요.
 - **노드 그룹 생성이 `InsufficientInstanceCapacity`로 실패하거나, 첫 생성이 30분쯤 멈춘 뒤 전체가 롤백됨**: 먼저 노드 그룹의 실패 사유를 확인하세요. `InsufficientInstanceCapacity`는 그 AZ에서 요청한 유형의 인스턴스를 필요한 수만큼 확보하지 못했다는 뜻입니다. GPU 용량 부족으로 첫 클러스터 생성 전체가 롤백됐다면, 아래 명령으로 GPU 노드 그룹 없이 클러스터를 먼저 만들고 노드 그룹을 하나씩 추가하세요(`scripts/config.env`의 `SCENARIO`가 `A`이고 `WITH_KATA_GPU`가 `"0"`일 때). 기존 클러스터에 GPU 노드 그룹을 추가하다 실패했다면 그 업데이트만 롤백되니, 잠시 뒤 실패한 단계만 다시 실행하세요.
 

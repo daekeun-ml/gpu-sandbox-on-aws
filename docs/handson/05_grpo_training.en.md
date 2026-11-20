@@ -33,7 +33,7 @@ Generating rollouts (vLLM) and training the policy on one A10G 24 GB means shari
     - **OOM**: a process failure because GPU memory ran out (out of memory).
 
 !!! warning "Validation status"
-    A 5-step run (`scripts/07_run_grpo.sh 5`) ran in the practice account and the Job ended Complete. The default 60-step run was not run, and the memory and cost figures are calculations, not measurements. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
+    The default 60-step run (`scripts/07_run_grpo.sh`) and a 5-step run ran in the practice account, and both Jobs ended Complete. The memory and cost figures are calculations, not measurements. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Before you begin
 
@@ -74,7 +74,11 @@ CUDA Error: invalid argument at /workspace/csrc/cumem_allocator.cpp:249
 
 The fields each summary keeps are listed under [Reading the logs](#reading-the-logs) below. To see every field from the start, run `GPUSANDBOX_LOG=json scripts/07_run_grpo.sh`. For a run that has already started, read the raw log with the `kubectl logs` command right below.
 
-In the 5-step run in the practice account on 2026-11-18 (`MAX_STEPS=5`, `g5.2xlarge`), every step printed one `reward_batch` whose `status` mixed `ok`, `wrong_answer`, `compile_error` and `runtime_error`, each step took 63.15 to 95.59 seconds, and `train_runtime` was about 401 seconds. After `done`, vLLM printed the `CUDA Error` of the last line while shutting down, yet the Job still ended Complete (exit 0). If you see that line, judge success by the Job status.
+In the default 60-step run in the practice account, every step printed one `reward_batch`, 60 in all. `status` mixed `ok`, `wrong_answer`, `compile_error` and `runtime_error`, with no `sandbox_error` at all. Scoring a batch took 31 seconds at the median, and `train_runtime` was 2697 seconds (about 45 minutes). The screen below shows the start and end of that run.
+
+![07_run_grpo.sh output for 60 steps: the Job submission and the routing line, batches 1 to 3 with their train lines, a gap, batches 58 to 60 with their train lines, train done (train_runtime 2697), done (reward_batches 60), and the final vLLM shutdown message CUDA Error](../images/terminal/grpo-train-a.png)
+
+After `done`, vLLM printed the `CUDA Error` of the last line while shutting down, yet the Job still ended Complete (exit 0). If you see that line, judge success by the Job status.
 
 **If it fails:** if the pod stays Pending, `status` is mostly `sandbox_error`, or you hit an OOM, see the "How to verify" table at the end and the "training" section of [Troubleshooting](../reference/troubleshooting.md).
 
@@ -255,7 +259,7 @@ This asset shows that the on-policy loop runs end to end; it does not promise a 
 | 2 | `row_softmax`, `rms_norm`, `layer_norm` |
 | 3 (excluded by default) | `matmul_bias_relu` (float16) |
 
-A comment in the tasks module calls level 0 the sanity level that small models usually solve. So reward will most likely show up on level 0 first (inference), while level 2, where correct kernels are rare, can have a sparse reward and a high `frac_reward_zero_std`. The default 60 steps cover 120 prompts (about 13 per task), which may be too few to judge a trend.
+A comment in the tasks module calls level 0 the sanity level that small models usually solve. So reward will most likely show up on level 0 first (inference), while level 2, where correct kernels are rare, can have a sparse reward and a high `frac_reward_zero_std`. The default 60 steps cover 120 prompts (about 13 per task), which may be too few to judge a trend. In the 60-step run in the practice account, the `ok` share was 5.3% over the first 20 steps and 6.0% over the last 20, nearly the same.
 
 Diagnose in this order: `reward_batch` appears on steps that have new completions to score, `sandbox_error` is rare, the format reward is above 0, then how the `wrong_answer` and `runtime_error` ratios move, and whether `ok` + custom kernel appears even once.
 
@@ -308,7 +312,7 @@ GPU memory use was not measured. The step times and the per-step reward and loss
 
 ## Time and cost
 
-The 5-step run in the practice account on 2026-11-18 took about 12 minutes for the whole Job, image pull and model download included. Time goes to the trainer image pull on the first run (large, based on `vllm/vllm-openai:v0.33.0`), the model download on every run (`HF_HOME` is an emptyDir), vLLM initialization, and per step the generation, sandbox evaluation and training.
+In the practice account the whole Job took about 50 minutes for the default 60-step run and about 12 minutes for a 5-step run, both including the image pull and model download. Time goes to the trainer image pull on the first run (large, based on `vllm/vllm-openai:v0.33.0`), the model download on every run (`HF_HOME` is an emptyDir), vLLM initialization, and per step the generation, sandbox evaluation and training.
 
 | Node | Count | USD/hour |
 |---|---|---|

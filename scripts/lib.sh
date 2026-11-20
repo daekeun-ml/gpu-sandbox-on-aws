@@ -14,6 +14,10 @@ else
   exit 1
 fi
 
+# AWS CLI: no pager (it waits for a key or leaves control codes in captured output), and more
+# retries with backoff for throttled read-only calls such as Service Quotas.
+export AWS_PAGER="" AWS_MAX_ATTEMPTS="${AWS_MAX_ATTEMPTS:-8}" AWS_RETRY_MODE="${AWS_RETRY_MODE:-adaptive}"
+
 # Colors only on a terminal, and never with NO_COLOR set (https://no-color.org).
 _on_tty() { [[ -t "$1" && -z "${NO_COLOR+x}" ]]; }
 log() {

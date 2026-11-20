@@ -147,6 +147,8 @@ kernel (gVisor reports its own): 4.19.0-gvisor
 cuda ok: NVIDIA A10G 2048.0
 ```
 
+![04_install_gpu_stack.sh 실행 화면 끝부분: 노드별 GPU 수(device plugin 재시작 직후라 한 대는 잠시 0), gvisor RuntimeClass 생성, smoke pod의 커널 4.19.0-gvisor, Starting gVisor..., 마지막 줄 cuda ok: NVIDIA A10G 2048.0](../images/terminal/gpu-stack-a.png)
+
 - 커널 문자열은 gVisor 소스(`version.go`)의 기본값 `4.19.0-gvisor`입니다. 노드의 커널(`kubectl get node <node> -o jsonpath='{.status.nodeInfo.kernelVersion}'`)과 다르면 pod가 호스트 커널을 직접 쓰지 않는다는 뜻입니다. gVisor인지는 RuntimeClass `gvisor`와 아래 dmesg의 `Starting gVisor...`로 확인합니다.
 - dmesg의 첫 줄은 `Starting gVisor...`이고, 이어지는 줄은 gVisor가 임의로 선택한 메시지입니다.
 

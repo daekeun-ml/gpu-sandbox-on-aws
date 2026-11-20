@@ -312,8 +312,8 @@ https://dohbsn4kn34ya.cloudfront.net/?lang=en
 
 ## Validation status
 
-- **Run on AWS:** scenario A (gVisor GPU on `g5`), scenario C (three CPU runtimes) with a version switch, Kata GPU (`g4dn.metal`), the runtime benchmark on five pools and the public demo site ran in a practice account. The experimental Kata CLH GPU did not start its VM. The measurements are in [08 Runtime benchmark](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/08_benchmark/), and the dated run record is in [Verified facts and sources](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/sources/#aws-run-record).
-- **Not run on AWS:** `ops/rollout.sh` during training (scenario A), `rollout.sh --finish`, the 60-step default training run, and HyperPod B1 and B2. Confirm these steps with the checks on each hands-on page.
+- **Run on AWS:** scenario A (gVisor GPU on `g5`, including the default 60-step training run), scenario C (three CPU runtimes) with a version switch, Kata GPU (`g4dn.metal`), the runtime benchmark on five pools and the public demo site ran in a practice account. The experimental Kata CLH GPU did not start its VM. The measurements are in [08 Runtime benchmark](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/08_benchmark/), and the dated run record is in [Verified facts and sources](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/sources/#aws-run-record).
+- **Not run on AWS:** `ops/rollout.sh` during training (scenario A), and HyperPod B1 and B2. Confirm these steps with the checks on each hands-on page.
 - **Numbers:** prices and versions come from official documentation and public material, not measurements.
 
 ## Cost

@@ -33,7 +33,7 @@ rollout 생성(vLLM)과 policy 학습을 A10G 24 GB 한 장에서 함께 하려�
     - **OOM**: GPU 메모리가 부족해 프로세스가 실패하는 것(out of memory)입니다.
 
 !!! warning "검증 상태"
-    실습 계정에서 5 step run(`scripts/07_run_grpo.sh 5`)을 실행해 Job이 Complete로 끝났습니다. 기본값인 60 step run은 실행하지 않았고, 메모리와 비용 수치는 측정값이 아니라 계산값입니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
+    실습 계정에서 기본값인 60 step run(`scripts/07_run_grpo.sh`)과 5 step run을 실행해 둘 다 Job이 Complete로 끝났습니다. 메모리와 비용 수치는 측정값이 아니라 계산값입니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 시작 전 확인
 
@@ -74,7 +74,11 @@ CUDA Error: invalid argument at /workspace/csrc/cumem_allocator.cpp:249
 
 요약에 담기는 필드는 아래 [로그 읽는 법](#로그-읽는-법)에 있습니다. 모든 필드를 처음부터 보려면 `GPUSANDBOX_LOG=json scripts/07_run_grpo.sh`로 실행하세요. 이미 시작한 학습은 바로 아래 `kubectl logs` 명령으로 원래 로그를 봅니다.
 
-실습 계정에서 2026-11-18에 실행한 5 step run(`MAX_STEPS=5`, `g5.2xlarge`)에서는 step마다 `reward_batch`가 하나씩 나왔고, `status`에 `ok`, `wrong_answer`, `compile_error`, `runtime_error`가 섞여 있었습니다. step마다 63.15초에서 95.59초가 걸렸고, `train_runtime`은 약 401초였습니다. `done` 뒤에 vLLM이 종료하면서 마지막 줄의 `CUDA Error`를 출력했지만, Job은 그대로 Complete(exit 0)로 끝났습니다. 그러니 이 줄이 보이면 Job 상태로 성공 여부를 판단하세요.
+실습 계정에서 기본값인 60 step run을 실행했을 때는 step마다 `reward_batch`가 하나씩, 모두 60개 나왔습니다. `status`에는 `ok`, `wrong_answer`, `compile_error`, `runtime_error`가 섞였고 `sandbox_error`는 한 건도 없었습니다. batch 채점 시간은 중앙값 31초, `train_runtime`은 2697초(약 45분)였습니다. 아래 화면은 그 실행의 처음과 끝입니다.
+
+![07_run_grpo.sh 60 step 실행 화면: Job 제출과 routing 줄, batch 1부터 3까지와 train 줄, 중간 생략, batch 58부터 60까지와 train 줄, train done(train_runtime 2697), done(reward_batches 60), 마지막 vLLM 종료 메시지 CUDA Error](../images/terminal/grpo-train-a.png)
+
+`done` 뒤에 vLLM이 종료하면서 마지막 줄의 `CUDA Error`를 출력했지만, Job은 그대로 Complete(exit 0)로 끝났습니다. 그러니 이 줄이 보이면 Job 상태로 성공 여부를 판단하세요.
 
 **문제가 생기면:** pod가 Pending이거나 `status`가 대부분 `sandbox_error`이거나 OOM이 나면, 끝의 "확인 방법" 표와 [문제 해결](../reference/troubleshooting.md)의 "학습" 항목을 보세요.
 
@@ -255,7 +259,7 @@ TRL은 세 reward 함수를 따로 호출합니다. `KernelRewards`가 task, pro
 | 2 | `row_softmax`, `rms_norm`, `layer_norm` |
 | 3 (기본 제외) | `matmul_bias_relu` (float16) |
 
-tasks 모듈 주석은 level 0을 작은 모델도 대부분 풀 수 있는 sanity level로 설명합니다. 그래서 0보다 큰 reward는 level 0에서 먼저 나올 가능성이 크고(추론), 정답 커널이 드문 level 2는 reward가 희소해 `frac_reward_zero_std`가 높을 수 있습니다. 기본 60 step의 prompt 120개(task당 평균 13개 정도)는 추세를 판단하기에 적은 양일 수 있습니다.
+tasks 모듈 주석은 level 0을 작은 모델도 대부분 풀 수 있는 sanity level로 설명합니다. 그래서 0보다 큰 reward는 level 0에서 먼저 나올 가능성이 크고(추론), 정답 커널이 드문 level 2는 reward가 희소해 `frac_reward_zero_std`가 높을 수 있습니다. 기본 60 step의 prompt 120개(task당 평균 13개 정도)는 추세를 판단하기에 적은 양일 수 있습니다. 실습 계정의 60 step run에서도 `ok` 비율은 처음 20 step 5.3%, 마지막 20 step 6.0%로 거의 같았습니다.
 
 진단할 때는 새로 채점할 completion이 있는 step에서 `reward_batch`가 나오는지, `sandbox_error`가 드문지, format reward가 0보다 큰지, `wrong_answer`와 `runtime_error` 비율이 어떻게 변하는지, `ok` + custom kernel이 한 번이라도 나오는지를 차례로 확인합니다.
 
@@ -308,7 +312,7 @@ GPU 메모리 사용량은 측정하지 않았습니다. step 시간과 step별 
 
 ## 소요 시간과 비용
 
-실습 계정에서 2026-11-18에 실행한 5 step run은 이미지 pull과 모델 다운로드를 포함해 Job 전체가 약 12분 걸렸습니다. 시간이 걸리는 단계는 첫 실행의 trainer 이미지 pull(`vllm/vllm-openai:v0.33.0` 기반이라 큼), 매 실행의 모델 다운로드(`HF_HOME`이 emptyDir), vLLM 초기화, step마다의 생성, 샌드박스 평가, 학습입니다.
+실습 계정에서 Job 전체는 기본값 60 step run이 약 50분, 5 step run이 약 12분 걸렸습니다(둘 다 이미지 pull과 모델 다운로드 포함). 시간이 걸리는 단계는 첫 실행의 trainer 이미지 pull(`vllm/vllm-openai:v0.33.0` 기반이라 큼), 매 실행의 모델 다운로드(`HF_HOME`이 emptyDir), vLLM 초기화, step마다의 생성, 샌드박스 평가, 학습입니다.
 
 | 노드 | 수 | USD/시간 |
 |---|---|---|

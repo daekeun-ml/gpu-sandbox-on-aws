@@ -275,6 +275,8 @@ PASS read_host_file               status=policy_violation  speedup=None
 [hh:mm:ss] pool sandbox-gvisor-v1 verified
 ```
 
+![verify.sh gvisor v1 실행 화면: 샌드박스 커널 4.19.0-gvisor와 노드 커널이 다르고, 외부 연결 네 곳이 blocked, 두 pod 모두 NVIDIA A10G와 egress blocked, 미리 준비한 코드 6개가 PASS(Triton 정답 speedup 1.76), default namespace 접속 blocked, 마지막 줄 pool sandbox-gvisor-v1 verified](../images/terminal/verify-gvisor-a.png)
+
 - 3번의 `pod` 줄은 endpoint마다 하나씩 나오며, 풀, 커널, GPU, egress 차단 여부를 보여 줍니다. 차단되지 않은 endpoint는 `EGRESS OPEN`으로 표시됩니다.
 - Kata 풀에서는 `kernel` 값이 guest 커널 버전이고, `kata-qemu`의 GPU 자리는 `Tesla T4`입니다. CPU 풀(`*-cpu`)은 GPU 자리에 `no GPU`가 나오고 Triton golden 둘을 건너뜁니다.
 - 스크립트 앞에 `GPUSANDBOX_LOG=json`을 붙이면(`GPUSANDBOX_LOG=json scripts/ops/verify.sh gvisor`) `pod` 줄 대신 모든 필드가 들어 있는 원래 JSON 줄(`endpoint`, `kernel_release`, `gpu`, `egress_blocked` 등)이 나옵니다. 원래 JSON은 `rl-trainer` namespace에서 실행된 `probe-...` Job의 로그에도 남습니다.

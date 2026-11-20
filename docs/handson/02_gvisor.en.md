@@ -147,6 +147,8 @@ kernel (gVisor reports its own): 4.19.0-gvisor
 cuda ok: NVIDIA A10G 2048.0
 ```
 
+![End of the 04_install_gpu_stack.sh output: GPUs per node (one briefly 0 right after the device plugin restart), the gvisor RuntimeClass, the smoke pod's kernel 4.19.0-gvisor, Starting gVisor..., and the last line cuda ok: NVIDIA A10G 2048.0](../images/terminal/gpu-stack-a.png)
+
 - The kernel string is the default `4.19.0-gvisor` in the gVisor source (`version.go`). If it differs from the node's kernel (`kubectl get node <node> -o jsonpath='{.status.nodeInfo.kernelVersion}'`), the pod is not using the host kernel directly. The RuntimeClass `gvisor` and the dmesg line `Starting gVisor...` below show that it is gVisor.
 - The first dmesg line is `Starting gVisor...`; gVisor picks the following lines at random.
 

@@ -137,6 +137,8 @@ scripts/01_check_prereqs.sh
 
 부족하면 Service Quotas 콘솔에서 증가를 요청하세요(vCPU 계산은 [00 전체 흐름](00_overview.md)의 사전 준비 절).
 
+![01_check_prereqs.sh 실행 화면: AWS identity 표(계정과 사용자는 가림), 도구 버전, G and VT 쿼터 768, Standard 쿼터 1152, c8i.2xlarge의 nested-virtualization 지원, g5.2xlarge, g5.xlarge, g4dn.metal이 us-west-2a, 2b, 2c에서 제공, 마지막 줄 Done](../images/terminal/prereqs-a.png)
+
 **문제가 생기면:** `missing tool`이나 `set ... in scripts/config.env`가 나오면 [문제 해결](../reference/troubleshooting.md)의 "설정과 스크립트" 항목을 보세요.
 
 ## 클러스터 생성 (CDK): `02_create_cluster.sh`
@@ -171,6 +173,8 @@ Next:
   then the in-cluster steps of the hands-on (04_install_gpu_stack.sh or kata/cpu_nodes.sh,
   05_setup_namespaces_auth.sh, 06_deploy_sandboxes.sh, ops/verify.sh, ...)
 ```
+
+![02_create_cluster.sh 실행 화면 끝부분: 배포 승인에 y, gpu-sandbox-cdk 배포 완료, Outputs의 AccessInstanceId, ClusterEndpoint, ClusterName gpu-sandbox, EndpointPublicAccess false, Scenario A, 총 소요 903.84초, Next 안내](../images/terminal/create-cluster-a.png)
 
 EKS 콘솔의 클러스터 Networking 탭에서는 API server endpoint access가 `Private`으로 표시되어야 합니다.
 
@@ -213,22 +217,21 @@ cdk/tunnel.sh
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 ```
 
-**확인할 것:** 시나리오 A라면 아래와 같은 형태입니다(예시이며 이름과 시간은 환경마다 다름).
+**확인할 것:** 시나리오 A라면 아래처럼 노드 다섯 대가 `Ready`입니다.
 
-```text
-NAME                                      STATUS   ROLES    AGE   VERSION   ROLE             INSTANCE-TYPE
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   15m   v1.36.x   system           m6i.large
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   15m   v1.36.x   system           m6i.large
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   12m   v1.36.x   trainer          g5.2xlarge
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   12m   v1.36.x   sandbox-gvisor   g5.xlarge
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   12m   v1.36.x   sandbox-gvisor   g5.xlarge
-```
+![kubectl get nodes 결과: system m6i.large 두 대, trainer g5.2xlarge 한 대, sandbox-gvisor g5.xlarge 두 대가 모두 Ready](../images/terminal/nodes-a.png)
 
 B1(`--hyperpod`)은 trainer 줄이 없고, B2는 system 두 대, C는 system 두 대와 `sandbox-kata` 한 대(`c8i.2xlarge`, 실습 계정에서 확인)입니다.
 
 **문제가 생기면:**
 
-- `TargetNotConnected`는 access instance의 SSM agent가 아직 등록되지 않았다는 뜻이니, 배포 직후라면 몇 분 뒤 다시 실행하세요.
+- `TargetNotConnected`는 access instance의 SSM agent가 아직 등록되지 않았다는 뜻이니, 배포 직후라면 몇 분 뒤 다시 실행하세요. 10분이 지나도 같으면 아래 명령으로 상태를 확인하세요. `ConnectionLost`이면 `aws ec2 reboot-instances --region "$AWS_REGION" --instance-ids <instance-id>`로 재부팅하고, `Online`으로 돌아온 뒤 다시 실행합니다. 인스턴스 ID는 `tunnel.sh`가 출력하는 `via i-...` 값입니다.
+
+    ```bash
+    aws ssm describe-instance-information --region "$AWS_REGION" --filters Key=InstanceIds,Values=<instance-id> --query 'InstanceInformationList[0].PingStatus' --output text
+    ```
+
+- kubectl이 `TLS handshake timeout`으로 실패하면 이전 클러스터의 터널이 아직 `127.0.0.1:8443`을 쓰고 있을 수 있습니다. 예전 터널을 띄운 터미널을 Ctrl-C로 닫고 다시 실행하세요.
 - `missing tool: session-manager-plugin`이면 준비 2의 2번을 진행하세요.
 - `stack <CLUSTER_NAME>-cdk has no outputs; run cdk/deploy.sh first`가 나오면 클러스터 생성(`02_create_cluster.sh`)을 먼저 끝내세요.
 - `Unable to connect to the server`라면 터널이 열려 있는지 확인하고, 다른 클러스터의 context를 쓰고 있었다면 `kubectl config use-context <CLUSTER_NAME>-tunnel`로 전환하세요.

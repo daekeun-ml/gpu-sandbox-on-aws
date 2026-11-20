@@ -137,6 +137,8 @@ scripts/01_check_prereqs.sh
 
 Request increases for low quotas in the Service Quotas console (the vCPU math is in the prerequisites section of [00 Overview](00_overview.md)).
 
+![01_check_prereqs.sh output: the AWS identity table (account and user masked), tool versions, a G and VT quota of 768, a Standard quota of 1152, nested-virtualization support on c8i.2xlarge, g5.2xlarge, g5.xlarge and g4dn.metal offered in us-west-2a, 2b and 2c, and the final Done line](../images/terminal/prereqs-a.png)
+
 **If it fails:** for `missing tool` or `set ... in scripts/config.env`, see the "config and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ## Create the cluster (CDK): `02_create_cluster.sh`
@@ -171,6 +173,8 @@ Next:
   then the in-cluster steps of the hands-on (04_install_gpu_stack.sh or kata/cpu_nodes.sh,
   05_setup_namespaces_auth.sh, 06_deploy_sandboxes.sh, ops/verify.sh, ...)
 ```
+
+![End of the 02_create_cluster.sh output: y to the deploy prompt, gpu-sandbox-cdk deployed, Outputs with AccessInstanceId, ClusterEndpoint, ClusterName gpu-sandbox, EndpointPublicAccess false and Scenario A, a total time of 903.84 s, and the Next guidance](../images/terminal/create-cluster-a.png)
 
 In the EKS console, the cluster's Networking tab must show API server endpoint access as `Private`.
 
@@ -213,22 +217,21 @@ In the first terminal, list the nodes.
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 ```
 
-**What to look for:** for scenario A, a shape like the one below (an example; names and ages differ).
+**What to look for:** for scenario A, five nodes are `Ready`, as below.
 
-```text
-NAME                                      STATUS   ROLES    AGE   VERSION   ROLE             INSTANCE-TYPE
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   15m   v1.36.x   system           m6i.large
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   15m   v1.36.x   system           m6i.large
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   12m   v1.36.x   trainer          g5.2xlarge
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   12m   v1.36.x   sandbox-gvisor   g5.xlarge
-ip-10-0-x-x.us-west-2.compute.internal    Ready    <none>   12m   v1.36.x   sandbox-gvisor   g5.xlarge
-```
+![kubectl get nodes: two system m6i.large, one trainer g5.2xlarge and two sandbox-gvisor g5.xlarge nodes, all Ready](../images/terminal/nodes-a.png)
 
 B1 (`--hyperpod`) has no trainer line, B2 only the two system nodes, and C two system nodes and one `sandbox-kata` node (`c8i.2xlarge`, checked in the practice account).
 
 **If it fails:**
 
-- `TargetNotConnected` means the access instance's SSM agent has not registered yet; right after the deploy, wait a few minutes and retry.
+- `TargetNotConnected` means the access instance's SSM agent has not registered yet; right after the deploy, wait a few minutes and retry. If it still fails after 10 minutes, check its status with the command below. If it is `ConnectionLost`, reboot it with `aws ec2 reboot-instances --region "$AWS_REGION" --instance-ids <instance-id>` and retry once it is `Online`. The instance ID is the `via i-...` value that `tunnel.sh` prints.
+
+    ```bash
+    aws ssm describe-instance-information --region "$AWS_REGION" --filters Key=InstanceIds,Values=<instance-id> --query 'InstanceInformationList[0].PingStatus' --output text
+    ```
+
+- If kubectl fails with `TLS handshake timeout`, a tunnel to an earlier cluster may still hold `127.0.0.1:8443`. Close the terminal of the old tunnel with Ctrl-C and run it again.
 - For `missing tool: session-manager-plugin`, do item 2 of preparation 2.
 - For `stack <CLUSTER_NAME>-cdk has no outputs; run cdk/deploy.sh first`, finish the cluster creation (`02_create_cluster.sh`) first.
 - For `Unable to connect to the server`, check that the tunnel is still running; after using another cluster, switch back with `kubectl config use-context <CLUSTER_NAME>-tunnel`.

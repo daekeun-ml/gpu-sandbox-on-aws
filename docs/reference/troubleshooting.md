@@ -13,7 +13,7 @@
 - **"(추정)"으로 표시한 원인은 코드나 문서로 확인하지 못한 것입니다.** pod 이벤트와 노드 로그로 직접 확인하세요.
 
 !!! warning "이 페이지의 근거"
-    시나리오 C, 시나리오 A(`g5`), Kata GPU(`g4dn.metal`), 런타임 벤치마크, 데모 사이트는 실습 계정에서 실행했습니다. 시나리오 A 클러스터는 GPU 노드 그룹 없이 만든 뒤 update로 추가했고(아래 "GPU 용량이 없을 때"), 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행은 Kata GPU 실행에서 나왔습니다. 시나리오 A의 `ops/rollout.sh`, 기본값 60 step 학습, HyperPod B1과 B2는 실행하지 않았고, 실험용 CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](sources.md#aws-실행-기록)에 있습니다. 증상과 원인은 스크립트 오류 메시지, 코드 동작, 공식 문서에서 가져왔습니다. 에러 문구는 도구 버전마다 다를 수 있습니다.
+    시나리오 C, 시나리오 A(`g5`), Kata GPU(`g4dn.metal`), 런타임 벤치마크, 데모 사이트는 실습 계정에서 실행했습니다. 시나리오 A 클러스터는 GPU 노드 그룹 없이 만든 뒤 update로 추가했고(아래 "GPU 용량이 없을 때"), 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행은 Kata GPU 실행에서 나왔습니다. 학습 중의 시나리오 A `ops/rollout.sh`와 HyperPod B1, B2는 실행하지 않았고, 실험용 CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](sources.md#aws-실행-기록)에 있습니다. 증상과 원인은 스크립트 오류 메시지, 코드 동작, 공식 문서에서 가져왔습니다. 에러 문구는 도구 버전마다 다를 수 있습니다.
 
 ??? note "용어"
     - **readiness**: kubelet이 pod가 요청을 받을 준비가 됐는지 확인하는 검사입니다. 이 저장소에서는 GPU probe와 egress 차단 확인이 모두 통과해야 Ready가 됩니다.
@@ -168,7 +168,8 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 | `ADMIN_PRINCIPAL_ARN must list IAM role or user ARNs, not sts assumed-role ARNs` | STS 세션 ARN(`arn:aws:sts::...:assumed-role/...`)을 넣음 | `aws iam get-role --role-name <역할> --query Role.Arn --output text`로 얻은 역할 ARN을 넣거나 비워 두기 |
 | `EKS_PUBLIC_ACCESS_CIDR must be a single IPv4 address in /32 form` | `0.0.0.0/0`이나 /24 같은 범위를 넣음 | 비워 두거나(private만) 작업 PC 주소 하나를 `/32`로 |
 | `cdk/tunnel.sh`가 `stack <CLUSTER_NAME>-cdk has no outputs; run cdk/deploy.sh first`로 멈춤 | 스택이 아직 없거나, `CLUSTER_NAME`, `AWS_REGION`이 배포할 때와 다름 | config.env 값을 확인하고 `02_create_cluster.sh` 실행 |
-| `cdk/tunnel.sh`가 `TargetNotConnected`로 끝남 | access instance의 SSM agent가 아직 Systems Manager에 등록되지 않음(배포 직후) | 몇 분 기다렸다 다시 실행 |
+| `cdk/tunnel.sh`가 `TargetNotConnected`로 끝남 | access instance의 SSM agent가 아직 Systems Manager에 등록되지 않음(배포 직후). 등록 직후 연결이 끊기기도 함(`PingStatus`가 `ConnectionLost`) | 몇 분 기다렸다 다시 실행. 10분이 지나도 같으면 `aws ssm describe-instance-information`으로 `PingStatus`를 확인하고, `ConnectionLost`이면 `aws ec2 reboot-instances`로 재부팅한 뒤 `Online`이 되면 다시 실행 |
+| kubectl이 `TLS handshake timeout`으로 실패 | 이전 클러스터의 터널(`session-manager-plugin`)이 아직 `127.0.0.1:8443`을 쓰고 있음 | 예전 터널 터미널을 Ctrl-C로 닫고 `cdk/tunnel.sh` 재실행 |
 | `cdk/tunnel.sh`가 `[error] missing tool: session-manager-plugin`으로 멈춤 | AWS CLI용 Session Manager plugin이 없음 | [Session Manager plugin 설치](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) 후 `session-manager-plugin --version`으로 확인 |
 | `cdk/destroy.sh`가 `cluster API not reachable (is cdk/tunnel.sh running?)` 경고를 냄 | 터널이 꺼져 있어 풀과 Job을 먼저 지우지 못함 | 그대로 두어도 스택 삭제가 노드를 지웁니다. 풀부터 지우려면 터널을 켜고 다시 실행 |
 

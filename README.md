@@ -312,8 +312,8 @@ https://dohbsn4kn34ya.cloudfront.net/ (영어판은 주소 뒤에 `?lang=en`)
 
 ## 검증 상태
 
-- **AWS에서 실행한 것:** 시나리오 A(gVisor GPU, `g5`), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 풀의 런타임 벤치마크, 공개 데모 사이트를 실습 계정에서 실행했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 측정값은 [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/), 날짜별 실행 기록은 [검증된 사실과 출처](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/sources/#aws-실행-기록)에 있습니다.
-- **AWS에서 실행하지 않은 것:** 학습 중의 `ops/rollout.sh`(시나리오 A), `rollout.sh --finish`, 60 step 기본 학습, HyperPod B1과 B2. 이 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
+- **AWS에서 실행한 것:** 시나리오 A(gVisor GPU, `g5`, 기본 60 step 학습 포함), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 풀의 런타임 벤치마크, 공개 데모 사이트를 실습 계정에서 실행했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 측정값은 [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/), 날짜별 실행 기록은 [검증된 사실과 출처](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/sources/#aws-실행-기록)에 있습니다.
+- **AWS에서 실행하지 않은 것:** 학습 중의 `ops/rollout.sh`(시나리오 A), HyperPod B1과 B2. 이 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
 - **수치:** 가격과 버전 같은 수치는 측정값이 아니라 공식 문서와 공개 자료의 값입니다.
 
 ## 비용
