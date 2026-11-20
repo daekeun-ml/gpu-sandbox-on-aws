@@ -1,29 +1,10 @@
 # 99 정리
 
-!!! info "TL;DR"
-    GPU 노드는 삭제할 때까지 요금이 발생하므로, 만든 리소스를 Agent Sandbox 확장, 데모 사이트, HyperPod, EKS 클러스터(CDK 스택) 순으로 삭제하고 남은 리소스를 조회합니다. 잠시 사용을 멈출 때는 노드 그룹을 0으로 줄입니다.
+실습에서 만든 리소스를 의존성이 있는 순서대로 지웁니다. HyperPod를 사용했다면 HyperPod부터 삭제한 뒤 EKS 스택을 정리하세요.
 
-## 기존 Pain Point
+**완료 기준**　삭제 명령이 끝나면 AWS에서 스택, 인스턴스, 별도로 만든 리소스가 남아 있는지 확인합니다.
 
-`g4dn.metal`은 시간당 7.824 USD여서 이 노드 그룹 하나만 남아 있어도 하루에 약 188 USD가 청구됩니다(us-east-1과 us-west-2 온디맨드 요금).
-
-- **HyperPod**: EKS 클러스터를 orchestrator로 쓰므로, 정리 스크립트는 HyperPod를 먼저 삭제했다고 가정합니다.
-- **Agent Sandbox warm pool**: GPU 샌드박스는 처리할 요청이 없어도 GPU를 계속 점유합니다.
-- **데모 사이트**: 별도의 CloudFormation stack이라 `08_cleanup.sh`가 삭제하지 않습니다.
-- **CDK 스택 밖의 리소스**: AMI와 snapshot, ECR 이미지, HyperPod의 S3 버킷과 IAM 역할, CDK bootstrap 스택도 CDK 스택을 삭제한 뒤에 남습니다.
-
-![두 패널 그림입니다. a: CDK 스택 삭제(cdk destroy)는 클러스터, 노드 그룹, VPC, NAT gateway만 함께 삭제합니다. AMI와 snapshot, ECR 이미지, HyperPod의 S3 버킷과 IAM 역할, 데모 사이트 stack, CDK bootstrap 스택(CDKToolkit)은 남습니다. b: 08_cleanup.sh는 클러스터 이름을 입력받아 CDK 스택을 삭제하고, ami와 images를 입력받아 AMI와 snapshot, ECR 이미지(--images일 때)를 삭제합니다. hyperpod/delete.sh는 HyperPod 이름과 bucket을 입력받아 S3 버킷과 IAM 역할을 삭제합니다. demo/teardown.sh는 stack 이름을 입력받아 데모 사이트 stack을 삭제합니다. CDKToolkit은 더 쓰지 않을 계정에서만 직접 삭제합니다.](../images/figures/handson-99_cleanup.svg)
-
-*그림 요약: CDK 스택을 삭제하면 스택이 만든 리소스만 삭제되고, 스택 밖의 이미지, 버킷, 역할, 다른 stack은 남습니다. 스택 밖의 AMI, ECR 이미지, HyperPod 리소스, 데모 stack은 각각의 스크립트로 삭제하고, CDKToolkit은 다음 배포에 쓰도록 남겨 둡니다.*
-
-
-## Why
-
-- **단계마다 확인 단어를 입력받습니다.** 다른 클러스터나 stack을 실수로 삭제할 위험을 줄입니다.
-- **리소스를 만든 단계마다 삭제 명령이 따로 있습니다.** 확장, 데모, HyperPod, 클러스터를 각각 삭제하므로 무엇이 삭제되는지 분명합니다. 인프라는 CDK 스택 하나로 만들었으므로 `cdk destroy`를 한 번 실행하면 됩니다.
-- **마지막에 남은 인스턴스를 보여 줍니다.** `project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스가 남았는지 표로 출력합니다.
-
-**사전 지식:** 무엇을 만들었는지 확인하세요. 클러스터와 이미지는 [01 클러스터와 이미지](01_cluster_and_images.md), HyperPod는 [07 HyperPod 시나리오](07_hyperpod.md), 데모 사이트는 [09 데모 사이트 (CloudFront)](09_demo_site.md), Agent Sandbox 확장은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 만들었습니다.
+**시작 전에** 무엇을 만들었는지 확인하세요. 클러스터와 이미지는 [01 클러스터와 이미지](01_cluster_and_images.md), HyperPod는 [07 HyperPod 시나리오](07_hyperpod.md), 데모 사이트는 [09 데모 사이트 (CloudFront)](09_demo_site.md), Agent Sandbox 확장은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 만들었습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **CloudFormation stack**: 여러 AWS 리소스를 한 묶음으로 만들고 지우는 단위입니다. 클러스터 생성(`02_create_cluster.sh`)이 만드는 CDK 스택(`<CLUSTER_NAME>-cdk`)과 데모 사이트는 각각 별도의 stack입니다.

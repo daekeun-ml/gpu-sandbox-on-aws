@@ -280,6 +280,59 @@ kubectl -n kube-system get ds nvdp-nvidia-device-plugin -o yaml | grep -A1 CDI_D
 
 마지막 명령은 `name: CDI_DISABLE_HOOKS`와 그다음 줄의 `value: disable-device-node-modification`을 출력해야 합니다.
 
+### 지원되지 않는 드라이버일 때 보이는 증상
+
+1. **노드 부팅:** `install-gvisor.sh`가 user data 로그에 `WARNING: NVIDIA driver <버전> is not supported by gVisor <릴리스> nvproxy`를 남깁니다.
+2. **`04_install_gpu_stack.sh`의 smoke pod:** runsc가 컨테이너 시작을 거부합니다.
+    - 스크립트는 `smoke pod did not succeed; its state and events follow (the pod is deleted when this script exits)` 경고와 함께 `kubectl describe pod`의 마지막 25줄을 출력하고, 그 이벤트에 runsc 에러가 기록됩니다.
+    - 컨테이너가 시작되지 않았으면 `no logs from gvisor-smoke-<n>: the container did not start` 경고도 나옵니다.
+    - pod는 스크립트가 끝날 때 지워지므로 따로 지울 필요가 없습니다.
+3. **풀 배포(`06_deploy_sandboxes.sh`):** 샌드박스 pod가 Ready 상태가 되지 않아(fail closed, 다른 이유로 CUDA 초기화가 실패해도 같음) 배포가 실패합니다.
+    - 스크립트는 `rollout status`를 최대 30분 기다립니다. Deployment의 진행 기한(`progressDeadlineSeconds`)도 1800초로 이 대기 한도와 같습니다.
+    - headless Service는 Ready 상태인 pod의 IP만 반환하므로 trainer는 이 pod로 요청을 보내지 않습니다.
+
+해결 방법은 둘 중 하나입니다.
+
+- 그 드라이버를 지원하는 gVisor 릴리스로 `GVISOR_RELEASE` 값을 올립니다.
+- 지원되는 드라이버가 포함된 AMI를 씁니다.
+
+어느 쪽이든 교체 전에 도입할 릴리스의 runsc(`install-gvisor.sh`가 받는 `https://storage.googleapis.com/gvisor/releases/release/<릴리스>/x86_64/gvisor.tar.bz2`)로 `runsc nvproxy list-supported-drivers`를 실행해 새 AMI의 드라이버 버전과 대조하세요. 아래 방법은 이미 부팅된 노드에 설치된 조합을 확인할 때 씁니다.
+
+### 노드에서 직접 확인하기
+
+gVisor 노드 이름을 찾아 그 노드에서 debug pod 셸을 엽니다(`<gvisor-node>`는 첫 명령이 출력한 이름).
+
+```bash
+kubectl get nodes -l gpusandbox/role=sandbox-gvisor
+kubectl debug node/<gvisor-node> -it --profile=sysadmin --image=public.ecr.aws/amazonlinux/amazonlinux:2023
+```
+
+**확인할 것:** 두 번째 명령 뒤에 셸 프롬프트가 나타납니다. 노드의 루트 파일 시스템은 `/host`에 마운트됩니다.
+
+debug 셸에서 다음을 실행합니다.
+
+```bash
+cat /proc/driver/nvidia/version                         # loaded kernel module version
+/host/usr/local/bin/runsc --version                      # installed gVisor release
+/host/usr/local/bin/runsc nvproxy list-supported-drivers | grep -Fw 580.178.04   # use the version from the first line
+```
+
+**확인할 것:**
+
+- **첫째 명령**: `580.178.04`가 들어간 모듈 버전을 출력합니다(`g5`의 proprietary 모듈이면 `NVIDIA UNIX x86_64 Kernel Module  580.178.04`).
+- **둘째 명령**: `release-20261109.0`이 들어간 버전 줄을 출력합니다.
+- **첫째 명령의 버전이 다르면**: 셋째 명령의 `580.178.04`를 그 버전으로 바꿔 실행하세요.
+- **셋째 명령**: 그 버전을 출력하면 지원되는 조합이고, 아무것도 출력하지 않으면 지원되지 않는 조합입니다.
+
+debug pod는 자동으로 삭제되지 않으니, 셸을 종료한 뒤 pod를 찾아 삭제하세요.
+
+```bash
+kubectl get pods -n default -o name | grep node-debugger
+kubectl delete -n default pod/<name>
+```
+
+**확인할 것:** 첫 명령이 `pod/node-debugger-...` 이름을 출력하고, 둘째 명령이 `pod "node-debugger-..." deleted`를 출력합니다.
+
 ## Kata
 
 | 증상 | 원인 | 해결 |
@@ -307,7 +360,7 @@ kubectl -n kube-system get ds nvdp-nvidia-device-plugin -o yaml | grep -A1 CDI_D
 - **Kata GPU의 `No available IOMMU models`**
     - **pgpu 확인으로 드러나지 않는 이유**: 2026-11-18에 이 오류가 난 노드에서 `lsmod`에는 `vfio`, `vfio_pci`, `vfio_pci_core`만 있었고, IOMMU(group 257개), T4 8개의 vfio-pci 바인딩, `nvidia.com/pgpu=8`은 정상이었습니다.
     - **해결 1, AMI 다시 빌드**: 지금의 `infra/kata/build-iommu-ami.sh`는 `/etc/modules-load.d/vfio-iommu-type1.conf`(`vfio_iommu_type1`)를 AMI에 넣습니다. 새 `KATA_IOMMU_AMI_ID`로 config.env를 바꾸고 `02_create_cluster.sh`를 재실행하세요.
-    - **해결 2, 이전 AMI의 노드에서 바로 고치기**: `kubectl debug node/<node>` 셸에서 `chroot /host` 뒤 `modprobe vfio_iommu_type1`을 실행합니다(재부팅하면 다시 필요). 자세한 절차는 [03 Kata 샌드박스](../handson/03_kata.md)의 2단계에 있습니다.
+    - **해결 2, 이전 AMI의 노드에서 바로 고치기**: `kubectl debug node/<node>` 셸에서 `chroot /host` 뒤 `modprobe vfio_iommu_type1`을 실행합니다(재부팅하면 다시 필요). 아래 `create container timeout` 진단 절차를 참고하세요.
 
 아래 명령은 CPU 노드의 nested virtualization 설정, Kata 런타임 구성 요소, GPU 노드의 라벨과 pgpu 광고를 차례로 확인합니다. `CpuOptions`에 `"NestedVirtualization": "enabled"`가, pgpu 줄에 `8`이 나오면 정상입니다.
 
@@ -339,6 +392,29 @@ cat /proc/cmdline                                    # must contain intel_iommu=
 ls /sys/kernel/iommu_groups | wc -l                  # 0 means the IOMMU is off
 lsmod | grep -E 'vfio|nvidia'                        # vfio_pci and vfio_iommu_type1 loaded, nvidia not loaded
 ```
+
+### pod가 `create container timeout`으로 멈출 때 (vfio_iommu_type1)
+
+2026-11-18 실행에서 만난 문제입니다. 지금의 `build-iommu-ami.sh`는 이 모듈이 부팅 때 로드되도록 고쳤고, 그 전에 만든 AMI의 노드에서는 이 문제가 생깁니다.
+
+- **증상:** `kata-qemu-nvidia-gpu` pod가 `ContainerCreating`에 머물고, 이벤트에 `failed to create shim task: create container timeout`이 나옵니다. 노드 로그에는 QEMU 오류 `vfio 0000:e7:00.0: failed to setup container for group 87: No available IOMMU models`가 남습니다(PCI 주소와 group 번호는 노드마다 다름).
+- **원인:** AL2023 커널은 VFIO type1 IOMMU backend를 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하고, 그 노드에서는 아무것도 이 모듈을 로드하지 않았습니다. `lsmod`에는 `vfio`, `vfio_pci`, `vfio_pci_core`만 있었습니다. IOMMU(group 257개, 커널 명령줄의 `intel_iommu=on`), T4 8개의 `vfio-pci` 바인딩, `nvidia.com/pgpu=8`은 모두 정상이었으므로 `kata/gpu_nodes.sh`의 pgpu 확인만으로는 드러나지 않습니다.
+- **해결 (새 AMI):** 지금의 `infra/kata/build-iommu-ami.sh`는 `/etc/modules-load.d/vfio-iommu-type1.conf`(`vfio_iommu_type1`)를 AMI에 넣습니다. 이전 AMI를 쓰고 있다면 이 스크립트로 AMI를 다시 빌드하고, 출력된 `KATA_IOMMU_AMI_ID`로 `scripts/config.env`를 바꾼 뒤 `02_create_cluster.sh`를 다시 실행하세요.
+- **해결 (지금 노드):** 이전 AMI로 뜬 노드에서는 위 debug 셸에서 모듈을 직접 로드합니다. 재부팅하면 다시 로드해야 합니다.
+
+```bash
+# In the debug shell on the Kata GPU node (kubectl debug node/<kata-gpu-node> ... --profile=sysadmin)
+chroot /host
+journalctl --since "30 min ago" --no-pager | grep "No available IOMMU models" | tail -3   # the symptom
+modprobe vfio_iommu_type1
+grep vfio_iommu_type1 /proc/modules                                                     # one line now
+exit
+```
+
+**확인할 것:**
+
+- 마지막 `grep`이 `vfio_iommu_type1` 줄을 출력합니다.
+- `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu`로 READY가 `1/1`이 되는지 확인하세요. 2026-11-18 실행에서는 이 수정 뒤 `kata-qemu` pod 4개가 Ready가 되었습니다.
 
 ## 샌드박스 풀과 readiness
 

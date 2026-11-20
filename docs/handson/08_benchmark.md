@@ -1,24 +1,10 @@
 # 08 런타임 벤치마크
 
-!!! info "TL;DR"
-    배포된 v1 풀마다 같은 golden 커널로 cold start, 평가 지연, 처리량, speedup을 측정합니다. 결과는 GPU 종류가 같은 풀끼리만 비교합니다.
+같은 입력을 런타임별로 평가해 지연을 비교합니다. `ops/bench.sh`는 평가 결과와 시간을 기록하므로, 결과가 같은 경우의 지연을 비교할 수 있습니다. GPU 결과는 같은 GPU 종류끼리 비교하세요.
 
-## 기존 Pain Point
+**완료 기준**　cold와 warm을 나눠 보세요. warm에서는 p50으로 일반적인 응답 시간을 보고 p95로 느린 요청의 응답 시간이 어느 정도까지 늘어나는지 확인합니다.
 
-이 핸즈온에서 gVisor는 A10G(`g5.xlarge`)에서, Kata QEMU는 T4(`g4dn.metal`)에서 실행됩니다. 그래서 두 풀의 측정값을 그대로 비교하면 런타임 차이와 GPU 차이가 섞입니다. 블로그와 CI에 공개된 boot time도 측정 구간, 머신, 버전이 서로 달라서 실습 환경에 그대로 적용할 수 없습니다.
-
-![두 패널 그림입니다. a: 벤치마크 harness가 relu_bias_triton을 gVisor 풀(g5.xlarge, A10G)과 Kata QEMU 풀(g4dn.metal, T4)에 보냅니다. 두 풀의 숫자 차이에는 런타임 차이와 GPU 차이가 섞여 있어 분리할 수 없습니다. b: 같은 harness가 relu_bias_torch_only를 같은 c8i.2xlarge 노드의 Kata CLH CPU 풀(Cloud Hypervisor)과 Kata QEMU CPU 풀(QEMU)에 보냅니다. 노드, 이미지, golden이 같고 RuntimeClass만 다르므로, 숫자 차이는 RuntimeClass에 따라 함께 달라지는 hypervisor와 pod당 예약량(overhead.podFixed)의 차이입니다. 입력 seed는 요청마다 새로 뽑고 nested virtualization에서 얻은 값이므로, 이 노드 안의 상대 비교로만 씁니다.](../images/figures/handson-08_benchmark.svg)
-
-*그림 요약: GPU가 다른 두 풀을 비교하면 숫자 차이에 런타임 차이와 GPU 차이가 섞입니다. 런타임만 비교하려면 같은 c8i 노드의 Kata CLH CPU 풀과 Kata QEMU CPU 풀처럼 노드, 이미지, golden이 같은 쌍을 씁니다.*
-
-
-## Why
-
-- **같은 golden 커널, 같은 harness, 같은 API로 측정합니다.** GPU 풀에는 `relu_bias_triton`, CPU 풀에는 `relu_bias_torch_only`를 보냅니다.
-- **결과를 JSONL 파일로 저장합니다.** 저장소 루트에 생기는 `bench-<timestamp>.jsonl`의 값을 표로 옮기기 쉽습니다.
-- **런타임 외의 조건이 같은 비교를 따로 정리합니다.** 같은 GPU 종류 안의 비교와, 같은 `c8i` 노드에서 Kata CLH CPU와 Kata QEMU CPU를 비교하는 경우입니다.
-
-**사전 지식:**
+**시작 전에**
 
 - 비교할 풀이 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)으로 배포되어 있어야 합니다. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다.
 - **Kata일 때**: [03 Kata 샌드박스](03_kata.md)에서 노드와 런타임을 준비하고, 04의 `scripts/06_deploy_sandboxes.sh`로 측정할 v1 풀을 배포합니다.

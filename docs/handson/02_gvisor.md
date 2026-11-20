@@ -1,24 +1,10 @@
 # 02 gVisor GPU 샌드박스
 
-!!! info "TL;DR"
-    NVIDIA device plugin을 CDI 모드로 설치하고 `gvisor` RuntimeClass를 등록합니다. 그다음 smoke pod 하나를 gVisor로 실행해 A10G에서 CUDA가 동작하는지 확인합니다.
+gVisor에서 작은 GPU 작업을 실행합니다. 샌드박스 풀을 만들기 전에 GPU 할당과 런타임 설정이 함께 동작하는지 확인하는 단계입니다.
 
-## 기존 Pain Point
+**완료 기준**　smoke pod가 완료되면 해당 노드에서 gVisor를 통해 GPU 작업을 실행할 수 있다는 뜻입니다.
 
-gVisor에서는 컨테이너의 시스템 콜을 호스트 커널이 아니라 gVisor 자체 커널(Sentry)이 처리합니다. 그래서 runc에서 GPU를 연결하던 `nvidia-container-runtime` hook을 쓸 수 없고, GPU 장치를 컨테이너에 연결하는 방법을 따로 정해야 합니다. nvproxy는 지원 목록에 있는 드라이버 버전만 허용하므로, AMI가 바뀌어 드라이버 버전이 달라지면 샌드박스 컨테이너가 시작되지 않을 수 있습니다.
-
-![a: runc 노드에서는 nvidia-container-runtime hook이 GPU를 컨테이너에 주입합니다. gVisor 노드에서는 Sentry가 syscall을 처리하므로 같은 hook을 쓸 수 없고, sandbox 컨테이너에 GPU를 연결할 경로가 없습니다. 또 AMI 교체로 드라이버 버전이 바뀌어 nvproxy가 지원하지 않는 버전이 되면 샌드박스가 시작되지 않을 수 있습니다. b: runc trainer 노드와 gVisor 노드 모두 같은 device plugin(cdi-cri)이 CDI 장치를 할당하고, runsc가 nvproxy를 켭니다. g5(A10G) 노드의 proprietary 드라이버 580.178.04(GSP off)는 버전이 gVisor 지원 목록에 있으므로 샌드박스가 시작됩니다. 드라이버 버전이 목록과 일치하지 않으면 pod가 Ready가 되지 않습니다(fail closed).](../images/figures/handson-02_gvisor.svg)
-
-*그림 요약: runc에서 GPU를 연결하던 hook 방식은 gVisor에서 쓸 수 없고, 드라이버 버전이 nvproxy 지원 목록에서 벗어나면 샌드박스가 시작되지 않을 수 있습니다. CDI로 장치를 컨테이너에 연결하고 지원 목록에 있는 드라이버만 쓰면 sandbox 컨테이너가 GPU를 쓸 수 있고, 버전이 맞지 않으면 pod가 Ready가 되지 않습니다(fail closed).*
-
-
-## Why
-
-- **gVisor 문서에 나온 CDI 방식을 씁니다.** runc로 실행되는 trainer 노드도 같은 device plugin 하나로 관리합니다.
-- **드라이버 버전 불일치를 무시하지 않습니다.** 노드는 부팅할 때 경고를 남기고, GPU probe가 실패한 pod는 Ready 상태가 되지 않습니다(fail closed).
-- **지원 목록에 있는 드라이버만 씁니다.** 기본은 `g5`(A10G)와 드라이버 580.178.04 조합입니다. gVisor 문서가 다루는 조합은 아니고 이 저장소가 실습 계정에서 검증했습니다. `runsc.toml`은 `compute,utility` 기능만 허용합니다.
-
-**사전 지식:** [01 클러스터와 이미지](01_cluster_and_images.md)를 마쳐 gVisor 노드 두 대와 `SANDBOX_IMAGE_URI`를 준비하세요. kubectl과 helm 명령은 두 번째 터미널에서 `cdk/tunnel.sh`로 터널을 열어 둔 상태에서 실행합니다. 개념은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에 있습니다.
+**시작 전에** [01 클러스터와 이미지](01_cluster_and_images.md)를 마쳐 gVisor 노드 두 대와 `SANDBOX_IMAGE_URI`를 준비하세요. kubectl과 helm 명령은 두 번째 터미널에서 `cdk/tunnel.sh`로 터널을 열어 둔 상태에서 실행합니다. 개념은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **gVisor Sentry**: 컨테이너의 syscall을 host 커널 대신 처리하는, 사용자 공간에서 실행되는 커널입니다.
@@ -184,58 +170,10 @@ nvproxy는 드라이버 버전이 정확히 일치해야 동작하고, gVisor는
 
 reward 샌드박스는 신뢰할 수 없는 코드를 실행하므로, 이 저장소는 `--nvproxy-allow-unsupported-driver`를 쓰지 않고 지원되는 드라이버 조합만 씁니다.
 
-### 지원되지 않는 드라이버일 때 보이는 증상
+### 자주 막히는 지점
 
-1. **노드 부팅:** `install-gvisor.sh`가 user data 로그에 `WARNING: NVIDIA driver <버전> is not supported by gVisor <릴리스> nvproxy`를 남깁니다.
-2. **`04_install_gpu_stack.sh`의 smoke pod:** runsc가 컨테이너 시작을 거부합니다.
-    - 스크립트는 `smoke pod did not succeed; its state and events follow (the pod is deleted when this script exits)` 경고와 함께 `kubectl describe pod`의 마지막 25줄을 출력하고, 그 이벤트에 runsc 에러가 기록됩니다.
-    - 컨테이너가 시작되지 않았으면 `no logs from gvisor-smoke-<n>: the container did not start` 경고도 나옵니다.
-    - pod는 스크립트가 끝날 때 지워지므로 따로 지울 필요가 없습니다.
-3. **풀 배포(`06_deploy_sandboxes.sh`):** 샌드박스 pod가 Ready 상태가 되지 않아(fail closed, 다른 이유로 CUDA 초기화가 실패해도 같음) 배포가 실패합니다.
-    - 스크립트는 `rollout status`를 최대 30분 기다립니다. Deployment의 진행 기한(`progressDeadlineSeconds`)도 1800초로 이 대기 한도와 같습니다.
-    - headless Service는 Ready 상태인 pod의 IP만 반환하므로 trainer는 이 pod로 요청을 보내지 않습니다.
-
-해결 방법은 둘 중 하나입니다.
-
-- 그 드라이버를 지원하는 gVisor 릴리스로 `GVISOR_RELEASE` 값을 올립니다.
-- 지원되는 드라이버가 포함된 AMI를 씁니다.
-
-어느 쪽이든 교체 전에 도입할 릴리스의 runsc(`install-gvisor.sh`가 받는 `https://storage.googleapis.com/gvisor/releases/release/<릴리스>/x86_64/gvisor.tar.bz2`)로 `runsc nvproxy list-supported-drivers`를 실행해 새 AMI의 드라이버 버전과 대조하세요. 아래 방법은 이미 부팅된 노드에 설치된 조합을 확인할 때 씁니다.
-
-### 노드에서 직접 확인하기
-
-gVisor 노드 이름을 찾아 그 노드에서 debug pod 셸을 엽니다(`<gvisor-node>`는 첫 명령이 출력한 이름).
-
-```bash
-kubectl get nodes -l gpusandbox/role=sandbox-gvisor
-kubectl debug node/<gvisor-node> -it --profile=sysadmin --image=public.ecr.aws/amazonlinux/amazonlinux:2023
-```
-
-**확인할 것:** 두 번째 명령 뒤에 셸 프롬프트가 나타납니다. 노드의 루트 파일 시스템은 `/host`에 마운트됩니다.
-
-debug 셸에서 다음을 실행합니다.
-
-```bash
-cat /proc/driver/nvidia/version                         # loaded kernel module version
-/host/usr/local/bin/runsc --version                      # installed gVisor release
-/host/usr/local/bin/runsc nvproxy list-supported-drivers | grep -Fw 580.178.04   # use the version from the first line
-```
-
-**확인할 것:**
-
-- **첫째 명령**: `580.178.04`가 들어간 모듈 버전을 출력합니다(`g5`의 proprietary 모듈이면 `NVIDIA UNIX x86_64 Kernel Module  580.178.04`).
-- **둘째 명령**: `release-20261109.0`이 들어간 버전 줄을 출력합니다.
-- **첫째 명령의 버전이 다르면**: 셋째 명령의 `580.178.04`를 그 버전으로 바꿔 실행하세요.
-- **셋째 명령**: 그 버전을 출력하면 지원되는 조합이고, 아무것도 출력하지 않으면 지원되지 않는 조합입니다.
-
-debug pod는 자동으로 삭제되지 않으니, 셸을 종료한 뒤 pod를 찾아 삭제하세요.
-
-```bash
-kubectl get pods -n default -o name | grep node-debugger
-kubectl delete -n default pod/<name>
-```
-
-**확인할 것:** 첫 명령이 `pod/node-debugger-...` 이름을 출력하고, 둘째 명령이 `pod "node-debugger-..." deleted`를 출력합니다.
+- GPU가 `0`이면 device plugin이 준비될 때까지 기다렸다가 노드의 GPU 할당 가능 수량을 다시 확인하세요.
+- GPU가 보이는데 smoke pod가 시작되지 않으면 스크립트 마지막에 출력된 pod 이벤트를 보세요. `nvproxy`가 드라이버 버전을 인식하지 못하면 [노드에서 드라이버 확인](../reference/troubleshooting.md#노드에서-직접-확인하기) 절차로 실제 설치된 버전을 비교하세요.
 
 ## runsc.toml 설정
 

@@ -1,26 +1,10 @@
 # 07 HyperPod 시나리오
 
-!!! info "TL;DR"
-    B1은 학습만 SageMaker HyperPod로 옮기고 GPU 샌드박스는 같은 EKS 클러스터의 EC2 노드 그룹에 그대로 둡니다. 실험 경로인 B2는 custom AMI를 써서 샌드박스도 HyperPod 노드에서 실행합니다.
+HyperPod에서 GRPO를 실행합니다. B1은 trainer를 HyperPod에 두고 샌드박스는 EC2에서 실행합니다. B2는 샌드박스도 별도 HyperPod 인스턴스 그룹에 배치하는 실험 경로입니다.
 
-## 기존 Pain Point
+**완료 기준**　Job 제출 후 trainer pod가 HyperPod 노드에 잡혔는지, `routing`과 `reward_batch` 로그가 나오는지 차례로 확인합니다.
 
-- **GPU 노드 고장**: 며칠 동안 실행되는 on-policy 학습에서 GPU 노드 하나가 고장 나면, 운영자가 직접 노드를 교체하고 job을 다시 시작해야 합니다.
-- **생성 단계나 샌드박스 풀의 멈춤**: 프로세스는 실행 중인데 학습은 진행되지 않습니다. 이 상태는 겉으로는 정상처럼 보여서 알아차리기 어렵습니다.
-- **HyperPod 노드에서 샌드박스 실행**: HyperPod 노드는 HyperPod AMI와 그 AMI의 드라이버를 쓰므로 EC2 노드에서 쓰던 런타임 설치 방법을 그대로 적용할 수 없습니다.
-
-![두 패널 그림입니다. a: 며칠 걸리는 on-policy 학습 중 GPU 노드가 고장 나면, 사람이 노드를 교체하고 job을 다시 시작할 때까지 기다려야 합니다. 생성이나 샌드박스 풀이 멈추면(hang) 프로세스는 살아 있지만 학습이 진행되지 않아 겉으로는 정상처럼 보입니다. HyperPod 노드에 둔 gVisor GPU 풀은 기본 AMI의 드라이버 595.91.07이 nvproxy 목록에 없어 실행되지 않습니다. b: NodeRecovery: Automatic이 노드를 재부팅하거나 교체하고, training operator가 job을 재시작합니다. 로그 패턴으로 hang을 감지하면 elastic agent와 training operator가 job을 재시작합니다. B2는 드라이버 580.178.04가 포함된 custom AMI로 샌드박스 전용 인스턴스 그룹에 gVisor 풀을 시작합니다.](../images/figures/handson-07_hyperpod.svg)
-
-*그림 요약: 며칠 걸리는 학습에서 노드가 고장 나면 사람이 복구할 때까지 기다려야 하고, 멈춘 학습은 겉으로는 정상처럼 보입니다. HyperPod에서는 NodeRecovery와 training operator가 복구를 처리하고, B2는 custom AMI로 HyperPod 노드에서 gVisor 풀을 실행합니다.*
-
-
-## Why
-
-- **trainer만 HyperPod로 옮깁니다.** HyperPod 노드가 같은 EKS 클러스터에 연결되므로 샌드박스 이미지, routing, NetworkPolicy, audience 토큰 인증은 시나리오 A와 같습니다.
-- **HyperPod는 장시간 학습에 필요한 기능을 제공합니다.** `NodeRecovery: Automatic`은 고장 난 노드를 재부팅하거나 교체하고, training operator는 job 재시작과 로그 패턴 기반 hang 감지를 맡습니다.
-- **B2는 custom AMI로 드라이버 조건을 맞춥니다.** HyperPod 기본 AMI의 드라이버(595.91.07)는 gVisor가 지원하지 않습니다. 그래서 드라이버를 580.178.04로 바꾼 AMI로 샌드박스 전용 인스턴스 그룹을 만듭니다.
-
-**사전 지식:** 시나리오 A의 [00 전체 흐름](00_overview.md), [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md), [05 On-policy GRPO 학습](05_grpo_training.md)을 먼저 보세요. HyperPod 선택 기준은 [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
+**시작 전에** 시나리오 A의 [00 전체 흐름](00_overview.md), [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md), [05 On-policy GRPO 학습](05_grpo_training.md)을 먼저 보세요. HyperPod 선택 기준은 [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **SageMaker HyperPod**: 장시간 실행되는 학습을 위한 AWS의 관리형 클러스터입니다. EKS를 orchestrator로 쓰면 기존 EKS 클러스터에 HyperPod 노드 묶음을 연결합니다.
@@ -294,7 +278,7 @@ kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '"event
 - 첫 명령이 `HyperPodPyTorchJob grpo-<RUN_ID> submitted`와 job 한 줄을 출력합니다.
 - 둘째 명령에서 20분 안에 `{"event": "routing", ...}`이 나오고, 이어서 샌드박스로 completion을 보낸 step마다 `{"event": "reward_batch", ...}` 줄이 나옵니다. 첫 step에는 모델 다운로드와 vLLM 초기화가 포함되어 시간이 걸립니다.
 
-`hyperpod/run_grpo.sh`는 `RUN_ID`, `MAX_STEPS`(첫 번째 인자, 예: `scripts/hyperpod/run_grpo.sh 20`), `MODEL_ID`를 [05](05_grpo_training.md)의 스크립트와 같은 방식으로 정하고 `k8s/trainer/hyperpod-job-grpo.yaml.tpl`을 렌더링해 적용합니다. reward, 로그 형식, 메모리 계산은 05와 같습니다.
+설정값과 Job 제출 이후의 동작은 [HyperPod 학습 스크립트](../reference/scripts.md#scriptshyperpodrun_grposh)를 참고하세요. 채점 방식과 로그 형식은 [05 GRPO 학습](05_grpo_training.md)과 같습니다.
 
 **문제가 생기면:**
 

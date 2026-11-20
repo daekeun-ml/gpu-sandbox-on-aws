@@ -1,27 +1,10 @@
 # 05 On-policy GRPO 학습
 
-!!! info "TL;DR"
-    `Qwen/Qwen2.5-Coder-1.5B-Instruct`(LoRA)를 A10G 한 장에서 GRPO로 학습합니다. `reward_batch` 로그로 샌드박스 채점을 포함한 on-policy 루프가 끝까지 실행되는지 확인합니다.
+모델이 만든 Triton 코드를 샌드박스에서 채점하고, 그 점수로 GRPO 업데이트를 한 번씩 진행합니다. 작은 모델로 생성 → 채점 → 학습이 이어지는지 살펴봅니다.
 
-## 기존 Pain Point
+**완료 기준**　`routing` 로그가 나오면 사용할 풀을 읽은 상태입니다. `reward_batch`에는 샌드박스에 채점을 요청한 배치의 결과가 나옵니다. 학습 step도 함께 진행되는지 보세요.
 
-- **GPU 한 장에서 생성과 학습**: rollout 생성(vLLM)과 policy 학습을 A10G 24 GB 한 장에서 함께 하려면, 두 작업이 GPU 메모리를 번갈아 써야 합니다.
-- **맞으면 1, 틀리면 0인 reward**: 작은 모델은 학습 초기에 올바른 Triton 커널을 거의 생성하지 못합니다. 그래서 group의 completion 8개가 모두 0점이 되고, advantage도 0이라 학습 신호가 없습니다.
-- **채점하지 못한 completion**: 샌드박스 pod가 다른 평가를 처리 중이거나 장애가 나서 채점하지 못한 completion까지 0점으로 처리하면, policy가 인프라 문제 때문에 낮은 reward를 받습니다.
-- **학습 도중 샌드박스 버전을 바꾼다면([06](06_sandbox_update.md))**: 어느 batch를 어느 버전이 채점했는지도 로그에 기록해야 합니다.
-
-![a: 맞으면 1, 틀리면 0인 reward로 샌드박스가 group 하나(completion 8개)를 채점합니다. 올바른 커널이 하나도 없으면 8개 모두 0점이라 advantage가 0이 되고 학습 신호가 없습니다. pod가 바쁘거나 장애가 나서 채점에 실패해도 0점이 되므로, policy가 인프라 문제 때문에 낮은 reward를 받습니다. b: 부분 점수(0.1, 0.15, 0.3, 0.4)를 쓰면 0.3과 0.1의 차이도 학습 신호가 됩니다. sandbox_error는 None으로 처리되어 group baseline에서 제외되므로 policy가 낮은 reward를 받지 않습니다.](../images/figures/handson-05_grpo_training.svg)
-
-*그림 요약: 0과 1만 있는 reward에서는 올바른 커널이 없는 group의 advantage가 0이 되어 학습 신호가 없고, 채점 실패를 0점으로 처리하면 policy가 인프라 문제로 낮은 reward를 받습니다. 부분 점수를 쓰면 group 안의 점수 차이가 학습 신호가 되고, sandbox_error는 None으로 처리되어 group baseline에서 제외됩니다.*
-
-
-## Why
-
-- **strictly on-policy가 기본입니다.** 생성한 batch 하나로 optimizer step을 정확히 한 번 실행합니다. 같은 GPU를 쓰는 vLLM(colocate)은 학습하는 동안 sleep mode로 GPU 메모리를 해제합니다.
-- **reward는 부분 점수가 있는 세 component로 구성되고, `sandbox_error`는 0점으로 처리하지 않고 제외합니다.** 세 함수가 모두 `None`을 반환하면 그 completion은 group baseline 계산에서 제외됩니다.
-- **샌드박스에 채점을 요청한 batch마다 채점한 풀을 로그에 기록합니다.** `{"event": "reward_batch", ...}` 줄에 runtime, version, routing_revision, served_versions, status 집계가 들어갑니다. 로컬 검사나 캐시만으로 끝난 batch에는 이 줄이 없습니다.
-
-**사전 지식:** [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)을 마쳐야 합니다. GRPO와 버전 고정은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, reward 설계는 [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
+**시작 전에** [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)을 마쳐야 합니다. GRPO와 버전 고정은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, reward 설계는 [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **GRPO**: prompt 하나에 completion을 여러 개(group) 생성하고, group 평균보다 reward가 높은 completion이 더 자주 생성되도록 학습하는 RL 알고리즘입니다.
@@ -103,6 +86,88 @@ kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 ```
 
 **확인할 것:** 요약이 아닌 원래 JSON 이벤트와 TRL dict 줄이 나오고, 모델 로딩과 vLLM 초기화 로그도 출력됩니다.
+
+## 로그 읽는 법
+
+로그에는 두 종류의 줄이 함께 출력됩니다. 첫째는 TRL이 step마다 출력하는 Python dict입니다(`loss` 키가 있어 스크립트 필터를 통과).
+
+| TRL 지표 | 의미 |
+|---|---|
+| `rewards/format_reward/mean`, `rewards/correctness_reward/mean`, `rewards/speedup_reward/mean` | component별 평균 (None인 completion은 제외) |
+| `reward`, `reward_std` | 가중합 reward의 평균과 표준편차 |
+| `frac_reward_zero_std` | reward 표준편차가 0인 비율. 1에 가까우면 group 안 completion이 모두 같은 점수라 학습 신호가 거의 없습니다 |
+| `completions/mean_length`, `completions/clipped_ratio` | completion 길이, 768 token에서 잘린 비율 |
+| `entropy`, `clip_ratio/*`, `sampling/importance_sampling_ratio/*` | policy 엔트로피, clipping 비율, vLLM 보정 비율 |
+| `loss`, `grad_norm`, `learning_rate` | 일반 학습 지표. `beta`가 0이라 `kl`은 기록되지 않습니다 |
+
+completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라 달라집니다.
+
+- **코드 블록 안에서 잘리면**: 그 블록은 닫히지 않으므로, 앞에 닫힌 Python 블록이 없으면 format이 0이 됩니다.
+- **블록을 닫은 뒤 설명에서 잘렸다면**: 그 블록으로 채점합니다.
+
+터미널 요약의 `train` 줄에는 이 중 `loss`, `reward`, `reward_std`, `grad_norm`, `learning_rate`와 `epoch`만 나옵니다. 나머지 지표는 원래 dict(pod 로그 또는 `GPUSANDBOX_LOG=json`)에서 보세요.
+
+둘째는 이 저장소 코드가 stdout에 출력하는 JSON 이벤트입니다. 그중 `reward_batch`와 버전이 바뀔 때의 `sandbox_version_switch`만 `/outputs/grpo/sandbox_metrics.jsonl`에도 기록됩니다. 시작 시점의 `routing`과 종료 시점의 `done`까지 보관하려면 Job 로그를 저장하세요(위 "학습 결과 보존"). 아래는 pod 로그와 `GPUSANDBOX_LOG=json`에서 보이는 원래 JSON 형태입니다.
+
+```text
+{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
+{"event": "reward_batch", "batch": <int>, "global_step": <int>, "runtime": "gvisor", "version": "v1",
+ "served_versions": {"v1": <int>}, "routing_revision": <int>, "n": <int>, "status": {"<status>": <int>, ...},
+ "pass_rate": <float>, "custom_kernel_rate": <float>, "mean_speedup": <float or null>,
+ "eval_p50_s": <float or null>, "eval_p95_s": <float or null>, "batch_wall_s": <float>, "ts": <float>}
+{"event": "done", "output": "/outputs/grpo/final", "reward_batches": <int>}
+```
+
+| `reward_batch` 필드 | 의미 |
+|---|---|
+| `batch`, `global_step` | 몇 번째 reward batch인지, 채점할 때 trainer의 `global_step`(완료된 optimizer step 수) |
+| `runtime`, `version` | 이 batch를 채점한 풀(마지막 샌드박스 호출의 routing snapshot) |
+| `served_versions` | 결과에 기록된 버전별 개수. 정상이면 key가 `version` 하나뿐입니다 |
+| `routing_revision` | routing table 내용이 바뀔 때마다 1씩 늘어납니다 |
+| `n`, `status` | 이 batch에서 샌드박스로 보낸 completion의 수와 status별 개수 |
+| `pass_rate`, `custom_kernel_rate` | `n` 중 `ok` 비율, `custom_kernel`이 참인 비율(launch 수를 세지 못한 Triton 코드 포함) |
+| `mean_speedup` | `ok`인 completion(커널 여부 무관)의 speedup 평균, 없으면 null |
+| `eval_p50_s`, `eval_p95_s`, `batch_wall_s` | 샌드박스 서버가 측정한 평가 시간(`duration_s`)의 p50/p95, trainer가 batch 전체를 기다린 시간 |
+
+- **`served_versions`와 direct 모드**: direct 모드에서는 응답에 버전이 없으면(통신 실패 등) 요청한 버전을 채우므로, `status`의 `sandbox_error` 수도 함께 보세요.
+- **`n`, `status`에 들어가는 것**: 코드 없음, trainer 쪽 정책 위반, 캐시 hit은 포함되지 않습니다. 다른 풀로 캐시돼 다시 채점한 completion은 포함됩니다.
+- **`eval_p50_s`, `eval_p95_s`가 null일 때**: 측정 시간이 하나도 없으면(모두 통신 실패 등) p50과 p95가 모두 null, 하나뿐이면 p95만 null입니다.
+
+터미널 요약의 `reward_batch` 줄은 이 중 `batch`, `runtime/version`, `status`, `pass_rate`, `mean_speedup`, `batch_wall_s`만 보여 줍니다. `served_versions`에 버전이 둘 이상이면 `MIXED VERSIONS {...}`가 붙습니다. 결과의 버전이 요청한 버전(`version`)과 같은지는 원래 JSON에서 `served_versions`의 키로 확인합니다.
+
+샌드박스로 보낸 completion이 없는 step에는 `reward_batch` 줄이 없습니다. 버전 전환 때의 `sandbox_version_switch` 이벤트는 [06](06_sandbox_update.md)에서 다룹니다.
+
+## 1.5B 모델에서 기대할 것
+
+이 에셋은 on-policy 루프가 끝까지 실행되는지 확인하는 용도이고, 학습 곡선이 개선된다고 보장하지 않습니다.
+
+| level | task |
+|---|---|
+| 0 | `vector_add`, `relu_bias`, `scaled_residual` |
+| 1 | `silu_mul`, `gelu_tanh`, `row_sum_sq` |
+| 2 | `row_softmax`, `rms_norm`, `layer_norm` |
+| 3 (기본 제외) | `matmul_bias_relu` (float16) |
+
+tasks 모듈 주석은 level 0을 작은 모델도 대부분 풀 수 있는 sanity level로 설명합니다.
+
+- **level 0**: 0보다 큰 reward는 level 0에서 먼저 나올 가능성이 큽니다(추론).
+- **level 2**: 정답 커널이 드물어 reward가 희소하므로 `frac_reward_zero_std`가 높을 수 있습니다.
+- **기본 60 step**: prompt 120개(task당 평균 13개 정도)는 추세를 판단하기에 적은 양일 수 있습니다. 실습 계정의 60 step run에서도 `ok` 비율은 처음 20 step 5.3%, 마지막 20 step 6.0%로 거의 같았습니다.
+
+진단할 때는 아래 항목을 차례로 확인합니다.
+
+1. 새로 채점할 completion이 있는 step에서 `reward_batch`가 나오는지
+2. `sandbox_error`가 드문지
+3. format reward가 0보다 큰지
+4. `wrong_answer`와 `runtime_error` 비율이 어떻게 변하는지
+5. `ok` + custom kernel이 한 번이라도 나오는지
+
+## 자주 막히는 지점
+
+- **pod가 `Pending`**이면 `kubectl describe pod`의 이벤트에서 GPU를 기다리는지 확인하세요. 같은 trainer 노드에 이전 Job이 남아 있으면 새 Job도 대기할 수 있습니다.
+- **`sandbox_error`가 반복**되면 먼저 `scripts/ops/verify.sh gvisor`로 풀을 확인하세요. 이 상태는 샌드박스가 채점에 실패했다는 뜻입니다. 모델이 틀린 답을 낸 경우와 로그에서 구분할 수 있습니다.
+
+OOM이나 첫 로그가 나오지 않는 경우는 [학습 문제 해결](../reference/troubleshooting.md#학습)을 참고하세요.
 
 ## Job manifest에서 볼 부분
 
@@ -246,81 +311,6 @@ TRL은 세 reward 함수를 따로 호출합니다. `KernelRewards`는 task, pro
 | `sandbox_error` | None | None | None | 제외 (advantage 0) |
 
 부분 점수가 있으므로, 실행은 되지만 틀린 코드(0.3)와 실행되지 않는 코드(0.1)의 차이도 학습 신호가 됩니다. TRL 문서에 따르면 reward 함수가 None을 반환하면 그 값은 reward 계산에서 제외됩니다.
-
-## 로그 읽는 법
-
-로그에는 두 종류의 줄이 함께 출력됩니다. 첫째는 TRL이 step마다 출력하는 Python dict입니다(`loss` 키가 있어 스크립트 필터를 통과).
-
-| TRL 지표 | 의미 |
-|---|---|
-| `rewards/format_reward/mean`, `rewards/correctness_reward/mean`, `rewards/speedup_reward/mean` | component별 평균 (None인 completion은 제외) |
-| `reward`, `reward_std` | 가중합 reward의 평균과 표준편차 |
-| `frac_reward_zero_std` | reward 표준편차가 0인 비율. 1에 가까우면 group 안 completion이 모두 같은 점수라 학습 신호가 거의 없습니다 |
-| `completions/mean_length`, `completions/clipped_ratio` | completion 길이, 768 token에서 잘린 비율 |
-| `entropy`, `clip_ratio/*`, `sampling/importance_sampling_ratio/*` | policy 엔트로피, clipping 비율, vLLM 보정 비율 |
-| `loss`, `grad_norm`, `learning_rate` | 일반 학습 지표. `beta`가 0이라 `kl`은 기록되지 않습니다 |
-
-completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라 달라집니다.
-
-- **코드 블록 안에서 잘리면**: 그 블록은 닫히지 않으므로, 앞에 닫힌 Python 블록이 없으면 format이 0이 됩니다.
-- **블록을 닫은 뒤 설명에서 잘렸다면**: 그 블록으로 채점합니다.
-
-터미널 요약의 `train` 줄에는 이 중 `loss`, `reward`, `reward_std`, `grad_norm`, `learning_rate`와 `epoch`만 나옵니다. 나머지 지표는 원래 dict(pod 로그 또는 `GPUSANDBOX_LOG=json`)에서 보세요.
-
-둘째는 이 저장소 코드가 stdout에 출력하는 JSON 이벤트입니다. 그중 `reward_batch`와 버전이 바뀔 때의 `sandbox_version_switch`만 `/outputs/grpo/sandbox_metrics.jsonl`에도 기록됩니다. 시작 시점의 `routing`과 종료 시점의 `done`까지 보관하려면 Job 로그를 저장하세요(위 "학습 결과 보존"). 아래는 pod 로그와 `GPUSANDBOX_LOG=json`에서 보이는 원래 JSON 형태입니다.
-
-```text
-{"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
-{"event": "reward_batch", "batch": <int>, "global_step": <int>, "runtime": "gvisor", "version": "v1",
- "served_versions": {"v1": <int>}, "routing_revision": <int>, "n": <int>, "status": {"<status>": <int>, ...},
- "pass_rate": <float>, "custom_kernel_rate": <float>, "mean_speedup": <float or null>,
- "eval_p50_s": <float or null>, "eval_p95_s": <float or null>, "batch_wall_s": <float>, "ts": <float>}
-{"event": "done", "output": "/outputs/grpo/final", "reward_batches": <int>}
-```
-
-| `reward_batch` 필드 | 의미 |
-|---|---|
-| `batch`, `global_step` | 몇 번째 reward batch인지, 채점할 때 trainer의 `global_step`(완료된 optimizer step 수) |
-| `runtime`, `version` | 이 batch를 채점한 풀(마지막 샌드박스 호출의 routing snapshot) |
-| `served_versions` | 결과에 기록된 버전별 개수. 정상이면 key가 `version` 하나뿐입니다 |
-| `routing_revision` | routing table 내용이 바뀔 때마다 1씩 늘어납니다 |
-| `n`, `status` | 이 batch에서 샌드박스로 보낸 completion의 수와 status별 개수 |
-| `pass_rate`, `custom_kernel_rate` | `n` 중 `ok` 비율, `custom_kernel`이 참인 비율(launch 수를 세지 못한 Triton 코드 포함) |
-| `mean_speedup` | `ok`인 completion(커널 여부 무관)의 speedup 평균, 없으면 null |
-| `eval_p50_s`, `eval_p95_s`, `batch_wall_s` | 샌드박스 서버가 측정한 평가 시간(`duration_s`)의 p50/p95, trainer가 batch 전체를 기다린 시간 |
-
-- **`served_versions`와 direct 모드**: direct 모드에서는 응답에 버전이 없으면(통신 실패 등) 요청한 버전을 채우므로, `status`의 `sandbox_error` 수도 함께 보세요.
-- **`n`, `status`에 들어가는 것**: 코드 없음, trainer 쪽 정책 위반, 캐시 hit은 포함되지 않습니다. 다른 풀로 캐시돼 다시 채점한 completion은 포함됩니다.
-- **`eval_p50_s`, `eval_p95_s`가 null일 때**: 측정 시간이 하나도 없으면(모두 통신 실패 등) p50과 p95가 모두 null, 하나뿐이면 p95만 null입니다.
-
-터미널 요약의 `reward_batch` 줄은 이 중 `batch`, `runtime/version`, `status`, `pass_rate`, `mean_speedup`, `batch_wall_s`만 보여 줍니다. `served_versions`에 버전이 둘 이상이면 `MIXED VERSIONS {...}`가 붙습니다. 결과의 버전이 요청한 버전(`version`)과 같은지는 원래 JSON에서 `served_versions`의 키로 확인합니다.
-
-샌드박스로 보낸 completion이 없는 step에는 `reward_batch` 줄이 없습니다. 버전 전환 때의 `sandbox_version_switch` 이벤트는 [06](06_sandbox_update.md)에서 다룹니다.
-
-## 1.5B 모델에서 기대할 것
-
-이 에셋은 on-policy 루프가 끝까지 실행되는지 확인하는 용도이고, 학습 곡선이 개선된다고 보장하지 않습니다.
-
-| level | task |
-|---|---|
-| 0 | `vector_add`, `relu_bias`, `scaled_residual` |
-| 1 | `silu_mul`, `gelu_tanh`, `row_sum_sq` |
-| 2 | `row_softmax`, `rms_norm`, `layer_norm` |
-| 3 (기본 제외) | `matmul_bias_relu` (float16) |
-
-tasks 모듈 주석은 level 0을 작은 모델도 대부분 풀 수 있는 sanity level로 설명합니다.
-
-- **level 0**: 0보다 큰 reward는 level 0에서 먼저 나올 가능성이 큽니다(추론).
-- **level 2**: 정답 커널이 드물어 reward가 희소하므로 `frac_reward_zero_std`가 높을 수 있습니다.
-- **기본 60 step**: prompt 120개(task당 평균 13개 정도)는 추세를 판단하기에 적은 양일 수 있습니다. 실습 계정의 60 step run에서도 `ok` 비율은 처음 20 step 5.3%, 마지막 20 step 6.0%로 거의 같았습니다.
-
-진단할 때는 아래 항목을 차례로 확인합니다.
-
-1. 새로 채점할 completion이 있는 step에서 `reward_batch`가 나오는지
-2. `sandbox_error`가 드문지
-3. format reward가 0보다 큰지
-4. `wrong_answer`와 `runtime_error` 비율이 어떻게 변하는지
-5. `ok` + custom kernel이 한 번이라도 나오는지
 
 ## 옵션 바꾸기
 

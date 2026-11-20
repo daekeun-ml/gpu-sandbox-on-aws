@@ -1,27 +1,10 @@
 # 06 학습 중 샌드박스 업데이트
 
-!!! info "TL;DR"
-    on-policy 학습을 멈추지 않고 blue/green 방식으로 샌드박스를 v1에서 v2로 교체합니다. 전환 시점은 `sandbox_version_switch` 이벤트로 확인합니다.
+학습을 켜 둔 채 v2 풀을 따로 배포합니다. 같은 입력에 대한 채점 결과를 비교한 뒤 라우팅을 바꿉니다.
 
-## 기존 Pain Point
+**완료 기준**　전환 후 v2가 실제로 평가를 처리했는지 `reward_batch`에서 확인하세요. 확인이 끝나면 v1을 정리합니다.
 
-- **측정 방식의 허점**: 학습 도중 policy가 측정 방식의 허점을 이용하면(예: 비현실적인 speedup) harness를 바로 고쳐야 합니다.
-- **취약점 패치**: gVisor, Kata, 베이스 이미지의 취약점 패치도 학습이 끝날 때까지 미루기 어렵습니다.
-- **처음부터 다시 학습하면**: 며칠 동안의 학습 결과를 잃을 수 있습니다.
-- **버전에 따라 달라지는 채점**: 새 Triton이나 CUDA 사용자 공간 라이브러리로 바꾸면 같은 코드라도 verdict와 timing이 달라질 수 있습니다. 그래서 한 GRPO group의 completion 8개를 서로 다른 버전이 채점하면, 두 버전의 측정 기준 차이가 advantage에 섞여 학습 신호로 쓰입니다.
-
-![a: rolling update 중에는 한 group의 completion을 v1 풀(seed 3개, cap 없음)과 v2 풀(seed 5개, cap 10배)이 나눠 채점합니다. 두 버전의 기준 차이가 advantage에 섞입니다. b: group마다 한 버전으로 고정하고 한 배치 안에서는 두 버전을 섞지 않으면, group 안의 completion을 같은 기준으로 비교하므로 v1과 v2의 seed 수와 speedup 상한 차이가 advantage에 섞이지 않습니다.](../images/figures/handson-06_sandbox_update.svg)
-
-*그림 요약: 한 group은 한 버전으로 채점하고, 버전을 바꾸는 중에도 한 배치 안에서는 두 버전을 섞지 않습니다. 그래야 v1과 v2의 seed 수와 speedup 상한 차이가 group 안의 점수 비교에 섞이지 않습니다.*
-
-
-## Why
-
-- **버전마다 Deployment와 headless Service를 따로 둡니다(blue/green).** Service 하나가 두 버전의 pod를 함께 가리키지 않습니다. 이전 Deployment는 replica 0으로 남겨 두므로 빠르게 rollback할 수 있습니다.
-- **전환 전에 golden 제출물로 parity를 검사합니다.** status가 같고 speedup 비율 차이가 35% 이내일 때만 traffic을 옮깁니다.
-- **trainer는 한 reward batch의 결과를 한 풀의 버전으로 맞춥니다.** 샌드박스를 부를 때마다 routing snapshot 하나를 읽고, 갱신된 routing 표를 읽은 호출부터 새 버전이 채점합니다. 한 batch의 결과가 두 풀에 걸치면 마지막에 부른 풀에서 다시 채점해 한 버전으로 맞춥니다.
-
-**사전 지식:** [05 On-policy GRPO 학습](05_grpo_training.md)의 학습이 실행 중이어야 합니다. 버전을 group 단위로 고정하는 이유는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
+**시작 전에** [05 On-policy GRPO 학습](05_grpo_training.md)의 학습이 실행 중이어야 합니다. 버전을 group 단위로 고정하는 이유는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **blue/green**: 새 버전(green)을 기존 버전(blue)과 별도로 띄워 검증한 뒤 트래픽을 한 번에 옮기는 배포 방식입니다.

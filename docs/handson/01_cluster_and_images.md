@@ -1,28 +1,10 @@
 # 01 클러스터와 이미지
 
-!!! info "TL;DR"
-    도구와 쿼터를 확인한 뒤 CDK 스택 하나로 private EKS 클러스터와 노드 그룹을 만듭니다. 터널로 접속해 노드를 확인하고, 이미지 세 개를 ECR에 push합니다.
+CDK로 EKS와 노드 그룹을 만들고, 샌드박스와 trainer가 쓸 이미지를 ECR에 올립니다. 다음 장의 GPU smoke test는 여기서 올린 샌드박스 이미지를 사용합니다. CDK는 private EKS를 만들고, 터널은 작업 PC를 EKS API에 연결합니다.
 
-## 기존 Pain Point
+**완료 기준**　터널을 연 뒤 `kubectl get nodes`에서 필요한 노드가 `Ready`인지 확인하세요. 이미지를 빌드하면 URI가 출력됩니다. 다음 스크립트에서 읽을 수 있도록 이 URI를 `scripts/config.env`에 저장합니다.
 
-EKS 클러스터를 기본값으로 만들면 샌드박스에 위험한 설정이 그대로 적용됩니다.
-
-- **IMDS hop limit**: 노드의 IMDS hop limit이 2 이상이면 pod가 노드의 인스턴스 자격 증명을 읽을 수 있습니다.
-- **public API endpoint**: IAM 인증은 그대로 적용되지만, 인터넷 어디서나 API에 접속을 시도할 수 있습니다. 그래서 회사 계정의 보안 점검(예: Security Hub 컨트롤 EKS.1)에서 지적 대상이 됩니다.
-- **eksctl**: 이 저장소가 예전에 쓰던 eksctl은 private endpoint만 활성화한 클러스터를 처음부터 만드는 기능을 지원하지 않습니다(eksctl 문서).
-- **이미지의 버전 범위**: TRL, vLLM, torch, transformers가 서로의 버전 범위를 제한하므로, pip이 그중 하나만 업그레이드해도 import 단계에서 오류가 납니다.
-
-![a: 기본값으로 만든 EKS 클러스터에서는 인터넷의 누구나 public endpoint로 EKS API에 접속을 시도할 수 있습니다(IAM 인증은 그대로 적용됩니다). IMDS hop limit이 2 이상인 노드에서는 pod 안의 코드가 IMDS(169.254.169.254)에 요청해 노드의 인스턴스 자격 증명을 얻을 수 있습니다. b: CDK 스택은 private endpoint만 켜서 인터넷에서 EKS API로 접속하는 경로를 없애고, 작업 PC는 SSM 터널로 접속합니다. 노드는 IMDSv2 필수와 hop limit 1로 설정되어 pod가 IMDS 응답을 받지 못합니다.](../images/figures/handson-01_cluster_and_images.svg)
-
-*그림 요약: 기본 설정의 EKS 클러스터에서는 인터넷에서 클러스터 API로 접속을 시도할 수 있고, pod 안의 코드가 노드 자격 증명을 얻을 수 있습니다. CDK 스택은 private endpoint만 켜고 IMDS hop limit을 1로 설정해 두 경로를 모두 차단합니다.*
-
-
-## Why
-
-- **인프라는 CDK 스택 하나이고, 다시 실행하면 달라진 부분만 변경합니다.** 스택은 VPC, EKS 클러스터와 노드 그룹, access instance, KMS 키를 만듭니다. EKS는 CloudFormation 리소스(L1)로만 정의하고 Kubernetes manifest는 적용하지 않습니다. 그래서 `04_install_gpu_stack.sh` 이후 스크립트가 설치하는 device plugin, RuntimeClass, kata-deploy와 겹치지 않고, 설치 순서도 충돌하지 않습니다.
-- **노드 설정을 부팅 과정에 포함했습니다.** 런타임별 설정 작업이 launch template의 user data에 들어 있어서, 노드가 교체돼도 같은 상태로 부팅됩니다.
-
-**사전 지식:** [00 전체 흐름](00_overview.md)의 단계 표와 [시작하기](../getting_started.md)의 로컬 Python 환경을 먼저 보세요. CDK 스택의 보안 기본값 전체는 [Production 09 CDK](../production/09_cdk.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
+**시작 전에** [00 전체 흐름](00_overview.md)의 단계 표와 [시작하기](../getting_started.md)의 로컬 Python 환경을 먼저 보세요. CDK 스택의 보안 기본값 전체는 [Production 09 CDK](../production/09_cdk.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **AWS CDK, 스택, synth**: 코드(여기서는 Python)로 AWS 인프라를 정의해 CloudFormation으로 배포하는 도구, 함께 만들고 함께 지우는 리소스 묶음, 코드를 CloudFormation 템플릿으로 변환하는 단계입니다.

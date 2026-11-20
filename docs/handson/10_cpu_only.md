@@ -1,29 +1,10 @@
 # 10 c8i 단독 저비용 경로 (시나리오 C)
 
-!!! info "TL;DR"
-    GPU 없이 `c8i.2xlarge` 한 대(nested virtualization)에서 gVisor와 Kata(Cloud Hypervisor, QEMU)를 실행합니다. 모델 없이 reward 루프를 실행하는 동안 샌드박스를 v1에서 v2로 교체합니다(컴퓨트 시간당 약 0.57 USD 추정, 온디맨드 요금).
+c8i 노드에서 세 런타임을 띄우고, 모델 대신 정해진 입력으로 채점 흐름을 실행합니다. GPU를 빌리기 전에 풀 검증과 버전 교체를 연습할 수 있습니다.
 
-## 기존 Pain Point
+**완료 기준**　검증을 통과한 뒤 시뮬레이터 로그의 채점 버전이 v1에서 v2로 바뀌는지 확인하세요.
 
-시나리오 A는 GPU 노드가 있어야 시작할 수 있습니다.
-
-- **GPU 쿼터**: `Running On-Demand G and VT instances` 쿼터가 0인 계정이 많아서, 쿼터 증가가 승인되기 전에는 실습을 시작할 수 없습니다.
-- **비용**: 가장 작은 구성도 컴퓨트 비용만 시간당 약 3.42 USD이고, Kata GPU까지 포함하면 11 USD를 넘습니다.
-- **비교 조건**: gVisor는 `g5.xlarge`(A10G)에서, Kata GPU는 `g4dn.metal`(T4)에서 실행되므로 런타임 차이만 따로 비교하기 어렵습니다.
-- **bare metal에 대한 오해**: Kata에는 bare metal이 필요하다고 알고 실습을 미루는 경우도 있지만, `.metal` 인스턴스가 필요한 경우는 Kata에서 GPU passthrough를 쓸 때뿐입니다.
-
-![두 패널 그림입니다. a: G and VT 쿼터가 0이면(0인 계정이 많습니다) 승인을 기다리는 동안 실습을 시작할 수 없습니다. 승인되면 시나리오 A(컴퓨트 시간당 약 3.42 USD, Kata GPU까지 포함하면 11 USD 초과)의 gVisor 풀은 g5.xlarge(A10G)에, Kata GPU 풀은 g4dn.metal(T4)에 배치됩니다. 노드와 GPU가 다르므로 런타임 차이만 분리하기 어렵습니다. b: 시나리오 C는 Standard 쿼터만 있으면 되고(컴퓨트 시간당 약 0.57 USD, A의 약 6분의 1, 추정), c8i.2xlarge 한 대에 gVisor, Kata CLH, Kata QEMU 풀을 모두 배치합니다. CPU, 메모리, 커널이 같으므로 측정 차이를 런타임 차이로 해석하기 쉽습니다.](../images/figures/handson-10_cpu_only.svg)
-
-*그림 요약: 시나리오 A는 GPU 쿼터가 없으면 시작할 수 없고, 비용이 크며, 두 런타임이 서로 다른 노드와 GPU에서 실행됩니다. 시나리오 C는 `c8i.2xlarge` 한 대에 세 런타임을 배치해 약 6분의 1 비용으로 같은 조건에서 비교합니다.*
-
-
-## Why
-
-- **세 런타임을 같은 노드에서 비교합니다.** 세 풀이 CPU, 메모리, 커널이 같은 한 노드에서 실행되므로, 부팅 시간과 평가 지연의 차이를 런타임 차이로 해석하기 쉽습니다.
-- **샌드박스 쪽 코드는 GPU 경로와 같습니다.** 이미지, `/v1/evaluate` API, 인증, NetworkPolicy, 검증 스크립트(`scripts/ops/verify.sh`)는 그대로 씁니다. CPU 풀은 CPU용 RuntimeClass와 `device=cpu`, 작은 입력 크기(`SANDBOX_SIZE=smoke`)를 사용합니다. 예를 들어 `relu_bias`의 입력은 4096×4096에서 64×128로 줄어듭니다.
-- **학습 대신 reward 경로를 실행합니다.** reward 루프 시뮬레이션(`scripts/ops/simulate.sh`)은 golden 제출물을 trainer의 reward 함수(`KernelRewards`)로 배치마다 채점합니다. 그래서 학습 중 버전 교체(`scripts/ops/rollout.sh`)가 어떻게 동작하는지 그대로 확인할 수 있습니다.
-
-**사전 지식:** [00 전체 흐름](00_overview.md)의 아키텍처와 [시작하기](../getting_started.md)의 로컬 smoke test를 먼저 보세요. 런타임 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), 버전 교체의 원리는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에 있습니다.
+**시작 전에** [00 전체 흐름](00_overview.md)의 아키텍처와 [시작하기](../getting_started.md)의 로컬 smoke test를 먼저 보세요. 런타임 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), 버전 교체의 원리는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **nested virtualization**: VM 안에서 다시 VM을 띄우는 기능입니다. EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에 `/dev/kvm`을 제공합니다. Kata는 이 장치로 pod마다 작은 VM을 만듭니다.

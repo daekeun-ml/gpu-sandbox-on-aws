@@ -1,30 +1,10 @@
 # 00 핸즈온 전체 흐름
 
-!!! info "TL;DR"
-    CDK로 만든 EKS 클러스터 하나에서 번호가 붙은 스크립트를 순서대로 실행합니다. gVisor만 쓰는 최소 구성(컴퓨트 시간당 약 3.4 USD)으로 시작하고, 필요하면 Kata CPU 노드와 Kata GPU 노드(`g4dn.metal`, 시간당 7.824 USD)를 추가합니다(추정, 온디맨드 요금).
+GPU 샌드박스를 배포하고, 모델이 만든 코드를 채점한 뒤, 학습 중에 채점 풀을 교체합니다. 먼저 아래 표에서 시나리오를 고르세요.
 
-## 기존 Pain Point
+**완료 기준**　A는 GPU 학습까지, B는 HyperPod에서 학습까지, C는 GPU 없이 채점과 버전 전환까지 확인하는 경로입니다.
 
-런타임 smoke test(`04_install_gpu_stack.sh`)는 이미지(`03_build_push_images.sh`)가 먼저 있어야 하고, 샌드박스 풀(`06_deploy_sandboxes.sh`)은 네임스페이스와 인증(`05_setup_namespaces_auth.sh`)이 먼저 있어야 합니다.
-
-- **이미지를 건너뛰면**: 이미지 URI가 없어 `set ... in scripts/config.env` 에러로 멈춥니다.
-- **네임스페이스 설정을 건너뛰면**: `sandbox` 네임스페이스가 없어 풀 배포가 실패합니다.
-- **어느 단계가 어떤 과금 노드를 만드는지 모르면**: 실습이 끝난 뒤에도 노드가 남아 비용이 나갑니다.
-- **Kata + GPU 구성**: 최소 `g4dn.metal`(8x T4) 한 대가 필요하므로, GPU와 무관한 설정 실수도 시간당 7.8 USD인 노드에서 디버깅하게 됩니다.
-- **G and VT 쿼터**: vCPU 기준인 `Running On-Demand G and VT instances` 쿼터는 문서상 기본값이 0일 수 있어, 먼저 올리지 않으면 `02_create_cluster.sh`의 노드 그룹 생성이 실패합니다.
-
-![a: 놓치기 쉬운 네 가지와 그 결과입니다. 03_build_push_images.sh를 건너뛰면 이미지 URI가 없어 config.env 에러로 멈추고, 05_setup_namespaces_auth.sh를 건너뛰면 sandbox 네임스페이스가 없어 풀 배포가 실패합니다. G and VT 쿼터를 올리지 않으면 02_create_cluster.sh에서 노드 그룹 생성이 실패합니다. 어느 단계가 노드를 켜는지 모르면 실습 뒤에도 노드 요금이 나갑니다. GPU와 무관한 설정 실수를 시간당 7.824 USD인 g4dn.metal에서 디버깅하게 됩니다. b: 이 핸즈온의 대응입니다. 번호 순서대로 실행하고, 각 스크립트는 그 단계에 필요한 설정값이 비었거나 __SET_ME__이면 중단됩니다. 02_create_cluster.sh 전에 실행하는 사전 확인(01_check_prereqs.sh)이 G and VT 쿼터를 조회합니다(읽기 전용). 끝나면 실행하는 정리(08_cleanup.sh)가 클러스터 이름을 입력받은 뒤 CDK 스택을 지우고, 설정에 기록된 AMI는 하나씩 확인한 뒤 지우며, ECR은 --images를 붙일 때만 지웁니다. Kata GPU 노드 추가(kata/gpu_nodes.sh)보다 Kata CPU 노드 추가(kata/cpu_nodes.sh)를 먼저 실행해 c8i.2xlarge에서 리허설하면 g4dn.metal은 GPU passthrough 확인에만 씁니다.](../images/figures/handson-00_overview.svg)
-
-*그림 요약: 실행 순서, G and VT 쿼터, 과금되는 노드, 디버깅에 쓸 노드 중 하나라도 놓치면 실습보다 오류 처리와 비용 관리에 시간이 더 듭니다. 번호 순서대로 실행하고, 클러스터를 만들기 전에 쿼터를 확인하고(`01_check_prereqs.sh`), 끝나면 정리하세요(`08_cleanup.sh`). GPU와 무관한 설정은 `c8i.2xlarge`에서 먼저 점검합니다.*
-
-
-## Why
-
-- **번호가 실행 순서이고, 빠진 값이 있으면 스크립트가 멈춥니다.** 각 스크립트는 그 단계에 필요한 `scripts/config.env` 변수가 비어 있거나 `__SET_ME__`를 포함하면 멈추고, `g4dn.metal`을 추가하는 배포와 삭제(`08_cleanup.sh`)는 확인 단어를 입력해야 진행됩니다.
-- **노드 그룹은 CDK 스택 하나에 차례로 추가합니다.** `WITH_KATA_CPU`나 `WITH_KATA_GPU`를 바꿔 `02_create_cluster.sh`를 다시 실행하면 CDK가 달라진 부분만 변경하므로, gVisor 최소 경로를 검증한 뒤 Kata 노드 그룹을 추가하면 됩니다. 시나리오 자체를 바꿀 때는 `CHANGE_SCENARIO=1`도 붙여야 하고, 없으면 배포 스크립트가 멈춥니다.
-- **Kata는 비용이 적은 노드에서 먼저 리허설합니다.** nested virtualization을 지원하는 `c8i.2xlarge`에서 `kata-clh`와 `kata-qemu`를 먼저 실행해 보고, GPU passthrough가 필요할 때만 `g4dn.metal` 노드를 만듭니다.
-
-**사전 지식:** [시작하기](../getting_started.md)에서 로컬 smoke test와 `scripts/config.env` 준비를 먼저 끝내세요. 런타임 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
+**시작 전에** [시작하기](../getting_started.md)에서 로컬 smoke test와 `scripts/config.env` 준비를 먼저 끝내세요. 런타임 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **AWS CDK, 스택**: 코드(여기서는 Python)로 AWS 인프라를 정의해 CloudFormation으로 배포하는 도구와, 함께 만들고 함께 지우는 리소스 묶음입니다.

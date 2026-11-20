@@ -1,28 +1,10 @@
 # 11 multi-turn 에피소드 실습
 
-!!! info "TL;DR"
-    GPU와 모델 없이 시나리오 C의 `c8i.2xlarge` 노드에 Agent Sandbox warm pool을 만들고, golden 제출물을 정해진 순서로 제출하는 multi-turn 에피소드를 실행합니다. 이벤트 로그에서 에피소드마다 샌드박스 하나가 할당되고 에피소드가 끝나면 반납되는지 확인합니다(컴퓨트 시간당 약 0.57 USD 추정, 온디맨드 요금).
+에피소드마다 warm pool에서 샌드박스를 하나 빌립니다. 같은 샌드박스에서 여러 턴을 실행해 이전 턴의 파일을 다시 읽는지 확인합니다.
 
-## 기존 Pain Point
+**완료 기준**　여러 턴에서 같은 인스턴스를 사용하고 에피소드가 끝나면 claim이 삭제되는지 확인하세요.
 
-reward 풀은 요청마다 유휴 pod 하나를 선택하므로 한 에피소드의 turn이 서로 다른 pod에서 채점될 수 있습니다.
-
-- **요청이 끝날 때마다**: 서버는 그 요청의 작업 디렉터리와 남은 프로세스를 지웁니다.
-- **에피소드마다 샌드박스를 새로 만들면**: Ready가 될 때까지 기다려야 하고, Kata GPU VM은 처음 Ready가 될 때까지 몇 분이 걸릴 수 있습니다(deployment 템플릿 주석).
-- **이 동작을 GPU warm pool에서 처음 확인하면**: 대기 중인 샌드박스가 평가를 처리하지 않는 동안에도 GPU를 하나씩 점유하므로 그만큼 GPU 요금이 발생합니다.
-
-![두 패널 그림입니다. a 에피소드 단위 샌드박스가 없는 경우: 에피소드 하나의 turn 1 제출은 reward 풀(Deployment)의 pod A로, turn 2 수정 제출은 pod B로 전송되고, 두 pod는 요청이 끝나면 그 요청의 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드마다 새 샌드박스를 만드는 점선 경로(빨간색)에서는 Ready까지 기다려야 하고, Kata GPU VM은 몇 분이 걸릴 수 있습니다. b 시나리오 C의 Agent Sandbox: c8i.2xlarge 노드(nested virtualization)에서 SandboxWarmPool kernel-eval-gvisor-cpu가 대기 샌드박스 2개를 실행합니다. rl-trainer 네임스페이스의 Job episodes(ServiceAccount sandbox-episode)가 에피소드마다 SandboxClaim을 만들면(1) 대기 샌드박스 하나가 할당됩니다(2). Job은 turn 1, 2, 3을 그 샌드박스에 제출하고(3) verdict를 피드백으로 받습니다(4). 세 turn은 같은 pod에서 채점되지만, 작업 디렉터리는 제출마다 삭제됩니다. 에피소드가 끝나면 Job이 claim을 삭제하고(5), 샌드박스도 함께 삭제됩니다.](../images/figures/handson-11_multi_turn.svg)
-
-*그림 요약: reward 풀에서는 한 에피소드의 turn이 서로 다른 pod에서 채점되고, 요청이 끝나면 작업 디렉터리와 남은 프로세스가 정리됩니다. 시나리오 C에서는 Job이 에피소드마다 warm pool의 gvisor-cpu 샌드박스 하나를 claim해 turn 1, 2, 3을 모두 그 샌드박스로 보내고, 에피소드가 끝나면 claim을 삭제합니다.*
-
-
-## Why
-
-- **가장 적은 비용으로 multi-turn 경로 전체를 실행합니다.** GPU와 모델 없이 controller 설치, warm pool, claim, turn, 반납을 모두 실행합니다. 샌드박스 서버, 인증, NetworkPolicy는 GPU 경로와 같습니다. CPU 프로필이라 RuntimeClass, 노드, 자원(가속기 없음), `device=cpu`, 입력 크기(`SANDBOX_SIZE=smoke`)가 다릅니다.
-- **에피소드의 수명 주기를 이벤트로 확인합니다.** Job이 출력하는 `episode_start`, `turn`, `episode_end`, `multiturn_summary` 이벤트에 claim, 샌드박스, pod, reward가 기록됩니다.
-- **multi-turn과 single-turn을 같은 조건에서 비교합니다.** 같은 warm pool과 같은 제출 순서에서 `max_turns`만 3과 1로 바꿔 실행하므로, episode reward와 첫 turn의 reward를 바로 비교할 수 있습니다.
-
-**사전 지식:** [10 c8i 단독 저비용 경로](10_cpu_only.md)의 시나리오 C 클러스터가 필요하고, 개념은 [초심자 06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md)와 [개념 06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에 있습니다.
+**시작 전에** [10 c8i 단독 저비용 경로](10_cpu_only.md)의 시나리오 C 클러스터가 필요하고, 개념은 [초심자 06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md)와 [개념 06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **에피소드(episode)**: 모델이 과제 하나를 여러 turn에 걸쳐 푸는 한 번의 시도입니다. 이 실습의 과제는 `relu_bias`입니다.

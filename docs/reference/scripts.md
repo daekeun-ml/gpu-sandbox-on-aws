@@ -1,13 +1,17 @@
 # 스크립트 레퍼런스
 
-!!! info "TL;DR"
-    스크립트마다 하는 일, 사용법, 다시 실행할 때의 동작, 성공 신호를 같은 항목으로 정리했습니다. 대부분은 다시 실행해도 안전합니다. 예외는 같은 `IMAGE_TAG`로 실행한 `03_build_push_images.sh`, 클러스터가 이미 있을 때의 `hyperpod/create.sh`, 실행할 때마다 새 AMI를 만드는 AMI 빌드 단계입니다.
+저장소 루트에서 실행하세요. `kubectl`이나 Helm을 쓰는 단계에서는 다른 터미널에 `cdk/tunnel.sh`를 열어 둡니다. 처음부터 실습한다면 [핸즈온 전체 흐름](../handson/00_overview.md)에서 시나리오를 고르세요.
 
-실행 순서와 시나리오별 경로는 [00 핸즈온 전체 흐름](../handson/00_overview.md)에, 증상별 원인과 해결은 [문제 해결](troubleshooting.md)에 있습니다. kubectl이나 helm을 쓰는 스크립트는 두 번째 터미널에서 `cdk/tunnel.sh`를 열어 둔 상태로 실행하세요.
-
-![작업 PC, AWS 계정, 클러스터 안의 세 구역에 핸즈온 스크립트를 실행 순서대로 놓은 그림입니다. 작업 PC에서 01_check_prereqs.sh가 도구와 쿼터를 조회하고(만드는 것 없음), 02_create_cluster.sh가 AWS 계정에 CDK 스택(VPC, private EKS, 노드 그룹, access instance)을 배포합니다. 이어서 cdk/tunnel.sh가 SSM 포트 포워딩으로 작업 PC의 127.0.0.1:8443을 private EKS API에 연결하고, 이후 kubectl은 모두 이 터널을 거칩니다. 03_build_push_images.sh는 sandbox, trainer, control 이미지를 ECR에 push하고 config.env에 넣을 export 줄을 출력합니다. 클러스터 안에서는 04_install_gpu_stack.sh(NVIDIA device plugin, gvisor RuntimeClass, smoke pod), 05_setup_namespaces_auth.sh(네임스페이스, NetworkPolicy, JWKS, routing ConfigMap), 06_deploy_sandboxes.sh(샌드박스 풀: Deployment와 headless Service), ops/verify.sh(격리, 연결 차단, probe Job의 golden verdict 확인), 07_run_grpo.sh(시나리오 A의 GRPO 학습 Job) 순서로 진행합니다. 점선 상자는 선택 단계입니다. kata/cpu_nodes.sh와 kata/gpu_nodes.sh는 04와 05 사이에 Kata 런타임을 설치하고, 07 대신 시나리오 C는 ops/simulate.sh를, 시나리오 B는 hyperpod/run_grpo.sh를 실행합니다. ops/rollout.sh는 07(또는 그 대신 실행한 스크립트)이 실행 중일 때 v2 풀을 배포하고 routing을 전환합니다. 마지막으로 08_cleanup.sh가 CDK 스택을 지우며, 시나리오 B는 그 전에 hyperpod/delete.sh를 실행합니다.](../images/figures/reference-scripts.svg)
-
-*그림 요약: 번호 순서대로 실행하고, 02와 03 사이에 연 `cdk/tunnel.sh`는 끝날 때까지 열어 둡니다. 02는 AWS 계정에 CDK 스택을, 03은 ECR에 이미지를 만들고, 04부터 07까지는 클러스터 안에서 실행됩니다. 점선 상자는 시나리오에 따라 더하거나 바꾸는 단계예요. 실습을 마치면 `08_cleanup.sh`로 스택을 지웁니다.*
+| 하려는 작업 | 스크립트 |
+|---|---|
+| AWS 설정 확인, EKS 생성, 이미지 준비 | [01~03과 터널](#기본-순서) |
+| 런타임 설치와 채점 풀 배포 | [04~06](#scripts04_install_gpu_stacksh), [Kata](#kata) |
+| EKS에서 GRPO 실행 (A) | [07_run_grpo.sh](#scripts07_run_grposh) |
+| HyperPod에서 GRPO 실행 (B1·B2) | [hyperpod/run_grpo.sh](#scriptshyperpodrun_grposh) |
+| 풀 검증, GPU 없는 시뮬레이션 (C), 버전 전환, 지연 측정 | [검증과 운영](#검증과-운영) |
+| 에피소드마다 샌드박스 할당 | [Agent Sandbox 확장](#확장) |
+| 평가 기록을 웹에 공개 | [데모 사이트](#데모-사이트) |
+| 실습 리소스 삭제 | [정리 실습](../handson/99_cleanup.md) |
 
 ## 기본 순서
 
@@ -229,15 +233,34 @@
 - **성공 신호**: sandbox 노드 두 대에서 `driver 580.178.04: SUPPORTED by gVisor ...: mode B2 is possible`이 나옵니다. trainer 노드의 `driver 595.91.07: NOT supported ...`는 정상입니다.
 - **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)
 
-### `scripts/hyperpod/run_grpo.sh`
+### `scripts/hyperpod/run_grpo.sh` { #scriptshyperpodrun_grposh }
 
-- **하는 일**: GRPO trainer를 HyperPodPyTorchJob `grpo-<RUN_ID>`로 HyperPod 노드에 제출합니다. 로그를 따라가지 않고, 로그를 볼 명령만 출력합니다.
-- **사용법**: `scripts/hyperpod/run_grpo.sh [max_steps]` (기본 60). trainer 이미지는 `HYPERPOD=1`로 빌드해야 합니다.
-- **언제**: B1과 B2에서 `07_run_grpo.sh` 대신 실행합니다.
-- **시간과 과금**: 문서에 기록 없음([07](../handson/07_hyperpod.md) 참고). 새로 과금되는 리소스는 없습니다(HyperPod 인스턴스는 `hyperpod/create.sh`에서 시작).
-- **다시 실행할 때**: `RUN_ID` 기본값이 실행 시각이라 실행할 때마다 새 job을 제출하고, 이전 job은 지우지 않습니다. trainer 인스턴스의 GPU는 하나이므로 이전 job이 실행 중이면 새 job은 GPU를 기다립니다.
-- **성공 신호**: `HyperPodPyTorchJob grpo-<RUN_ID> submitted`와 job 한 줄이 나옵니다. 출력된 명령으로 본 trainer 로그에는 20분 안에 `{"event": "routing", ...}`과 `reward_batch` 줄이 나옵니다.
-- **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [문제 해결: 학습](troubleshooting.md#학습)
+B1과 B2에서 **HyperPod trainer에 GRPO Job을 제출**합니다. 기존 샌드박스 풀은 모델이 생성한 코드를 채점하고, trainer는 그 점수로 모델을 업데이트합니다.
+
+**준비**　[HyperPod 실습](../handson/07_hyperpod.md)에서 training operator, trainer 노드, 샌드박스 풀을 준비하세요. `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드한 이미지에는 Job의 실행 명령인 `hyperpodrun`이 들어 있습니다. `scripts/config.env`에 `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, `HYPERPOD_TRAINER_INSTANCE_TYPE`이 필요합니다.
+
+```bash
+scripts/hyperpod/run_grpo.sh 5
+```
+
+`5`는 optimizer step 수입니다. 생략하면 60이고 기본 모델은 `Qwen/Qwen2.5-Coder-1.5B-Instruct`입니다. 스크립트는 설정을 `k8s/trainer/hyperpod-job-grpo.yaml.tpl`에 넣어 `rl-trainer`에 `grpo-<RUN_ID>`라는 `HyperPodPyTorchJob`을 제출합니다. operator가 스케줄 가능한 trainer 노드에 GPU 한 장을 요청하는 pod를 띄우고, 컨테이너는 라우팅 ConfigMap과 인증 토큰을 읽어 샌드박스 풀에 연결합니다.
+
+| 확인할 것 | 출력으로 알 수 있는 것 |
+|---|---|
+| `HyperPodPyTorchJob grpo-<RUN_ID> submitted` | API가 Job을 받았습니다. pod 상태는 별도로 확인하세요. |
+| `routing` 이벤트 | trainer가 샌드박스 경로를 읽었습니다. 템플릿은 시작 후 20분 안에 이 이벤트를 기대합니다. |
+| `reward_batch` 이벤트와 학습 step | 샌드박스 평가 요청이 처리되고 학습이 진행되는지 확인할 수 있습니다. `sandbox_error`가 반복되면 풀을 점검하세요. |
+
+스크립트는 로그 조회 명령을 출력하고 끝납니다. 같은 namespace에 이전 run이 있으면 아래처럼 이번 Job의 pod를 찾아 로그를 확인하세요.
+
+```bash
+kubectl -n rl-trainer get pods -l app=grpo-trainer -o wide
+kubectl -n rl-trainer logs -f <trainer-pod> -c pytorch
+```
+
+`RUN_ID`를 지정하지 않으면 실행 시각을 사용합니다. 새 ID로 실행하면 Job이 추가되므로 기존 Job이 GPU를 쓰는 동안 새 pod는 대기할 수 있습니다. `/outputs`는 pod의 `emptyDir`입니다. pod가 교체되면 여기에 저장한 체크포인트도 사라집니다.
+
+Job 종류를 찾을 수 없으면 [HyperPod operator 설정](troubleshooting.md#hyperpod)을, pod는 실행되는데 평가 로그가 나오지 않으면 [학습 문제 해결](troubleshooting.md#학습)을 확인하세요.
 
 ### `scripts/hyperpod/delete.sh`
 

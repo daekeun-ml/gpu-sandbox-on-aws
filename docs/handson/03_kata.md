@@ -1,30 +1,10 @@
 # 03 Kata 샌드박스 (CLH, QEMU)
 
-!!! info "TL;DR"
-    `c8i.2xlarge`의 nested virtualization으로 `kata-clh`와 `kata-qemu`를 적은 비용으로 먼저 리허설합니다. GPU passthrough가 필요할 때만 IOMMU AMI로 부팅한 `g4dn.metal`에서 VM마다 T4를 하나씩 직접 할당합니다.
+Kata는 pod마다 작은 VM을 띄웁니다. 먼저 c8i에서 CPU로 Cloud Hypervisor와 QEMU를 확인하고, GPU passthrough가 필요하면 별도로 metal 노드를 추가합니다. GPU 경로에서는 IOMMU를 켠 `g4dn.metal`에서 VM에 T4를 한 장씩 할당합니다.
 
-## 기존 Pain Point
+**완료 기준**　CPU smoke test와 GPU smoke test는 각각 VM 부팅과 GPU 연결을 확인합니다. CPU 실습만 하려면 1단계까지 진행하세요.
 
-Kata는 pod마다 가벼운 VM을 실행하므로 노드에 `/dev/kvm`이 있어야 합니다(QEMU와 Cloud Hypervisor가 KVM을 씀).
-
-- **일반 GPU VM 인스턴스**: `g5.xlarge` 같은 인스턴스에는 `/dev/kvm`이 없습니다.
-- **GPU를 VM에 직접 할당하려면**: IOMMU를 켜고, 호스트가 NVIDIA 드라이버를 로드하지 않은 채 GPU를 `vfio-pci`에 바인딩해 VM에 넘겨야 합니다. AWS에서 이 조건을 갖춘 x86 NVIDIA 인스턴스는 bare metal인 `g4dn.metal`(시간당 7.824 USD)뿐입니다.
-- **GPU와 무관한 설정 실수**: kata-deploy, containerd drop-in, RuntimeClass 같은 실수도 이 노드에서 디버깅하게 됩니다.
-- **AL2023 커널**: IOMMU를 기본으로 활성화하지 않습니다.
-- **nodeadm**: 부팅할 때마다 `/etc/containerd/config.toml`을 다시 작성하므로, kata-deploy가 추가한 runtime handler가 재부팅 뒤 사라질 수 있습니다.
-
-![a: kata-deploy와 containerd drop-in, RuntimeClass와 NetworkPolicy, node guard와 부팅 시간처럼 GPU와 무관한 설정과 GPU passthrough(VFIO, IOMMU)를 모두 g4dn.metal(시간당 7.824 USD)에서 확인합니다. g4dn.metal은 Kata VM에 GPU를 직접 할당할 수 있는 유일한 x86 NVIDIA 인스턴스입니다. b: GPU와 무관한 설정은 nested virtualization(/dev/kvm)을 지원하는 c8i.2xlarge(시간당 0.37484 USD)에서 먼저 확인하고, GPU passthrough만 IOMMU AMI로 시작한 g4dn.metal에서 확인합니다.](../images/figures/handson-03_kata.svg)
-
-*그림 요약: AWS에서 Kata VM에 GPU를 직접 할당할 수 있는 x86 NVIDIA 인스턴스는 `g4dn.metal` 하나뿐이라, GPU와 무관한 디버깅까지 시간당 7.824 USD인 노드에서 하게 됩니다. GPU와 무관한 확인을 `c8i.2xlarge`(시간당 0.37484 USD)에서 먼저 하면 `g4dn.metal`에서는 GPU passthrough만 확인하면 됩니다.*
-
-
-## Why
-
-- **두 단계로 나눠 비용을 줄입니다.** CPU 단계(`c8i.2xlarge`)에서는 kata-deploy와 RuntimeClass를 설치하고 세 런타임의 커널을 확인합니다. GPU 노드를 추가하기 전에 [04](04_sandbox_pools.md)의 CPU 풀을 배포하면, 네트워크 차단(NetworkPolicy, node guard)은 `scripts/ops/verify.sh`로, pod 생성부터 Ready까지 걸린 시간은 `scripts/ops/bench.sh`로 확인할 수 있습니다.
-- **커널 인자는 AMI에 포함합니다.** 비용이 적은 `m6i.large` 빌더에서 `intel_iommu=on iommu=pt`를 AMI에 넣습니다. `g4dn.metal`은 첫 부팅부터 이 인자를 적용하므로 설정을 위해 재부팅할 필요가 없습니다.
-- **업스트림이 지원하는 GPU 연결 방식이 기본값입니다.** 이 방식은 QEMU, cold-plug, Go shim(`kata-qemu-nvidia-gpu`) 조합입니다. Cloud Hypervisor GPU는 환경변수를 지정해야만 활성화되는 실험 기능(RuntimeClass label `gpusandbox/support: experimental`)입니다.
-
-**사전 지식:** [01 클러스터와 이미지](01_cluster_and_images.md)를 먼저 마쳐야 합니다. Kata가 GPU를 다루는 방식은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)의 "Kata + VFIO passthrough" 절에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
+**시작 전에** [01 클러스터와 이미지](01_cluster_and_images.md)를 먼저 마쳐야 합니다. Kata가 GPU를 다루는 방식은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)의 "Kata + VFIO passthrough" 절에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **Kata Containers**: pod마다 작은 VM을 만들어 그 안에서 컨테이너를 실행하는 런타임입니다. 그래서 pod마다 별도의 guest 커널을 씁니다.
@@ -221,7 +201,7 @@ flowchart LR
 3. 15초 간격으로 빌더 상태를 조회해 stopped가 될 때까지 최대 30분 기다립니다. 상태가 shutting-down이나 terminated가 되면 오류로 멈춥니다.
 4. `eks-al2023-${K8S_VERSION}-iommu-<타임스탬프>` 이름으로 AMI를 만들고, AMI를 쓸 수 있게 될 때까지 기다립니다. 스크립트가 성공하든 실패하든 EXIT trap이 빌더를 terminate합니다.
 
-`vfio_iommu_type1` 모듈이 없으면 QEMU가 GPU를 연결하지 못해 Kata GPU pod가 시작되지 않습니다(아래 "pod가 `create container timeout`으로 멈출 때").
+`vfio_iommu_type1` 모듈이 없으면 QEMU가 GPU를 연결하지 못해 Kata GPU pod가 시작되지 않습니다([Kata 문제 해결](../reference/troubleshooting.md#kata) 참고).
 
 ??? note "커널 인자와 모듈 설정을 AMI에 넣는 이유"
     - **`intel_iommu=on`**: AL2023 커널은 `CONFIG_INTEL_IOMMU_DEFAULT_ON`이 꺼져 있어서, 이 인자가 커널 명령줄에 있어야 VFIO가 GPU를 VM에 직접 할당할 수 있습니다.
@@ -354,7 +334,7 @@ grep vfio_iommu_type1 /proc/modules    # expect one line: QEMU needs this VFIO I
 2026-11-18 노드에서는 IOMMU group이 257개였고 T4 8개가 모두 `vfio-pci`에 바인딩되어 있었습니다.
 
 - **첫째 명령 출력에 커널 인자가 없으면**: 노드가 IOMMU AMI로 부팅되지 않은 것입니다.
-- **넷째 명령이 아무것도 출력하지 않으면**: 아래 "pod가 `create container timeout`으로 멈출 때"를 보세요.
+- **넷째 명령이 아무것도 출력하지 않으면**: [Kata 문제 해결](../reference/troubleshooting.md#kata)을 보세요.
 
 확인이 끝나면 debug pod를 [02 gVisor](02_gvisor.md)의 "노드에서 직접 확인하기"와 같은 방법으로 삭제하세요.
 
@@ -365,28 +345,9 @@ grep vfio_iommu_type1 /proc/modules    # expect one line: QEMU needs this VFIO I
 - golden verdict 6개 PASS(`vector_add_triton`, `relu_bias_triton` 포함)
 - NetworkPolicy가 `default` namespace에서 온 호출을 차단
 
-### pod가 `create container timeout`으로 멈출 때 (vfio_iommu_type1)
+### 자주 막히는 지점
 
-2026-11-18 실행에서 만난 문제입니다. 지금의 `build-iommu-ami.sh`는 이 모듈이 부팅 때 로드되도록 고쳤고, 그 전에 만든 AMI의 노드에서는 이 문제가 생깁니다.
-
-- **증상:** `kata-qemu-nvidia-gpu` pod가 `ContainerCreating`에 머물고, 이벤트에 `failed to create shim task: create container timeout`이 나옵니다. 노드 로그에는 QEMU 오류 `vfio 0000:e7:00.0: failed to setup container for group 87: No available IOMMU models`가 남습니다(PCI 주소와 group 번호는 노드마다 다름).
-- **원인:** AL2023 커널은 VFIO type1 IOMMU backend를 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하고, 그 노드에서는 아무것도 이 모듈을 로드하지 않았습니다. `lsmod`에는 `vfio`, `vfio_pci`, `vfio_pci_core`만 있었습니다. IOMMU(group 257개, 커널 명령줄의 `intel_iommu=on`), T4 8개의 `vfio-pci` 바인딩, `nvidia.com/pgpu=8`은 모두 정상이었으므로 `kata/gpu_nodes.sh`의 pgpu 확인만으로는 드러나지 않습니다.
-- **해결 (새 AMI):** 지금의 `infra/kata/build-iommu-ami.sh`는 `/etc/modules-load.d/vfio-iommu-type1.conf`(`vfio_iommu_type1`)를 AMI에 넣습니다. 이전 AMI를 쓰고 있다면 이 스크립트로 AMI를 다시 빌드하고, 출력된 `KATA_IOMMU_AMI_ID`로 `scripts/config.env`를 바꾼 뒤 `02_create_cluster.sh`를 다시 실행하세요.
-- **해결 (지금 노드):** 이전 AMI로 뜬 노드에서는 위 debug 셸에서 모듈을 직접 로드합니다. 재부팅하면 다시 로드해야 합니다.
-
-```bash
-# In the debug shell on the Kata GPU node (kubectl debug node/<kata-gpu-node> ... --profile=sysadmin)
-chroot /host
-journalctl --since "30 min ago" --no-pager | grep "No available IOMMU models" | tail -3   # the symptom
-modprobe vfio_iommu_type1
-grep vfio_iommu_type1 /proc/modules                                                     # one line now
-exit
-```
-
-**확인할 것:**
-
-- 마지막 `grep`이 `vfio_iommu_type1` 줄을 출력합니다.
-- `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu`로 READY가 `1/1`이 되는지 확인하세요. 2026-11-18 실행에서는 이 수정 뒤 `kata-qemu` pod 4개가 Ready가 되었습니다.
+GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `create container timeout`과 함께 노드 로그에 `No available IOMMU models`가 나오면 [`vfio_iommu_type1` 진단 절차](../reference/troubleshooting.md#kata)를 따라가세요.
 
 ## 3단계 (선택, 실험): Kata + Cloud Hypervisor GPU
 

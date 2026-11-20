@@ -1,30 +1,10 @@
 # 04 샌드박스 풀 배포와 검증
 
-!!! info "TL;DR"
-    네임스페이스, NetworkPolicy, 인증 키, routing ConfigMap을 만들고 (runtime, version)마다 샌드박스 풀을 배포합니다. 그다음 격리, egress 차단, golden verdict, NetworkPolicy 네 가지를 검증합니다.
+trainer가 평가 요청을 보낼 샌드박스 풀을 배포합니다. 05번 스크립트는 네임스페이스·인증·라우팅을 준비하고, 06번은 실제로 요청을 처리할 pod를 띄웁니다.
 
-## 기존 Pain Point
+**완료 기준**　`ops/verify.sh`로 pod 상태뿐 아니라 접근 제어와 기준 입력의 채점 결과를 확인합니다. 검증을 통과하면 학습을 시작하세요.
 
-모델이 생성한 코드는 샌드박스 서버와 같은 pod에서 실행됩니다. 그래서 일반 서비스에서는 기본으로 쓰는 설정(토큰 마운트, 기본 네트워크 허용)이 그대로 공격 경로가 됩니다.
-
-- **pod 안의 비밀**: API key나 Kubernetes token을 pod에 두면 후보 코드가 읽을 수 있습니다.
-- **정책이 적용되기 전의 네트워크**: VPC CNI의 standard 모드에서는 새 pod가 정책이 적용되기 전까지 default-allow 상태로 시작합니다.
-- **노드 IP 예외**: VPC CNI는 kubelet probe가 차단되지 않도록 pod와 그 pod가 실행 중인 노드 IP 사이의 트래픽을 항상 허용합니다.
-- **GPU 하나에서 동시 평가**: 한 GPU에서 평가 두 개가 동시에 실행되면 실행 시간 측정이 서로 간섭해 speedup reward가 부정확해집니다.
-- **Kata GPU VM의 첫 기동**: VFIO가 메모리를 pin하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready 상태가 될 때까지 몇 분이 걸립니다.
-
-![a: 서버와 같은 샌드박스 pod에서 실행되는 후보 코드가 pod에 둔 token과 API key를 읽습니다. 정책이 적용되기 전 default-allow 상태에서는 IMDS와 API server에 접속할 수 있고, 항상 허용되는 노드 IP를 통해 노드 kubelet(포트 10250)에도 접속할 수 있습니다. b: pod에는 비밀이 아닌 JWKS 공개 키만 있어 읽어 갈 비밀이 없습니다. IMDS와 API server 접근은 default-deny NetworkPolicy가, 노드 kubelet 접근은 node guard가 차단합니다. readiness는 이 차단이 동작하는지 확인한 뒤에만 pod를 Ready로 만듭니다.](../images/figures/handson-04_sandbox_pools.svg)
-
-*그림 요약: 후보 코드는 같은 pod의 비밀, 정책이 적용되기 전의 네트워크, 노드 IP 예외를 통해 다른 리소스에 접근할 수 있습니다. 샌드박스 pod에는 비밀 대신 공개 키(JWKS)만 두고, 네트워크 차단을 직접 확인한 pod만 Ready가 됩니다.*
-
-
-## Why
-
-- **비밀 대신 audience가 지정된 토큰을 씁니다.** 샌드박스는 projected ServiceAccount token(audience `gpu-sandbox`)을 클러스터 issuer의 공개 키(JWKS)로 오프라인 검증하고, 설정이 하나라도 빠지면 인증이 필요한 요청(`/v1/evaluate`, `/info`, `/metrics`)을 모두 거부합니다(fail closed). kubelet probe용 `/healthz`, `/readyz`는 토큰 없이 응답하고 샌드박스 정보를 돌려주지 않습니다.
-- **차단을 확인한 pod의 주소만 공개됩니다.** readiness probe는 IMDS, API server, 노드 kubelet으로 가는 연결이 실제로 차단됐는지 확인한 뒤에만 통과합니다. headless Service는 Ready 상태인 pod의 IP만 DNS에 등록합니다.
-- **(runtime, version)마다 Deployment가 하나입니다.** 새 버전은 기존 Deployment와 별도로 새 Deployment를 배포하고(blue/green), routing ConfigMap으로 전환합니다.
-
-**사전 지식:** [02 gVisor GPU 샌드박스](02_gvisor.md)(또는 Kata 풀이라면 [03 Kata 샌드박스](03_kata.md))를 먼저 마쳐야 합니다. 샌드박스 버전과 routing의 개념은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
+**시작 전에** [02 gVisor GPU 샌드박스](02_gvisor.md)(또는 Kata 풀이라면 [03 Kata 샌드박스](03_kata.md))를 먼저 마쳐야 합니다. 샌드박스 버전과 routing의 개념은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **Pod Security (restricted, baseline)**: 네임스페이스 단위로 pod의 보안 설정 수준을 강제하는 Kubernetes 기능과, 가장 엄격한 수준(restricted) 및 기본 수준(baseline)입니다.
