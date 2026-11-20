@@ -58,10 +58,12 @@ If the deployment GPU is known, choose the same or a similar GPU for measurement
 | Customer situation | Combination | Reason |
 |---|---|---|
 | An in-house research team trains Triton kernels for L4 serving with its own model | gVisor on `g6.xlarge` (a supported alternative in this asset; the default is `g5.xlarge`) | a pool used by one team does not require a VM boundary, and the measurement GPU can match the deployment GPU (L4) |
-| Training jobs of several customers use the same GPU nodes, and rankings on T4 are good enough | Kata + QEMU on `g4dn.metal`, one pool per customer | Kata creates a VM per pod, but the pool picks an idle pod for each request, so in one shared pool requests from several customers use the same VM in turn. Customers are separated by a VM boundary only when each has its own pool and its requests go to that pool. T4 measurement is accepted |
+| Training jobs of several customers use the same GPU nodes, and rankings on T4 are good enough | Kata + QEMU on `g4dn.metal`, one pool per customer | customers are separated by a VM boundary only when each has its own pool and its requests go to that pool (list below the table). T4 measurement is accepted |
 | Kernels for H100 serving are trained in a pool shared by several customers | gVisor on `p5` + compensating controls, consider separate nodes per customer, a written risk acceptance | EC2 has no VM boundary + H100 combination |
 | Code RL scored by unit tests | Kata + CLH on `c8i` or a managed CPU sandbox | the GPU is not on the reward path |
 | You want to separate the nvcc compile stage from the measurement stage | CPU tier (Kata + CLH on `c8i`) + GPU tier (gVisor or Kata + QEMU) | compilation and static checks do not spend GPU time |
+
+- **Why the second example needs one pool per customer**: Kata creates a VM per pod, but the pool picks an idle pod for each request, so in one shared pool requests from several customers use the same VM in turn.
 
 The second and third examples are the same multi-tenant situation with different measurement GPU requirements, and that difference decides whether a VM boundary is available.
 
@@ -71,25 +73,35 @@ The second and third examples are the same multi-tenant situation with different
 |---|---|---|---|---|---|
 | Isolation boundary | user-space kernel. The GPU goes through an ioctl allowlist, weaker than a VM | VM + IOMMU | VM | VM + IOMMU (unverified upstream) | managed by AWS (see the documentation for details) |
 | GPUs available on AWS | G/P family VMs. This asset uses A10G (`g5`, default) and L4 (`g6`, alternative) | T4 (`g4dn.metal`) only | none | T4 (`g4dn.metal`) | none (at launch) |
-| Installation effort | medium: runsc via user data, containerd handler, RuntimeClass, device plugin `cdi-cri` | high: IOMMU AMI bake, GPU Operator, kata-deploy, `.metal` node | medium: nested-virtualization launch template, kata-deploy | high: the QEMU path plus experimental values. The 4.3.1 values already hold the guest kernel and image paths; check the paths for other versions. In this repository's run the VM did not start | low: Kubernetes 1.36 or later |
+| Installation effort | medium: runsc via user data, containerd handler, RuntimeClass, device plugin `cdi-cri` | high: IOMMU AMI bake, GPU Operator, kata-deploy, `.metal` node | medium: nested-virtualization launch template, kata-deploy | high: the QEMU path plus experimental values. In this repository's run the VM did not start | low: Kubernetes 1.36 or later |
 | Density (this asset's setup) | one per `g5.xlarge` node | up to 8 VMs per `g4dn.metal`, all guest RAM pinned | 1.25 CPU per pod (request 1 + overhead 250m) and 2 GiB + 130Mi of memory; whichever of the node's allocatable CPU and memory runs out first sets the limit | shares the node with `kata-qemu` | see the documentation |
 | Upstream support | supported (nvproxy documentation) | supported (NVIDIA CI covers A100, H100) | supported | not supported | supported by AWS (launched 2026-11-09) |
 | Driver coupling | the host driver version must match the nvproxy support list exactly | guest driver (kata-deploy, open 615.71.09). The host loads no driver | none | guest driver | none |
 | On-Demand per GPU per hour | 1.006 (A10G, `g5.xlarge`) | about 0.978 (7.824 / 8, with all eight in use) | n/a | about 0.978 | n/a |
 
+- **Values for Kata + CLH (GPU, experimental)**: the 4.3.1 values already hold the guest kernel and image paths; check the paths for other versions.
+
 Prices are computed from us-east-1 and us-west-2 list prices. With fewer T4s in use, the cost per GPU on `g4dn.metal` goes up.
 
 ## What to check right after choosing
 
-How to run the scripts and sample output are on the matching hands-on page. The gVisor combination (`04_install_gpu_stack.sh`, `scripts/ops/verify.sh gvisor v1`) ran on `g5.xlarge` in the practice account. Kata + QEMU (GPU) also ran on `g4dn.metal`, where `scripts/ops/verify.sh kata-qemu v1` confirmed the T4 and the golden verdicts ([run record](../reference/sources.md#aws-run-record)). NVIDIA's upstream CI covers A100 and H100. Verify them against the expected results.
+How to run the scripts and sample output are on the matching hands-on page.
+
+- **gVisor combination**: `04_install_gpu_stack.sh` and `scripts/ops/verify.sh gvisor v1` ran on `g5.xlarge` in the practice account.
+- **Kata + QEMU (GPU)**: it ran on `g4dn.metal`, where `scripts/ops/verify.sh kata-qemu v1` confirmed the T4 and the golden verdicts ([run record](../reference/sources.md#aws-run-record)). NVIDIA's upstream CI covers A100 and H100.
+
+Verify them against the expected results.
 
 | Combination | Check script | Expected result | Hands-on |
 |---|---|---|---|
-| gVisor | `scripts/04_install_gpu_stack.sh` | `dmesg` inside the smoke pod shows the gVisor Sentry instead of the host kernel, and torch sees the GPU and runs a kernel (`cuda ok:` followed by the GPU name and `2048.0`; on the default `g5.xlarge`, `cuda ok: NVIDIA A10G 2048.0`). If the node's driver is not on the nvproxy support list, the node's boot log carries the warning from `install-gvisor.sh` | [02 gVisor](../handson/02_gvisor.md) |
+| gVisor | `scripts/04_install_gpu_stack.sh` | `dmesg` inside the smoke pod shows the gVisor Sentry instead of the host kernel, and torch sees the GPU and runs a kernel (`cuda ok:` followed by the GPU name and `2048.0`; on the default `g5.xlarge`, `cuda ok: NVIDIA A10G 2048.0`) | [02 gVisor](../handson/02_gvisor.md) |
 | Kata CPU (`kata-clh`, `kata-qemu`) | `scripts/kata/cpu_nodes.sh` | both runtime classes exist, and the guest kernel version printed by the smoke pods differs from the host kernel version the script prints | [03 Kata](../handson/03_kata.md) |
 | Kata + QEMU (GPU) | `scripts/kata/gpu_nodes.sh` | the node's allocatable `nvidia.com/pgpu` is above 0 and the `kata-qemu-nvidia-gpu` runtime class exists | [03 Kata](../handson/03_kata.md) |
 | Deployment pool | `scripts/ops/verify.sh <runtime> [version]` | isolation evidence per pod, IMDS, API server, kubelet and the internet blocked, golden verdicts, access from another namespace refused | [04 Sandbox pools](../handson/04_sandbox_pools.md) |
-| Agent Sandbox warm pool | open one claim and run the probe Job against its `status.sandbox.serviceFQDN`. Warm pods have no `gpusandbox/version` label, so `verify.sh` does not find them, and if a Deployment pool of the same runtime exists it checks that pool instead | golden verdicts from the claimed sandbox | "Checking evaluations as well" in [06 Agent Sandbox](06_agent_sandbox.md) |
+| Agent Sandbox warm pool | open one claim and run the probe Job against its `status.sandbox.serviceFQDN` | golden verdicts from the claimed sandbox | "Checking evaluations as well" in [06 Agent Sandbox](06_agent_sandbox.md) |
+
+- **If the gVisor node's driver is not on the nvproxy support list**: the node's boot log carries the warning from `install-gvisor.sh`.
+- **Why `verify.sh` is not used for the Agent Sandbox warm pool**: warm pods have no `gpusandbox/version` label, so `verify.sh` does not find them, and if a Deployment pool of the same runtime exists it checks that pool instead.
 
 **If it fails:** when a result differs from the expected one, look first at the runtime's section (gVisor, Kata) or the "sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md).
 
@@ -100,12 +112,16 @@ Revisit the runtime choice if one of these facts changes.
 | Changing fact | Impact | How to check |
 |---|---|---|
 | A new gVisor release supports the default HyperPod AMI's driver | B2 can skip the driver swap. To use the default AMI as is, the lifecycle script must also install gVisor (`on_create_sandbox.sh` fails when `runsc` is missing) | set `GVISOR_RELEASE` to the new release, then run `scripts/hyperpod/check_gvisor.sh` |
-| The EKS NVIDIA AMI, the NVIDIA driver or the gVisor version changes | gVisor on the default `g5` (proprietary module with GSP off) rests on this repository's verification, not on the gVisor documentation, so it must be checked again | `/proc/driver/nvidia/version` and `runsc nvproxy list-supported-drivers` on the node, then, while a GPU is free, the `04_install_gpu_stack.sh` smoke test (it creates its own pod that uses one GPU), and `scripts/ops/verify.sh gvisor v1` for the deployed pool |
+| The EKS NVIDIA AMI, the NVIDIA driver or the gVisor version changes | gVisor on the default `g5` (proprietary module with GSP off) rests on this repository's verification, not on the gVisor documentation, so it must be checked again | the steps in the list below the table |
 | you can get `g6` On-Demand capacity in the Availability Zones you use | you can choose `g6`, which uses the open driver, matches the gVisor documentation and is cheaper | launch an instance and terminate it at once to check, then change `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` in `scripts/config.env` |
 | A G or P family joins the nested virtualization list | Kata + GPU without `.metal` becomes worth evaluating (check VFIO support separately) | the nested virtualization User Guide, the `describe-instance-types` filter |
 | A new `.metal` type with an x86 NVIDIA GPU | a VM boundary + current GPU combination becomes possible | EC2 accelerated computing instance specifications |
 | Nitro Sandboxes supports GPU passthrough | a managed GPU tier becomes worth evaluating | the Nitro Sandboxes documentation, EKS sandboxing limitations |
 | NVIDIA CI covers T4, or Kata supports CLH GPUs | the verification status of `g4dn.metal` or the CLH GPU path changes | Kata release notes, upstream `docs/hypervisors.md` |
+
+- **When the EKS NVIDIA AMI, the NVIDIA driver or the gVisor version changes**: first check `/proc/driver/nvidia/version` and `runsc nvproxy list-supported-drivers` on the node. Then check the following.
+    - **While a GPU is free**: run the `04_install_gpu_stack.sh` smoke test (it creates its own pod that uses one GPU).
+    - **For a deployed pool**: check it with `scripts/ops/verify.sh gvisor v1`.
 
 !!! question "❓ Misconception: with gVisor, GPU code is isolated as well as in a VM"
     gVisor handles syscalls in a user-space kernel (the Sentry), but the GPU path is an ioctl allowlist to the host driver, and the gVisor documentation says nvproxy is "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves" and has "no validation of things like DMA buffers". For adversarial code from different customers, evaluate a VM boundary (Kata + VFIO) first; if you use gVisor because you need a current GPU, document the compensating controls and the residual risk.

@@ -5,7 +5,12 @@
 
 ## Pain point
 
-When speedup is the reward, the policy can look for gaps in the measurement instead of faster kernels; in the CUDA-L1 report, an extra CUDA stream fooled the timing in 82 of 250 cases (32.8%). In the same Python process as the scoring code, the candidate can replace the timer, the reference operation or the comparison function. Outputs that are right during the correctness check but wrong during the benchmark, cached results, and lazy outputs that move the work outside the timed window are not caught by a single correctness check. Conversely, scoring a sandbox failure as a wrong answer suppresses the behavior that produced a correct answer.
+When speedup is the reward, the policy can look for gaps in the measurement instead of faster kernels.
+
+- **An extra CUDA stream**: in the CUDA-L1 report, an extra CUDA stream fooled the timing in 82 of 250 cases (32.8%).
+- **In the same Python process as the scoring code**: the candidate can replace the timer, the reference operation or the comparison function.
+- **With a single correctness check**: outputs that are right during the correctness check but wrong during the benchmark, cached results, and lazy outputs that move the work outside the timed window are not caught.
+- **Conversely, scoring a sandbox failure as a wrong answer**: it suppresses the behavior that produced a correct answer.
 
 ![a: candidate code (ModelNew) in the same Python process as the scoring code replaces the harness timer and the reference and comparison, and games the timed window with an extra stream, caching and lazy outputs, earning a high reward without a faster kernel. b: candidate code runs only in an untrusted child process; the static policy's ban on attribute writes protects the timer, the parent produces the reference outputs and compares (the child also imports the task module, but the parent makes this request's reference outputs only after the child ends), and synchronize, new inputs and checksums protect the timed window](../images/figures/production-04_reward_integrity.svg)
 
@@ -51,7 +56,8 @@ The sandbox server creates a new process tree for every evaluation request and s
 | 5. Timing check | Parent | Times the reference on the same inputs and compares the timed output checksums | `wrong_answer` + `timed_output_mismatch` flag |
 | 6. Verdict | Parent | Computes speedup, `custom_kernel` and flags, writes the verdict | `ok` |
 
-An exception on the parent's reference path is an infrastructure problem, not the candidate's fault, and returns `sandbox_error`; a CUDA error adds the `gpu_fault` flag, and the server marks the pod as draining so the liveness probe restarts the container. A child that dies without a status file (segfault, CUDA abort and so on) is the candidate's fault and gives `runtime_error`, and since Triton compiles on the first launch, kernel compile errors also arrive as `runtime_error`.
+- **An exception on the parent's reference path**: it is an infrastructure problem, not the candidate's fault, and returns `sandbox_error`. If it was a CUDA error, the `gpu_fault` flag is added and only then does the server mark the pod as draining, so the liveness probe restarts the container.
+- **A child that dies without a status file (segfault, CUDA abort and so on)**: it is the candidate's fault and gives `runtime_error`. Since Triton compiles on the first launch, kernel compile errors also arrive as `runtime_error`.
 
 ### Leaving no traces between evaluations
 
@@ -60,7 +66,10 @@ An exception on the parent's reference path is an infrastructure problem, not th
 - **The child runs in isolated mode and in a new session.** It starts with `python -I` (a Python option that ignores the user's environment), and on timeout the whole session gets SIGKILL.
 - **The child receives an env allowlist only.** Pod env outside `PATH`, `LD_LIBRARY_PATH`, `CUDA_VISIBLE_DEVICES`, `NVIDIA_VISIBLE_DEVICES`, `NVIDIA_DRIVER_CAPABILITIES`, `LANG`, `LC_ALL` and `CC` (tokens, proxies and so on) is not passed on.
 - **Leftover processes are cleaned up.** After each evaluation the server sends SIGKILL to every process except itself and its ancestors (tini as PID 1) (`server/procs.py`).
-- **Files written by the child are not trusted.** `runner.json` goes through a 1 MiB size limit and type checks. The per-seed output tensor files are read with `weights_only=True`, without a size check, and then compared with the reference by shape, dtype and value. The timing samples must number exactly `iters` and all be finite positive values, or the result is `runtime_error` with the `invalid_runner_report` flag.
+- **Files written by the child are not trusted.**
+    - `runner.json` goes through a 1 MiB size limit and type checks.
+    - The per-seed output tensor files are read with `weights_only=True`, without a size check, and then compared with the reference by shape, dtype and value.
+    - The timing samples must number exactly `iters` and all be finite positive values, or the result is `runtime_error` with the `invalid_runner_report` flag.
 - **The parent writes the verdict last.** Once the runner exits, the parent checks its results and writes the verdict at the very end, so a file the child wrote in advance is overwritten. The server cleans up any leftover processes after the evaluation.
 
 ## Measurement contract
@@ -69,14 +78,18 @@ The measurement contract is the set of rules for the clock, the inputs and the o
 
 | # | Contract | Implementation | What it blocks |
 |---|---|---|---|
-| 1 | Host clock up to `torch.cuda.synchronize()` | `time.perf_counter()` wraps the `forward` call and a device-wide synchronize | Work on an extra CUDA stream escaping the time. CUDA events on the default stream can miss work on other streams, a gap KernelBench also documents |
+| 1 | Host clock up to `torch.cuda.synchronize()` | `time.perf_counter()` wraps the `forward` call and a device-wide synchronize | Work on an extra CUDA stream escaping the time |
 | 2 | A distinct input per timed iteration | Warmup and timed inputs are built one by one from `timing_seed + i` | Output caches keyed on the input (they never hit) |
-| 3 | Checksums of every timed output | Each output's float64 (sum, sum of absolute values) is recorded, and the parent compares it with the reference for the same input. Tolerance is `ATOL × element count + RTOL × reference absolute sum` | "Wrong once the benchmark starts", kernels that never fill the output, cached results for other inputs |
+| 3 | Checksums of every timed output | Each output's float64 (sum, sum of absolute values) is recorded, and the parent compares it with the reference for the same input | "Wrong once the benchmark starts", kernels that never fill the output, cached results for other inputs |
 | 4 | Output type is exactly `torch.Tensor` | A list or tuple output is checked element by element; it fails if any `type(t) is torch.Tensor` check fails. The policy also rejects Tensor subclasses | Lazy tensors |
 | 5 | Fresh seeds per request | `secrets.SystemRandom` draws new correctness seeds (3 in v1, 5 in v2) and a new timing seed | Memorizing outputs or reusing them across rollouts |
 | 6 | Per-request Triton and CUDA caches | `HOME`, `TMPDIR`, `TRITON_CACHE_DIR` and `CUDA_CACHE_PATH` are created fresh under the request directory | Poisoning the next evaluation through compile caches left by a previous one |
 | 7 | Outputs read with `weights_only=True` | `torch.load(..., weights_only=True)` | Arbitrary objects being unpickled when the parent reads files the candidate wrote |
-| 8 | (Optional) speedup cap | `HARNESS_MAX_SPEEDUP`: 0 (off) in v1, 10 in v2 (the same value as KernelBench's `excessive_speedup_threshold`). Above it, the `implausible_speedup` flag is added and the speedup becomes 1.0 | Unknown measurement exploits earning a large reward |
+| 8 | (Optional) speedup cap | `HARNESS_MAX_SPEEDUP`: 0 (off) in v1, 10 in v2 | Unknown measurement exploits earning a large reward |
+
+- **Why contract 1 is needed**: CUDA events on the default stream can miss work on other streams, a gap KernelBench also documents.
+- **Tolerance of contract 3**: `ATOL × element count + RTOL × reference absolute sum`.
+- **Cap of contract 8**: v2's 10 is the same value as KernelBench's `excessive_speedup_threshold`. Above it, the `implausible_speedup` flag is added and the speedup becomes 1.0.
 
 Child and parent build inputs from the same `timing_seed`, so each iteration's candidate checksum pairs with the reference's.
 
@@ -118,7 +131,10 @@ The reward gives a speed bonus only to correct answers that actually use a Trito
 1. **The policy's AST signal:** if a function carries a decorator that resolves to `triton.jit` (aliases included), `uses_triton` is true.
 2. **The child's launch counter:** on a GPU, before importing the candidate, the child wraps `triton.runtime.jit.JITFunction.run` to count calls. Unable to assign module attributes, the candidate cannot restore the original method.
 
-`custom_kernel` is true when `uses_triton` is true and the launch count during the correctness check is greater than zero. A kernel defined but never called makes it false and adds the `triton_kernel_never_launched` flag. The counter is best effort: if Triton is missing or its internals differ from what the hook expects, the count is `None`, and the decision falls back to the AST signal alone.
+`custom_kernel` is true when `uses_triton` is true and the launch count during the correctness check is greater than zero.
+
+- **A kernel defined but never called**: it makes `custom_kernel` false and adds the `triton_kernel_never_launched` flag.
+- **If Triton is missing or its internals differ from what the hook expects**: the counter is best effort, so the count is `None`, and the decision falls back to the AST signal alone.
 
 ## Publicly reported reward hacking and the response
 
@@ -138,7 +154,15 @@ The patterns are described at the level of the public reports, and the "What rem
 | CUDA-L1 | Caching | A distinct input per timed iteration, fresh seeds and a fresh process per request | A cache keyed on something other than the input is caught by the checksums, with the checksum limits above |
 
 !!! warning "Open: how a try/except fallback is classified"
-    The policy does not reject `try` and `except`, and the launch counter increments before it calls the original `run`. A submission whose kernel launch fails with an exception and that then builds the result with PyTorch operations can therefore be classified as `custom_kernel` and earn correctness 1.0 plus a speedup score (inference from the code, not checked on a GPU). The output really is correct, so what goes wrong is not the correctness verdict but the "used a kernel" classification. Possible fixes are counting only successful launches, rejecting a `try` around kernel calls in the policy, or adding a rule-based linter or an LLM judge; any of them changes the measurement contract, so ship it as a new sandbox version.
+    The policy does not reject `try` and `except`, and the launch counter increments before it calls the original `run`. A submission whose kernel launch fails with an exception and that then builds the result with PyTorch operations can therefore be classified as `custom_kernel` and earn correctness 1.0 plus a speedup score (inference from the code, not checked on a GPU). The output really is correct, so what goes wrong is not the correctness verdict but the "used a kernel" classification.
+
+    Possible fixes are these.
+
+    - counting only successful launches
+    - rejecting a `try` around kernel calls in the policy
+    - adding a rule-based linter or an LLM judge
+
+    Any of them changes the measurement contract, so ship it as a new sandbox version.
 
 ## How verdicts become rewards
 
@@ -165,18 +189,27 @@ flowchart LR
 
 | Item | TRL (`KernelRewards`) | veRL (`rl/verl/reward_fn.py`) |
 |---|---|---|
-| Unit of work | One reward batch evaluated at once, the result shared by three reward functions (usually one batch call; none when the batch is fully cached from one pool, up to three when a version switch forces rescoring) | One sample at a time, async `compute_score` |
+| Unit of work | One reward batch evaluated at once, the result shared by three reward functions (number of calls below the table) | One sample at a time, async `compute_score` |
 | Return value | One component value per function; TRL forms the weighted sum with `reward_weights` | `score` (weighted sum) plus `status`, `correctness`, `speedup_reward`, `sandbox_version`, `sandbox_error` |
 | Policy violations | Checked in the trainer beforehand; `policy_violation` without a sandbox round trip | Same (`check_source`) |
 | `sandbox_error` | All three components `None`. TRL treats a sample whose rewards are all `None` as unscorable, removes it from the group baseline and sets its advantage to 0 | No "skip" signal, so it returns the format score 0.1 and `sandbox_error: 1` |
 
-On veRL, a sample hit by an infrastructure error gets 0.1. That can be below the normally scored samples of the same group, and it is above `no_code` (0), which submitted no code. The effect and the remedies are in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md). Verdict `flags` are not aggregated as metrics yet; to alert on reward hacking, see the extension in [07 Observability and operations](07_observability_and_operations.md).
+- **Number of TRL batch calls**: usually one. None when the batch is fully cached from one pool, up to three when a version switch forces rescoring.
+
+On veRL, a sample hit by an infrastructure error gets 0.1. That can be below the normally scored samples of the same group, and it is above `no_code` (0), which submitted no code. The effect and the remedies are in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
+
+Verdict `flags` are not aggregated as metrics yet; to alert on reward hacking, see the extension in [07 Observability and operations](07_observability_and_operations.md).
 
 ## When you find a new pattern
 
-1. **Add a reproducing submission to the golden set.** Add it with its expected verdict to `src/gpusandbox/golden.py`. `scripts/ops/verify.sh` and `parity` run the golden set inside the `CONTROL_IMAGE_URI` image, so set a new `IMAGE_TAG`, rebuild with `scripts/03_build_push_images.sh` and update `CONTROL_IMAGE_URI`. Then check that the verification Job output has a line for the new case.
+1. **Add a reproducing submission to the golden set.** Add it with its expected verdict to `src/gpusandbox/golden.py`.
+    - **Rebuild the image**: `scripts/ops/verify.sh` and `parity` run the golden set inside the `CONTROL_IMAGE_URI` image, so set a new `IMAGE_TAG`, rebuild with `scripts/03_build_push_images.sh` and update `CONTROL_IMAGE_URI`.
+    - **Check**: then check that the verification Job output has a line for the new case.
 2. **Add the control and a local test.** After changing the harness or the policy, add the same case to `tests/test_policy.py` or `tests/test_harness_cpu.py`.
-3. **Ship a new version.** The measurement contract changes, so bump `HARNESS_VERSION` and start a new sandbox version with a new image. `parity` fails if the old version does not return the new case's expected `status` or `custom_kernel`. Parity compares only the expected `status`, the expected `custom_kernel` where set, and the speedup gap between the two pools, so a change that only adds new `flags` passes parity and the flag needs its own check. `scripts/ops/rollout.sh` does not switch when parity fails; in that case verify the new pool with `scripts/ops/verify.sh`, switch with the routing update commands in [05 Sandbox versioning](05_sandbox_updates.md), and record it following "Harness changes that shift rewards on purpose".
+3. **Ship a new version.** The measurement contract changes, so bump `HARNESS_VERSION` and start a new sandbox version with a new image.
+    - **When parity fails**: `parity` fails if the old version does not return the new case's expected `status` or `custom_kernel`.
+    - **What parity compares**: only the expected `status`, the expected `custom_kernel` where set, and the speedup gap between the two pools, so a change that only adds new `flags` passes parity and the flag needs its own check.
+    - **If parity fails**: `scripts/ops/rollout.sh` does not switch. In that case verify the new pool with `scripts/ops/verify.sh`, switch with the routing update commands in [05 Sandbox versioning](05_sandbox_updates.md), and record it following "Harness changes that shift rewards on purpose".
 
 ## How to verify
 
@@ -189,7 +222,11 @@ Set up the Python environment as in section 2 of [Getting started](../getting_st
 python -m pytest tests/test_harness_cpu.py tests/test_policy.py -q
 ```
 
-**What to look for:** the last line is `19 passed` (the test count as of 2026-11-13; the duration depends on the machine). Passing was verified on macOS (CPU only), not on Linux. These two files do not start a sandbox server, so they do not call the server's process cleanup (reaper).
+**What to look for:**
+
+- The last line is `19 passed` (the test count as of 2026-11-13; the duration depends on the machine).
+- Passing was verified on macOS (CPU only), not on Linux.
+- These two files do not start a sandbox server, so they do not call the server's process cleanup (reaper).
 
 | Test | What it checks |
 |---|---|
@@ -204,7 +241,10 @@ python -m pytest tests/test_harness_cpu.py tests/test_policy.py -q
 
 `tests/test_routing_and_rewards.py` checks the verdict-to-reward step. Scoring four verdicts through a fake client (a custom kernel at 2x, a correct PyTorch-only answer, a wrong answer, `sandbox_error`) yields format `[1.0, 1.0, 1.0, None]`, correctness `[1.0, 0.3, 0.2, None]` and speedup `[1.0, 0.0, 0.0, None]`, with a single sandbox round trip. The same file also checks that policy violations never reach the sandbox, and the log scale and cap of the speedup score.
 
-**If it fails:** for import errors or torch installation problems, recheck the environment setup in [Getting started](../getting_started.md); for other symptoms, see [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:**
+
+- **Import errors or torch installation problems**: recheck the environment setup in [Getting started](../getting_started.md).
+- **Other symptoms**: see [Troubleshooting](../reference/troubleshooting.md).
 
 ### On a cluster
 
@@ -214,7 +254,12 @@ The command checks the pool's isolation, egress denial, golden verdicts through 
 scripts/ops/verify.sh gvisor v1
 ```
 
-**What to look for:** in the output of step 3, every golden entry shows a `PASS` line. GPU pools run all 6; CPU pools (`*-cpu`) run 4, without the 2 GPU-only entries. The format below is the output format of `src/gpusandbox/tools.py`; the speedup values differ per pool.
+**What to look for:**
+
+- In the output of step 3, every golden entry shows a `PASS` line.
+- GPU pools run all 6; CPU pools (`*-cpu`) run 4, without the 2 GPU-only entries.
+
+The format below is the output format of `src/gpusandbox/tools.py`; the speedup values differ per pool.
 
 ```text
 PASS vector_add_triton            status=ok                speedup=<value>
@@ -226,7 +271,9 @@ PASS read_host_file               status=policy_violation  speedup=None
 ```
 
 - `PASS` for `vector_add_triton` and `relu_bias_triton` means a Triton kernel compiled, ran and was classified as a custom kernel on that node.
-- `relu_bias_benchmark_cheat` returns wrong output from its fourth `forward` call on. With v1's 3 correctness seeds it passes the correctness check and becomes `wrong_answer` at the timed checksum comparison. With v2's 5 seeds it is already `wrong_answer` at the correctness check, so a `PASS` on a v2 pool does not show that the checksum check works. The probe compares only `status`.
+- `relu_bias_benchmark_cheat` returns wrong output from its fourth `forward` call on. The probe compares only `status`.
+    - **With v1's 3 correctness seeds**: it passes the correctness check and becomes `wrong_answer` at the timed checksum comparison.
+    - **With v2's 5 seeds**: it is already `wrong_answer` at the correctness check, so a `PASS` on a v2 pool does not show that the checksum check works.
 - For the Kata GPU pool, run the same check with `scripts/ops/verify.sh kata-qemu v1`.
 
 **If it fails:** see the "Sandbox pools and readiness" and "401 and 403 responses" tables in [Troubleshooting](../reference/troubleshooting.md).

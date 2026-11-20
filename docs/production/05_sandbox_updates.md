@@ -5,7 +5,11 @@
 
 ## 기존 Pain Point
 
-보안 패치, Triton 업그레이드, harness 설정 변경은 학습 도중에도 생깁니다. 이미지가 바뀌면 커널 컴파일과 timing이 달라질 수 있어서, 바뀐 시점의 기록이 없으면 reward 곡선의 변화를 설명할 수 없습니다. 샌드박스 Deployment를 rolling update로 교체하면 구버전과 신버전 pod가 동시에 요청을 처리합니다. 그러면 같은 GRPO group의 completion이 서로 다른 채점 규칙으로 점수를 받아 group 기준 advantage가 잘못 계산됩니다. Karpenter `alias: al2023@latest`를 쓰면 새 노드에 별도 알림 없이 최신 AMI가 적용됩니다. gVisor nvproxy는 드라이버 버전을 엄격히 확인하므로, 드라이버가 바뀐 노드에서는 샌드박스가 Ready가 되지 않을 수 있습니다.
+보안 패치, Triton 업그레이드, harness 설정 변경은 학습 도중에도 생깁니다.
+
+- **이미지가 바뀔 때**: 커널 컴파일과 timing이 달라질 수 있어서, 바뀐 시점의 기록이 없으면 reward 곡선의 변화를 설명할 수 없습니다.
+- **샌드박스 Deployment를 rolling update로 교체할 때**: 구버전과 신버전 pod가 동시에 요청을 처리합니다. 그러면 같은 GRPO group의 completion이 서로 다른 채점 규칙으로 점수를 받아 group 기준 advantage가 잘못 계산됩니다.
+- **Karpenter `alias: al2023@latest`를 쓸 때**: 새 노드에 별도 알림 없이 최신 AMI가 적용됩니다. gVisor nvproxy는 드라이버 버전을 엄격히 확인하므로, 드라이버가 바뀐 노드에서는 샌드박스가 Ready가 되지 않을 수 있습니다.
 
 ![a: rolling update 중인 Deployment에서는 GRPO group 하나의 completion 8개를 구버전 pod(기존 채점 규칙)와 신버전 pod(새 채점 규칙)가 나눠 채점합니다. 그래서 group 기준 advantage에 두 규칙의 점수가 섞입니다. b: (runtime, version)마다 풀을 하나씩 둡니다. active인 sandbox-gvisor-v1이 group 전체를 채점하고, 롤백용으로 유지됩니다. sandbox-gvisor-v2는 검증과 parity 전에는 트래픽을 받지 않고, 통과하면 다음 batch(TRL)나 새로 고정되는 group(veRL)부터 전환됩니다. advantage에는 TRL이면 rank별 batch 안에서, veRL이면 유효한 group_key pin 안에서 한 버전의 점수만 들어갑니다.](../images/figures/production-05_sandbox_updates.svg)
 
@@ -58,7 +62,9 @@ export HARNESS_MAX_SPEEDUP="10"
 export SANDBOX_MAX_EVALS="200"
 ```
 
-`scripts/03_build_push_images.sh`는 ECR 저장소를 `--image-tag-mutability IMMUTABLE`로 만들므로, 같은 태그로 다시 push하면 `ImageTagAlreadyExistsException` 오류가 발생하고 검증한 태그의 이미지는 바뀌지 않습니다. 저장소를 스크립트 밖에서 만들었다면 tag immutability 설정을 확인하세요. 스크립트가 sandbox, trainer, control 이미지를 같은 `IMAGE_TAG`로 빌드해도 실행 중인 trainer는 기존 이미지를 그대로 씁니다.
+- **같은 태그로 다시 push하면**: `scripts/03_build_push_images.sh`는 ECR 저장소를 `--image-tag-mutability IMMUTABLE`로 만들므로, `ImageTagAlreadyExistsException` 오류가 발생하고 검증한 태그의 이미지는 바뀌지 않습니다.
+- **저장소를 스크립트 밖에서 만들었다면**: tag immutability 설정을 확인하세요.
+- **실행 중인 trainer**: 스크립트가 sandbox, trainer, control 이미지를 같은 `IMAGE_TAG`로 빌드해도 실행 중인 trainer는 기존 이미지를 그대로 씁니다.
 
 routing 표에도 새 버전의 주소가 있어야 합니다. 항목이 없으면 parity를 통과해도 전환 직후 direct 모드 trainer가 다음 reward batch에서 `RoutingError`로 중단됩니다. `k8s/base/routing.json.tpl`의 `pools`에 항목을 추가하고, 전환 전에 저장소 루트에서 `v3`를 active로 렌더링해 주소가 출력되는지 확인하세요.
 
@@ -68,9 +74,16 @@ python3 scripts/render.py k8s/base/routing.json.tpl ACTIVE_RUNTIME=gvisor ACTIVE
   | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d["active"]; print(d["pools"][a["runtime"]][a["version"]])'
 ```
 
-**확인할 것:** `sandbox-gvisor-v3.sandbox.svc.cluster.local:8000`이 출력됩니다. `KeyError: 'v3'`로 끝나면 `pools.gvisor`에 `v3` 항목이 없으니 템플릿에 추가하세요.
+**확인할 것:**
 
-노드 수준 변경은 기존 NodeClass를 수정하지 않는 편이 안전합니다. NodePool이나 EC2NodeClass template이 바뀌면 Karpenter가 기존 노드를 drift로 교체해, 구버전 풀의 노드까지 새 런타임으로 바뀝니다(karpenter.sh 문서). 새 버전용 NodePool과 EC2NodeClass에 고유한 노드 label을 붙이고, 버전 파일에서 `NODE_SELECTOR`를 덮어써 그 노드를 선택하세요. AMI는 `alias: al2023@latest` 대신 고정 alias(예: `al2023@v20261107`, 형식은 Karpenter 문서에서 재확인)를 쓰면 의도한 시점에만 바뀝니다. 핸즈온의 CDK 노드 그룹이라면 `cdk/gpusandbox_cdk/stack.py`에 새 노드 그룹을 추가해 다시 배포하세요.
+- `sandbox-gvisor-v3.sandbox.svc.cluster.local:8000`이 출력됩니다.
+- **`KeyError: 'v3'`로 끝나면**: `pools.gvisor`에 `v3` 항목이 없으니 템플릿에 추가하세요.
+
+노드 수준 변경은 기존 NodeClass를 수정하지 않는 편이 안전합니다. NodePool이나 EC2NodeClass template이 바뀌면 Karpenter가 기존 노드를 drift로 교체해, 구버전 풀의 노드까지 새 런타임으로 바뀝니다(karpenter.sh 문서).
+
+- **새 버전의 노드**: 새 버전용 NodePool과 EC2NodeClass에 고유한 노드 label을 붙이고, 버전 파일에서 `NODE_SELECTOR`를 덮어써 그 노드를 선택하세요.
+- **AMI**: `alias: al2023@latest` 대신 고정 alias(예: `al2023@v20261107`, 형식은 Karpenter 문서에서 재확인)를 쓰면 의도한 시점에만 바뀝니다.
+- **핸즈온의 CDK 노드 그룹이라면**: `cdk/gpusandbox_cdk/stack.py`에 새 노드 그룹을 추가해 다시 배포하세요.
 
 ## (runtime, version)마다 blue/green 풀 하나
 
@@ -115,9 +128,16 @@ scripts/ops/rollout.sh gvisor v1 v2
 scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
 
-1단계와 2단계는 `scripts/06_deploy_sandboxes.sh`와 `scripts/ops/verify.sh`를 그대로 호출합니다. 1단계는 replica 인자 없이 호출하므로 profile의 기본 replica 수로 배포하고, 환경 변수 `SANDBOX_ALLOWED_SUBJECTS`가 없으면 trainer를 포함한 기본 호출자 목록을 씁니다. [02 보안](02_security.md)처럼 호출자 목록을 좁혀 운영한다면 정방향 전환과 롤백 모두 이 변수를 지정해 실행하세요. 3단계 parity가 실패하면 스크립트는 `parity failed: v2 keeps no traffic, v1 stays active`를 출력하고 중단합니다. 4단계는 `rl-trainer`와 `sandbox-gateway` 중 존재하는 네임스페이스의 `sandbox-routing` ConfigMap을 갱신합니다.
+- **1단계와 2단계**: `scripts/06_deploy_sandboxes.sh`와 `scripts/ops/verify.sh`를 그대로 호출합니다. 1단계는 replica 인자 없이 호출하므로 profile의 기본 replica 수로 배포합니다.
+- **환경 변수 `SANDBOX_ALLOWED_SUBJECTS`가 없으면**: 1단계는 trainer를 포함한 기본 호출자 목록을 씁니다. [02 보안](02_security.md)처럼 호출자 목록을 좁혀 운영한다면 정방향 전환과 롤백 모두 이 변수를 지정해 실행하세요.
+- **3단계 parity가 실패하면**: 스크립트는 `parity failed: v2 keeps no traffic, v1 stays active`를 출력하고 중단합니다.
+- **4단계**: `rl-trainer`와 `sandbox-gateway` 중 존재하는 네임스페이스의 `sandbox-routing` ConfigMap을 갱신합니다.
 
-**확인할 것:** 첫 명령은 마지막에 세 가지를 출력합니다. ConfigMap이 1분 안팎에 pod에 반영된다는 안내, trainer 로그에서 확인할 `{"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", ...}` 줄, 다음에 실행할 `--finish` 명령입니다.
+**확인할 것:** 첫 명령은 마지막에 세 가지를 출력합니다.
+
+- ConfigMap이 1분 안팎에 pod에 반영된다는 안내
+- trainer 로그에서 확인할 `{"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", ...}` 줄
+- 다음에 실행할 `--finish` 명령
 
 **문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "버전 전환 (routing)" 표를 보세요.
 
@@ -128,9 +148,12 @@ scripts/ops/rollout.sh gvisor v1 v2 --finish
 
 | 관문 | 확인하는 것 | 실패하면 |
 |---|---|---|
-| `ops/verify.sh` | 샌드박스와 노드의 커널 출력(운영자가 직접 대조, 자동 판정 없음), IMDS, API 서버, kubelet, 인터넷 차단, 인증된 API로 golden verdict(`probe`), 다른 네임스페이스에서 접속 차단 | 커널 출력을 뺀 검사가 실패하면 스크립트가 중단되고 신버전은 트래픽을 받지 않음 |
+| `ops/verify.sh` | 샌드박스와 노드의 커널 출력, IMDS, API 서버, kubelet, 인터넷 차단, golden verdict(`probe`), 다른 네임스페이스에서 접속 차단 | 커널 출력을 뺀 검사가 실패하면 스크립트가 중단되고 신버전은 트래픽을 받지 않음 |
 | `parity` (`src/gpusandbox/tools.py`) | 두 풀 모두 golden 기대 verdict, status 동일, speedup 비율 차이가 `--speedup-tolerance` 이내(기본 0.35, 스크립트는 기본값 사용) | 위와 같음 |
 | canary (선택) | 일부 group만 신버전으로 채점 | 이 저장소에는 구현되어 있지 않음 |
+
+- **`ops/verify.sh`의 커널 출력**: 운영자가 직접 대조하며, 자동 판정은 없습니다.
+- **`ops/verify.sh`의 golden verdict**: 인증된 API로 확인합니다.
 
 golden 세트(`src/gpusandbox/golden.py`)는 제출물 6개로 구성되며, CPU 풀에서는 GPU 전용 항목을 건너뜁니다.
 
@@ -152,10 +175,14 @@ golden 세트(`src/gpusandbox/golden.py`)는 제출물 6개로 구성되며, CPU
 
 | 항목 | TRL (direct 또는 gateway batch) | veRL (gateway, 샘플 단위) |
 |---|---|---|
-| 고정 단위 | reward batch 하나에 버전 하나(샌드박스 호출마다 snapshot을 읽고, 다른 풀로 캐시된 결과는 다시 채점) | `group_key` 하나에 첫 샘플 시점의 snapshot |
+| 고정 단위 | reward batch 하나에 버전 하나 | `group_key` 하나에 첫 샘플 시점의 snapshot |
 | 코드 | `KernelRewards._evaluate` → `evaluate_batch_sync` | `compute_score` → `evaluate_grouped` → `POST /v1/evaluate` |
-| 전환 시점 | ConfigMap이 반영된 뒤 샌드박스에 보내는 다음 reward batch (batch 전체가 한 풀의 캐시에 적중하면 기존 결과 사용) | 새 `group_key`의 첫 샘플 (`GATEWAY_GROUP_PIN_TTL_S`, 기본 900초 동안 기존 고정 유지) |
+| 전환 시점 | ConfigMap이 반영된 뒤 샌드박스에 보내는 다음 reward batch | 새 `group_key`의 첫 샘플 |
 | 기록 | `sandbox_version_switch`, `reward_batch` | `gateway_evaluations_total{version}`, `compute_score` 반환값의 `sandbox_version` |
+
+- **TRL의 고정 단위**: 샌드박스 호출마다 snapshot을 읽고, 다른 풀로 캐시된 결과는 다시 채점합니다.
+- **TRL의 전환 시점**: batch 전체가 한 풀의 캐시에 적중하면 기존 결과를 씁니다.
+- **veRL의 전환 시점**: `GATEWAY_GROUP_PIN_TTL_S`(기본 900초) 동안 기존 고정을 유지합니다.
 
 TRL은 `steps_per_generation` 기본값(= `gradient_accumulation_steps`)에서 generation batch 하나로 optimizer step 하나를 실행하므로, batch 경계와 step 경계가 같습니다. trainer는 routing 파일을 최대 2초에 한 번 다시 읽고, ConfigMap 변경은 kubelet 동기화로 보통 1분 안에 pod에 반영됩니다. `subPath`로 마운트하면 갱신이 반영되지 않으니 저장소 템플릿처럼 디렉터리로 마운트하세요.
 
@@ -173,7 +200,9 @@ trainer는 버전이 바뀐 뒤 샌드박스를 호출하는 첫 reward batch에
 {"event": "reward_batch", "global_step": 37, "runtime": "gvisor", "version": "v2", "served_versions": {"v2": 96}, "routing_revision": 2, "n": 96}
 ```
 
-- `version`은 direct 모드에서는 trainer가 routing 표에서 고른 버전이고, gateway 모드에서는 gateway가 응답한 배치 버전입니다. `served_versions`는 개별 결과에 기록된 버전별 건수입니다. 정상 응답의 버전이 `version`과 다르면 Service selector와 routing 주소를 확인하세요. `sandbox_error` 결과에는 pod 대신 그 배치의 버전이 채워지거나, gateway 호출이 실패하면 버전이 빠져 `None`으로 집계되니 `status`를 함께 보세요.
+- **`version`**: direct 모드에서는 trainer가 routing 표에서 고른 버전이고, gateway 모드에서는 gateway가 응답한 배치 버전입니다.
+- **`served_versions`**: 개별 결과에 기록된 버전별 건수입니다. 정상 응답의 버전이 `version`과 다르면 Service selector와 routing 주소를 확인하세요.
+- **`sandbox_error` 결과**: pod 대신 그 배치의 버전이 채워지거나, gateway 호출이 실패하면 버전이 빠져 `None`으로 집계되니 `status`를 함께 보세요.
 - `global_step`을 기준으로 TRL 학습 로그(loss, reward 함수별 값)와 맞춰 보면 reward 변화가 전환 시점과 겹치는지 확인할 수 있습니다.
 - veRL에는 `reward_batch` 이벤트가 없으니 `gateway_evaluations_total`을 `version` label로 나눠 확인합니다(07 페이지의 PromQL 참고).
 
@@ -198,7 +227,11 @@ done
 rm -f .routing.json
 ```
 
-**확인할 것:** 존재하는 namespace마다 `configmap/sandbox-routing configured`가 출력됩니다. 1분 안팎에 ConfigMap이 반영되면, 샌드박스를 호출하는 다음 reward batch에서 trainer가 `to`가 `gvisor/v1`인 `sandbox_version_switch` 이벤트를 기록합니다. batch가 한 풀의 캐시로 끝나면 호출이 없으므로 이벤트도 남지 않습니다.
+**확인할 것:**
+
+- 존재하는 namespace마다 `configmap/sandbox-routing configured`가 출력됩니다.
+- 1분 안팎에 ConfigMap이 반영되면, 샌드박스를 호출하는 다음 reward batch에서 trainer가 `to`가 `gvisor/v1`인 `sandbox_version_switch` 이벤트를 기록합니다.
+- **batch가 한 풀의 캐시로 끝나면**: 호출이 없으므로 이벤트도 남지 않습니다.
 
 롤백해도 v2 reward로 학습한 업데이트는 모델에 그대로 남습니다. 롤백한 step과, 그 구간의 reward가 v2 기준이었다는 사실을 기록하세요.
 
@@ -206,11 +239,19 @@ rm -f .routing.json
 
 아래 조건을 만족할 때 `--finish`를 실행하세요. `--finish`는 구버전 Deployment를 삭제하지 않고 replicas를 0으로 줄이므로 롤백이 빠릅니다.
 
-1. **TRL:** trainer가 `sandbox_version_switch`를 기록했고, 이후 여러 `reward_batch`의 `served_versions`에 신버전만 있으며, 그 batch의 `status`에 `sandbox_error` 말고 다른 판정도 있습니다. 풀 호출이 실패해도 `served_versions`에는 그 배치의 버전이 채워지므로, 모두 `sandbox_error`이면 신버전이 실제로 채점하지 못한 것이니 구버전 풀을 유지하세요.
+1. **TRL:** trainer가 `sandbox_version_switch`를 기록했고, 이후 여러 `reward_batch`의 `served_versions`에 신버전만 있으며, 그 batch의 `status`에 `sandbox_error` 말고 다른 판정도 있습니다.
+    - **모두 `sandbox_error`이면**: 풀 호출이 실패해도 `served_versions`에는 그 배치의 버전이 채워지므로, 신버전이 실제로 채점하지 못한 것입니다. 구버전 풀을 유지하세요.
 2. **veRL:** `sandbox_version_switch`와 `reward_batch` 이벤트가 없습니다. 새 group의 `compute_score` 결과에 기록된 `sandbox_version`이 신버전인지, `gateway_evaluations_total`에서 구버전 카운터가 더 늘지 않는지 확인하세요. 이 카운터는 평가가 끝난 뒤에 늘어나므로 잠시 멈춘 것만으로는 구버전 작업이 끝났다고 볼 수 없습니다.
-3. **gateway 경로:** gateway가 새 routing을 읽은 뒤 `GATEWAY_GROUP_PIN_TTL_S`(기본 900초)가 지나 구버전 pin이 모두 만료됐고, 그 전에 구버전으로 접수된 요청(빈 pod를 최대 600초 기다림)과 실행 중인 평가도 끝났습니다. 구버전 pod의 `sandbox_busy`가 모두 0인지 확인하세요. 다만 이 지표는 pod에서 실행 중인 평가만 보여 주고, gateway에서 빈 pod를 기다리거나 재시도 중인 요청은 보이지 않습니다. 이 저장소의 gateway에는 풀별 미완료 요청 수 지표가 없습니다. TTL은 다음 요청이 쓸 pin만 정하므로, 이미 접수된 요청은 TTL이 지나도 남아 있을 수 있습니다.
+3. **gateway 경로:** gateway가 새 routing을 읽은 뒤 `GATEWAY_GROUP_PIN_TTL_S`(기본 900초)가 지나 구버전 pin이 모두 만료됐고, 그 전에 구버전으로 접수된 요청(빈 pod를 최대 600초 기다림)과 실행 중인 평가도 끝났습니다. 구버전 pod의 `sandbox_busy`가 모두 0인지 확인하세요.
+    - **`sandbox_busy`로 보이지 않는 것**: 이 지표는 pod에서 실행 중인 평가만 보여 주고, gateway에서 빈 pod를 기다리거나 재시도 중인 요청은 보이지 않습니다. 이 저장소의 gateway에는 풀별 미완료 요청 수 지표가 없습니다.
+    - **TTL이 정하는 것**: TTL은 다음 요청이 쓸 pin만 정하므로, 이미 접수된 요청은 TTL이 지나도 남아 있을 수 있습니다.
 
-pod가 삭제된 뒤 Karpenter NodePool의 노드는 빈 상태로 `consolidateAfter`(gVisor 10분, Kata GPU 30분)가 지나면 회수 대상이 되고, 요금은 노드가 실제로 종료될 때까지 붙습니다. 반면 핸즈온의 EKS 관리형 노드 그룹은 직접 줄일 때까지 과금됩니다(예: `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`). 더 이상 롤백할 필요가 없으면 `kubectl -n sandbox delete deployment/sandbox-gvisor-v1 service/sandbox-gvisor-v1`로 삭제합니다.
+pod가 삭제된 뒤 노드 요금은 노드 종류에 따라 다르게 멈춥니다.
+
+- **Karpenter NodePool의 노드**: 빈 상태로 `consolidateAfter`(gVisor 10분, Kata GPU 30분)가 지나면 회수 대상이 되고, 요금은 노드가 실제로 종료될 때까지 붙습니다.
+- **핸즈온의 EKS 관리형 노드 그룹**: 직접 줄일 때까지 과금됩니다(예: `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`).
+
+더 이상 롤백할 필요가 없으면 `kubectl -n sandbox delete deployment/sandbox-gvisor-v1 service/sandbox-gvisor-v1`로 삭제합니다.
 
 ## reward가 의도적으로 바뀌는 harness 변경
 
@@ -223,14 +264,20 @@ v2의 10배 speedup 상한처럼 점수 계산이 달라지는 변경은 reward 
 
 GRPO advantage는 group 안에서 상대적으로 계산되므로, group 전체 reward에 같은 값이 더해지는 변화는 상쇄됩니다. 하지만 speedup 상한처럼 group 안의 순위를 바꾸는 변화는 학습 신호 자체를 바꿉니다.
 
-INTELLECT-3 보고서는 environment를 "trainer와 독립적으로 버전 관리"한다고 설명합니다. Prime Intellect의 Environments Hub는 environment를 의존성을 고정할 수 있는 독립 Python 모듈로 배포합니다. 두 사례 모두 이 페이지처럼 채점 환경의 버전을 run과 따로 관리합니다.
+??? note "다른 프로젝트의 사례"
+    INTELLECT-3 보고서는 environment를 "trainer와 독립적으로 버전 관리"한다고 설명합니다. Prime Intellect의 Environments Hub는 environment를 의존성을 고정할 수 있는 독립 Python 모듈로 배포합니다. 두 사례 모두 이 페이지처럼 채점 환경의 버전을 run과 따로 관리합니다.
 
 ## 확인 방법
 
 - `ops/rollout.sh` 출력에 golden 항목별 `PASS` 줄과 `{"event": "parity", ..., "passed": true}`가 있습니다.
 - 4단계 뒤 1분 안팎에 ConfigMap이 반영되고, 샌드박스를 호출하는 다음 reward batch에서 `sandbox_version_switch`가 기록됩니다.
 - 이후 `reward_batch`의 `served_versions`에 신버전만 있고, `status`에 `sandbox_error` 말고 다른 판정도 있습니다.
-- `--finish` 뒤 `kubectl -n sandbox get deploy`에서 구버전이 `0/0`으로 표시됩니다. gVisor 풀은 pod 하나가 GPU 노드 하나를 쓰므로 두 풀을 함께 실행하는 동안 노드 비용이 늘어납니다. Kata 풀은 기본 replica 4개씩이면 두 풀이 g4dn.metal 한 대(T4 8개)에 함께 들어갈 수 있습니다. 전환 때문에 노드를 추가했다면 구버전 풀을 줄인 뒤 그 노드가 반납됐는지 확인하세요. 핸즈온 절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)에 있습니다.
+- `--finish` 뒤 `kubectl -n sandbox get deploy`에서 구버전이 `0/0`으로 표시됩니다.
+- **gVisor 풀**: pod 하나가 GPU 노드 하나를 쓰므로 두 풀을 함께 실행하는 동안 노드 비용이 늘어납니다.
+- **Kata 풀**: 기본 replica 4개씩이면 두 풀이 g4dn.metal 한 대(T4 8개)에 함께 들어갈 수 있습니다.
+- **전환 때문에 노드를 추가했다면**: 구버전 풀을 줄인 뒤 그 노드가 반납됐는지 확인하세요.
+
+핸즈온 절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)에 있습니다.
 
 ## 적용 범위와 한계
 

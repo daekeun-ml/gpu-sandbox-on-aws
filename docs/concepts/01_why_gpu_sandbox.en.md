@@ -5,7 +5,12 @@
 
 ## Pain point
 
-Most sandboxes for code-execution RL are CPU-only, so they cannot score tasks that measure kernel correctness and speed on a GPU. With a GPU attached, untrusted code reaches the GPU driver, state leaks when evaluations share one GPU in turn, and one GPU per sandbox is expensive. When the reward is measured speedup, the policy can also learn to fool the measurement instead of writing faster kernels.
+Most sandboxes for code-execution RL are CPU-only, so they cannot score tasks that measure kernel correctness and speed on a GPU.
+
+- **With a GPU attached**: untrusted code reaches the GPU driver.
+- **When evaluations share one GPU in turn**: state leaks from one evaluation into the next.
+- **With one GPU per sandbox**: the cost is high.
+- **When the reward is measured speedup**: the policy can also learn to fool the measurement instead of writing faster kernels.
 
 ![Two panels. a: candidate kernel code sent to a CPU-only sandbox cannot be scored on tasks measured on a GPU; sent to a GPU sandbox it brings four risks: untrusted code reaches the GPU driver, state leaks into the next evaluation, one GPU per sandbox raises cost, and the policy fools the measurement for reward. b: this asset checks format and the AST policy on CPU first so violations get a verdict before the GPU, and in a GPU sandbox pod with one GPU and one evaluation, gVisor or Kata protects the node, each run gets a new process tree and caches, the GPU measures only correctness and timing, and host clock timing with output checksums counters measurement cheating.](../images/figures/concepts-01_why_gpu_sandbox.svg)
 
@@ -48,11 +53,14 @@ Most sandboxes for code-execution RL are CPU-only, so they cannot score tasks th
 
 | Reason | Explanation |
 |---|---|
-| Firecracker has no GPU passthrough | Firecracker uses a minimal device model built around virtio devices (six emulated devices according to its FAQ). PCI support was added in 1.13.0, but the changelog does not list VFIO GPU passthrough. This is why Firecracker-based sandbox services (E2B and others) are mostly CPU-only. |
+| Firecracker has no GPU passthrough | Firecracker uses a minimal device model built around virtio devices (six emulated devices according to its FAQ). PCI support was added in 1.13.0, but the changelog does not list VFIO GPU passthrough. |
 | Managed isolation is CPU-only at launch, too | The AWS Nitro Sandboxes documentation (EKS isolated pods, launched 2026-11-09) states "GPU and other device passthrough are not supported at launch". |
-| CUDA state contamination | When several untrusted runs share one GPU in turn, leftover processes, Triton and CUDA compile caches and driver state can affect the next evaluation. Each run needs a fresh process tree and fresh caches. Under Kata, VFIO resets the device when the old VM releases the GPU; under gVisor, a new pod still uses the same host driver and GPU. The GKE Sandbox documentation also advises "Don't use GPU time-sharing in sandboxed Pods". |
+| CUDA state contamination | When several untrusted runs share one GPU in turn, leftover processes, Triton and CUDA compile caches and driver state can affect the next evaluation. Each run needs a fresh process tree and fresh caches. |
 | Cost and density | Trustworthy timing needs one GPU per evaluation. This asset runs one GPU per pod and one evaluation at a time (503 when busy), so you cannot pack many sandboxes onto one node as with CPU sandboxes. |
 | Driver coupling | gVisor needs the host driver version to match the nvproxy support list exactly, and Kata needs a separate driver inside the guest VM. The number of version combinations to operate grows. |
+
+- **Firecracker-based services**: the missing GPU passthrough in Firecracker is why Firecracker-based sandbox services (E2B and others) are mostly CPU-only.
+- **CUDA state contamination and device reset**: under Kata, VFIO resets the device when the old VM releases the GPU; under gVisor, a new pod still uses the same host driver and GPU. The GKE Sandbox documentation also advises "Don't use GPU time-sharing in sandboxed Pods".
 
 ## Two-tier pattern: filter on CPU, measure on GPU
 
@@ -63,13 +71,26 @@ GPU nodes cost more per hour than CPU nodes (for example `g5.xlarge` 1.006 USD a
 *Takeaway: Answers without code or with a policy violation get their verdict before reaching a GPU, and the GPU sandbox only measures correctness and timing.*
 
 
-The first stage is `KernelRewards` inside the trainer process. It extracts the code block, checks the AST policy with `check_source` and, on a violation, records the same `policy_violation` verdict as the sandbox, without a round trip. The sandbox harness checks the same policy again. The policy is a reward-integrity device; the security boundary that protects the node is gVisor or Kata.
+The first stage is `KernelRewards` inside the trainer process.
 
-The CPU tier is a Kata + Cloud Hypervisor node group on a nested-virtualization node (`c8i.2xlarge`; nested virtualization lets a regular EC2 VM start VMs of its own) with the `kata-clh-cpu` profile. The hands-on uses it to rehearse Kata cheaply before paying for `g4dn.metal`, and in production it can host steps that need no GPU, such as nvcc compilation. The harness has no compile-only mode, so you build that step yourself.
+1. It extracts the code block and checks the AST policy with `check_source`.
+2. On a violation, it records the same `policy_violation` verdict as the sandbox, without a round trip.
+
+The sandbox harness checks the same policy again. The policy is a reward-integrity device; the security boundary that protects the node is gVisor or Kata.
+
+The CPU tier is a Kata + Cloud Hypervisor node group on a nested-virtualization node (`c8i.2xlarge`; nested virtualization lets a regular EC2 VM start VMs of its own) with the `kata-clh-cpu` profile.
+
+- **In the hands-on**: it is used to rehearse Kata cheaply before paying for `g4dn.metal`.
+- **In production**: it can host steps that need no GPU, such as nvcc compilation. The harness has no compile-only mode, so you build that step yourself.
 
 ## The scenario of this asset
 
-A code model (default `Qwen/Qwen2.5-Coder-1.5B-Instruct`, Apache-2.0) rewrites a PyTorch module as `ModelNew` using Triton kernels, the sandbox measures correctness and speed and returns the result, and the trainer computes the format, correctness and speedup scores. The task contract is similar to KernelBench: each task module has a trusted reference `Model`, `get_init_inputs()`, `get_inputs(seed, device, size)` that builds inputs per seed, and tolerances `ATOL` and `RTOL`.
+A code model (default `Qwen/Qwen2.5-Coder-1.5B-Instruct`, Apache-2.0) rewrites a PyTorch module as `ModelNew` using Triton kernels, the sandbox measures correctness and speed and returns the result, and the trainer computes the format, correctness and speedup scores. The task contract is similar to KernelBench. Each task module has these.
+
+- a trusted reference `Model`
+- `get_init_inputs()`
+- `get_inputs(seed, device, size)` that builds inputs per seed
+- tolerances `ATOL` and `RTOL`
 
 ### Ten tasks (`src/gpusandbox/tasks/`)
 

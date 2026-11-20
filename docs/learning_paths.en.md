@@ -49,8 +49,11 @@ Costs are estimates that add up On-Demand compute list prices (us-east-1 and us-
 | 3. c8i low cost (scenario C) | You want to try the three runtimes and a version swap cheaply on AWS | an AWS account, Standard vCPU quota 14, the AWS CDK CLI and the Session Manager plugin | half a day | compute about 0.57 USD/hour + EKS 0.10 + NAT |
 | 4. GPU basics (scenario A) | You want to run real GRPO training and GPU sandboxes | G and VT vCPU quota 16 (24 during the version swap in 06, which adds two gVisor nodes) | a day | compute about 3.42 USD/hour (about 2.01 more during the version swap) |
 | 5. HyperPod (scenarios B1, B2) | You plan to train on SageMaker HyperPod | B1: G and VT vCPU quota 8 and one HyperPod `ml.g5.2xlarge`. B2: one HyperPod `ml.g5.2xlarge` and two `ml.g5.xlarge` (no EC2 GPU quota) | a day or more | B1 about 3.72, B2 about 4.52 USD/hour |
-| 6. Add Kata GPU | You want to compare VM-boundary isolation and GPU passthrough | G and VT vCPU quota: 96 on top of path 3, 112 on top of path 4. While the IOMMU AMI builds, the Standard vCPU quota needs 2 more (16 together with the c8i rehearsal) | path 3 or 4 + half a day | on top of path 3, about 8.39 USD/hour in total (7.824 added). On top of path 4 with the c8i rehearsal, about 11.61 USD/hour in total |
+| 6. Add Kata GPU | You want to compare VM-boundary isolation and GPU passthrough | G and VT vCPU quota: 96 on top of path 3, 112 on top of path 4 | path 3 or 4 + half a day | on top of path 3, about 8.39 USD/hour in total (7.824 added) |
 | 7. Production design | You are designing a structure for a real service | a browser | 2 to 3 hours | free |
+
+- **Standard vCPU quota for path 6**: while the IOMMU AMI builds, it needs 2 more (16 together with the c8i rehearsal).
+- **Cost of path 6 on top of path 4**: with the c8i rehearsal, about 11.61 USD/hour in total.
 
 ## Steps per path
 
@@ -116,7 +119,10 @@ Costs are estimates that add up On-Demand compute list prices (us-east-1 and us-
 
 === "6. Kata GPU"
 
-    1. Follow path 3 up to, but not including, its cleanup step. To continue from path 4 and compare the two GPU pools, come here before the version swap of 06: the last step of 06 (`--finish`) scales `gvisor v1` to zero. You cannot continue once the cluster is deleted.
+    1. Continue from path 3 or 4.
+        - **Continuing from path 3**: follow it up to, but not including, its cleanup step.
+        - **Continuing from path 4 to compare the two GPU pools**: come here before the version swap of 06. The last step of 06 (`--finish`) scales `gvisor v1` to zero.
+        - **Once the cluster is deleted**: you cannot continue.
     2. Stage 1 (c8i rehearsal) → stage 2 (`g4dn.metal`) of [03 Kata sandboxes](handson/03_kata.md)
     3. Deploy the `kata-qemu v1` pool as in [04 Sandbox pools](handson/04_sandbox_pools.md) and verify it with `scripts/ops/verify.sh kata-qemu v1`.
     4. (Optional) Compare with gVisor in [08 Runtime benchmark](handson/08_benchmark.md). For a GPU-to-GPU comparison, run it while both the `gvisor v1` (path 4) and `kata-qemu v1` pools are Ready.
@@ -143,7 +149,10 @@ It is for reading, not running, and its order is in the tab above. It is easier 
 
 !!! warning "Before starting an AWS path (3 to 6)"
     1. **Clean up as soon as you finish.** The last step of each path (`scripts/08_cleanup.sh`) asks you to type a confirmation word, so nothing is deleted by accident.
-    2. **Scale the EC2 practice node groups you are not using to zero while you take a break.** Scaling only a Deployment down does not stop node charges (how to scale nodes is under "Time and cost" in [00 Overview](handson/00_overview.md)). The two system nodes stay because their minimum is 2, and HyperPod instances keep billing when you scale EKS node groups, so after path 5 delete them with `scripts/hyperpod/delete.sh`.
+    2. **Scale the EC2 practice node groups you are not using to zero while you take a break.** How to scale nodes is under "Time and cost" in [00 Overview](handson/00_overview.md).
+        - **Scaling only a Deployment down**: it does not stop node charges.
+        - **The two system nodes**: they stay because their minimum is 2.
+        - **HyperPod instances**: they keep billing when you scale EKS node groups, so after path 5 delete them with `scripts/hyperpod/delete.sh`.
     3. **Check what is left after cleanup.** The last table of `08_cleanup.sh` (tagged instances) must be empty, and resources that can stay behind and the commands to check them are in [99 Cleanup](handson/99_cleanup.md).
 
 ## If you get stuck

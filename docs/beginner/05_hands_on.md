@@ -56,9 +56,13 @@ python -m pytest -q
 
 ![로컬 터미널: python -m pytest -q 결과, 74 passed](../images/learning/local-pytest.png)
 
-**지금 일어나는 일:** 01편과 04편에서 설명한 기능(위험한 코드를 실행 전에 막는 검사, 채점기와 제출 코드를 나눈 구조, 토큰이 없으면 거절하는 인증, 배치 경계의 버전 교체)이 동작하는지 확인합니다.
+**지금 일어나는 일:** 01편과 04편에서 설명한 기능(위험한 코드를 실행 전에 막는 검사, 채점기와 제출 코드를 나눈 구조, 토큰이 없으면 거절하는 인증, 배치 경계의 버전 교체)이 동작하는지 확인합니다. 2번 테스트 중 `test_golden_probe_and_parity_on_cpu_pools`가 로컬 서버 두 개를 띄워 4번과 같은 시험용 답안 네 개를 채점하고 결과를 확인합니다.
 
-**문제가 생기면:** `ModuleNotFoundError`가 나오면 복제한 저장소 폴더(`gpu-sandbox-on-aws`)에서 `source .venv/bin/activate`를 실행했는지 확인하세요. 그래도 나오면 1번의 `uv pip install` 두 줄만 다시 실행합니다. Linux 호스트에서 다음 3번처럼 서버를 직접 띄우면 같은 사용자의 다른 프로세스가 종료될 수 있습니다(이유는 [시작하기](../getting_started.md) 3장 참고). Linux에서는 3~4번을 건너뛰세요. 2번 테스트 중 `test_golden_probe_and_parity_on_cpu_pools`가 로컬 서버 두 개를 띄워 4번과 같은 시험용 답안 네 개를 채점하고 결과를 확인합니다. macOS에서는 3~4번에서 같은 채점을 직접 실행해 보세요.
+**문제가 생기면:**
+
+- **`ModuleNotFoundError`가 나오면**: 복제한 저장소 폴더(`gpu-sandbox-on-aws`)에서 `source .venv/bin/activate`를 실행했는지 확인하세요. 그래도 나오면 1번의 `uv pip install` 두 줄만 다시 실행합니다.
+- **Linux 호스트에서**: 다음 3번처럼 서버를 직접 띄우면 같은 사용자의 다른 프로세스가 종료될 수 있습니다(이유는 [시작하기](../getting_started.md) 3장 참고). Linux에서는 3~4번을 건너뛰세요.
+- **macOS에서**: 3~4번에서 같은 채점을 직접 실행해 보세요.
 
 ### 3. 샌드박스 서버 두 개 띄우기 (macOS)
 
@@ -117,7 +121,16 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 ## 2부: AWS에서 세 런타임 비교하기 (선택, 과금)
 
-**준비물:** 실습용 AWS 계정(운영 계정은 피하세요), AWS CLI와 자격 증명, Node.js 22 또는 24, AWS CDK CLI(`npm install -g aws-cdk`), Session Manager plugin for the AWS CLI, `kubectl`, `helm`. 계정의 `Running On-Demand Standard` vCPU 쿼터가 14 이상이어야 합니다. 리전은 `us-west-2` 기준입니다.
+**준비물:**
+
+- 실습용 AWS 계정(운영 계정은 피하세요)
+- AWS CLI와 자격 증명
+- Node.js 22 또는 24
+- AWS CDK CLI(`npm install -g aws-cdk`)
+- Session Manager plugin for the AWS CLI
+- `kubectl`, `helm`
+
+계정의 `Running On-Demand Standard` vCPU 쿼터가 14 이상이어야 합니다. 리전은 `us-west-2` 기준입니다.
 
 **비용:** 클러스터 노드 세 대(`m6i.large` 2대 + `c8i.2xlarge` 1대)가 시간당 약 0.57 USD이고, EKS 0.10 USD와 NAT gateway 요금이 더해집니다(온디맨드 요금). 접속용 인스턴스(`t4g.nano`), KMS 키, 로그, EBS 볼륨에도 요금이 조금 붙습니다. 1~2시간 실습하면 몇 달러가 들 것으로 봅니다(추정).
 
@@ -145,7 +158,9 @@ uv pip install -r cdk/requirements.txt
 source scripts/config.env
 ```
 
-첫 줄은 설정 파일이 없을 때만 예시 파일을 복사하므로, 이미 만든 파일은 그대로 남습니다. `scripts/config.env`의 `AWS_REGION`, `CLUSTER_NAME`은 기본값(`us-west-2`, `gpu-sandbox`)을 그대로 써도 됩니다. 마지막 줄은 이 값을 현재 터미널에 불러와 6단계와 문제 해결 명령의 `$AWS_REGION`, `$CLUSTER_NAME`에 씁니다. 파일을 고쳤거나 새 터미널을 열었다면 `source scripts/config.env`를 다시 실행하세요.
+- **첫 줄**: 설정 파일이 없을 때만 예시 파일을 복사하므로, 이미 만든 파일은 그대로 남습니다.
+- **`AWS_REGION`, `CLUSTER_NAME`**: `scripts/config.env`의 이 두 값은 기본값(`us-west-2`, `gpu-sandbox`)을 그대로 써도 됩니다.
+- **마지막 줄**: 이 값을 현재 터미널에 불러와 6단계와 문제 해결 명령의 `$AWS_REGION`, `$CLUSTER_NAME`에 씁니다. 파일을 고쳤거나 새 터미널을 열었다면 `source scripts/config.env`를 다시 실행하세요.
 
 **지금 일어나는 일:** 모든 스크립트와 CDK 앱이 이 파일 하나에서 설정을 읽습니다. 이 파일에는 계정 정보가 들어갈 수 있어서 `.gitignore`로 git 커밋에서 제외되어 있습니다.
 
@@ -164,7 +179,12 @@ cdk/deploy.sh C
 
 ![CloudFormation 스택 gpu-sandbox-cdk의 Outputs 탭: EndpointPublicAccess false](../images/console/cfn-outputs.png)
 
-**지금 일어나는 일:** CDK가 private 네트워크(VPC), EKS 클러스터, 노드 두 종류(system 2대, `c8i.2xlarge` 1대), 접속용 인스턴스를 한 번에 만들고, 01편의 방어 중 노드와 클러스터 쪽 설정을 적용합니다. EKS API는 인터넷에서 접속할 수 없고, 노드에는 IMDSv2 필수와 hop limit 1이, 디스크에는 암호화가 적용됩니다. `c8i.2xlarge`에는 nested virtualization이 켜지고 gVisor와 node guard가 설치됩니다. VPC CNI의 네트워크 정책 기능도 켜지지만, `sandbox` 네임스페이스의 차단 규칙은 샌드박스 풀을 배포할 때 따로 설치합니다([10편](../handson/10_cpu_only.md) 5단계). 그래서 이 편의 시험용 pod(`default` 네임스페이스)에는 그 규칙이 적용되지 않습니다.
+**지금 일어나는 일:** CDK가 private 네트워크(VPC), EKS 클러스터, 노드 두 종류(system 2대, `c8i.2xlarge` 1대), 접속용 인스턴스를 한 번에 만들고, 01편의 방어 중 노드와 클러스터 쪽 설정을 적용합니다.
+
+- **EKS API**: 인터넷에서 접속할 수 없습니다.
+- **노드와 디스크**: 노드에는 IMDSv2 필수와 hop limit 1이, 디스크에는 암호화가 적용됩니다.
+- **`c8i.2xlarge`**: nested virtualization이 켜지고 gVisor와 node guard가 설치됩니다.
+- **네트워크 정책**: VPC CNI의 네트워크 정책 기능도 켜지지만, `sandbox` 네임스페이스의 차단 규칙은 샌드박스 풀을 배포할 때 따로 설치합니다([10편](../handson/10_cpu_only.md) 5단계). 그래서 이 편의 시험용 pod(`default` 네임스페이스)에는 그 규칙이 적용되지 않습니다.
 
 **문제가 생기면:** [Production 09 CDK](../production/09_cdk.md)의 "문제가 생기면"을 보세요.
 
@@ -182,7 +202,10 @@ cdk/tunnel.sh
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 ```
 
-**확인할 것:** 노드 세 대가 `Ready`이고, 그중 한 대의 ROLE이 `sandbox-kata`, INSTANCE-TYPE이 `c8i.2xlarge`입니다.
+**확인할 것:**
+
+- 노드 세 대가 `Ready`입니다.
+- 그중 한 대의 ROLE이 `sandbox-kata`, INSTANCE-TYPE이 `c8i.2xlarge`입니다.
 
 **지금 일어나는 일:** 내 PC의 `127.0.0.1:8443`으로 보낸 요청이 SSM 터널을 거쳐 VPC 안의 EKS API로 전달됩니다.
 
@@ -232,10 +255,21 @@ kubectl logs runc-smoke
 kubectl delete pod runc-smoke
 ```
 
-**문제가 생기면:** 스크립트는 pod가 제시간에 끝났는지만 확인하고 실패 원인은 판별하지 않습니다. 스크립트는 경고를 출력한 뒤 로그를 읽고 그 pod를 지우므로, 경고에 나온 pod 이름을 기록하세요. pod가 남아 있으면 `kubectl describe pod <이름>`을, 이미 지워졌다면 `kubectl get events -n default --field-selector involvedObject.name=<이름>`을 확인합니다. Kata pod에서 KVM 관련 오류가 보이면 [Production 09 CDK](../production/09_cdk.md) 2단계의 `describe-instances` 명령으로 `NestedVirtualization`이 `enabled`인지 확인합니다. gVisor pod에서 런타임 오류가 보이면 [문제 해결](../reference/troubleshooting.md)의 "gVisor" 항목을 보고 노드의 gVisor 설치 상태를 확인하세요.
+**문제가 생기면:** 스크립트는 pod가 제시간에 끝났는지만 확인하고 실패 원인은 판별하지 않습니다.
+
+- **경고가 나오면**: 스크립트는 경고를 출력한 뒤 로그를 읽고 그 pod를 지우므로, 경고에 나온 pod 이름을 기록하세요.
+- **pod가 남아 있으면**: `kubectl describe pod <이름>`을 확인합니다.
+- **pod가 이미 지워졌다면**: `kubectl get events -n default --field-selector involvedObject.name=<이름>`을 확인합니다.
+- **Kata pod에서 KVM 관련 오류가 보이면**: [Production 09 CDK](../production/09_cdk.md) 2단계의 `describe-instances` 명령으로 `NestedVirtualization`이 `enabled`인지 확인합니다.
+- **gVisor pod에서 런타임 오류가 보이면**: [문제 해결](../reference/troubleshooting.md)의 "gVisor" 항목을 보고 노드의 gVisor 설치 상태를 확인하세요.
 
 !!! tip "같은 클러스터로 10편을 이어서 하려면"
-    [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)는 이 클러스터와 같은 구성에서 샌드박스 풀을 띄우고, 모델 없이 시험용 답안을 채점하며 버전 교체를 확인합니다. 이어서 하려면 9단계를 건너뛰고 10편의 "준비"와 1단계를 확인한 뒤 3단계부터 진행하세요. 2단계(클러스터 생성)와 4단계(런타임 설치)는 이 편의 6단계와 8단계에서 했습니다. 클러스터는 10편의 정리 절차로 지웁니다.
+    [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)는 이 클러스터와 같은 구성에서 샌드박스 풀을 띄우고, 모델 없이 시험용 답안을 채점하며 버전 교체를 확인합니다. 이어서 하려면 아래 순서로 진행하세요.
+
+    1. 이 편의 9단계를 건너뜁니다.
+    2. 10편의 "준비"와 1단계를 확인합니다.
+    3. 10편의 3단계부터 진행합니다. 2단계(클러스터 생성)와 4단계(런타임 설치)는 이 편의 6단계와 8단계에서 했습니다.
+    4. 클러스터는 10편의 정리 절차로 지웁니다.
 
 ### 9. 지우기
 
@@ -245,7 +279,12 @@ kubectl delete pod runc-smoke
 cdk/destroy.sh
 ```
 
-**확인할 것:** `gpu-sandbox-cdk: destroyed`가 나오고, 마지막 인스턴스 표가 비어 있으면 됩니다. secrets용 KMS 키는 7일 뒤 삭제되도록 예약되고, CDK bootstrap 스택(`CDKToolkit`)은 다음 실습을 위해 지우지 않습니다.
+**확인할 것:**
+
+- `gpu-sandbox-cdk: destroyed`가 나옵니다.
+- 마지막 인스턴스 표가 비어 있습니다.
+
+secrets용 KMS 키는 7일 뒤 삭제되도록 예약되고, CDK bootstrap 스택(`CDKToolkit`)은 다음 실습을 위해 지우지 않습니다.
 
 **지금 일어나는 일:** 스택에 속한 리소스가 한 번에 지워지므로, 리소스를 하나씩 찾아 지울 필요가 없습니다.
 

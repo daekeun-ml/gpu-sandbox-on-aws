@@ -5,7 +5,11 @@
 
 ## Pain points
 
-The reward pool picks one free pod for each request and reuses that pod for later grading. When a request ends, the server deletes that request's work directory and cleans up leftover processes. A multi-turn agent submits code, reads the verdict, revises the code and submits again, so every turn of one episode has to be graded in the same sandbox with the same sandbox version. For a GPU task, the speed before and after a fix also has to be compared on the same GPU. Creating a new sandbox for each episode means waiting for it to start every time, and a Kata GPU VM can take several minutes to become Ready for the first time.
+The reward pool picks one free pod for each request and reuses that pod for later grading. When a request ends, the server deletes that request's work directory and cleans up leftover processes.
+
+A multi-turn agent submits code, reads the verdict, revises the code and submits again, so every turn of one episode has to be graded in the same sandbox with the same sandbox version. For a GPU task, the speed before and after a fix also has to be compared on the same GPU.
+
+Creating a new sandbox for each episode means waiting for it to start every time, and a Kata GPU VM can take several minutes to become Ready for the first time.
 
 ![Two panels. a single-turn grading: the GRPO trainer submits one completion to the reward pool, the pool picks a free pod anew for each request, and one verdict comes back; after each request the server clears that request's work directory and leftover processes. b multi-turn episode: a sandbox started ahead in the SandboxWarmPool is assigned to the episode by a SandboxClaim. The agent (model) submits turn 1, reads the verdict as feedback, submits a revised turn 2 and gets another verdict. Every turn is graded in that one claimed sandbox with the same sandbox version (and on the same GPU with a GPU profile), and the sandbox is deleted when the episode ends.](../images/figures/beginner-06_multi_turn_agent.svg)
 
@@ -47,7 +51,11 @@ A multi-turn agent repeats these steps within one episode.
 2. It reads the verdict as feedback. For example, the status, the end of the error message and the speedup are returned to the model.
 3. It revises the code and submits it again (turn 2). Steps 2 and 3 repeat until the task is done.
 
-A real agent reads the verdict and revises its code. The [chapter 11](../handson/11_multi_turn.md) exercise instead submits prepared test answers in a fixed order, in place of a model, to check that each one gets a verdict from the same sandbox. This asset's example sends every submission of one episode to the same sandbox. With a GPU profile, every turn is graded on the same GPU with the same sandbox version. The CPU exercise assigns sandboxes the same way. If the GPU or the grading version changes between turns, the verdicts of turn 1 and turn 2 cannot be compared on the same basis (inference). The reward pool picks a free pod anew for each request, so turns of the same episode can be graded on different pods and GPUs.
+A real agent reads the verdict and revises its code. The [chapter 11](../handson/11_multi_turn.md) exercise instead submits prepared test answers in a fixed order, in place of a model, to check that each one gets a verdict from the same sandbox.
+
+- **This asset's example**: it sends every submission of one episode to the same sandbox. With a GPU profile, every turn is graded on the same GPU with the same sandbox version. The CPU exercise assigns sandboxes the same way.
+- **If the GPU or the grading version changes between turns**: the verdicts of turn 1 and turn 2 cannot be compared on the same basis (inference).
+- **In the reward pool**: a free pod is picked anew for each request, so turns of the same episode can be graded on different pods and GPUs.
 
 Creating a new sandbox for each episode instead means waiting for the sandbox to be ready every time an episode starts. A Kata GPU VM fixes all of its guest memory in place and initialises CUDA inside the guest, so it can take several minutes to become Ready for the first time (deployment template comment).
 
@@ -100,17 +108,26 @@ The awslabs [AI on EKS](https://github.com/awslabs/ai-on-eks) project has an [Ag
 |---|---|---|
 | Target | AI agents that run model-generated code. The page does not mention GPUs | GPU kernel grading (reward) |
 | Isolation runtime | Three tiers: `standard` (runc), `gvisor` (Standard EKS only), `isolated-sandbox` (Nitro Sandboxes) | gVisor + nvproxy (`g5.xlarge`, A10G) or Kata + VFIO (`g4dn.metal`, T4) |
-| Use of Agent Sandbox | Manages the lifecycle with Sandbox, SandboxTemplate, SandboxWarmPool and SandboxClaim (`v1beta1`), and uses KRO to put several resources behind one `AgentSandbox` resource | An optional extension that claims one sandbox for each multi-turn episode. GPU tasks use a GPU profile, and the CPU exercise in chapter 11 runs without a GPU. Default grading uses the Deployment-based reward pool |
-| Egress | Allows outbound traffic only to allowed domains (FQDN). Standard EKS uses Cilium and EKS Auto Mode uses `ApplicationNetworkPolicy` | Blocks all egress (`egress: []`). Only pods with the client label (`gpusandbox/client=true`) in the `rl-trainer` namespace can call the sandbox API, on TCP 8000 |
+| Use of Agent Sandbox | Manages the lifecycle with Sandbox, SandboxTemplate, SandboxWarmPool and SandboxClaim (`v1beta1`) | An optional extension that claims one sandbox for each multi-turn episode |
+| Egress | Allows outbound traffic only to allowed domains (FQDN) | Blocks all egress (`egress: []`) |
 | Nodes | Karpenter and a dedicated gVisor NodePool (`runsc` installed through AL2023 user data) | EKS managed node groups and Karpenter NodePools from the CDK stack |
 
 - **The `isolated-sandbox` tier:** each pod runs in its own Firecracker microVM on an EC2 Nitro Sandbox. It needs EKS Auto Mode (Kubernetes 1.36 or later) or Standard EKS with a custom AMI. According to this guide's [sources page](../reference/sources.md), Nitro Sandboxes do not support GPU passthrough at launch.
 - **Kata + Firecracker:** the page lists it as a future tier, and it is not included in the solution.
+- **The AI on EKS solution's use of Agent Sandbox:** it uses KRO to put several resources behind one `AgentSandbox` resource.
+- **The AI on EKS solution's egress:** Standard EKS uses Cilium and EKS Auto Mode uses `ApplicationNetworkPolicy`.
+- **This asset's use of Agent Sandbox:** GPU tasks use a GPU profile, and the CPU exercise in chapter 11 runs without a GPU. Default grading uses the Deployment-based reward pool.
+- **Calls to this asset's sandbox API:** only pods with the client label (`gpusandbox/client=true`) in the `rl-trainer` namespace can call the sandbox API, on TCP 8000.
 - **How to choose:** for agent sandboxes that need no GPU and may connect only to allowed domains, refer to the AI on EKS solution. For grading kernels on a GPU inside the sandbox, refer to this asset.
 
 ## This asset's Agent Sandbox extension
 
-This asset offers Agent Sandbox as an optional extension. The sandbox server, the image and the authentication method are the same as in the reward pool, and one pod is assigned to each episode. The list of accounts allowed to call it (the episode Job account is added and the gateway account is left out) and the restart setting after a failure (the extension template has no `livenessProbe`) differ from the default pool. The extension files are in `k8s/extensions/agent-sandbox/`, `scripts/extensions/agent_sandbox.sh` and `src/gpusandbox/agent_sandbox.py` (`EpisodeSandbox`).
+This asset offers Agent Sandbox as an optional extension. The sandbox server, the image and the authentication method are the same as in the reward pool, and one pod is assigned to each episode. Two things differ from the default pool.
+
+- **The list of accounts allowed to call it**: the episode Job account is added and the gateway account is left out.
+- **The restart setting after a failure**: the extension template has no `livenessProbe`.
+
+The extension files are in `k8s/extensions/agent-sandbox/`, `scripts/extensions/agent_sandbox.sh` and `src/gpusandbox/agent_sandbox.py` (`EpisodeSandbox`).
 
 ## Scope and limits
 

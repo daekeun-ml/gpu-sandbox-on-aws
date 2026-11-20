@@ -54,7 +54,10 @@ All four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key,
 
 ### Request path
 
-- Each time the trainer sends requests to the sandbox, it picks the runtime and version from a snapshot of the routing ConfigMap (`sandbox-routing`), and it takes all results of one reward batch from one pool. If you switch to v2 during training, cached results from the previous pool that fall in the same batch are scored again on the v2 pool. When every completion in a batch is already cached from one pool, the trainer uses those results without calling the sandbox. If the routing switches more than once within one batch, the third request sends the whole batch to one pool, so one batch is always scored by one version.
+- Each time the trainer sends requests to the sandbox, it picks the runtime and version from a snapshot of the routing ConfigMap (`sandbox-routing`), and it takes all results of one reward batch from one pool.
+    - **If you switch to v2 during training**: when the batch has completions that still need scoring, cached results from the previous pool that fall in the same batch are scored again on the v2 pool.
+    - **When every completion in a batch is already cached from one pool**: the trainer uses those results without calling the sandbox, even after a switch.
+    - **If the routing switches more than once within one batch**: the third request sends the whole batch to one pool, so one batch is always scored by one version.
 - The trainer resolves the headless Service through CoreDNS and sends `POST /v1/evaluate` straight to each Ready pod. A busy pod answers `503`, and the trainer retries another pod.
 - Each request carries a projected ServiceAccount token with the audience `gpu-sandbox`, which the pod verifies offline against the JWKS. The `sandbox` namespace is default-deny, so only labelled pods from `rl-trainer` can connect.
 
@@ -99,10 +102,17 @@ uv pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-**What to look for:** the last line shows `109 passed` and no failures. The tests check the AST policy, the two-process harness, token authentication, readiness, the client and the gateway, and the rendering of manifests and node user data on CPU. The 18 CDK stack tests live separately in `cdk/tests`; after installing the CDK libraries, run them with `cd cdk && python -m pytest -q tests`.
+**What to look for:** the last line shows `109 passed` and no failures.
+
+- **What the tests cover**: the AST policy, the two-process harness, token authentication, readiness, the client and the gateway, and the rendering of manifests and node user data, checked on CPU.
+- **CDK stack tests**: the 18 CDK stack tests live separately in `cdk/tests`; after installing the CDK libraries, run them with `cd cdk && python -m pytest -q tests`.
 
 > [!WARNING]
-> **Starting a server directly on a Linux host:** after every evaluation, the sandbox server sends SIGKILL to every process in `/proc` except itself and its ancestors. Inside a pod this is limited to the container, but `gpusandbox-server` started directly on a Linux host also targets other processes of the same user, so run it in a separate container. pytest turns this behavior off in `tests/conftest.py`, so the commands above are safe on a Linux host as they are ([Getting started](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/getting_started/)).
+> **Starting a server directly on a Linux host:** after every evaluation, the sandbox server sends SIGKILL to every process in `/proc` except itself and its ancestors.
+>
+> - **Inside a pod**: this is limited to the container.
+> - **`gpusandbox-server` started directly on a Linux host**: it also targets other processes of the same user, so run it in a separate container.
+> - **pytest**: it turns this behavior off in `tests/conftest.py`, so the commands above are safe on a Linux host as they are ([Getting started](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/getting_started/)).
 
 ### 2. Run on AWS (billable)
 
@@ -110,7 +120,9 @@ Pick one scenario and run its commands from top to bottom. If this is your first
 
 #### Common setup (once)
 
-1. Create the configuration file. Every script reads it and stops where a value it needs is empty. If you leave `ADMIN_PRINCIPAL_ARN` empty, the IAM role you are using becomes the cluster admin. If the role ARN has a path, set the full ARN, path included.
+1. Create the configuration file. Every script reads it and stops where a value it needs is empty.
+    - **If you leave `ADMIN_PRINCIPAL_ARN` empty**: the IAM role you are using becomes the cluster admin.
+    - **If the role ARN has a path**: set the full ARN, path included.
 
     ```bash
     cp scripts/config.env.example scripts/config.env
@@ -174,8 +186,16 @@ To switch the sandbox version during training (`scripts/ops/rollout.sh`), first 
 
 **Adding Kata runtimes (optional):** run these between 04 and 05.
 
-- **Kata CPU:** set `WITH_KATA_CPU` to `"1"` in `scripts/config.env`, run `02_create_cluster.sh` again, then run `scripts/kata/cpu_nodes.sh`.
-- **Kata GPU (`g4dn.metal`, about 7.8 USD per hour):** The first run of `scripts/kata/gpu_nodes.sh` builds an AMI and stops. Add the printed `KATA_IOMMU_AMI_ID` line, set `WITH_KATA_GPU` to `"1"`, then run `02_create_cluster.sh` and `scripts/kata/gpu_nodes.sh` again. Details are in [Hands-on 03](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/03_kata/).
+- **Kata CPU:**
+    1. Set `WITH_KATA_CPU` to `"1"` in `scripts/config.env`.
+    2. Run `02_create_cluster.sh` again.
+    3. Run `scripts/kata/cpu_nodes.sh`.
+- **Kata GPU (`g4dn.metal`, about 7.8 USD per hour):**
+    1. The first run of `scripts/kata/gpu_nodes.sh` builds an AMI and stops.
+    2. Add the printed `KATA_IOMMU_AMI_ID` line and set `WITH_KATA_GPU` to `"1"`.
+    3. Run `02_create_cluster.sh` and `scripts/kata/gpu_nodes.sh` again.
+
+    Details are in [Hands-on 03](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/03_kata/).
 
 #### Scenarios B1 and B2: HyperPod
 
@@ -225,6 +245,8 @@ scripts/08_cleanup.sh
 
 #### Script folders
 
+The usage, behavior on a second run and success signal of each script are in the guidebook's [Script reference](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/scripts/).
+
 | Location | Purpose |
 |---|---|
 | `scripts/01_*.sh` to `08_*.sh` | The main steps, run in numeric order |
@@ -240,8 +262,8 @@ scripts/08_cleanup.sh
 | Script | What it does |
 |---|---|
 | `scripts/01_check_prereqs.sh` | Checks local tools, the AWS identity, quotas, nested virtualization support and per-AZ availability of the GPU instance types. Read-only; it creates nothing. |
-| `scripts/02_create_cluster.sh` | Creates the VPC, the private EKS cluster, the scenario's node groups and the SSM access instance with CDK. No option uses `SCENARIO` from `scripts/config.env` (default A), `--hyperpod` B1, `--hyperpod-b2` B2, `--cpu-only` C. Running it again with changed settings adds or changes node groups. |
-| `cdk/tunnel.sh` | The connection you keep open in a second terminal. It forwards `127.0.0.1:8443` on your PC to the private EKS API through SSM port forwarding, and creates the kubectl context `<CLUSTER_NAME>-tunnel`. Keep it running while you use kubectl and helm after the cluster exists. |
+| `scripts/02_create_cluster.sh` | Creates the VPC, the private EKS cluster, the scenario's node groups and the SSM access instance with CDK. Running it again with changed settings adds or changes node groups. |
+| `cdk/tunnel.sh` | The connection you keep open in a second terminal. Keep it running while you use kubectl and helm after the cluster exists. |
 | `scripts/03_build_push_images.sh` | Builds the sandbox, trainer and control images for `linux/amd64`, pushes them to ECR, and prints the image addresses as `export` lines. `--no-trainer` skips the trainer; `HYPERPOD=1` adds `hyperpodrun` to the trainer image. |
 | `scripts/04_install_gpu_stack.sh` | Installs the NVIDIA device plugin (CDI mode), then registers the `gvisor` RuntimeClass and runs a smoke pod to confirm that GPU work runs inside gVisor. In B2 and C it installs only the device plugin and skips the rest. |
 | `scripts/05_setup_namespaces_auth.sh` | Creates the namespaces, NetworkPolicies, ServiceAccounts and the routing ConfigMap, and copies the cluster's token signing public keys (JWKS) into the `sandbox` namespace. `ACTIVE_RUNTIME` sets the first runtime to use. |
@@ -251,8 +273,8 @@ scripts/08_cleanup.sh
 | `cdk/deploy.sh`, `cdk/destroy.sh` | Deploy and delete the CDK stack. `02_create_cluster.sh` and `08_cleanup.sh` call them. |
 | `scripts/kata/cpu_nodes.sh` | Installs kata-deploy on the c8i node, registers the `gvisor-cpu` RuntimeClass, and runs smoke pods for the three runtimes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU). |
 | `scripts/kata/gpu_nodes.sh` | The first run builds an AMI with the IOMMU on and stops. Once the `g4dn.metal` node exists, the next run installs the GPU Operator and kata-deploy and checks GPU passthrough (`nvidia.com/pgpu`). |
-| `scripts/ops/verify.sh <runtime> [version]` | Verifies one pool: it checks that IMDS, the API server and the internet are blocked, that the prepared test code gets the expected results, and that callers from other namespaces are blocked. It also prints the kernel inside the sandbox and the node's kernel; check yourself that they differ (isolation). |
-| `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | Switches the sandbox version during training (blue/green). It starts the new version, verifies it, checks that it gives the same results as the old one, then switches the routing. After the switch, once a `batch` line on the new version shows verdicts other than `sandbox_error`, run the same command with `--finish` to scale the old version to zero. |
+| `scripts/ops/verify.sh <runtime> [version]` | Verifies one pool: it checks that IMDS, the API server and the internet are blocked, that the prepared test code gets the expected results, and that callers from other namespaces are blocked. |
+| `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | Switches the sandbox version during training (blue/green). It starts the new version, verifies it, checks that it gives the same results as the old one, then switches the routing. |
 | `scripts/ops/simulate.sh [steps] [interval_s]` | In scenario C, scores prepared test code batch by batch without a model, and shows from which batch the new version is used. It does not train. |
 | `scripts/ops/bench.sh [requests]` | Measures cold start, evaluation latency, throughput and speedup for every deployed v1 pool. |
 | `scripts/ops/sync_jwks.sh` | Copies the cluster's token signing public keys into the sandbox namespace again. Run it when the API server keys change and you get 401 `unknown signing key`. |
@@ -261,10 +283,18 @@ scripts/08_cleanup.sh
 | `scripts/hyperpod/check_gvisor.sh` | Starts a debug pod on each HyperPod node and prints its NVIDIA driver version and whether gVisor supports it. At the end it deletes every pod whose name starts with `node-debugger-` in the `default` namespace. |
 | `scripts/hyperpod/run_grpo.sh [max_steps]` | In scenario B, runs GRPO training on the HyperPod node instead of `07_run_grpo.sh`. |
 | `scripts/hyperpod/delete.sh` | Deletes the HyperPod cluster, its execution role and the lifecycle bucket. Run it before `08_cleanup.sh`. |
-| `scripts/extensions/agent_sandbox.sh` | The Agent Sandbox extension. `install` installs the controller and `pool` creates a warm pool. `claim` borrows one sandbox, prints its address and returns it, and `episodes` runs multi-turn episodes without a model. |
+| `scripts/extensions/agent_sandbox.sh` | The Agent Sandbox extension. `install` installs the controller and `pool` creates a warm pool. |
 | `demo/deploy.sh`, `demo/teardown.sh` | Deploy the demo site to a private S3 bucket behind CloudFront (us-east-1), and remove it. |
-| `scripts/logview.py` | Shows the JSON events of Job logs as short colored lines on a terminal. `07_run_grpo.sh`, the check and measurement scripts in `ops/` and `agent_sandbox.sh episodes` go through it. HyperPod's `run_grpo.sh` prints a command for following the logs; run that command yourself. For the raw JSON, put `GPUSANDBOX_LOG=json` in front of the command. |
+| `scripts/logview.py` | Shows the JSON events of Job logs as short colored lines on a terminal. `07_run_grpo.sh`, the check and measurement scripts in `ops/` and `agent_sandbox.sh episodes` go through it. |
 | `scripts/lib.sh`, `scripts/lib_jobs.sh` | Shared functions that the other scripts load. You do not run them directly. |
+
+- **Scenario choice in `02_create_cluster.sh`**: no option uses `SCENARIO` from `scripts/config.env` (default A), `--hyperpod` B1, `--hyperpod-b2` B2, `--cpu-only` C.
+- **What `cdk/tunnel.sh` does**: it forwards `127.0.0.1:8443` on your PC to the private EKS API through SSM port forwarding, and creates the kubectl context `<CLUSTER_NAME>-tunnel`.
+- **Kernel output of `verify.sh`**: it also prints the kernel inside the sandbox and the node's kernel; check yourself that they differ (isolation).
+- **`--finish` of `rollout.sh`**: after the switch, once a `batch` line on the new version shows verdicts other than `sandbox_error`, run the same command with `--finish` to scale the old version to zero.
+- **`claim` and `episodes` of `agent_sandbox.sh`**: `claim` borrows one sandbox, prints its address and returns it, and `episodes` runs multi-turn episodes without a model.
+- **Logs of HyperPod's `run_grpo.sh`**: `run_grpo.sh` prints a command for following the logs; run that command yourself.
+- **For the raw JSON**: put `GPUSANDBOX_LOG=json` in front of the command.
 
 </details>
 
@@ -336,7 +366,10 @@ aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name 
 ## Security
 
 - **Private binds:** the sandbox server binds only to `127.0.0.1` by default. Only the pod manifest uses `0.0.0.0`, inside the pod network; Services are headless ClusterIP only, and NetworkPolicy allowlists restrict the callers.
-- **Audience-bound tokens:** sandbox pods verify projected ServiceAccount tokens with audience `gpu-sandbox` offline against the cluster issuer's JWKS (public keys), and reject `/v1/evaluate`, `/info` and `/metrics` requests if the authentication settings are empty (fail closed). `/healthz` and `/readyz`, which the kubelet uses, answer without a token, so a Ready pod does not prove that authentication is configured. There are no secrets in the pod and no access to the Kubernetes API. The gateway checks callers with TokenReview and a subject allowlist.
+- **Audience-bound tokens:** sandbox pods verify projected ServiceAccount tokens with audience `gpu-sandbox` offline against the cluster issuer's JWKS (public keys), and reject `/v1/evaluate`, `/info` and `/metrics` requests if the authentication settings are empty (fail closed).
+    - **`/healthz` and `/readyz`**: the kubelet uses them and they answer without a token, so a Ready pod does not prove that authentication is configured.
+    - **Inside the pod**: there are no secrets and no access to the Kubernetes API.
+    - **The gateway**: it checks callers with TokenReview and a subject allowlist.
 - **No public endpoints:** no cluster service is exposed to the internet; the only public part by design is the demo site, which holds only the recording JSON and static files. The EKS API endpoint is private only, and operators connect through `cdk/tunnel.sh`, which goes through an SSM access instance with no inbound rules.
 - **Verified egress denial:** a sandbox turns Ready only after it confirms that IMDS, the API server and the node kubelet are unreachable, and sandbox nodes have an iptables node guard.
 - **Local-only settings:** `SANDBOX_AUTH_TEST_BYPASS=1` is for loopback tests only, so do not combine it with a `0.0.0.0` bind. `scripts/config.env` holds account-specific values, so do not commit it (it is in `.gitignore`).

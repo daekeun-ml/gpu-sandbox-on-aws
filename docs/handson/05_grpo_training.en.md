@@ -5,7 +5,10 @@
 
 ## Pain point
 
-Generating rollouts (vLLM) and training the policy on one A10G 24 GB means sharing memory over time. A small model rarely writes a correct Triton kernel at first, so with a reward of 1 for correct and 0 otherwise all 8 answers in a group score 0, the advantage is 0, and there is no learning signal. If answers left unscored because a sandbox pod was busy or dead also get 0, the policy is punished for an infrastructure problem. And if the sandbox version changes mid-training ([06](06_sandbox_update.md)), the log must record which version scored which batch.
+- **Generation and training on one GPU**: generating rollouts (vLLM) and training the policy on one A10G 24 GB means sharing memory over time.
+- **A reward of 1 for correct and 0 otherwise**: a small model rarely writes a correct Triton kernel at first, so all 8 answers in a group score 0, the advantage is 0, and there is no learning signal.
+- **Answers left unscored**: if answers left unscored because a sandbox pod was busy or dead also get 0, the policy is punished for an infrastructure problem.
+- **If the sandbox version changes mid-training ([06](06_sandbox_update.md))**: the log must record which version scored which batch.
 
 ![a: with a reward of 1 if correct and 0 otherwise, when the sandbox scores one group of 8 completions and there is no correct kernel, all 8 score 0, the advantage is 0 and there is no learning signal; when a pod is busy or dead, the failed scoring also gets 0 and the policy is punished for an infrastructure problem. b: with partial credit (0.1, 0.15, 0.3, 0.4), even the gap between 0.3 and 0.1 is a learning signal, and sandbox_error returns None, so the completion is left out of the group baseline and not punished](../images/figures/handson-05_grpo_training.svg)
 
@@ -55,7 +58,10 @@ scripts/07_run_grpo.sh 20     # or: a shorter run
 | 1 | sets `RUN_ID` (default `date +%Y%m%d-%H%M%S`), `MAX_STEPS` (first argument, default 60) and `MODEL_ID` (default `Qwen/Qwen2.5-Coder-1.5B-Instruct`). |
 | 2 | renders `k8s/trainer/job-grpo.yaml.tpl` and creates the Job `grpo-${RUN_ID}` in the `rl-trainer` namespace. |
 | 3 | waits up to 30 minutes for the pod to become Ready. |
-| 4 | follows the logs filtered by `"event"`, `loss`, `Error` and `Traceback`. In a terminal, JSON events and TRL dicts are shown as one-line summaries. Ctrl-C stops following the logs, not the training. |
+| 4 | follows the logs filtered by `"event"`, `loss`, `Error` and `Traceback`. |
+
+- **When you watch the step 4 logs in a terminal**: JSON events and TRL dicts are shown as one-line summaries.
+- **On Ctrl-C while step 4 follows the logs**: it stops following the logs, not the training.
 
 **What to look for:** lines in the order below (example shape; values differ per run). The image pull and model download can leave a few minutes without output after the first lines.
 
@@ -74,11 +80,17 @@ CUDA Error: invalid argument at /workspace/csrc/cumem_allocator.cpp:249
 
 The fields each summary keeps are listed under [Reading the logs](#reading-the-logs) below. To see every field from the start, run `GPUSANDBOX_LOG=json scripts/07_run_grpo.sh`. For a run that has already started, read the raw log with the `kubectl logs` command right below.
 
-In the default 60-step run in the practice account, every step printed one `reward_batch`, 60 in all. `status` mixed `ok`, `wrong_answer`, `compile_error` and `runtime_error`, with no `sandbox_error` at all. Scoring a batch took 31 seconds at the median, and `train_runtime` was 2697 seconds (about 45 minutes). The screen below shows the start and end of that run.
+The default 60-step run in the practice account gave these results.
+
+- Every step printed one `reward_batch`, 60 in all.
+- `status` mixed `ok`, `wrong_answer`, `compile_error` and `runtime_error`, with no `sandbox_error` at all.
+- Scoring a batch took 31 seconds at the median, and `train_runtime` was 2697 seconds (about 45 minutes).
+
+The screen below shows the start and end of that run.
 
 ![07_run_grpo.sh output for 60 steps: the Job submission and the routing line, batches 1 to 3 with their train lines, a gap, batches 58 to 60 with their train lines, train done (train_runtime 2697), done (reward_batches 60), and the final vLLM shutdown message CUDA Error](../images/terminal/grpo-train-a.png)
 
-After `done`, vLLM printed the `CUDA Error` of the last line while shutting down, yet the Job still ended Complete (exit 0). If you see that line, judge success by the Job status.
+The `CUDA Error` line after `done` comes from vLLM shutting down after training. This vLLM version runs its engine in a separate child process by default (`VLLM_ENABLE_V1_MULTIPROCESSING=1`), and the cumem allocator that sleep mode uses (`vllm_enable_sleep_mode=True` in `rl/trl/train_grpo.py`) lives in that process. The line appears to come from that process as it exits (the same line appeared even when the training script ended with `os._exit` right after `done`). It comes after the adapter is saved and after `done`, and the Job still ends Complete (exit 0), so judge success by the Job status when you see it.
 
 **If it fails:** if the pod stays Pending, `status` is mostly `sandbox_error`, or you hit an OOM, see the "How to verify" table at the end and the "training" section of [Troubleshooting](../reference/troubleshooting.md).
 
@@ -96,15 +108,19 @@ kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 
 | Field | Value | Reason |
 |---|---|---|
-| Pod label | `gpusandbox/client: "true"` | the NetworkPolicy `allow-clients-to-sandbox-api` in the sandbox namespace admits on port 8000 only pods with this label from the `rl-trainer` namespace. Without it, connections are blocked and the completions that must go to the sandbox become sandbox_error. Completions with no code block or caught by the trainer-side policy check never reach the sandbox and are scored as usual. |
+| Pod label | `gpusandbox/client: "true"` | the NetworkPolicy `allow-clients-to-sandbox-api` in the sandbox namespace admits on port 8000 only pods with this label from the `rl-trainer` namespace. |
 | `automountServiceAccountToken` | `false` | no Kubernetes API token. The trainer does not call the API and receives only the sandbox token. |
-| Projected token | audience `${SANDBOX_AUDIENCE}`, `expirationSeconds: 3600`, `/var/run/secrets/gpusandbox/token` | sandbox pods accept only this audience and allowed subjects (`system:serviceaccount:rl-trainer:grpo-trainer` and others). kubelet replaces the file in place, and the client rereads it on every request. |
-| Routing ConfigMap | `sandbox-routing` mounted as the directory `/etc/gpusandbox/routing` (not subPath) | a subPath mount does not receive ConfigMap updates. For the version switch in [06](06_sandbox_update.md) to reach a running pod, it must be a directory mount. |
+| Projected token | audience `${SANDBOX_AUDIENCE}`, `expirationSeconds: 3600`, `/var/run/secrets/gpusandbox/token` | sandbox pods accept only this audience and allowed subjects (`system:serviceaccount:rl-trainer:grpo-trainer` and others). |
+| Routing ConfigMap | `sandbox-routing` mounted as the directory `/etc/gpusandbox/routing` (not subPath) | a subPath mount does not receive ConfigMap updates. |
 | Resources | CPU 7, memory 28Gi, `nvidia.com/gpu: 1` | leaves room for the system on `g5.2xlarge` (8 vCPU, 32 GiB). |
 | `/dev/shm` | memory emptyDir 8Gi | the container's default shared memory is small, so it is set separately. |
 | `/outputs`, `/cache` | emptyDir | checkpoints (every 20 steps, at most 2) and the HF cache disappear with the pod. |
 | `backoffLimit`, `ttlSecondsAfterFinished` | `0`, `86400` | no retry on failure, and a finished Job is deleted after 24 hours. |
 | `PYTORCH_CUDA_ALLOC_CONF` | `expandable_segments:True` | reduces memory fragmentation. |
+
+- **Without the pod label**: connections are blocked and the completions that must go to the sandbox become sandbox_error. Completions with no code block or caught by the trainer-side policy check never reach the sandbox and are scored as usual.
+- **Projected token rotation**: kubelet replaces the file in place, and the client rereads it on every request.
+- **Routing ConfigMap mount**: for the version switch in [06](06_sandbox_update.md) to reach a running pod, it must be a directory mount.
 
 !!! note "Keeping the training results"
     The LoRA adapter and `sandbox_metrics.jsonl` live on an emptyDir, so once the container ends not even `kubectl cp` can retrieve them (fine for a pipeline check). The JSON events also go to stdout: save them with the command below before the Job is deleted (24 hours after completion). To keep the adapter, attach shared storage to `/outputs` ([Production 06 Scaling with veRL](../production/06_scaling_with_verl.md)).
@@ -141,7 +157,17 @@ generation batch = per-device batch 4 x processes 1 x steps_per_generation 4 = 1
 60 steps x 2 prompts                    = 120 prompts out of 576 dataset rows
 ```
 
-TRL refuses to start if the generation batch is not divisible by `num_generations`. The argument table above lists the command-line defaults of `train_grpo.py`. Of these, the learning rate, batch size, gradient accumulation, number of generations, maximum length, reward weights, save interval, seed and vLLM memory settings go to `GRPOConfig`. `--max-level` and `--repeats` shape the dataset, `--lora-r` and `--lora-alpha` go to `LoraConfig`, and `--allow-torch-only` and `--runtime` configure the reward functions (`KernelRewards`). In `GRPOConfig` the script also sets `use_vllm=True`, `vllm_mode="colocate"`, `vllm_enable_sleep_mode=True`, `logging_steps=1`, `save_total_limit=2` and `report_to="none"`. The items in the table below are not set on the GPU training path, so they keep TRL's defaults. These defaults were checked with a `GRPOConfig` from the local TRL 1.18.0; re-check them if you change the TRL version.
+TRL refuses to start if the generation batch is not divisible by `num_generations`.
+
+??? note "Where the arguments go"
+    The argument table above lists the command-line defaults of `train_grpo.py`.
+
+    - **`GRPOConfig`**: gets the learning rate, batch size, gradient accumulation, number of generations, maximum length, reward weights, save interval, seed and vLLM memory settings. The script also sets `use_vllm=True`, `vllm_mode="colocate"`, `vllm_enable_sleep_mode=True`, `logging_steps=1`, `save_total_limit=2` and `report_to="none"` there.
+    - **Dataset**: shaped by `--max-level` and `--repeats`.
+    - **`LoraConfig`**: set by `--lora-r` and `--lora-alpha`.
+    - **Reward functions (`KernelRewards`)**: configured by `--allow-torch-only` and `--runtime`.
+
+The items in the table below are not set on the GPU training path, so they keep TRL's defaults. These defaults were checked with a `GRPOConfig` from the local TRL 1.18.0; re-check them if you change the TRL version.
 
 | TRL default | Value | Meaning |
 |---|---|---|
@@ -172,15 +198,29 @@ sequenceDiagram
 
 *Takeaway: generation, scoring and the update each happen once per step, in order, so sandbox evaluation time is part of every step's time.*
 
-TRL calls the three reward functions separately, but `KernelRewards` caches verdicts by a hash of the task, prompt and completion text, so on one pool each completion is evaluated once. After a version switch, when new completions are scored on the new pool, entries in the same batch cached from the old pool are scored again on the new pool. When the whole batch is cached from one pool, its results are used without calling the sandboxes. Either way, one batch is scored by one version.
+TRL calls the three reward functions separately. `KernelRewards` caches verdicts by a hash of the task, prompt and completion text.
+
+- **On one pool**: each completion is evaluated once.
+- **When new completions are scored on the new pool after a version switch**: entries in the same batch cached from the old pool are scored again on the new pool.
+- **When the whole batch is cached from one pool**: its results are used without calling the sandboxes.
+
+Either way, one batch is scored by one version.
 
 ## Reward components
 
 The three components in `src/gpusandbox/rewards.py`:
 
-- **format**: the extractor pairs opening and closing fences in order to split the text into closed code blocks, then keeps only blocks with no language tag or a `python`, `py` or `python3` tag (any case) as candidates. It picks the last candidate containing the string `class ModelNew`, else the last candidate. A `bash` or `text` block earlier in the answer therefore does not hide the Python block after it. 1.0 if the chosen code parses and has a top-level `ModelNew` class, else 0.0. Only one block is scored, so put the whole `ModelNew` in one `python` block, as the prompt asks.
+- **format**: 1.0 if the chosen code parses and has a top-level `ModelNew` class, else 0.0. The extractor chooses the code in this order.
+    1. It pairs opening and closing fences in order to split the text into closed code blocks.
+    2. It keeps only blocks with no language tag or a `python`, `py` or `python3` tag (any case) as candidates.
+    3. It picks the last candidate containing the string `class ModelNew`, else the last candidate. A `bash` or `text` block earlier in the answer therefore does not hide the Python block after it.
+
+    Only one block is scored, so put the whole `ModelNew` in one `python` block, as the prompt asks.
+
 - **correctness**: a stepped score by sandbox status (table below).
-- **speedup**: with the default settings, only for results with status `ok` and `custom_kernel=true`, `0.5 + 0.5 × clamp(log2(speedup), -1, 2)`. `custom_kernel` is true when the code uses Triton and the kernel launch count is not zero, and also when the launch count could not be collected. With `--allow-torch-only`, PyTorch-only correct answers get the same formula. 0.5x gives 0.0, 1x gives 0.5, 2x gives 1.0, 4x or more gives 1.5.
+- **speedup**: with the default settings, only for results with status `ok` and `custom_kernel=true`, `0.5 + 0.5 × clamp(log2(speedup), -1, 2)`. 0.5x gives 0.0, 1x gives 0.5, 2x gives 1.0, 4x or more gives 1.5.
+    - **`custom_kernel`**: true when the code uses Triton and the kernel launch count is not zero, and also when the launch count could not be collected.
+    - **With `--allow-torch-only`**: PyTorch-only correct answers get the same formula.
 
 | Sandbox status | correctness | Notes |
 |---|---|---|
@@ -216,9 +256,14 @@ The log mixes two kinds of lines. The first is the Python dict TRL prints every 
 | `rewards/format_reward/mean`, `rewards/correctness_reward/mean`, `rewards/speedup_reward/mean` | mean per component (answers with None excluded) |
 | `reward`, `reward_std` | mean and standard deviation of the weighted reward |
 | `frac_reward_zero_std` | fraction of groups whose reward standard deviation is 0. Near 1 means all answers in a group tie, so there is almost no learning signal |
-| `completions/mean_length`, `completions/clipped_ratio` | completion length, and the fraction cut at 768 tokens. A cut inside a code block leaves that block unclosed, so format is 0 unless an earlier Python block is closed. A cut in the explanation after a closed block still scores that block |
+| `completions/mean_length`, `completions/clipped_ratio` | completion length, and the fraction cut at 768 tokens |
 | `entropy`, `clip_ratio/*`, `sampling/importance_sampling_ratio/*` | policy entropy, clipping ratio, vLLM correction ratio |
 | `loss`, `grad_norm`, `learning_rate` | the usual training metrics. With `beta` 0, `kl` is not recorded |
+
+When a completion is cut at 768 tokens, the format score depends on where the cut falls.
+
+- **A cut inside a code block**: it leaves that block unclosed, so format is 0 unless an earlier Python block is closed.
+- **A cut in the explanation after a closed block**: that block is still scored.
 
 The `train` line of the terminal summary shows only `loss`, `reward`, `reward_std`, `grad_norm`, `learning_rate` and `epoch` from these. Read the other metrics in the raw dict (the pod log or `GPUSANDBOX_LOG=json`).
 
@@ -237,12 +282,16 @@ The second is the JSON events this repository's code prints to stdout. Only `rew
 |---|---|
 | `batch`, `global_step` | which reward batch this is, and the trainer's `global_step` (completed optimizer steps) at scoring time |
 | `runtime`, `version` | the pool that scored this batch (the routing snapshot of the last sandbox call) |
-| `served_versions` | counts per version recorded in the results. Normally it has a single key equal to `version`. In direct mode a result without a version (a failed request, for example) gets the requested version, so also check the `sandbox_error` count in `status` |
+| `served_versions` | counts per version recorded in the results. Normally it has a single key equal to `version` |
 | `routing_revision` | increases by 1 each time the routing table content changes |
-| `n`, `status` | the number of answers sent to sandboxes in this batch and the count per status. Answers without code, trainer-side policy violations and cache hits are not included. Answers cached from another pool and scored again are included |
+| `n`, `status` | the number of answers sent to sandboxes in this batch and the count per status |
 | `pass_rate`, `custom_kernel_rate` | fraction of `n` that is `ok`, and fraction with `custom_kernel` true (including Triton code whose launches could not be counted) |
 | `mean_speedup` | mean speedup of the `ok` answers (with or without a kernel), null if none |
-| `eval_p50_s`, `eval_p95_s`, `batch_wall_s` | p50/p95 of the evaluation time measured by the sandbox server (`duration_s`), and the time the trainer waited for the whole batch. With no measured time at all (for example every call failed) both p50 and p95 are null; with only one, p95 is null |
+| `eval_p50_s`, `eval_p95_s`, `batch_wall_s` | p50/p95 of the evaluation time measured by the sandbox server (`duration_s`), and the time the trainer waited for the whole batch |
+
+- **`served_versions` in direct mode**: in direct mode a result without a version (a failed request, for example) gets the requested version, so also check the `sandbox_error` count in `status`.
+- **What `n` and `status` count**: answers without code, trainer-side policy violations and cache hits are not included. Answers cached from another pool and scored again are included.
+- **When `eval_p50_s` and `eval_p95_s` are null**: with no measured time at all (for example every call failed) both p50 and p95 are null; with only one, p95 is null.
 
 The `reward_batch` line of the terminal summary shows only `batch`, `runtime/version`, `status`, `pass_rate`, `mean_speedup` and `batch_wall_s` from these. When `served_versions` has more than one version, `MIXED VERSIONS {...}` is appended. Whether the results came from the requested version (`version`) shows in the raw JSON, as the key of `served_versions`.
 
@@ -259,9 +308,19 @@ This asset shows that the on-policy loop runs end to end; it does not promise a 
 | 2 | `row_softmax`, `rms_norm`, `layer_norm` |
 | 3 (excluded by default) | `matmul_bias_relu` (float16) |
 
-A comment in the tasks module calls level 0 the sanity level that small models usually solve. So reward will most likely show up on level 0 first (inference), while level 2, where correct kernels are rare, can have a sparse reward and a high `frac_reward_zero_std`. The default 60 steps cover 120 prompts (about 13 per task), which may be too few to judge a trend. In the 60-step run in the practice account, the `ok` share was 5.3% over the first 20 steps and 6.0% over the last 20, nearly the same.
+A comment in the tasks module calls level 0 the sanity level that small models usually solve.
 
-Diagnose in this order: `reward_batch` appears on steps that have new completions to score, `sandbox_error` is rare, the format reward is above 0, then how the `wrong_answer` and `runtime_error` ratios move, and whether `ok` + custom kernel appears even once.
+- **Level 0**: reward will most likely show up on level 0 first (inference).
+- **Level 2**: correct kernels are rare, so the reward can be sparse and `frac_reward_zero_std` high.
+- **The default 60 steps**: they cover 120 prompts (about 13 per task), which may be too few to judge a trend. In the 60-step run in the practice account, the `ok` share was 5.3% over the first 20 steps and 6.0% over the last 20, nearly the same.
+
+Diagnose in this order.
+
+1. `reward_batch` appears on steps that have new completions to score
+2. `sandbox_error` is rare
+3. the format reward is above 0
+4. how the `wrong_answer` and `runtime_error` ratios move
+5. whether `ok` + custom kernel appears even once
 
 ## Changing options
 
@@ -285,7 +344,8 @@ MODEL_ID=<open-license-model-id> scripts/07_run_grpo.sh 20
             # - --allow-torch-only       # credit for correct PyTorch-only answers
 ```
 
-`--max-level 0` reduces the tasks to three and makes the reward less sparse. `--allow-torch-only` gives correct PyTorch-only answers correctness 1.0 and a speedup score, which changes the task; use it only to check the pipeline.
+- **`--max-level 0`**: reduces the tasks to three and makes the reward less sparse.
+- **`--allow-torch-only`**: gives correct PyTorch-only answers correctness 1.0 and a speedup score, which changes the task. Use it only to check the pipeline.
 
 ## A10G 24 GB memory budget
 
@@ -312,7 +372,12 @@ GPU memory use was not measured. The step times and the per-step reward and loss
 
 ## Time and cost
 
-In the practice account the whole Job took about 50 minutes for the default 60-step run and about 12 minutes for a 5-step run, both including the image pull and model download. Time goes to the trainer image pull on the first run (large, based on `vllm/vllm-openai:v0.33.0`), the model download on every run (`HF_HOME` is an emptyDir), vLLM initialization, and per step the generation, sandbox evaluation and training.
+In the practice account the whole Job took about 50 minutes for the default 60-step run and about 12 minutes for a 5-step run, both including the image pull and model download. Time goes to these stages.
+
+- the trainer image pull on the first run (large, based on `vllm/vllm-openai:v0.33.0`)
+- the model download on every run (`HF_HOME` is an emptyDir)
+- vLLM initialization
+- per step, the generation, sandbox evaluation and training
 
 | Node | Count | USD/hour |
 |---|---|---|
@@ -327,7 +392,9 @@ The EKS control plane, NAT gateway and EBS are billed separately. If a `g4dn.met
 
 1. `kubectl -n rl-trainer get pods -l job-name=grpo-<RUN_ID>` shows the pod Running.
 2. The first event line is `routing  mode direct  runtime gvisor  version v1  ...`.
-3. Every step prints a TRL dict line. Steps with new completions to score also print a `batch` line (`reward_batch`) without `MIXED VERSIONS`, and most of the counts per status are not `sandbox_error`. A step whose completions all lack a code block, all fail the trainer-side policy check or are all cached from one pool passes without `reward_batch`.
+3. Every step prints a TRL dict line.
+    - **Steps with new completions to score**: they also print a `batch` line (`reward_batch`) without `MIXED VERSIONS`, and most of the counts per status are not `sandbox_error`.
+    - **A step whose completions all lack a code block, all fail the trainer-side policy check or are all cached from one pool**: it passes without `reward_batch`.
 4. At the end `done  output /outputs/grpo/final  ...` appears and the Job becomes Complete. The vLLM shutdown error that follows (`cumem_allocator.cpp:249`) also appeared in the 5-step run in the practice account, and that Job was Complete too.
 
 | Symptom | Possible cause | Check |
@@ -341,7 +408,14 @@ The EKS control plane, NAT gateway and EBS are billed separately. If a `g4dn.met
     For `sandbox_error` all three components are None. TRL 1.18.0 leaves such completions out of the group baseline and sets their advantage to 0, so the policy is not punished for infrastructure failures. Many of them do shrink the learning signal, so watch `status` in `reward_batch`.
 
 !!! question "❓ Misconception: if the reward does not rise, the pipeline is broken"
-    With a 1.5B model and 60 steps, a reward that barely moves is not unusual. Suspect the pipeline when `status` is mostly `sandbox_error`, when a `batch` line carries `MIXED VERSIONS`, when the key of `served_versions` in the raw JSON differs from `version`, or when no `reward_batch` line appears during the whole run. With no `reward_batch`, first check the format metric and `completions/clipped_ratio` for cut-off code. Confirm that training finished with the `done` event and the Job's Complete status.
+    With a 1.5B model and 60 steps, a reward that barely moves is not unusual. Suspect the pipeline in these cases.
+
+    - `status` is mostly `sandbox_error`
+    - a `batch` line carries `MIXED VERSIONS`
+    - the key of `served_versions` in the raw JSON differs from `version`
+    - no `reward_batch` line appears during the whole run
+
+    With no `reward_batch`, first check the format metric and `completions/clipped_ratio` for cut-off code. Confirm that training finished with the `done` event and the Job's Complete status.
 
 !!! question "❓ Misconception: strictly on-policy means generation and training distributions are identical"
     Strictly on-policy only means a generated batch is used for one optimizer step. Per the TRL documentation, numerical differences between vLLM generation and the training model add an off-policy component, which TRL 1.18.0 corrects with importance sampling by default (the `sampling/importance_sampling_ratio/*` metrics).

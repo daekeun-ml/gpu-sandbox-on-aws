@@ -48,11 +48,14 @@ If the stack runs scenario B2 or C, there are no EC2 gVisor GPU nodes, so the sc
 
 ## NVIDIA device plugin (CDI mode)
 
-The script first adds the `nvdp` Helm repository, installs `nvdp/nvidia-device-plugin` with `--version "${NVIDIA_DEVICE_PLUGIN_VERSION}"` (default 0.20.1) into `kube-system`, and waits for the DaemonSet with `--wait`. It then sets the plugin's `--cdi-disable-hooks` flag with the command below and waits for the rollout (the script runs it; you do not). Chart v0.20.1 does not expose this flag as a value, so it goes in as an environment variable.
+`04_install_gpu_stack.sh` works in this order. The script runs the `kubectl` command in step 2, so you do not run it yourself.
 
-```bash
-kubectl -n kube-system set env ds/nvdp-nvidia-device-plugin CDI_DISABLE_HOOKS=disable-device-node-modification
-```
+1. It adds the `nvdp` Helm repository, installs `nvdp/nvidia-device-plugin` with `--version "${NVIDIA_DEVICE_PLUGIN_VERSION}"` (default 0.20.1) into `kube-system`, and waits for the DaemonSet with `--wait`.
+2. It sets the plugin's `--cdi-disable-hooks` flag with the command below and waits for the rollout. Chart v0.20.1 does not expose this flag as a value, so it goes in as an environment variable.
+
+    ```bash
+    kubectl -n kube-system set env ds/nvdp-nvidia-device-plugin CDI_DISABLE_HOOKS=disable-device-node-modification
+    ```
 
 ??? note "Why the CDI hook is turned off"
     - nvidia-container-toolkit 1.20.1 on the AMI adds a `disable-device-node-modification` CDI hook, which reads `<rootfs>/proc/driver/nvidia/params`.
@@ -61,7 +64,10 @@ kubectl -n kube-system set env ds/nvdp-nvidia-device-plugin CDI_DISABLE_HOOKS=di
     - The problem does not depend on the GPU model, so `g6` is affected too. A gVisor pod without a GPU on the same node ran fine.
     - runc pods (the trainer) lose only this hook. Without `CAP_MKNOD` they cannot create device nodes anyway.
 
-**What to look for:** GPU 1 on every node (example shape; scenario B has no trainer line). Right after the plugin restarts, the gVisor node can briefly show `0`. The smoke pod requests one GPU and is placed once a node has its GPU registered again, so judge success by the final `cuda ok:` log.
+**What to look for:**
+
+- GPU 1 on every node (example shape; scenario B has no trainer line).
+- Right after the plugin restarts, the gVisor node can briefly show `0`. The smoke pod requests one GPU and is placed once a node has its GPU registered again, so judge success by the final `cuda ok:` log.
 
 ```text
 daemonset.apps/nvdp-nvidia-device-plugin env updated
@@ -73,7 +79,7 @@ ip-192-168-x-x.us-west-2.compute.internal    sandbox-gvisor   1
 ip-192-168-x-x.us-west-2.compute.internal    sandbox-gvisor   1
 ```
 
-**If it fails:** an empty or `<none>` GPU column means `nvidia.com/gpu` is not registered in that node's `status.allocatable`. Check in `kube-system` whether a device plugin pod was placed on that node and read its logs; the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md) has the commands.
+**If it fails:** if the GPU column is empty or `<none>`, `nvidia.com/gpu` is not registered in that node's `status.allocatable`. Check in `kube-system` whether a device plugin pod was placed on that node and read its logs. The commands are in the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md).
 
 The settings in `infra/gpu/nvidia-device-plugin-values.yaml`:
 
@@ -100,7 +106,9 @@ flowchart LR
 
 *Takeaway: runsc turns on nvproxy from the NVIDIA devices in the OCI spec alone, without a prestart hook, so the device plugin only has to hand the devices over through CDI.*
 
-Per the gVisor documentation, runsc is fully CDI-compatible and configures the devices itself (skipping `nvidia-container-runtime-hook`), so no `nvidia-container-runtime` shim is needed, but the host still needs nvidia-container-toolkit. The EKS AL2023 NVIDIA AMI (v20261107) has the driver, nvidia-container-toolkit 1.20.1 and containerd 2.3.7 but no device plugin, and nodeadm enables CDI for kubelet 1.32 and later.
+- **runsc and CDI**: per the gVisor documentation, runsc is fully CDI-compatible and configures the devices itself (skipping `nvidia-container-runtime-hook`), so no `nvidia-container-runtime` shim is needed, but the host still needs nvidia-container-toolkit.
+- **What the AMI holds**: the EKS AL2023 NVIDIA AMI (v20261107) has the driver, nvidia-container-toolkit 1.20.1 and containerd 2.3.7 but no device plugin.
+- **CDI enablement**: nodeadm enables CDI for kubelet 1.32 and later.
 
 ## RuntimeClass and smoke pod
 
@@ -152,7 +160,10 @@ cuda ok: NVIDIA A10G 2048.0
 - The kernel string is the default `4.19.0-gvisor` in the gVisor source (`version.go`). If it differs from the node's kernel (`kubectl get node <node> -o jsonpath='{.status.nodeInfo.kernelVersion}'`), the pod is not using the host kernel directly. The RuntimeClass `gvisor` and the dmesg line `Starting gVisor...` below show that it is gVisor.
 - The first dmesg line is `Starting gVisor...`; gVisor picks the following lines at random.
 
-**If it fails:** if the `cuda ok:` line is missing or you see `smoke pod did not succeed`, read "nvproxy driver version matching" below first, then the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md) (which also covers a pod stuck in `ContainerCreating`). If the pod ends in `StartError` with `reading mounts file: error unmarshaling mounts: unexpected end of JSON input`, the CDI hook setting above is missing; check it with `kubectl -n kube-system get ds nvdp-nvidia-device-plugin -o yaml | grep -A1 CDI_DISABLE_HOOKS`.
+**If it fails:**
+
+- **If the `cuda ok:` line is missing or you see `smoke pod did not succeed`**: read "nvproxy driver version matching" below first, then the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md) (which also covers a pod stuck in `ContainerCreating`).
+- **If the pod ends in `StartError` with `reading mounts file: error unmarshaling mounts: unexpected end of JSON input`**: the CDI hook setting above is missing. Check it with `kubectl -n kube-system get ds nvdp-nvidia-device-plugin -o yaml | grep -A1 CDI_DISABLE_HOOKS`.
 
 ## nvproxy driver version matching
 
@@ -176,10 +187,20 @@ Reward sandboxes run untrusted code, so this repository sticks to supported comb
 ### Symptoms of an unsupported driver
 
 1. **Node boot:** `install-gvisor.sh` leaves `WARNING: NVIDIA driver <version> is not supported by gVisor <release> nvproxy` in the user data log.
-2. **The `04_install_gpu_stack.sh` smoke pod:** runsc refuses to start the container, so the script warns `smoke pod did not succeed; its state and events follow (the pod is deleted when this script exits)` and prints the last 25 lines of `kubectl describe pod`, whose events carry the runsc error. If the container never started, it also warns `no logs from gvisor-smoke-<n>: the container did not start`. The pod is deleted when the script ends, so there is nothing to clean up by hand.
-3. **Pool deployment (`06_deploy_sandboxes.sh`):** sandbox pods never turn Ready (fail closed, as with a CUDA initialization failure for any other reason), and the deployment fails. The script waits up to 30 minutes in `rollout status`. The Deployment's progress deadline (`progressDeadlineSeconds`) is also 1800 seconds, the same as this wait. The headless Service publishes only Ready pod IPs, so the trainer never gets such a pod.
+2. **The `04_install_gpu_stack.sh` smoke pod:** runsc refuses to start the container.
+    - The script warns `smoke pod did not succeed; its state and events follow (the pod is deleted when this script exits)` and prints the last 25 lines of `kubectl describe pod`, whose events carry the runsc error.
+    - If the container never started, it also warns `no logs from gvisor-smoke-<n>: the container did not start`.
+    - The pod is deleted when the script ends, so there is nothing to clean up by hand.
+3. **Pool deployment (`06_deploy_sandboxes.sh`):** sandbox pods never turn Ready (fail closed, as with a CUDA initialization failure for any other reason), and the deployment fails.
+    - The script waits up to 30 minutes in `rollout status`. The Deployment's progress deadline (`progressDeadlineSeconds`) is also 1800 seconds, the same as this wait.
+    - The headless Service publishes only Ready pod IPs, so the trainer never gets such a pod.
 
-The fix is to raise `GVISOR_RELEASE` to a gVisor release that supports the driver, or to use an AMI with a supported driver. Either way, before the switch run `runsc nvproxy list-supported-drivers` from the release you are adopting (the `https://storage.googleapis.com/gvisor/releases/release/<release>/x86_64/gvisor.tar.bz2` that `install-gvisor.sh` downloads) and compare it with the driver version of the new AMI. The method below checks the combination installed on a node that has already booted.
+The fix is one of these.
+
+- Raise `GVISOR_RELEASE` to a gVisor release that supports the driver.
+- Use an AMI with a supported driver.
+
+Either way, before the switch run `runsc nvproxy list-supported-drivers` from the release you are adopting (the `https://storage.googleapis.com/gvisor/releases/release/<release>/x86_64/gvisor.tar.bz2` that `install-gvisor.sh` downloads) and compare it with the driver version of the new AMI. The method below checks the combination installed on a node that has already booted.
 
 ### Checking on the node itself
 
@@ -200,7 +221,12 @@ cat /proc/driver/nvidia/version                         # loaded kernel module v
 /host/usr/local/bin/runsc nvproxy list-supported-drivers | grep -Fw 580.178.04   # use the version from the first line
 ```
 
-**What to look for:** the first prints a module version line containing `580.178.04` (`NVIDIA UNIX x86_64 Kernel Module  580.178.04` for the proprietary module on `g5`). The second prints a version line containing `release-20261109.0`. If the first shows a different version, put that version in place of `580.178.04` in the third. If the third prints the version, the combination is supported; if it prints nothing, it is not.
+**What to look for:**
+
+- **First command**: it prints a module version line containing `580.178.04` (`NVIDIA UNIX x86_64 Kernel Module  580.178.04` for the proprietary module on `g5`).
+- **Second command**: it prints a version line containing `release-20261109.0`.
+- **If the first shows a different version**: put that version in place of `580.178.04` in the third.
+- **Third command**: if it prints the version, the combination is supported; if it prints nothing, it is not.
 
 Debug pods are not deleted automatically, so find and delete it after leaving the shell.
 
@@ -249,7 +275,12 @@ Prices are us-east-1 and us-west-2 list prices.
 - `ops/verify.sh gvisor v1` passed: 6 golden verdicts PASS (including `vector_add_triton` and `relu_bias_triton`), 4 egress targets blocked, and the NetworkPolicy blocked connections from the `default` namespace.
 - A 5-step GRPO run with the trainer on `g5.2xlarge` finished.
 
-This combination was verified by this repository in a practice account, so after changing the instance type, driver, AMI or gVisor version, re-run the `04_install_gpu_stack.sh` smoke test and `scripts/ops/verify.sh`. If the default pool (`sandbox-gvisor-v1`, 2 replicas) holds the GPUs of both nodes, the smoke pod cannot get a GPU. The script then stops before it starts the smoke pod, with `every GPU on the sandbox-gvisor nodes is in use` and the command to scale the pool down. Free one GPU with `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=1` and run it again. Once you see `cuda ok:`, bring the pool back to 2 with `scripts/06_deploy_sandboxes.sh gvisor v1` and run `verify.sh`.
+This combination was verified by this repository in a practice account, so after changing the instance type, driver, AMI or gVisor version, re-run the `04_install_gpu_stack.sh` smoke test and `scripts/ops/verify.sh`.
+
+If the default pool (`sandbox-gvisor-v1`, 2 replicas) holds the GPUs of both nodes, the smoke pod cannot get a GPU. The script then stops before it starts the smoke pod, with `every GPU on the sandbox-gvisor nodes is in use` and the command to scale the pool down.
+
+1. Free one GPU with `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=1` and run it again.
+2. Once you see `cuda ok:`, bring the pool back to 2 with `scripts/06_deploy_sandboxes.sh gvisor v1` and run `verify.sh`.
 
 `g6` is a supported alternative. It loads the open driver, which the gVisor documentation covers, and it costs less (`g6.xlarge` 0.8048, `g6.2xlarge` 0.9776). To use it, change `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` (`HYPERPOD_*` for HyperPod) in `scripts/config.env`.
 
@@ -290,7 +321,12 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
   --nodegroup-name sandbox-gvisor --scaling-config minSize=0,maxSize=4,desiredSize=0
 ```
 
-**What to look for:** the command returns JSON with `"type": "ConfigUpdate"`. After a few minutes, `kubectl get nodes -l gpusandbox/role=sandbox-gvisor` (needs the tunnel) lists no nodes. When you continue, run it with `desiredSize=2` (why this value lives outside the stack: "Time and cost" in [01 Cluster and images](01_cluster_and_images.md)). When you finish the hands-on, run [99 Cleanup](99_cleanup.md).
+**What to look for:**
+
+- The command returns JSON with `"type": "ConfigUpdate"`.
+- After a few minutes, `kubectl get nodes -l gpusandbox/role=sandbox-gvisor` (needs the tunnel) lists no nodes.
+
+When you continue, run it with `desiredSize=2` (why this value lives outside the stack: "Time and cost" in [01 Cluster and images](01_cluster_and_images.md)). When you finish the hands-on, run [99 Cleanup](99_cleanup.md).
 
 ## Next step
 

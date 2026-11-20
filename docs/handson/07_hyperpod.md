@@ -5,7 +5,9 @@
 
 ## 기존 Pain Point
 
-며칠 동안 실행되는 on-policy 학습에서 GPU 노드 하나가 고장 나면, 운영자가 직접 노드를 교체하고 job을 다시 시작해야 합니다. 생성 단계나 샌드박스 풀이 멈추면 프로세스는 실행 중인데 학습은 진행되지 않습니다. 이 상태는 겉으로는 정상처럼 보여서 알아차리기 어렵습니다. 샌드박스를 HyperPod 노드에서 실행하려 해도, HyperPod 노드는 HyperPod AMI와 그 AMI의 드라이버를 쓰므로 EC2 노드에서 쓰던 런타임 설치 방법을 그대로 적용할 수 없습니다.
+- **GPU 노드 고장**: 며칠 동안 실행되는 on-policy 학습에서 GPU 노드 하나가 고장 나면, 운영자가 직접 노드를 교체하고 job을 다시 시작해야 합니다.
+- **생성 단계나 샌드박스 풀의 멈춤**: 프로세스는 실행 중인데 학습은 진행되지 않습니다. 이 상태는 겉으로는 정상처럼 보여서 알아차리기 어렵습니다.
+- **HyperPod 노드에서 샌드박스 실행**: HyperPod 노드는 HyperPod AMI와 그 AMI의 드라이버를 쓰므로 EC2 노드에서 쓰던 런타임 설치 방법을 그대로 적용할 수 없습니다.
 
 ![두 패널 그림입니다. a: 며칠 걸리는 on-policy 학습 중 GPU 노드가 고장 나면, 사람이 노드를 교체하고 job을 다시 시작할 때까지 기다려야 합니다. 생성이나 샌드박스 풀이 멈추면(hang) 프로세스는 살아 있지만 학습이 진행되지 않아 겉으로는 정상처럼 보입니다. HyperPod 노드에 둔 gVisor GPU 풀은 기본 AMI의 드라이버 595.91.07이 nvproxy 목록에 없어 실행되지 않습니다. b: NodeRecovery: Automatic이 노드를 재부팅하거나 교체하고, training operator가 job을 재시작합니다. 로그 패턴으로 hang을 감지하면 elastic agent와 training operator가 job을 재시작합니다. B2는 드라이버 580.178.04가 포함된 custom AMI로 샌드박스 전용 인스턴스 그룹에 gVisor 풀을 시작합니다.](../images/figures/handson-07_hyperpod.svg)
 
@@ -84,7 +86,14 @@ flowchart LR
 scripts/01_check_prereqs.sh
 ```
 
-**확인할 것:** 마지막 줄이 `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.`입니다. HyperPod 인스턴스는 EC2 쿼터 대신 `ml.<유형> for cluster usage` 쿼터를 씁니다. B1은 EC2 G/VT 쿼터 8 vCPU(`g5.xlarge` 2대)와 HyperPod `ml.g5.2xlarge` 1대분이 필요합니다. B2에는 EC2 GPU 노드가 없고, HyperPod `ml.g5.2xlarge` 1대분과 `ml.g5.xlarge` 2대분이 있어야 합니다. Service Quotas 콘솔의 Amazon SageMaker 항목에서 이 값을 확인하고, 부족하면 증가를 요청하세요.
+**확인할 것:** 마지막 줄이 `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.`입니다.
+
+HyperPod 인스턴스는 EC2 쿼터 대신 `ml.<유형> for cluster usage` 쿼터를 씁니다.
+
+- **B1**: EC2 G/VT 쿼터 8 vCPU(`g5.xlarge` 2대)와 HyperPod `ml.g5.2xlarge` 1대분이 필요합니다.
+- **B2**: EC2 GPU 노드가 없고, HyperPod `ml.g5.2xlarge` 1대분과 `ml.g5.xlarge` 2대분이 있어야 합니다.
+
+HyperPod의 `ml.<유형> for cluster usage` 쿼터는 Service Quotas 콘솔의 Amazon SageMaker 항목에서 확인하고, 부족하면 증가를 요청하세요.
 
 **문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "설정과 스크립트" 항목을 보세요.
 
@@ -112,9 +121,15 @@ scripts/02_create_cluster.sh --hyperpod
 cdk/tunnel.sh    # in a second terminal; keep it running for every kubectl and helm step
 ```
 
-**확인할 것:** 배포가 끝나면 `Outputs`에 `EndpointPublicAccess = false`가 나옵니다. 터널을 연 뒤 `kubectl get nodes -L gpusandbox/role`의 `ROLE` 열에 `system` 2대와 `sandbox-gvisor` 2대가 보이고, `trainer`는 없어야 정상입니다.
+**확인할 것:**
 
-CDK 스택은 HyperPod가 요구하는 인증 모드 `API_AND_CONFIG_MAP`과, NetworkPolicy를 켠 VPC CNI를 설정합니다. 또 4단계가 subnet을 찾을 때 쓰는 `kubernetes.io/role/internal-elb=1` 태그를 private subnet에 추가합니다. Kubernetes 1.36용 AMI는 HyperPod EKS AMI 릴리스 노트에 있지만, 전제조건 페이지에는 아직 1.35까지만 적혀 있어 두 문서의 내용이 다릅니다.
+- 배포가 끝나면 `Outputs`에 `EndpointPublicAccess = false`가 나옵니다.
+- 터널을 연 뒤 `kubectl get nodes -L gpusandbox/role`의 `ROLE` 열에 `system` 2대와 `sandbox-gvisor` 2대가 보이고, `trainer`는 없어야 정상입니다.
+
+Kubernetes 1.36용 AMI는 HyperPod EKS AMI 릴리스 노트에 있지만, 전제조건 페이지에는 아직 1.35까지만 적혀 있어 두 문서의 내용이 다릅니다.
+
+??? note "CDK 스택이 HyperPod용으로 설정하는 것"
+    CDK 스택은 HyperPod가 요구하는 인증 모드 `API_AND_CONFIG_MAP`과, NetworkPolicy를 켠 VPC CNI를 설정합니다. 또 4단계가 subnet을 찾을 때 쓰는 `kubernetes.io/role/internal-elb=1` 태그를 private subnet에 추가합니다.
 
 **문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "클러스터와 노드" 항목(vCPU 한도, AZ, 용량 부족)을 보세요.
 
@@ -141,11 +156,23 @@ HYPERPOD=1 scripts/03_build_push_images.sh
 scripts/04_install_gpu_stack.sh
 ```
 
-**확인할 것:** 출력의 `allocatable GPUs per node` 표에 `sandbox-gvisor` 노드가 GPU 1개씩 보입니다. device plugin이 재시작된 직후에는 잠시 `0`으로 보일 수 있습니다. 출력 끝에는 smoke pod 로그의 `cuda ok: NVIDIA A10G 2048.0` 줄이 나옵니다. HyperPod 노드는 4단계에서 만들어지므로 아직 표에 없습니다.
+**확인할 것:**
 
-이 device plugin은 `gpusandbox/device-plugin=cdi` label이 있는 노드에서만 실행됩니다. B1에서는 EC2 sandbox 노드가 여기에 해당하고, HyperPod trainer 노드에는 4단계의 dependency chart가 자체 device plugin을 설치합니다. [B2](#b2)의 HyperPod sandbox 인스턴스 그룹에도 이 label이 붙으므로 이 plugin이 실행됩니다.
+- 출력의 `allocatable GPUs per node` 표에 `sandbox-gvisor` 노드가 GPU 1개씩 보입니다. device plugin이 재시작된 직후에는 잠시 `0`으로 보일 수 있습니다.
+- 출력 끝에는 smoke pod 로그의 `cuda ok: NVIDIA A10G 2048.0` 줄이 나옵니다.
+- HyperPod 노드는 4단계에서 만들어지므로 아직 표에 없습니다.
 
-Kata 샌드박스도 쓰려면(선택 사항, 절차는 [03 Kata 샌드박스](03_kata.md)) 아래 순서로 실행합니다. `WITH_KATA_GPU=1`인데 `KATA_IOMMU_AMI_ID`가 비어 있으면 클러스터 생성이 CDK 단계에서 멈추므로, IOMMU AMI를 먼저 빌드합니다. `scripts/kata/gpu_nodes.sh`는 `KATA_IOMMU_AMI_ID`가 비어 있을 때만 AMI를 빌드하고 멈추는데, 이것은 정상입니다. `08_cleanup.sh`는 AMI를 지워도 `config.env`의 `KATA_IOMMU_AMI_ID` 줄을 남기므로, 정리 뒤 다시 실습할 때는 그 줄을 지운 다음 실행하세요.
+이 device plugin은 `gpusandbox/device-plugin=cdi` label이 있는 노드에서만 실행됩니다.
+
+- **B1의 EC2 sandbox 노드**: 여기에 해당합니다.
+- **B1의 HyperPod trainer 노드**: 4단계의 dependency chart가 자체 device plugin을 설치합니다.
+- **[B2](#b2)의 HyperPod sandbox 인스턴스 그룹**: 이 label이 붙으므로 이 plugin이 실행됩니다.
+
+Kata 샌드박스도 쓰려면(선택 사항, 절차는 [03 Kata 샌드박스](03_kata.md)) 아래 순서로 실행합니다.
+
+- **IOMMU AMI를 먼저 빌드합니다**: `WITH_KATA_GPU=1`인데 `KATA_IOMMU_AMI_ID`가 비어 있으면 클러스터 생성이 CDK 단계에서 멈추기 때문입니다.
+- **`KATA_IOMMU_AMI_ID`가 비어 있을 때 `scripts/kata/gpu_nodes.sh`를 실행하면**: AMI를 빌드하고 멈추는데, 이것은 정상입니다. 스크립트가 AMI를 빌드하고 멈추는 것은 이 값이 비어 있을 때뿐입니다.
+- **정리 뒤 다시 실습할 때**: `08_cleanup.sh`는 AMI를 지워도 `config.env`의 `KATA_IOMMU_AMI_ID` 줄을 남기므로, 그 줄을 지운 다음 실행하세요.
 
 ```bash
 # optional Kata pools: see 03_kata.md
@@ -172,11 +199,15 @@ scripts/hyperpod/create.sh
 
 | 단계 | 하는 일 | 이유 |
 |---|---|---|
-| 1 dependency chart | `aws/sagemaker-hyperpod-cli`를 clone하고 `helm_chart/HyperPodHelmChart`를 `hyperpod-dependencies`라는 이름으로 `kube-system`에 설치 | API로 HyperPod를 만들 때 필요합니다. main 브랜치 values 기준으로 health monitoring agent, deep health check, job auto-restart, MPI operator, NVIDIA, EFA, Neuron device plugin이 기본으로 켜집니다 |
+| 1 dependency chart | `aws/sagemaker-hyperpod-cli`를 clone하고 `helm_chart/HyperPodHelmChart`를 `hyperpod-dependencies`라는 이름으로 `kube-system`에 설치 | API로 HyperPod를 만들 때 필요합니다 |
 | 2 lifecycle bucket | `HYPERPOD_LCS_BUCKET`이 없으면 만들고, Block Public Access 네 가지(`BlockPublicAcls`, `IgnorePublicAcls`, `BlockPublicPolicy`, `RestrictPublicBuckets`)를 모두 켠 뒤 `infra/hyperpod/lifecycle/`을 올림 | lifecycle script는 노드가 만들어질 때 실행되어 노드 설정을 바꿀 수 있으므로 공개되면 안 됩니다 |
 | 3 execution role | `${HYPERPOD_CLUSTER_NAME}-execution`: `sagemaker.amazonaws.com` 신뢰, `AmazonSageMakerClusterInstanceRolePolicy` + inline `hyperpod-eks`(EC2 ENI, ECR pull) + inline `lifecycle-bucket-read` | HyperPod 노드용 역할은 EKS 노드 역할과 따로 둡니다 |
-| 4 CreateCluster | `Orchestrator.Eks.ClusterArn`, 인스턴스 그룹 `trainer`(`ml.g5.2xlarge` 1대, `ThreadsPerCore` 2(SMT를 켜서 vCPU 8개, trainer는 7개 요청), `OnCreate` `on_create.sh`), EKS 클러스터 보안 그룹과 private subnet(CDK 스택이 추가한 `kubernetes.io/role/internal-elb=1` 태그), `NodeRecovery: Automatic`. InService나 Failed가 될 때까지 60초 간격으로 기다림 | HyperPod 노드, EC2 노드, control plane이 같은 보안 그룹을 써서 서로 통신합니다 |
+| 4 CreateCluster | `Orchestrator.Eks.ClusterArn`, 인스턴스 그룹 `trainer`, EKS 클러스터 보안 그룹과 private subnet, `NodeRecovery: Automatic`으로 만듦. InService나 Failed가 될 때까지 60초 간격으로 기다림 | HyperPod 노드, EC2 노드, control plane이 같은 보안 그룹을 써서 서로 통신합니다 |
 | 5 training operator | `aws eks create-addon --addon-name amazon-sagemaker-hyperpod-training-operator` 뒤 `addon-active` 대기 | HyperPodPyTorchJob CRD와 controller를 설치합니다 |
+
+- **1단계 dependency chart의 기본값**: main 브랜치 values 기준으로 health monitoring agent, deep health check, job auto-restart, MPI operator, NVIDIA, EFA, Neuron device plugin이 기본으로 켜집니다.
+- **4단계의 인스턴스 그룹 `trainer`**: `ml.g5.2xlarge` 1대, `ThreadsPerCore` 2(SMT를 켜서 vCPU 8개, trainer는 7개 요청), `OnCreate` `on_create.sh`입니다.
+- **4단계의 private subnet**: CDK 스택이 추가한 `kubernetes.io/role/internal-elb=1` 태그로 찾습니다.
 
 **확인할 것:**
 
@@ -189,10 +220,19 @@ NAME              STATUS   ROLES    AGE   VERSION   NODE-HEALTH-STATUS   INSTANC
 <hyperpod-node>   Ready    <none>   5m    v1.36.x   Schedulable          ml.g5.2xlarge
 ```
 
-버킷 이름에 `sagemaker-` 접두사를 붙이는 것은 HyperPod 관리형 정책이 이 접두사를 전제로 한다는 `config.env.example` 주석을 따른 것입니다. 버킷 읽기 권한은 별도의 inline 정책이 부여합니다. `cluster.json.tpl`은 deep health check(`OnStartDeepHealthChecks`: `InstanceStress`, `InstanceConnectivity` 등)를 설정하지 않으니, 필요하면 인스턴스 그룹에 직접 추가하세요.
+??? note "버킷 이름의 `sagemaker-` 접두사"
+    버킷 이름에 `sagemaker-` 접두사를 붙이는 것은 HyperPod 관리형 정책이 이 접두사를 전제로 한다는 `config.env.example` 주석을 따른 것입니다. 버킷 읽기 권한은 별도의 inline 정책이 부여합니다.
+
+`cluster.json.tpl`은 deep health check(`OnStartDeepHealthChecks`: `InstanceStress`, `InstanceConnectivity` 등)를 설정하지 않으니, 필요하면 인스턴스 그룹에 직접 추가하세요.
 
 !!! warning "training operator 전제조건"
-    AWS 문서에 따르면 training operator의 전제조건은 cert-manager와 EKS Pod Identity Agent입니다. 또 CLI로 설치하기 전에 관리형 정책 `AmazonSageMakerHyperPodTrainingOperatorAccess`를 연결한 역할과 pod identity association(namespace `aws-hyperpod`, service account `hp-training-operator-controller-manager`)을 만들어야 합니다. 이 클러스터에는 `eks-pod-identity-agent` add-on이 설치되어 있습니다. 하지만 스크립트 5단계는 `create-addon`만 실행하고, dependency chart의 cert-manager는 기본값이 꺼져 있습니다. 스크립트는 이 준비를 기다리지 않고 5단계까지 이어서 실행하므로, `create.sh`를 실행하기 전에 [설치 문서](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-eks-operator-install.html)에 따라 cert-manager와, 역할 및 pod identity association을 준비하세요. `eks-pod-identity-agent` add-on이 `ACTIVE`인지도 확인합니다.
+    AWS 문서에 따르면 training operator의 전제조건은 다음과 같습니다.
+
+    - cert-manager
+    - EKS Pod Identity Agent
+    - CLI로 설치하기 전에 만드는, 관리형 정책 `AmazonSageMakerHyperPodTrainingOperatorAccess`를 연결한 역할과 pod identity association(namespace `aws-hyperpod`, service account `hp-training-operator-controller-manager`)
+
+    이 클러스터에는 `eks-pod-identity-agent` add-on이 설치되어 있습니다. 하지만 스크립트 5단계는 `create-addon`만 실행하고, dependency chart의 cert-manager는 기본값이 꺼져 있습니다. 스크립트는 이 준비를 기다리지 않고 5단계까지 이어서 실행하므로, `create.sh`를 실행하기 전에 [설치 문서](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-eks-operator-install.html)에 따라 cert-manager와, 역할 및 pod identity association을 준비하세요. `eks-pod-identity-agent` add-on이 `ACTIVE`인지도 확인합니다.
 
     같은 시점의 operator 문서는 지원 버전으로 Kubernetes 1.28~1.33, PyTorch 2.4.0~2.7.1을 나열합니다. 이 저장소는 Kubernetes 1.36과 vLLM 이미지의 PyTorch 2.14.0을 쓰므로, 이 조합에서 operator가 동작하는지는 확인되지 않았습니다. 클러스터 버전에 맞는 add-on 버전은 다음 명령으로 확인합니다.
 
@@ -204,7 +244,13 @@ NAME              STATUS   ROLES    AGE   VERSION   NODE-HEALTH-STATUS   INSTANC
 
     **확인할 것:** 표에 버전이 하나 이상 나옵니다. 비어 있으면 1.36용 add-on이 아직 없다는 뜻입니다.
 
-스크립트를 다시 실행하면 1단계의 Helm chart 설치와 2단계의 Block Public Access 설정, lifecycle 파일 업로드는 다시 적용됩니다. 버킷 생성은 버킷이 없을 때만, 3단계의 역할 생성과 정책 연결은 역할이 없을 때만 실행합니다. 하지만 4단계의 `create-cluster`는 같은 이름의 클러스터가 이미 있으면 실패할 것으로 봅니다(추론). 그래서 5단계만 실패했다면 스크립트를 다시 실행하지 말고, 전제조건을 준비한 뒤 다음 두 명령만 실행하세요.
+스크립트를 다시 실행하면 단계마다 다르게 동작합니다.
+
+- **다시 적용하는 것**: 1단계의 Helm chart 설치와 2단계의 Block Public Access 설정, lifecycle 파일 업로드
+- **없을 때만 실행하는 것**: 버킷 생성은 버킷이 없을 때만, 3단계의 역할 생성과 정책 연결은 역할이 없을 때만 실행합니다.
+- **4단계의 `create-cluster`**: 같은 이름의 클러스터가 이미 있으면 실패할 것으로 봅니다(추론).
+
+그래서 5단계만 실패했다면 스크립트를 다시 실행하지 말고, 전제조건을 준비한 뒤 다음 두 명령만 실행하세요.
 
 ```bash
 source scripts/config.env
@@ -250,7 +296,10 @@ kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '"event
 
 `hyperpod/run_grpo.sh`는 `RUN_ID`, `MAX_STEPS`(첫 번째 인자, 예: `scripts/hyperpod/run_grpo.sh 20`), `MODEL_ID`를 [05](05_grpo_training.md)의 스크립트와 같은 방식으로 정하고 `k8s/trainer/hyperpod-job-grpo.yaml.tpl`을 렌더링해 적용합니다. reward, 로그 형식, 메모리 계산은 05와 같습니다.
 
-**문제가 생기면:** pod가 Pending이거나 `hyperpodrun`을 찾지 못하면 [문제 해결](../reference/troubleshooting.md)의 "HyperPod" 항목을, 이벤트가 나오지 않으면 같은 페이지의 "학습" 항목을 보세요.
+**문제가 생기면:**
+
+- **pod가 Pending이거나 `hyperpodrun`을 찾지 못하면**: [문제 해결](../reference/troubleshooting.md)의 "HyperPod" 항목을 보세요.
+- **이벤트가 나오지 않으면**: 같은 페이지의 "학습" 항목을 보세요.
 
 ## HyperPodPyTorchJob 템플릿
 
@@ -275,9 +324,17 @@ AWS 문서에 따르면 규칙이 HANGING 상태가 되면 HyperPod elastic agen
 샌드박스로 보낸 completion이 없는 step에서는 `reward_batch` 줄이 출력되지 않습니다. 그래서 모든 completion이 코드 없음이나 trainer 쪽 정책 위반으로 처리되는 상태가 30분 넘게 이어지면, `RewardStalled` 규칙이 이를 hang으로 판단할 수 있습니다.
 
 !!! note "재시작 뒤 checkpoint"
-    `train_grpo.py`는 시작할 때 `/outputs/grpo`의 마지막 checkpoint(20 step마다 저장)에서 이어 학습합니다. 그런데 emptyDir는 pod가 삭제되면 함께 삭제됩니다. 그래서 pod가 다시 만들어지는 full job 재시작이나 노드 교체 뒤에는 디렉터리가 비어 있어 학습이 처음부터 다시 시작됩니다. process 수준 재시작에서는 기존 pod를 그대로 쓰는지에 따라 결과가 달라집니다. 노드 교체 뒤에도 학습을 이어 가려면 `/outputs`에 FSx for Lustre 같은 공유 스토리지 PVC를 마운트하세요([06 veRL로 확장](../production/06_scaling_with_verl.md)).
+    `train_grpo.py`는 시작할 때 `/outputs/grpo`의 마지막 checkpoint(20 step마다 저장)에서 이어 학습합니다. 그런데 emptyDir는 pod가 삭제되면 함께 삭제됩니다.
 
-HyperPod 노드에는 두 가지 제약이 있습니다. 첫째, ENI가 하나라 노드당 pod 수가 적습니다. `ml.g6.2xlarge`는 최대 14개(HyperPod chart의 DaemonSet 포함)였고, `ml.g5.2xlarge`의 한도는 확인하지 않았습니다. 둘째, 기본적으로 hostNetwork pod만 IMDS에 접근할 수 있으므로 trainer pod는 노드 자격 증명을 읽을 수 없습니다.
+    - **pod가 다시 만들어지는 full job 재시작이나 노드 교체 뒤**: 디렉터리가 비어 있어 학습이 처음부터 다시 시작됩니다.
+    - **process 수준 재시작**: 기존 pod를 그대로 쓰는지에 따라 결과가 달라집니다.
+
+    노드 교체 뒤에도 학습을 이어 가려면 `/outputs`에 FSx for Lustre 같은 공유 스토리지 PVC를 마운트하세요([06 veRL로 확장](../production/06_scaling_with_verl.md)).
+
+HyperPod 노드에는 두 가지 제약이 있습니다.
+
+- **노드당 pod 수**: ENI가 하나라 노드당 pod 수가 적습니다. `ml.g6.2xlarge`는 최대 14개(HyperPod chart의 DaemonSet 포함)였고, `ml.g5.2xlarge`의 한도는 확인하지 않았습니다.
+- **IMDS 접근**: 기본적으로 hostNetwork pod만 IMDS에 접근할 수 있으므로 trainer pod는 노드 자격 증명을 읽을 수 없습니다.
 
 ## 확인 방법
 
@@ -342,7 +399,12 @@ flowchart LR
 | HyperPod EKS AMI 1.33 (x86_64) | 580.178.04 | 지원 |
 | EKS AL2023 NVIDIA AMI v20261107 (EC2 gVisor 노드) | 580.178.04 | 지원 |
 
-gVisor 개발 브랜치에도 2026-11-14 기준 595.91.07은 없습니다. 그래서 클러스터를 1.33(extended support)으로 낮추는 대신 HyperPod가 공식 지원하는 custom AMI를 씁니다. AWS 문서에 따르면 HyperPod 공개 base AMI로 만든 이미지를 인스턴스 그룹의 `ImageId`에 지정할 수 있으며, 문서는 사용 예로 "driver customizations"를 명시합니다. 새로 설치하는 드라이버 버전은 EC2 gVisor 노드와 같은 580.178.04입니다. 그래서 B1과 B2는 같은 드라이버 버전에서 같은 verdict를 낼 것으로 봅니다(B2 미검증). 다만 EC2 `g5.xlarge` 노드의 AMI는 proprietary 커널 모듈(GSP 꺼짐)을 로드하고, B2 AMI는 open 커널 모듈을 설치하므로 모듈 종류는 다릅니다.
+gVisor 개발 브랜치에도 2026-11-14 기준 595.91.07은 없습니다. 그래서 클러스터를 1.33(extended support)으로 낮추는 대신 HyperPod가 공식 지원하는 custom AMI를 씁니다. AWS 문서에 따르면 HyperPod 공개 base AMI로 만든 이미지를 인스턴스 그룹의 `ImageId`에 지정할 수 있으며, 문서는 사용 예로 "driver customizations"를 명시합니다.
+
+새로 설치하는 드라이버 버전은 EC2 gVisor 노드와 같은 580.178.04입니다.
+
+- **verdict**: 그래서 B1과 B2는 같은 드라이버 버전에서 같은 verdict를 낼 것으로 봅니다(B2 미검증).
+- **커널 모듈 종류**: 다만 EC2 `g5.xlarge` 노드의 AMI는 proprietary 커널 모듈(GSP 꺼짐)을 로드하고, B2 AMI는 open 커널 모듈을 설치하므로 모듈 종류는 다릅니다.
 
 | 항목 | B1 | B2 |
 |---|---|---|
@@ -369,13 +431,22 @@ scripts/04_install_gpu_stack.sh
 ACTIVE_RUNTIME=gvisor-hyperpod scripts/05_setup_namespaces_auth.sh
 ```
 
-**확인할 것:** 첫 명령은 CDK `Outputs`(`EndpointPublicAccess = false`)를 출력하고 끝납니다. `03_build_push_images.sh`는 끝에 `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI`, `CONTROL_IMAGE_URI`의 `export` 세 줄을 출력만 하므로, 이 세 줄을 `scripts/config.env`에 추가한 뒤 다음 명령을 실행하세요. 추가하지 않으면 5단계의 풀 배포가 `SANDBOX_IMAGE_URI` 검사에서 멈춥니다. 터널을 연 뒤 `kubectl get nodes`를 실행하면 `system` 노드 두 대만 나옵니다. 아직 GPU 노드가 없으므로 `04_install_gpu_stack.sh`의 GPU 표가 비어 있어도 정상입니다. `05_setup_namespaces_auth.sh`의 마지막 출력에는 `"active": {"runtime": "gvisor-hyperpod", "version": "v1"}`이 보입니다.
+**확인할 것:**
+
+- 첫 명령은 CDK `Outputs`(`EndpointPublicAccess = false`)를 출력하고 끝납니다.
+- `03_build_push_images.sh`는 끝에 `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI`, `CONTROL_IMAGE_URI`의 `export` 세 줄을 출력만 하므로, 이 세 줄을 `scripts/config.env`에 추가한 뒤 다음 명령을 실행하세요. 추가하지 않으면 5단계의 풀 배포가 `SANDBOX_IMAGE_URI` 검사에서 멈춥니다.
+- 터널을 연 뒤 `kubectl get nodes`를 실행하면 `system` 노드 두 대만 나옵니다.
+- 아직 GPU 노드가 없으므로 `04_install_gpu_stack.sh`의 GPU 표가 비어 있어도 정상입니다.
+- `05_setup_namespaces_auth.sh`의 마지막 출력에는 `"active": {"runtime": "gvisor-hyperpod", "version": "v1"}`이 보입니다.
 
 ### 2단계: custom AMI 빌드 (`hyperpod/build_b2_ami.sh`)
 
 HyperPod EKS 1.36 base AMI로 builder 인스턴스(`m6i.large`)를 띄워 드라이버를 바꾸고 이미지를 만듭니다. 커널 모듈은 GPU 없이도 빌드할 수 있으므로 GPU 인스턴스는 쓰지 않습니다. 빌드에는 20~40분이 걸릴 것으로 봅니다(추정).
 
-스크립트는 먼저 클러스터 VPC에 builder 전용 보안 그룹을 만들어 builder에 붙입니다. 이 보안 그룹은 인바운드를 모두 막고 아웃바운드는 HTTPS(443)만 허용합니다(dnf 저장소, NVIDIA 설치 파일, gVisor 다운로드). AMI를 만든 뒤에는 builder를 종료하고, 종료가 끝나면 보안 그룹을 지웁니다. builder를 띄우기 전에 스크립트가 멈춰도 보안 그룹은 지워집니다.
+스크립트는 먼저 클러스터 VPC에 builder 전용 보안 그룹을 만들어 builder에 붙입니다. 이 보안 그룹은 인바운드를 모두 막고 아웃바운드는 HTTPS(443)만 허용합니다(dnf 저장소, NVIDIA 설치 파일, gVisor 다운로드).
+
+- **AMI를 만든 뒤**: builder를 종료하고, 종료가 끝나면 보안 그룹을 지웁니다.
+- **builder를 띄우기 전에 스크립트가 멈춰도**: 보안 그룹은 지워집니다.
 
 ```bash
 scripts/hyperpod/build_b2_ami.sh
@@ -391,11 +462,16 @@ builder 인스턴스는 다음 작업을 실행합니다(`infra/hyperpod/ami/cus
 
 | 순서 | 하는 일 |
 |---|---|
-| 1 | base AMI의 드라이버 설치 방식을 확인합니다. dnf 패키지면 같은 이름의 패키지를 580.178.04로 한 번에 바꾸고 버전을 고정합니다. `.run` 설치 파일이면 NVIDIA의 체크섬과 `config.env`의 체크섬 두 가지로 확인한 뒤 open 커널 모듈로 다시 설치합니다 |
+| 1 | base AMI의 드라이버 설치 방식을 확인하고, 그 방식에 맞게 드라이버를 바꿉니다(표 아래 목록) |
 | 2 | 디스크의 `nvidia` 모듈이 580.178.04이고 open 커널 모듈(`Dual MIT/GPL`)인지 확인합니다 |
 | 3 | 버전을 고정한 gVisor의 sha512를 확인한 뒤 설치하고, `runsc nvproxy list-supported-drivers`에 580.178.04가 있는지 확인합니다 |
 | 4 | cloud-init 상태를 지웁니다. 그러면 이 이미지로 시작하는 노드에서 cloud-init이 첫 부팅처럼 처음부터 실행됩니다 |
 | 5 | 결과 한 줄을 serial console에 쓰고 전원을 끕니다. 스크립트는 이 줄을 읽어 성공했을 때만 AMI를 만듭니다 |
+
+1번 작업은 드라이버 설치 방식에 따라 다릅니다.
+
+- **dnf 패키지면**: 같은 이름의 패키지를 580.178.04로 한 번에 바꾸고 버전을 고정합니다.
+- **`.run` 설치 파일이면**: NVIDIA의 체크섬과 `config.env`의 체크섬 두 가지로 확인한 뒤 open 커널 모듈로 다시 설치합니다.
 
 **확인할 것:** 출력이 아래 형태로 끝나면 성공입니다(예시). `export` 줄을 `scripts/config.env`에 추가하세요.
 
@@ -438,11 +514,18 @@ scripts/hyperpod/create.sh --b2
 | `LifeCycleConfig.OnCreate` | `on_create_sandbox.sh` | 드라이버 확인, `runsc` 등록, node guard, containerd 재시작 |
 | `ThreadsPerCore` | 2 | SMT를 켜서 vCPU가 4개입니다. 샌드박스 pod는 CPU 3개를 요청합니다(`gvisor-hyperpod.env`) |
 | `KubernetesConfig.Labels` | `gpusandbox/role=sandbox-hyperpod`, `gpusandbox/device-plugin=cdi` | RuntimeClass `gvisor-hyperpod`의 nodeSelector와 CDI device plugin이 이 label로 노드를 선택합니다 |
-| `KubernetesConfig.Taints` | `gpusandbox/role=sandbox-hyperpod:NoSchedule` | trainer 같은 다른 pod가 이 노드에 스케줄되지 않게 합니다. HyperPod chart의 device plugin에도 이 taint의 toleration이 없으므로, 두 plugin이 같은 GPU를 중복으로 등록하지 않습니다 |
+| `KubernetesConfig.Taints` | `gpusandbox/role=sandbox-hyperpod:NoSchedule` | trainer 같은 다른 pod가 이 노드에 스케줄되지 않게 합니다 |
+
+- **taint와 device plugin**: HyperPod chart의 device plugin에도 이 taint의 toleration이 없으므로, 두 plugin이 같은 GPU를 중복으로 등록하지 않습니다.
 
 HyperPod 문서에 따르면 deep health check를 켠 인스턴스 그룹에는 custom taint를 설정할 수 없습니다. 이 템플릿은 deep health check를 켜지 않습니다.
 
-lifecycle script(`on_create_sandbox.sh`)는 조건이 맞지 않으면 건너뛰지 않고 실패합니다. gVisor가 없는 샌드박스 노드가 오류 없이 클러스터에 추가되는 것보다, 노드 생성이 실패해 문제를 바로 알 수 있는 편이 안전하기 때문입니다. 스크립트는 실행 중인 containerd의 `--config` 인자에서 설정 파일 경로를 찾습니다(인자가 없으면 `/etc/containerd/config.toml`). 그다음 파일의 `version`(3 또는 2)에 맞는 형식으로 `runsc` handler를 추가하고, containerd가 이 설정을 읽을 수 있는지 `containerd config dump`로 확인합니다.
+lifecycle script(`on_create_sandbox.sh`)는 조건이 맞지 않으면 건너뛰지 않고 실패합니다. gVisor가 없는 샌드박스 노드가 오류 없이 클러스터에 추가되는 것보다, 노드 생성이 실패해 문제를 바로 알 수 있는 편이 안전하기 때문입니다.
+
+??? note "lifecycle script가 containerd에 `runsc`를 등록하는 순서"
+    1. 실행 중인 containerd의 `--config` 인자에서 설정 파일 경로를 찾습니다(인자가 없으면 `/etc/containerd/config.toml`).
+    2. 파일의 `version`(3 또는 2)에 맞는 형식으로 `runsc` handler를 추가합니다.
+    3. containerd가 이 설정을 읽을 수 있는지 `containerd config dump`로 확인합니다.
 
 **확인할 것:** 마지막 노드 표에 `ml.g5.xlarge` 두 대가 `Schedulable`, `sandbox-hyperpod`로 보이면 됩니다(예시).
 
@@ -460,7 +543,10 @@ aws logs describe-log-groups --region "$AWS_REGION" \
   --query "logGroups[?contains(logGroupName, '${HYPERPOD_CLUSTER_NAME}')].logGroupName" --output text
 ```
 
-로그에 `runsc missing`이 나오면 sandbox 그룹이 custom AMI로 부팅되지 않은 것입니다. `NVIDIA driver ... is not supported`는 실제로 로드된 드라이버가 설치된 `runsc`의 지원 목록에 없을 때 나옵니다. sandbox 그룹의 AMI ID와, 그 AMI의 드라이버와 gVisor 버전(`aws ec2 describe-images`의 `Description`)을 확인하세요.
+- **로그에 `runsc missing`이 나오면**: sandbox 그룹이 custom AMI로 부팅되지 않은 것입니다.
+- **`NVIDIA driver ... is not supported`가 나오면**: 실제로 로드된 드라이버가 설치된 `runsc`의 지원 목록에 없다는 뜻입니다.
+
+sandbox 그룹의 AMI ID와, 그 AMI의 드라이버와 gVisor 버전(`aws ec2 describe-images`의 `Description`)을 확인하세요.
 
 ### 4단계: 노드 확인 (`hyperpod/check_gvisor.sh`)
 
@@ -493,19 +579,38 @@ scripts/ops/verify.sh gvisor-hyperpod v1
 scripts/hyperpod/run_grpo.sh
 ```
 
-**확인할 것:** 풀 검증(`ops/verify.sh`)이 `pool sandbox-gvisor-hyperpod-v1 verified`로 끝납니다. 이 검증의 1번 검사에서 샌드박스 안의 커널 버전은 gVisor가 제공하는 값이므로 노드 커널(`6.12.111-...`)과 달라야 합니다. trainer 로그의 `reward_batch` 줄에는 `"runtime": "gvisor-hyperpod"`가 나옵니다.
+**확인할 것:**
+
+- 풀 검증(`ops/verify.sh`)이 `pool sandbox-gvisor-hyperpod-v1 verified`로 끝납니다.
+- 이 검증의 1번 검사에서 샌드박스 안의 커널 버전은 gVisor가 제공하는 값이므로 노드 커널(`6.12.111-...`)과 달라야 합니다.
+- trainer 로그의 `reward_batch` 줄에는 `"runtime": "gvisor-hyperpod"`가 나옵니다.
 
 학습 중 버전을 교체하려면 `scripts/ops/rollout.sh gvisor-hyperpod v1 v2`를 실행합니다. 풀의 replica 기본값은 1이며 `GVISOR_HYPERPOD_REPLICAS`로 바꿀 수 있습니다.
 
-**문제가 생기면:** pod가 `Pending`이면 `kubectl -n sandbox describe pod <pod>`의 출력에 `Insufficient nvidia.com/gpu`가 있는지 확인합니다. GPU가 0이면 CDI device plugin이 그 노드에서 실행되지 않은 것이니 `kubectl -n kube-system get pods -o wide | grep nvdp`로 확인하세요. 그 밖의 경우에는 [문제 해결](../reference/troubleshooting.md)의 "gVisor"와 "HyperPod" 항목을 보세요.
+**문제가 생기면:**
+
+- **pod가 `Pending`이면**: `kubectl -n sandbox describe pod <pod>`의 출력에 `Insufficient nvidia.com/gpu`가 있는지 확인합니다.
+- **GPU가 0이면**: CDI device plugin이 그 노드에서 실행되지 않은 것이니 `kubectl -n kube-system get pods -o wide | grep nvdp`로 확인하세요.
+- **그 밖의 경우**: [문제 해결](../reference/troubleshooting.md)의 "gVisor"와 "HyperPod" 항목을 보세요.
 
 ### custom AMI 관리
 
 | 상황 | 할 일 |
 |---|---|
-| HyperPod가 새 base AMI를 공개함 | custom AMI는 자동으로 갱신되지 않습니다. 2단계를 다시 실행하고 `scripts/config.env`의 `HYPERPOD_B2_AMI_ID`를 새 AMI ID로 바꾼 뒤 `source scripts/config.env`로 다시 불러옵니다. 그다음 `aws sagemaker update-cluster-software --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" --instance-groups InstanceGroupName=sandbox --image-id "$HYPERPOD_B2_AMI_ID"`로 sandbox 그룹만 바꿉니다. `--instance-groups`를 빼면 모든 인스턴스 그룹이 이 이미지로 바뀝니다 |
-| gVisor를 새 릴리스로 업그레이드함 | `GVISOR_RELEASE`를 바꾸고 2단계를 다시 실행합니다. 새 릴리스의 지원 목록에 드라이버가 있는지는 빌드 중에 확인합니다. 그다음 위 행과 같이 새 AMI ID를 설정 파일에 저장하고 다시 불러온 뒤 `update-cluster-software`로 sandbox 그룹만 바꿉니다. 3단계(`create.sh --b2`)는 기존 클러스터에 `create-cluster`를 다시 호출하므로 실행하지 않습니다 |
+| HyperPod가 새 base AMI를 공개함 | custom AMI는 자동으로 갱신되지 않습니다. 표 아래 순서로 sandbox 그룹의 AMI를 바꿉니다 |
+| gVisor를 새 릴리스로 업그레이드함 | 표 아래 순서로 새 AMI를 만들어 sandbox 그룹에 적용합니다 |
 | 실습을 끝냄 | `scripts/08_cleanup.sh`가 `HYPERPOD_B2_AMI_ID`의 AMI와 스냅샷을 지울지 묻습니다 |
+
+**HyperPod가 새 base AMI를 공개했을 때:**
+
+1. 2단계를 다시 실행합니다.
+2. `scripts/config.env`의 `HYPERPOD_B2_AMI_ID`를 새 AMI ID로 바꾼 뒤 `source scripts/config.env`로 다시 불러옵니다.
+3. `aws sagemaker update-cluster-software --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" --instance-groups InstanceGroupName=sandbox --image-id "$HYPERPOD_B2_AMI_ID"`로 sandbox 그룹만 바꿉니다. `--instance-groups`를 빼면 모든 인스턴스 그룹이 이 이미지로 바뀝니다.
+
+**gVisor를 새 릴리스로 업그레이드할 때:**
+
+1. `GVISOR_RELEASE`를 바꾸고 2단계를 다시 실행합니다. 새 릴리스의 지원 목록에 드라이버가 있는지는 빌드 중에 확인합니다.
+2. 위 순서와 같이 새 AMI ID를 설정 파일에 저장하고 다시 불러온 뒤 `update-cluster-software`로 sandbox 그룹만 바꿉니다. 3단계(`create.sh --b2`)는 기존 클러스터에 `create-cluster`를 다시 호출하므로 실행하지 않습니다.
 
 ## Kata를 HyperPod 노드에서 쓸 수 없는 이유
 

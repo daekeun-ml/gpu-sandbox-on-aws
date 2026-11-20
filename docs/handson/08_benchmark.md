@@ -18,7 +18,11 @@
 - **결과를 JSONL 파일로 저장합니다.** 저장소 루트에 생기는 `bench-<timestamp>.jsonl`의 값을 표로 옮기기 쉽습니다.
 - **런타임 외의 조건이 같은 비교를 따로 정리합니다.** 같은 GPU 종류 안의 비교와, 같은 `c8i` 노드에서 Kata CLH CPU와 Kata QEMU CPU를 비교하는 경우입니다.
 
-**사전 지식:** 비교할 풀이 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)으로 배포되어 있어야 합니다(Kata는 [03 Kata 샌드박스](03_kata.md)에서 노드와 런타임을 준비하고, 04의 `scripts/06_deploy_sandboxes.sh`로 측정할 v1 풀을 배포합니다. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다). 세 런타임의 구조 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
+**사전 지식:**
+
+- 비교할 풀이 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)으로 배포되어 있어야 합니다. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다.
+- **Kata일 때**: [03 Kata 샌드박스](03_kata.md)에서 노드와 런타임을 준비하고, 04의 `scripts/06_deploy_sandboxes.sh`로 측정할 v1 풀을 배포합니다.
+- 세 런타임의 구조 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **cold start**: 이 페이지에서는 pod가 만들어진 시각부터 마지막으로 Ready가 된 시각까지를 뜻합니다.
@@ -44,7 +48,10 @@
 kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version
 ```
 
-**확인할 것:** 측정하려는 런타임마다 VERSION이 `v1`인 pod가 있고, READY가 모두 `1/1`입니다. 스크립트는 v1 pod가 없는 런타임을 별도 메시지 없이 건너뜁니다.
+**확인할 것:**
+
+- 측정하려는 런타임마다 VERSION이 `v1`인 pod가 있고, READY가 모두 `1/1`입니다.
+- 스크립트는 v1 pod가 없는 런타임을 별도 메시지 없이 건너뜁니다.
 
 학습이 실행 중이 아닐 때 측정하세요. 샌드박스 pod는 한 번에 평가를 하나만 처리하므로, 학습과 벤치마크가 같은 pod를 함께 쓰면 pod를 기다린 시간이 처리량을 떨어뜨립니다.
 
@@ -62,9 +69,11 @@ scripts/ops/bench.sh 64     # more requests per pool
 | 순서 | 스크립트 동작 |
 |---|---|
 | 1 | `gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`, `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu` 순서로, `version=v1` pod가 있는 풀만 선택합니다 |
-| 2 | 현재 Ready인 pod마다 Ready condition의 `lastTransitionTime`에서 `creationTimestamp`를 뺀 cold start를 초 단위로 출력합니다. `lastTransitionTime`은 마지막으로 Ready가 된 시각이라서, 중간에 readiness를 잃었다가 회복한 pod는 첫 기동 시간이 아닌 값을 냅니다 |
+| 2 | 현재 Ready인 pod마다 Ready condition의 `lastTransitionTime`에서 `creationTimestamp`를 뺀 cold start를 초 단위로 출력합니다 |
 | 3 | GPU 풀에는 `relu_bias_triton`, 이름이 `-cpu`로 끝나는 풀에는 `relu_bias_torch_only`를 사용합니다 |
 | 4 | `gpusandbox.tools bench`를 Job `bench-<runtime>-<epoch>`로 `rl-trainer`에서 실행하고, 결과 JSON 한 줄을 `bench-<YYYYmmdd-HHMMSS>.jsonl`에 추가합니다 |
+
+- **2단계의 cold start 값**: `lastTransitionTime`은 마지막으로 Ready가 된 시각이라서, 중간에 readiness를 잃었다가 회복한 pod는 첫 기동 시간이 아닌 값을 냅니다.
 
 **확인할 것:** 풀마다 다음과 같은 출력이 나옵니다(예시 형태, 값은 환경마다 다릅니다).
 
@@ -76,11 +85,16 @@ scripts/ops/bench.sh 64     # more requests per pool
 [hh:mm:ss] bench  gvisor  ok 32/32  p50 ...s  p95 ...s  ... eval/s  speedup ...
 ```
 
-마지막 줄은 `[hh:mm:ss] results: <저장소 경로>/bench-<YYYYmmdd-HHMMSS>.jsonl`입니다. `bench` 줄의 `ok 32/32`처럼 두 수가 같아야 정상입니다. 터미널에는 요약이 보이고, JSONL 파일에는 모든 필드가 담긴 원래 JSON이 저장됩니다.
+- **마지막 줄**: `[hh:mm:ss] results: <저장소 경로>/bench-<YYYYmmdd-HHMMSS>.jsonl`입니다.
+- **`bench` 줄**: `ok 32/32`처럼 두 수가 같아야 정상입니다.
+- **터미널과 JSONL**: 터미널에는 요약이 보이고, JSONL 파일에는 모든 필드가 담긴 원래 JSON이 저장됩니다. cold start 값은 터미널에만 출력되고 JSONL에는 저장되지 않으니 따로 기록해 두세요.
+- **측정 버전**: 스크립트는 v1 풀만 측정합니다. v2는 seed 수(5개)가 달라 평가 시간이 다를 수 있으므로 같은 버전끼리 비교하세요.
 
-cold start 값은 터미널에만 출력되고 JSONL에는 저장되지 않으니 따로 기록해 두세요. 스크립트는 v1 풀만 측정합니다. v2는 seed 수(5개)가 달라 평가 시간이 다를 수 있으므로 같은 버전끼리 비교하세요.
+**문제가 생기면:**
 
-**문제가 생기면:** 한 풀의 결과가 모두 실패하면(`ok`가 0) bench Job이 실패하고 스크립트가 그 풀에서 멈춥니다. 스크립트 코드상 그 뒤의 풀은 측정하지 않습니다. `ok`가 `requests`보다 작아도 bench JSON에는 실패한 요청의 status나 오류가 남지 않습니다. 같은 풀에 `scripts/ops/verify.sh <runtime> v1`을 실행하세요. golden 요청에서 문제가 재현되면 `FAIL` 줄에 status와 오류가 나오니, 그 문자열로 [문제 해결](../reference/troubleshooting.md)의 "probe 도구로 /info 보기"와 "샌드박스 풀과 readiness" 항목을 찾아보세요.
+- **한 풀의 결과가 모두 실패하면(`ok`가 0)**: bench Job이 실패하고 스크립트가 그 풀에서 멈춥니다. 스크립트 코드상 그 뒤의 풀은 측정하지 않습니다.
+- **`ok`가 `requests`보다 작을 때**: bench JSON에는 실패한 요청의 status나 오류가 남지 않습니다.
+- **원인을 찾으려면**: 같은 풀에 `scripts/ops/verify.sh <runtime> v1`을 실행하세요. golden 요청에서 문제가 재현되면 `FAIL` 줄에 status와 오류가 나오니, 그 문자열로 [문제 해결](../reference/troubleshooting.md)의 "probe 도구로 /info 보기"와 "샌드박스 풀과 readiness" 항목을 찾아보세요.
 
 ### bench JSON 필드
 
@@ -98,7 +112,12 @@ cold start 값은 터미널에만 출력되고 JSONL에는 저장되지 않으�
 
 ## 평가 지연에 포함되는 과정
 
-`duration_s`는 서버가 요청 하나를 맡은 뒤 verdict를 낼 때까지 걸린 시간으로, 커널 실행 외의 과정도 모두 들어갑니다. 클라이언트가 pod를 기다린 시간은 들어가지 않습니다. 서버는 요청마다 새 프로세스 트리를 만들고 아래 과정을 실행합니다. 그림의 CUDA 초기화와 Triton 컴파일은 GPU 풀의 `relu_bias_triton`에만 해당합니다. CPU 풀에서 쓰는 `relu_bias_torch_only`는 CPU 텐서에 PyTorch 연산만 실행합니다.
+`duration_s`는 서버가 요청 하나를 맡은 뒤 verdict를 낼 때까지 걸린 시간으로, 커널 실행 외의 과정도 모두 들어갑니다. 클라이언트가 pod를 기다린 시간은 들어가지 않습니다.
+
+서버는 요청마다 새 프로세스 트리를 만들고 아래 과정을 실행합니다. golden에 따라 실행하는 과정이 다릅니다.
+
+- **GPU 풀의 `relu_bias_triton`**: 그림의 CUDA 초기화와 Triton 컴파일은 이 경우에만 해당합니다.
+- **CPU 풀에서 쓰는 `relu_bias_torch_only`**: CPU 텐서에 PyTorch 연산만 실행합니다.
 
 ```mermaid
 flowchart LR
@@ -116,11 +135,17 @@ warmup 3번과 timed 20번은 서버 기본값(`HARNESS_WARMUP`, `HARNESS_ITERS`
 
 | 비교 | 조건 | 볼 지표 |
 |---|---|---|
-| Kata CLH CPU 대 Kata QEMU CPU | 같은 `c8i.2xlarge` 노드(nested virtualization), 같은 이미지, 같은 golden, RuntimeClass만 다른 같은 profile. RuntimeClass에 따라 hypervisor와 pod당 예약량(`overhead.podFixed`)이 다르고, 입력 seed는 요청마다 새로 뽑습니다 | cold start, `eval_p50_s`, `eval_p95_s` |
-| Kata QEMU 대 Kata CLH GPU(실험) | 같은 `g4dn.metal`, 같은 T4 | 위 지표와 `ref_ms_median`. CLH GPU는 upstream에서 지원하지 않으며, 2026-11-18에는 VM이 시작되지 않아 측정하지 못했습니다 |
+| Kata CLH CPU 대 Kata QEMU CPU | 같은 `c8i.2xlarge` 노드(nested virtualization), 같은 이미지, 같은 golden, RuntimeClass만 다른 같은 profile | cold start, `eval_p50_s`, `eval_p95_s` |
+| Kata QEMU 대 Kata CLH GPU(실험) | 같은 `g4dn.metal`, 같은 T4 | 위 지표와 `ref_ms_median` |
 | gVisor (A10G) | 같은 A10G의 runc 기준선은 이 저장소에 없습니다 | 측정값 자체와, 같은 풀을 다른 시점에 측정한 값 |
-| gVisor CPU 대 Kata CPU | 같은 `c8i.2xlarge` 노드, 같은 이미지, 같은 golden. 격리 방식(사용자 공간 커널 대 VM)과 RuntimeClass 설정이 다르고, 입력 seed는 요청마다 새로 뽑습니다. 시나리오 C의 [10 c8i 단독 저비용 경로](10_cpu_only.md)에서 세 풀을 함께 띄움 | cold start, `eval_p50_s`, `eval_p95_s` |
+| gVisor CPU 대 Kata CPU | 같은 `c8i.2xlarge` 노드, 같은 이미지, 같은 golden | cold start, `eval_p50_s`, `eval_p95_s` |
 | GPU 종류가 다른 풀끼리 | A10G 대 T4 | 오버헤드 비교에 쓰지 않습니다. speedup은 GPU별로 따로 해석합니다 |
+
+- **Kata CLH CPU 대 Kata QEMU CPU**: RuntimeClass에 따라 hypervisor와 pod당 예약량(`overhead.podFixed`)이 다르고, 입력 seed는 요청마다 새로 뽑습니다.
+- **Kata CLH GPU(실험)**: CLH GPU는 upstream에서 지원하지 않으며, 2026-11-18에는 VM이 시작되지 않아 측정하지 못했습니다.
+- **gVisor CPU 대 Kata CPU**: 격리 방식(사용자 공간 커널 대 VM)과 RuntimeClass 설정이 다르고, 입력 seed는 요청마다 새로 뽑습니다. 시나리오 C의 [10 c8i 단독 저비용 경로](10_cpu_only.md)에서 세 풀을 함께 띄웁니다.
+
+결과를 읽을 때는 다음도 함께 고려하세요.
 
 - **처리량은 Ready pod 수에 따라 달라집니다.** pod 하나가 한 번에 평가 하나만 처리하기 때문입니다. 기본 replica는 `gvisor` 2, `kata-qemu` 4, `kata-clh` 2이고 CPU 풀은 각 2입니다. replica 수가 다른 풀은 전체 처리량과 함께 Ready pod 수로 나눈 pod당 값도 기록해 비교하세요.
 - **요청 수를 너무 크게 정하지 마세요.** pod는 한 번에 평가를 하나만 처리하므로 클라이언트는 비어 있는 pod를 기다립니다. 대기 시간이 600초(acquire timeout)를 넘으면 그 요청은 `sandbox_error`가 되어 `ok` 수가 줄어듭니다.
@@ -149,7 +174,10 @@ kubectl -n sandbox rollout status deployment/sandbox-kata-qemu-v1 --timeout=30m
 scripts/ops/bench.sh
 ```
 
-**확인할 것:** 둘째 명령이 `deployment "sandbox-kata-qemu-v1" successfully rolled out`으로 끝나고, 셋째 명령의 `kata-qemu` cold start 줄이 새 pod 이름으로 바뀝니다.
+**확인할 것:**
+
+- 둘째 명령이 `deployment "sandbox-kata-qemu-v1" successfully rolled out`으로 끝납니다.
+- 셋째 명령의 `kata-qemu` cold start 줄이 새 pod 이름으로 바뀝니다.
 
 아래 결과 표의 값(2차 측정)은 이 방법으로 모든 풀을 재시작한 뒤 측정했습니다.
 
@@ -245,7 +273,15 @@ PY
 
 ## 소요 시간과 비용
 
-벤치마크는 풀마다 Job 하나만 실행합니다. 2026-11-18 2차 측정에서 평가 구간(32 ÷ 처리량으로 계산)은 풀마다 약 100 s(`kata-qemu`)에서 약 300 s(`gvisor`)였고, 다섯 풀을 합하면 약 13분이었습니다. Job 생성, cold start 출력, 풀 재시작 시간은 이 값에 들어 있지 않습니다. 비용은 그동안 발생하는 노드 요금입니다. 이 중 `g4dn.metal`이 시간당 7.824 USD로 가장 비쌉니다(us-east-1과 us-west-2 온디맨드 요금). gVisor 노드로 쓴 `g5.2xlarge`는 시간당 1.212 USD, `c8i.2xlarge`는 시간당 0.37484 USD입니다(같은 기준). 측정을 마치면 [99 정리](99_cleanup.md)에 따라 GPU 노드 그룹을 0으로 줄이거나 삭제하세요.
+벤치마크는 풀마다 Job 하나만 실행합니다.
+
+- **시간**: 2026-11-18 2차 측정에서 평가 구간(32 ÷ 처리량으로 계산)은 풀마다 약 100 s(`kata-qemu`)에서 약 300 s(`gvisor`)였고, 다섯 풀을 합하면 약 13분이었습니다. Job 생성, cold start 출력, 풀 재시작 시간은 이 값에 들어 있지 않습니다.
+- **비용**: 그동안 발생하는 노드 요금입니다(us-east-1과 us-west-2 온디맨드 요금 기준).
+    - `g4dn.metal`: 시간당 7.824 USD로 가장 비쌉니다.
+    - `g5.2xlarge`(gVisor 노드로 씀): 시간당 1.212 USD
+    - `c8i.2xlarge`: 시간당 0.37484 USD
+
+측정을 마치면 [99 정리](99_cleanup.md)에 따라 GPU 노드 그룹을 0으로 줄이거나 삭제하세요.
 
 ## 확인 방법
 

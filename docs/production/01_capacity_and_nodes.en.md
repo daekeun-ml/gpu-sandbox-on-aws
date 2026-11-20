@@ -5,7 +5,13 @@
 
 ## Pain point
 
-A `g4dn.metal` takes minutes to boot, install kata-deploy and bind its GPUs to vfio-pci, so started on demand, it makes reward batches wait that long. Started early, it bills while idle (7.824 USD/hour, us-east-1 and us-west-2 On-Demand), and with node counts managed by hand it is easy to forget to turn it off. When an automatic AMI update brings an NVIDIA driver nvproxy does not know (unknown), gVisor GPU sandboxes never become Ready and pool capacity drops to zero. The G and VT On-Demand quota also has a documented default of 0, so until it is raised you cannot launch a single 96-vCPU `g4dn.metal`.
+A `g4dn.metal` takes minutes to boot, install kata-deploy and bind its GPUs to vfio-pci.
+
+- **Started on demand**: it makes reward batches wait that long.
+- **Started early**: it bills while idle (7.824 USD/hour, us-east-1 and us-west-2 On-Demand).
+- **With node counts managed by hand**: it is easy to forget to turn it off.
+- **When an automatic AMI update brings an NVIDIA driver nvproxy does not know (unknown)**: gVisor GPU sandboxes never become Ready and pool capacity drops to zero.
+- **The G and VT On-Demand quota**: it has a documented default of 0, so until it is raised you cannot launch a single 96-vCPU `g4dn.metal`.
 
 ![a: on the metal node (sandbox-kata-gpu) a reward batch arrives, the g4dn.metal then spends minutes booting, installing kata-deploy and binding vfio-pci, and the batch waits; on the gVisor node (sandbox-gvisor) an automatic AMI update through al2023@latest brings a driver unknown to nvproxy, GPU initialization fails, sandboxes never become Ready and pool capacity drops to 0. b: on metal a warm placeholder with priority -10 is preempted and steps aside, the sandbox pods run on a node that is already up and Karpenter adds a new spare; on gVisor the AMI is pinned to al2023@v20261107, CI checks support with nvproxy list-supported-drivers, and the AMI and GVISOR_RELEASE are raised together only when it passes](../images/figures/production-01_capacity_and_nodes.svg)
 
@@ -50,14 +56,19 @@ kubectl apply -f infra/karpenter/nodepools.yaml
 kubectl get ec2nodeclass,nodepool
 ```
 
-`KARPENTER_NODE_ROLE` is the node role you created while installing Karpenter. Unlike `envsubst`, `render.py` fails on an undefined variable, but it substitutes a variable defined as an empty string as is. Check that `KATA_IOMMU_AMI_ID` and `KARPENTER_NODE_ROLE` hold real values first. If you have no `KATA_IOMMU_AMI_ID` yet, build the AMI with `infra/kata/build-iommu-ami.sh` and put the printed `export KATA_IOMMU_AMI_ID=...` line into `scripts/config.env`.
+- **`KARPENTER_NODE_ROLE`**: the node role you created while installing Karpenter.
+- **How `render.py` handles variables**: unlike `envsubst`, it fails on an undefined variable, but it substitutes a variable defined as an empty string as is. Check that `KATA_IOMMU_AMI_ID` and `KARPENTER_NODE_ROLE` hold real values first.
+- **If you have no `KATA_IOMMU_AMI_ID` yet**: build the AMI with `infra/kata/build-iommu-ami.sh` and put the printed `export KATA_IOMMU_AMI_ID=...` line into `scripts/config.env`.
 
 What to look for:
 
 - Four EC2NodeClasses (`sandbox-gvisor`, `sandbox-kata-gpu`, `sandbox-kata-cpu`, `trainer`) and four NodePools with the same names.
 - All of them show READY `True`. Nodes start when pods ask for room, so having none yet is normal.
 
-If it fails: for `render: ... missing variable`, see the configuration and scripts table in [Troubleshooting](../reference/troubleshooting.md). If READY is not `True`, look for conditions that are `False` in `kubectl describe ec2nodeclass <name>`.
+If it fails:
+
+- **For `render: ... missing variable`**: see the configuration and scripts table in [Troubleshooting](../reference/troubleshooting.md).
+- **If READY is not `True`**: look for conditions that are `False` in `kubectl describe ec2nodeclass <name>`.
 
 `spec.cpuOptions.nestedVirtualization` (values `enabled` or `disabled`), used by `sandbox-kata-cpu`, is a field of the v1.15.2 CRD. If the FIELDS list of `kubectl explain ec2nodeclass.spec.cpuOptions` lacks `nestedVirtualization`, your Karpenter predates the feature; upgrade it first.
 
@@ -77,9 +88,16 @@ If it fails: for `render: ... missing variable`, see the configuration and scrip
 | `sandbox-kata-cpu` | `cpu: 256` | `WhenEmptyOrUnderutilized`, 5 min | 336h |
 | `trainer` | `nvidia.com/gpu: 16` | `WhenEmpty`, 15 min | 720h |
 
-- **Labels wire the other components together.** `gpusandbox/device-plugin=cdi` is the nodeSelector of the NVIDIA device plugin DaemonSet, and `nvidia.com/gpu.deploy.operands=false` keeps the GPU Operator away from container-mode nodes. The GPU Operator binds T4s to vfio-pci only on nodes labelled `nvidia.com/gpu.workload.config=vm-passthrough`. `gpusandbox/role` is shared by the `gvisor` RuntimeClass scheduling rules and the kata-deploy and sandbox Deployment nodeSelectors.
+- **Labels wire the other components together.**
+    - `gpusandbox/device-plugin=cdi` is the nodeSelector of the NVIDIA device plugin DaemonSet.
+    - `nvidia.com/gpu.deploy.operands=false` keeps the GPU Operator away from container-mode nodes.
+    - The GPU Operator binds T4s to vfio-pci only on nodes labelled `nvidia.com/gpu.workload.config=vm-passthrough`.
+    - `gpusandbox/role` is shared by the `gvisor` RuntimeClass scheduling rules and the kata-deploy and sandbox Deployment nodeSelectors.
 - **Taints make the nodes dedicated.** Only pods with the toleration land there, so untrusted code never shares a node with other workloads.
-- **gVisor nodes have exactly one GPU.** One sandbox per node keeps per-GPU timing clean. The pool stays on g5 (A10G): the AMI loads the proprietary kernel module (GSP off) on g5, a combination verified by this repository rather than documented by gVisor. g6 (L4, open driver) can be added to the NodePool as an alternative. Check driver support before adding another GPU family.
+- **gVisor nodes have exactly one GPU.** One sandbox per node keeps per-GPU timing clean.
+    - **The pool stays on g5 (A10G)**: the AMI loads the proprietary kernel module (GSP off) on g5, a combination verified by this repository rather than documented by gVisor.
+    - **Alternative**: g6 (L4, open driver) can be added to the NodePool.
+    - **Before adding another GPU family**: check driver support.
 - **GPU pools use `WhenEmpty`.** Reclaiming a node mid-evaluation means the running evaluation starts over on another pod, and it becomes `sandbox_error` if the retries also fail, so only empty nodes are reclaimed; the CPU tier, cheap to restart, allows `WhenEmptyOrUnderutilized` and spot.
 - **A metal node becomes a candidate for removal after 30 empty minutes.** Returned as soon as it is empty, a metal node pays its minutes of boot and setup again on the next demand; thirty idle minutes cost about 3.9 USD at 7.824 USD/hour, and billing runs until the node actually terminates.
 - **`expireAfter` refreshes nodes periodically.** Per the Karpenter v1.15 documentation, expiration is forceful: `karpenter.sh/do-not-disrupt` does not stop it, and the drain follows PDBs and `terminationGracePeriod`. The gateway resends a cut-off evaluation to another pod.
@@ -100,14 +118,21 @@ The user data is MIME multipart, and Karpenter adds its own NodeConfig with clus
 
 The shell script parts come in through `@@include path@@` lines in `scripts/render.py`. The named file is inserted verbatim at the same indentation and its `${...}` is not substituted, which keeps [`install-gvisor.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh) and [`node-guard.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/eks/node-guard.sh) readable and editable as standalone scripts. One template line, `export GVISOR_RELEASE="${GVISOR_RELEASE}"`, pins the gVisor version.
 
-Check that the values survived the merge by reading the live kubelet configuration (`configz`) of one Kata GPU node that Karpenter created, through the API server. A metal node appears only when something asks for room on it, so apply the placeholder from "Warm capacity for slow metal" below and run this once a `sandbox-kata-gpu` NodePool node is Ready. The placeholder, the PDB and the ResourceQuota live in the `sandbox` namespace, so on a new cluster create the namespaces first with `kubectl apply -f k8s/base/namespaces.yaml` (or `scripts/05_setup_namespaces_auth.sh`). A CDK-managed Kata GPU node also carries `gpusandbox/kata-gpu=true`, so select the node by its `karpenter.sh/nodepool` label.
+Check that the values survived the merge by reading the live kubelet configuration (`configz`) of one Kata GPU node that Karpenter created, through the API server.
+
+- **On a new cluster**: the placeholder, the PDB and the ResourceQuota live in the `sandbox` namespace, so create the namespaces first with `kubectl apply -f k8s/base/namespaces.yaml` (or `scripts/05_setup_namespaces_auth.sh`).
+- **Getting a metal node**: a metal node appears only when something asks for room on it, so apply the placeholder from "Warm capacity for slow metal" below and run this once a `sandbox-kata-gpu` NodePool node is Ready.
+- **Picking the node**: a CDK-managed Kata GPU node also carries `gpusandbox/kata-gpu=true`, so select the node by its `karpenter.sh/nodepool` label.
 
 ```bash
 node="$(kubectl get nodes -l karpenter.sh/nodepool=sandbox-kata-gpu -o jsonpath='{.items[0].metadata.name}')"
 kubectl get --raw "/api/v1/nodes/${node}/proxy/configz" | grep -o '"runtimeRequestTimeout":"[^"]*"'
 ```
 
-What to look for: one line, `"runtimeRequestTimeout":"20m0s"`. Any other value means the repository's NodeConfig was not merged; read the node's user data log with the node-level checks in [Troubleshooting](../reference/troubleshooting.md).
+What to look for:
+
+- One line, `"runtimeRequestTimeout":"20m0s"`.
+- **Any other value**: the repository's NodeConfig was not merged. Read the node's user data log with the node-level checks in [Troubleshooting](../reference/troubleshooting.md).
 
 ## Installing the GPU stack and runtimes
 
@@ -116,8 +141,13 @@ Karpenter nodes use the same values files as the hands-on track, except that you
 | Target | How | Why it works unchanged with Karpenter |
 |---|---|---|
 | NVIDIA device plugin (trainer, gVisor) | `scripts/04_install_gpu_stack.sh` | The DaemonSet nodeSelector `gpusandbox/device-plugin=cdi` matches the NodePool label. |
-| gVisor RuntimeClass and smoke test | `scripts/04_install_gpu_stack.sh` (same run, after the device plugin) | The RuntimeClass nodeSelector and toleration match the `sandbox-gvisor` NodePool. In A and B1 the smoke pod runs on a CDK-managed gVisor node if one has room, and Karpenter launches a new g5 node (billable) only when there is none. In B2 and C the script skips both the `gvisor` RuntimeClass and the smoke test, so if you add the `sandbox-gvisor` NodePool to such a cluster, apply the RuntimeClass yourself with `kubectl apply -f k8s/runtimes/runtimeclass-gvisor.yaml`. |
+| gVisor RuntimeClass and smoke test | `scripts/04_install_gpu_stack.sh` (same run, after the device plugin) | The RuntimeClass nodeSelector and toleration match the `sandbox-gvisor` NodePool (per-scenario differences below the table). |
 | GPU Operator, kata-deploy | The helm commands below (same as the helm steps of `scripts/kata/gpu_nodes.sh`) | kata-deploy runs as a DaemonSet, so it also covers nodes added later. |
+
+The gVisor RuntimeClass and smoke test behave differently per scenario.
+
+- **A and B1**: the smoke pod runs on a CDK-managed gVisor node if one has room, and Karpenter launches a new g5 node (billable) only when there is none.
+- **B2 and C**: the script skips both the `gvisor` RuntimeClass and the smoke test. If you add the `sandbox-gvisor` NodePool to such a cluster, apply the RuntimeClass yourself with `kubectl apply -f k8s/runtimes/runtimeclass-gvisor.yaml`.
 
 The GPU Operator installs in VM passthrough mode, and with `--wait` each chart waits up to 20 minutes for its resources.
 
@@ -133,7 +163,12 @@ helm upgrade --install kata-deploy oci://ghcr.io/kata-containers/kata-deploy-cha
   -f infra/kata/kata-deploy-values.yaml --wait --timeout 20m
 ```
 
-What to look for: both helm commands end with `STATUS: deployed`. Once Kata nodes are up, `kubectl get runtimeclass` should list `kata-qemu-nvidia-gpu`, `kata-qemu` and `kata-clh`. If it fails, see the Kata table in [Troubleshooting](../reference/troubleshooting.md).
+What to look for:
+
+- Both helm commands end with `STATUS: deployed`.
+- Once Kata nodes are up, `kubectl get runtimeclass` should list `kata-qemu-nvidia-gpu`, `kata-qemu` and `kata-clh`.
+
+If it fails, see the Kata table in [Troubleshooting](../reference/troubleshooting.md).
 
 ## IOMMU AMI pipeline
 
@@ -142,7 +177,11 @@ AL2023 kernels ship with `CONFIG_INTEL_IOMMU_DEFAULT_ON` unset, so VFIO passthro
 [`infra/kata/build-iommu-ami.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/build-iommu-ami.sh) works in three steps.
 
 1. It looks up the standard (non-NVIDIA) EKS AL2023 AMI in the SSM parameter `/aws/service/eks/optimized-ami/${K8S_VERSION}/amazon-linux-2023/x86_64/standard/recommended/image_id`.
-2. It launches an `m6i.large` with IMDSv2 and hop limit 1, whose user data runs `grubby --update-kernel=ALL --args="intel_iommu=on iommu=pt"`, writes `/etc/modules-load.d/vfio-iommu-type1.conf` so the `vfio_iommu_type1` module loads at boot, and runs `cloud-init clean --logs` and `shutdown -h now`. Without that module, QEMU fails to start the GPU VM with `No available IOMMU models` even when the kernel arguments are right.
+2. It launches an `m6i.large` with IMDSv2 and hop limit 1, whose user data does the following.
+    - runs `grubby --update-kernel=ALL --args="intel_iommu=on iommu=pt"`
+    - writes `/etc/modules-load.d/vfio-iommu-type1.conf` so the `vfio_iommu_type1` module loads at boot (without that module, QEMU fails to start the GPU VM with `No available IOMMU models` even when the kernel arguments are right)
+    - runs `cloud-init clean --logs` and `shutdown -h now`
+
 3. When the instance has stopped, it creates an AMI tagged with `base-ami`, terminates the builder and prints `export KATA_IOMMU_AMI_ID="ami-..."`.
 
 In production this runs as a pipeline.
@@ -165,7 +204,15 @@ flowchart LR
 kubectl get node "${node}" -o jsonpath='{.status.allocatable.nvidia\.com/pgpu}'
 ```
 
-What to look for: `8` once the GPU Operator has bound the GPUs. An empty value or `0` means see the `no passthrough GPUs advertised` row of the Kata table in [Troubleshooting](../reference/troubleshooting.md). `8` only means the devices are registered with the scheduler: an AMI without the `vfio_iommu_type1` module also shows `8`, and QEMU then cannot start the VM. Promote the AMI only after a `kata-qemu-nvidia-gpu` pool pod on a node with the new AMI reaches READY `1/1` and the golden run of `scripts/ops/verify.sh kata-qemu <version>` passes. The golden run goes to the pool's Service address, so if the pool also has pods on old-AMI nodes, one of them may answer instead. Check the NODE column of `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu,gpusandbox/version=<version> -o wide` and run it only when every Ready pod is on a new-AMI node.
+What to look for:
+
+- `8` once the GPU Operator has bound the GPUs.
+- **An empty value or `0`**: see the `no passthrough GPUs advertised` row of the Kata table in [Troubleshooting](../reference/troubleshooting.md).
+- **Even with `8`**: `8` only means the devices are registered with the scheduler. An AMI without the `vfio_iommu_type1` module also shows `8`, and QEMU then cannot start the VM.
+- **Before you promote the AMI**: check in this order.
+    1. Start a `kata-qemu-nvidia-gpu` pool pod on a node with the new AMI and check that it reaches READY `1/1`.
+    2. The golden run goes to the pool's Service address, so if the pool also has pods on old-AMI nodes, one of them may answer instead. Check the NODE column of `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu,gpusandbox/version=<version> -o wide` and confirm that every Ready pod is on a new-AMI node.
+    3. Promote the AMI only after the golden run of `scripts/ops/verify.sh kata-qemu <version>` passes.
 
 - **Promote:** change `KATA_IOMMU_AMI_ID` in `scripts/config.env` and reapply the EC2NodeClasses. When the selected AMI changes, Karpenter marks the nodes as drifted and replaces them while respecting disruption budgets and PDBs (Karpenter v1.15 documentation).
 - **Roll back:** keep the previous AMI (`scripts/08_cleanup.sh` deletes only the current `KATA_IOMMU_AMI_ID` from `config.env` and its snapshot, after confirmation).
@@ -183,9 +230,18 @@ To nvproxy a driver is supported, unsupported (needs `--nvproxy-allow-unsupporte
 | gVisor | release-20261109.0 (`GVISOR_RELEASE="20261109.0"`) |
 | Version to watch | 595.91.07 in the same AMI (g7 only) is unknown to nvproxy. The default HyperPod AMI ships this version too, which is why B2 uses a custom AMI with the driver replaced by 580.178.04. |
 
-Today the `sandbox-gvisor` EC2NodeClass uses `alias: al2023@latest`, so Karpenter replaces nodes through drift when a new EKS AMI appears. If nvproxy does not know the new driver, `install-gvisor.sh` writes `WARNING: NVIDIA driver ... is not supported` to the user data log, and sandbox pods fail GPU initialization and never become Ready (fail closed). That is safe but drops pool capacity to zero, and the Karpenter documentation does not recommend `latest` for production either.
+Today the `sandbox-gvisor` EC2NodeClass uses `alias: al2023@latest`, so Karpenter replaces nodes through drift when a new EKS AMI appears. If nvproxy does not know the new driver, this happens.
 
-In production pin the alias to a version (for example `alias: al2023@v20261107`; re-verify the version syntax in the Karpenter documentation) and raise the AMI and `GVISOR_RELEASE` in the same change. After changing the driver, the AMI or the gVisor version, re-run the `04_install_gpu_stack.sh` smoke test and `scripts/ops/verify.sh`: the g5 combination with the proprietary module rests on this repository's verification, not on the gVisor documentation. If the sandbox pool holds every GPU on the nodes, the smoke pod stays `Pending`, so scale the pool down by one replica to free a GPU first.
+- `install-gvisor.sh` writes `WARNING: NVIDIA driver ... is not supported` to the user data log.
+- Sandbox pods fail GPU initialization and never become Ready (fail closed). That is safe but drops pool capacity to zero.
+
+The Karpenter documentation does not recommend `latest` for production either.
+
+In production, do the following.
+
+- **Pin the alias**: pin it to a version (for example `alias: al2023@v20261107`; re-verify the version syntax in the Karpenter documentation) and raise the AMI and `GVISOR_RELEASE` in the same change.
+- **Re-verify after a change**: after changing the driver, the AMI or the gVisor version, re-run the `04_install_gpu_stack.sh` smoke test and `scripts/ops/verify.sh`. The g5 combination with the proprietary module rests on this repository's verification, not on the gVisor documentation.
+- **If the sandbox pool holds every GPU on the nodes**: the smoke pod stays `Pending`, so scale the pool down by one replica to free a GPU first.
 
 Before raising them, CI can verify the candidate gVisor release's checksum and nvproxy support list. This is an example, not a repository script, using the same URL and check as `install-gvisor.sh`.
 
@@ -203,13 +259,20 @@ mkdir -p gvisor && tar -xjf gvisor.tar.bz2 -C gvisor
   || { echo "gVisor ${GVISOR_RELEASE} nvproxy does not support driver ${DRIVER}"; exit 1; }
 ```
 
-What to look for: on success only `gvisor.tar.bz2: OK` appears and the exit code is 0. For a release that does not know the driver, it prints `gVisor ... nvproxy does not support driver ...` and exits with 1. In that case, wait for a gVisor release whose support list contains the driver, or do not raise the AMI.
+What to look for:
+
+- On success only `gvisor.tar.bz2: OK` appears and the exit code is 0.
+- **For a release that does not know the driver**: it prints `gVisor ... nvproxy does not support driver ...` and exits with 1. In that case, wait for a gVisor release whose support list contains the driver, or do not raise the AMI.
 
 After promotion, first confirm that a sandbox pod becomes Ready on one new node, then move on to the rest.
 
 ## Warm capacity for slow metal
 
-[`warm-capacity.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/warm-capacity.yaml) follows the AWS China blog pattern (EKS + Kata + Cloud Hypervisor). One low-priority placeholder pod occupies a `sandbox-kata-gpu` node until a sandbox pod needs room and the scheduler preempts it. The placeholder goes back to Pending, and Karpenter starts a new spare node for it in the background (within the NodePool cap `cpu: 192`).
+[`warm-capacity.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/warm-capacity.yaml) follows the AWS China blog pattern (EKS + Kata + Cloud Hypervisor).
+
+1. One low-priority placeholder pod occupies a `sandbox-kata-gpu` node.
+2. When a sandbox pod needs room, the scheduler preempts the placeholder.
+3. The placeholder goes back to Pending, and Karpenter starts a new spare node for it in the background (within the NodePool cap `cpu: 192`).
 
 | Setting | Value | Reason |
 |---|---|---|
@@ -226,7 +289,11 @@ kubectl apply -f k8s/production/pool-hardening.yaml   # PriorityClasses first
 kubectl apply -f k8s/production/warm-capacity.yaml
 ```
 
-What to look for: `kubectl -n sandbox get pods -l app=kata-metal-warm-placeholder -o wide` shows the placeholder `Running` on a `sandbox-kata-gpu` node. A few minutes of `Pending` while Karpenter starts the metal node are normal. If it stays `Pending`, check the Events in `kubectl -n sandbox describe pod <pod>` and the service quota section below.
+What to look for:
+
+- `kubectl -n sandbox get pods -l app=kata-metal-warm-placeholder -o wide` shows the placeholder `Running` on a `sandbox-kata-gpu` node.
+- A few minutes of `Pending` while Karpenter starts the metal node are normal.
+- **If it stays `Pending`**: check the Events in `kubectl -n sandbox describe pod <pod>` and the service quota section below.
 
 !!! warning "Cost and how to turn it off"
     A spare `g4dn.metal` bills all the time: at 7.824 USD/hour that is about 188 USD per day (us-east-1 and us-west-2 On-Demand, 9.624 USD/hour in Seoul). Scale the placeholder to zero with the command below while you are not training, and once the node has been empty for 30 minutes it becomes a candidate for removal under the `WhenEmpty` policy. Check when billing stopped by the time the node actually terminated.
@@ -237,7 +304,9 @@ What to look for: `kubectl -n sandbox get pods -l app=kata-metal-warm-placeholde
 
     What to look for: `kubectl -n sandbox get deployment kata-metal-warm-placeholder` shows READY `0/0`.
 
-`deployment.yaml.tpl` does not set `priorityClassName`, so pool pods run at the default priority 0, which is still above -10, so preemption works. To use `gpu-sandbox-pool` (100000) from `pool-hardening.yaml`, add `priorityClassName` to the template. Sandbox pods also fit into the CPU and memory the placeholder leaves free without preemption, so size the requests close to the node's allocatable if you want a whole node kept empty.
+- **Pool pod priority**: `deployment.yaml.tpl` does not set `priorityClassName`, so pool pods run at the default priority 0, which is still above -10, so preemption works.
+- **To use `gpu-sandbox-pool` (100000) from `pool-hardening.yaml`**: add `priorityClassName` to the template.
+- **To keep a whole node empty**: sandbox pods also fit into the CPU and memory the placeholder leaves free without preemption, so size the requests close to the node's allocatable.
 
 ## PDB and ResourceQuota
 
@@ -259,7 +328,11 @@ EC2 On-Demand quotas count vCPUs, not instances. The defaults below come from th
 | Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 5 | `sandbox-kata-cpu` (on-demand), system nodes, SSM access instance | 256 vCPU for the CPU NodePool limit, plus the system nodes (default two `m6i.large`) and the SSM access instance (`t4g.nano`) |
 | All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests | 5 | `sandbox-kata-cpu` (spot) | Up to 256 vCPU |
 
-`g4dn.metal` can be hard to get depending on the Region and AZ, so if you know how long you need it, consider an On-Demand Capacity Reservation, which holds capacity for an instance type in a specific AZ. An immediate reservation has no term commitment but bills until you cancel it, and counts toward the On-Demand quota. Future-dated reservations are available for the C, G, I, M, R, T, U and X families with a minimum of 32 vCPU. Karpenter's `capacityReservationSelectorTerms` is Beta in the Karpenter documentation and has to be enabled before use.
+`g4dn.metal` can be hard to get depending on the Region and AZ, so if you know how long you need it, consider an On-Demand Capacity Reservation, which holds capacity for an instance type in a specific AZ.
+
+- **Immediate reservations**: no term commitment, but they bill until you cancel them and count toward the On-Demand quota.
+- **Future-dated reservations**: available for the C, G, I, M, R, T, U and X families with a minimum of 32 vCPU.
+- **Karpenter's `capacityReservationSelectorTerms`**: Beta in the Karpenter documentation, and it has to be enabled before use.
 
 ## Scope and limits
 

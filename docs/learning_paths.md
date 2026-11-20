@@ -49,8 +49,11 @@ flowchart TD
 | 3. c8i 저비용 (시나리오 C) | AWS에서 세 런타임과 버전 교체를 적은 비용으로 해 보고 싶은 분 | AWS 계정, Standard vCPU 쿼터 14, AWS CDK CLI와 Session Manager plugin | 반나절 | 컴퓨트 약 0.57 USD/시간 + EKS 0.10 + NAT |
 | 4. GPU 기본 (시나리오 A) | 실제 GRPO 학습과 GPU 샌드박스를 실행해 보고 싶은 분 | G and VT vCPU 쿼터 16 (06의 버전 교체 중에는 gVisor 노드 2대를 더해 24) | 하루 | 컴퓨트 약 3.42 USD/시간 (버전 교체 중 약 2.01 추가) |
 | 5. HyperPod (시나리오 B1, B2) | 학습을 SageMaker HyperPod에서 실행하려는 분 | B1: G and VT vCPU 쿼터 8과 HyperPod `ml.g5.2xlarge` 1대. B2: HyperPod `ml.g5.2xlarge` 1대와 `ml.g5.xlarge` 2대 (EC2 GPU 쿼터 불필요) | 하루 이상 | B1 약 3.72, B2 약 4.52 USD/시간 |
-| 6. Kata GPU 추가 | VM 경계 격리와 GPU passthrough를 비교하려는 분 | G and VT vCPU 쿼터: 코스 3에 더하면 96, 코스 4에 더하면 112. IOMMU AMI를 빌드하는 동안 Standard vCPU 쿼터도 2가 더 필요(c8i 리허설과 함께면 16) | 코스 3이나 4 + 반나절 | 코스 3에 더하면 합계 약 8.39 USD/시간(7.824 추가). 코스 4에 c8i 리허설까지 더하면 합계 약 11.61 USD/시간 |
+| 6. Kata GPU 추가 | VM 경계 격리와 GPU passthrough를 비교하려는 분 | G and VT vCPU 쿼터: 코스 3에 더하면 96, 코스 4에 더하면 112 | 코스 3이나 4 + 반나절 | 코스 3에 더하면 합계 약 8.39 USD/시간(7.824 추가) |
 | 7. Production 설계 | 실제 서비스에 적용할 구조를 설계하는 분 | 브라우저 | 2~3시간 | 0원 |
+
+- **코스 6의 Standard vCPU 쿼터**: IOMMU AMI를 빌드하는 동안 2가 더 필요합니다(c8i 리허설과 함께면 16).
+- **코스 6을 코스 4에 더할 때의 비용**: c8i 리허설까지 더하면 합계 약 11.61 USD/시간입니다.
 
 ## 코스별 순서
 
@@ -116,7 +119,10 @@ flowchart TD
 
 === "6. Kata GPU"
 
-    1. 코스 3은 정리 단계 직전까지 진행합니다. 코스 4에서 이어 가며 두 GPU 풀을 비교하려면 06의 버전 교체 전에 넘어오세요. 06의 마지막 단계(`--finish`)는 `gvisor v1`을 0개로 줄입니다. 클러스터를 지운 뒤에는 이어서 할 수 없습니다.
+    1. 코스 3이나 4에서 이어 갑니다.
+        - **코스 3에서 이어 가면**: 정리 단계 직전까지 진행합니다.
+        - **코스 4에서 이어 가며 두 GPU 풀을 비교하려면**: 06의 버전 교체 전에 넘어오세요. 06의 마지막 단계(`--finish`)는 `gvisor v1`을 0개로 줄입니다.
+        - **클러스터를 지운 뒤에는**: 이어서 할 수 없습니다.
     2. [03 Kata 샌드박스](handson/03_kata.md)의 1단계(c8i 리허설) → 2단계(`g4dn.metal`)
     3. [04 샌드박스 풀 배포와 검증](handson/04_sandbox_pools.md)대로 `kata-qemu v1` 풀을 배포하고 `scripts/ops/verify.sh kata-qemu v1`로 검증합니다.
     4. (선택) [08 런타임 벤치마크](handson/08_benchmark.md)로 gVisor와 비교합니다. GPU끼리 비교하려면 `gvisor v1`(코스 4)과 `kata-qemu v1` 풀이 모두 Ready일 때 실행하세요.
@@ -143,7 +149,10 @@ flowchart TD
 
 !!! warning "AWS 코스(3~6)를 시작하기 전에"
     1. **끝나면 바로 정리합니다.** 각 코스의 마지막 단계(`scripts/08_cleanup.sh`)는 확인 단어를 직접 입력해야 진행되므로 리소스가 실수로 지워지지 않습니다.
-    2. **실습을 쉬는 동안에는 쓰지 않는 EC2 실습 노드 그룹을 0으로 줄입니다.** Deployment만 줄이면 노드는 계속 과금됩니다(방법은 [00 전체 흐름](handson/00_overview.md)의 "소요 시간과 비용" 참고). system 노드 두 대는 최솟값이 2라서 남고, HyperPod 인스턴스는 EKS 노드 그룹을 줄여도 과금되므로 코스 5를 마쳤다면 `scripts/hyperpod/delete.sh`로 지우세요.
+    2. **실습을 쉬는 동안에는 쓰지 않는 EC2 실습 노드 그룹을 0으로 줄입니다.** 방법은 [00 전체 흐름](handson/00_overview.md)의 "소요 시간과 비용"을 참고하세요.
+        - **Deployment만 줄이면**: 노드는 계속 과금됩니다.
+        - **system 노드 두 대**: 최솟값이 2라서 남습니다.
+        - **HyperPod 인스턴스**: EKS 노드 그룹을 줄여도 과금되므로 코스 5를 마쳤다면 `scripts/hyperpod/delete.sh`로 지우세요.
     3. **정리한 뒤 남은 리소스를 확인합니다.** `08_cleanup.sh`의 마지막 표(태그가 붙은 인스턴스)가 비어 있어야 하고, 남을 수 있는 리소스와 확인 명령은 [99 정리](handson/99_cleanup.md)에 있습니다.
 
 ## 문제가 생기면

@@ -5,7 +5,11 @@
 
 ## Pain point
 
-Security patches, Triton upgrades and harness setting changes happen mid-run too. A new image can change kernel compilation and timing, so without a record of when it changed, a shift in the reward curve cannot be explained. A rolling update of the sandbox Deployment makes old and new pods answer side by side: completions of one GRPO group are scored by different rules and the group-relative advantage is corrupted. Karpenter `alias: al2023@latest` silently gives new nodes the latest AMI, and gVisor nvproxy checks the driver version strictly, so on a node with a new driver the sandbox may never become Ready.
+Security patches, Triton upgrades and harness setting changes happen mid-run too.
+
+- **When the image changes**: kernel compilation and timing can change, so without a record of when it changed, a shift in the reward curve cannot be explained.
+- **When the sandbox Deployment is replaced by a rolling update**: old and new pods answer side by side. Completions of one GRPO group are then scored by different rules and the group-relative advantage is corrupted.
+- **When you use Karpenter `alias: al2023@latest`**: new nodes silently get the latest AMI. gVisor nvproxy checks the driver version strictly, so on a node with a new driver the sandbox may never become Ready.
 
 ![a: in a Deployment during a rolling update, the old pod (old scoring rules) and the new pod (new scoring rules) score parts of the 8 completions of one GRPO group, so the group-relative advantage mixes scores of two rules. b: with one pool per (runtime, version), the active sandbox-gvisor-v1 scores the whole group, and sandbox-gvisor-v2 gets no traffic before its checks and takes over from the next batch (TRL) or the next newly pinned group (veRL), so the advantage holds scores of one version within each rank's batch (TRL) or within a valid group_key pin (veRL)](../images/figures/production-05_sandbox_updates.svg)
 
@@ -58,7 +62,9 @@ export HARNESS_MAX_SPEEDUP="10"
 export SANDBOX_MAX_EVALS="200"
 ```
 
-`scripts/03_build_push_images.sh` creates its ECR repositories with `--image-tag-mutability IMMUTABLE`, so pushing an existing tag again fails with `ImageTagAlreadyExistsException` and a verified tag cannot change. If the repository was created outside the script, check its tag immutability setting. The script builds the sandbox, trainer and control images with the same `IMAGE_TAG`, but a running trainer keeps its own image.
+- **When you push an existing tag again**: `scripts/03_build_push_images.sh` creates its ECR repositories with `--image-tag-mutability IMMUTABLE`, so the push fails with `ImageTagAlreadyExistsException` and a verified tag cannot change.
+- **If the repository was created outside the script**: check its tag immutability setting.
+- **A running trainer**: the script builds the sandbox, trainer and control images with the same `IMAGE_TAG`, but a running trainer keeps its own image.
 
 The routing table also needs the new version's address. Without it, parity still passes, and right after the switch a direct-mode trainer stops with `RoutingError` at its next reward batch. Add the entry under `pools` in `k8s/base/routing.json.tpl`, and before the switch render the table with `v3` active from the repository root to check that it resolves to an address.
 
@@ -68,9 +74,16 @@ python3 scripts/render.py k8s/base/routing.json.tpl ACTIVE_RUNTIME=gvisor ACTIVE
   | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d["active"]; print(d["pools"][a["runtime"]][a["version"]])'
 ```
 
-**What to look for:** `sandbox-gvisor-v3.sandbox.svc.cluster.local:8000`. If it ends with `KeyError: 'v3'`, `pools.gvisor` has no `v3` entry; add it to the template.
+**What to look for:**
 
-For node-level changes it is safer not to edit the existing NodeClass. When a NodePool or EC2NodeClass template changes, Karpenter replaces the existing nodes as drifted, so the nodes under the old pool move to the new runtime too (karpenter.sh docs). Give a separate NodePool and EC2NodeClass for the new version a distinct node label, and override `NODE_SELECTOR` in the version file to select it. For the AMI, a pinned alias such as `al2023@v20261107` (check the format in the Karpenter docs) instead of `alias: al2023@latest` changes only when you intend it to. With the hands-on node groups from the CDK stack, add a new node group in `cdk/gpusandbox_cdk/stack.py` and deploy again.
+- `sandbox-gvisor-v3.sandbox.svc.cluster.local:8000` is printed.
+- **If it ends with `KeyError: 'v3'`**: `pools.gvisor` has no `v3` entry; add it to the template.
+
+For node-level changes it is safer not to edit the existing NodeClass. When a NodePool or EC2NodeClass template changes, Karpenter replaces the existing nodes as drifted, so the nodes under the old pool move to the new runtime too (karpenter.sh docs).
+
+- **Nodes for the new version**: give a separate NodePool and EC2NodeClass for the new version a distinct node label, and override `NODE_SELECTOR` in the version file to select it.
+- **AMI**: a pinned alias such as `al2023@v20261107` (check the format in the Karpenter docs) instead of `alias: al2023@latest` changes only when you intend it to.
+- **With the hands-on node groups from the CDK stack**: add a new node group in `cdk/gpusandbox_cdk/stack.py` and deploy again.
 
 ## One blue/green pool per (runtime, version)
 
@@ -115,9 +128,16 @@ scripts/ops/rollout.sh gvisor v1 v2
 scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
 
-Steps 1 and 2 call `scripts/06_deploy_sandboxes.sh` and `scripts/ops/verify.sh` unchanged. Step 1 passes no replica argument, so it deploys the profile's default replica count, and without the `SANDBOX_ALLOWED_SUBJECTS` environment variable it uses the default caller list, which includes the trainer. If you run with a narrowed caller list as in [02 Security](02_security.md), set this variable for both the forward switch and the rollback. If step 3 parity fails, the script stops with `parity failed: v2 keeps no traffic, v1 stays active`; step 4 updates the `sandbox-routing` ConfigMap in whichever of the `rl-trainer` and `sandbox-gateway` namespaces exist.
+- **Steps 1 and 2**: they call `scripts/06_deploy_sandboxes.sh` and `scripts/ops/verify.sh` unchanged. Step 1 passes no replica argument, so it deploys the profile's default replica count.
+- **Without the `SANDBOX_ALLOWED_SUBJECTS` environment variable**: step 1 uses the default caller list, which includes the trainer. If you run with a narrowed caller list as in [02 Security](02_security.md), set this variable for both the forward switch and the rollback.
+- **If step 3 parity fails**: the script stops with `parity failed: v2 keeps no traffic, v1 stays active`.
+- **Step 4**: it updates the `sandbox-routing` ConfigMap in whichever of the `rl-trainer` and `sandbox-gateway` namespaces exist.
 
-**What to look for:** the first command ends with a sentence saying that the ConfigMap reaches pods within about a minute, the `{"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", ...}` line to wait for in the trainer, and the `--finish` command to run next.
+**What to look for:** the first command ends with three things.
+
+- a sentence saying that the ConfigMap reaches pods within about a minute
+- the `{"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", ...}` line to wait for in the trainer
+- the `--finish` command to run next
 
 **If it fails:** see the version switch (routing) table in [Troubleshooting](../reference/troubleshooting.md).
 
@@ -128,9 +148,12 @@ Steps 1 and 2 call `scripts/06_deploy_sandboxes.sh` and `scripts/ops/verify.sh` 
 
 | Gate | What it checks | On failure |
 |---|---|---|
-| `ops/verify.sh` | Sandbox and node kernel printed (you compare them; no automatic check), IMDS, API server, kubelet and internet blocked, golden verdicts through the authenticated API (`probe`), connections from another namespace blocked | If any check other than the kernel printout fails, the script stops and the new version gets no traffic |
+| `ops/verify.sh` | Sandbox and node kernel printed, IMDS, API server, kubelet and internet blocked, golden verdicts (`probe`), connections from another namespace blocked | If any check other than the kernel printout fails, the script stops and the new version gets no traffic |
 | `parity` (`src/gpusandbox/tools.py`) | Both pools return the expected golden verdicts, same status, speedup ratio within `--speedup-tolerance` (default 0.35; the script uses the default) | Same as above |
 | Canary (optional) | Only some groups are scored by the new version | Not implemented in this repo |
+
+- **Kernel printout in `ops/verify.sh`**: you compare them yourself; there is no automatic check.
+- **Golden verdicts in `ops/verify.sh`**: they are checked through the authenticated API.
 
 The golden set (`src/gpusandbox/golden.py`) is six submissions, and CPU pools skip the GPU-only entries.
 
@@ -152,10 +175,14 @@ The golden set (`src/gpusandbox/golden.py`) is six submissions, and CPU pools sk
 
 | Item | TRL (direct or gateway batch) | veRL (gateway, per sample) |
 |---|---|---|
-| Pinning unit | One version per reward batch (a snapshot per sandbox call; results cached from another pool are scored again) | One snapshot per `group_key`, taken at its first sample |
+| Pinning unit | One version per reward batch | One snapshot per `group_key`, taken at its first sample |
 | Code | `KernelRewards._evaluate` → `evaluate_batch_sync` | `compute_score` → `evaluate_grouped` → `POST /v1/evaluate` |
-| When the switch takes effect | The next reward batch sent to the sandbox after the ConfigMap arrives (a batch fully cached from one pool keeps the cached results) | The first sample of a new `group_key` (existing pins hold for `GATEWAY_GROUP_PIN_TTL_S`, default 900 s) |
+| When the switch takes effect | The next reward batch sent to the sandbox after the ConfigMap arrives | The first sample of a new `group_key` |
 | Record | `sandbox_version_switch`, `reward_batch` | `gateway_evaluations_total{version}`, `sandbox_version` in the `compute_score` result |
+
+- **TRL pinning unit**: a snapshot per sandbox call; results cached from another pool are scored again.
+- **When the switch takes effect for TRL**: a batch fully cached from one pool keeps the cached results.
+- **When the switch takes effect for veRL**: existing pins hold for `GATEWAY_GROUP_PIN_TTL_S` (default 900 s).
 
 With the TRL default `steps_per_generation` (= `gradient_accumulation_steps`), one generation batch feeds one optimizer step, so a batch boundary is a step boundary. The trainer re-reads the routing file at most every 2 seconds, and a ConfigMap change reaches the pod through kubelet sync, usually within a minute. A `subPath` mount never receives updates, so mount it as a directory as the repo templates do.
 
@@ -173,7 +200,9 @@ In the first reward batch that calls the sandbox after a version change, the tra
 {"event": "reward_batch", "global_step": 37, "runtime": "gvisor", "version": "v2", "served_versions": {"v2": 96}, "routing_revision": 2, "n": 96}
 ```
 
-- `version` is the version the trainer picked from the routing table in direct mode, and the batch version the gateway answered with in gateway mode; `served_versions` counts the versions recorded in the individual results. If a successful result carries a version other than `version`, check the Service selector and the routing address. A `sandbox_error` result gets the batch's version filled in instead of a pod's, and when the gateway call itself fails it has no version and counts as `None`, so read `status` alongside.
+- **`version`**: the version the trainer picked from the routing table in direct mode, and the batch version the gateway answered with in gateway mode.
+- **`served_versions`**: counts the versions recorded in the individual results. If a successful result carries a version other than `version`, check the Service selector and the routing address.
+- **A `sandbox_error` result**: it gets the batch's version filled in instead of a pod's, and when the gateway call itself fails it has no version and counts as `None`, so read `status` alongside.
 - Joining on `global_step` with the TRL training log (loss, per-function rewards) shows whether a reward change coincides with the switch.
 - veRL has no `reward_batch` event, so split `gateway_evaluations_total` by its `version` label (see the PromQL on page 07).
 
@@ -198,7 +227,11 @@ done
 rm -f .routing.json
 ```
 
-**What to look for:** `configmap/sandbox-routing configured` for each namespace that exists. Once the ConfigMap arrives, usually within about a minute, the next reward batch that calls the sandbox logs a `sandbox_version_switch` whose `to` is `gvisor/v1`. A batch that ends on the cache of one pool makes no call and logs no event.
+**What to look for:**
+
+- `configmap/sandbox-routing configured` for each namespace that exists.
+- Once the ConfigMap arrives, usually within about a minute, the next reward batch that calls the sandbox logs a `sandbox_version_switch` whose `to` is `gvisor/v1`.
+- **A batch that ends on the cache of one pool**: it makes no call and logs no event.
 
 A rollback does not undo updates already applied with v2 rewards, so record the rollback step and that the rewards in that interval were v2 rewards.
 
@@ -206,11 +239,19 @@ A rollback does not undo updates already applied with v2 rewards, so record the 
 
 Run `--finish` when the following hold. It scales the old Deployment to zero replicas without deleting it, so rollback stays fast.
 
-1. **TRL:** the trainer logged `sandbox_version_switch`, several later `reward_batch` events show only the new version in `served_versions`, and their `status` has verdicts other than `sandbox_error`. A failed pool call still fills in the batch version, so if everything is `sandbox_error` the new version has not actually scored anything; keep the old pool.
+1. **TRL:** the trainer logged `sandbox_version_switch`, several later `reward_batch` events show only the new version in `served_versions`, and their `status` has verdicts other than `sandbox_error`.
+    - **If everything is `sandbox_error`**: a failed pool call still fills in the batch version, so the new version has not actually scored anything. Keep the old pool.
 2. **veRL:** there are no `sandbox_version_switch` or `reward_batch` events. Check that the `sandbox_version` returned by `compute_score` for new groups is the new version, and that the old version's `gateway_evaluations_total` counter has stopped rising. The counter rises only after an evaluation finishes, so a short pause does not prove the old version's work is done.
-3. **Gateway path:** `GATEWAY_GROUP_PIN_TTL_S` (default 900 s) has passed since the gateway read the new routing, so every old-version pin has expired, and the requests accepted for the old version before that (which wait up to 600 s for a free pod) and the evaluations in progress have also finished. Check that `sandbox_busy` is 0 on every old-version pod. This metric shows only evaluations running on a pod; requests waiting for a free pod or being retried in the gateway do not appear in it, and the gateway in this repository has no per-pool metric for unfinished requests. The TTL only decides the pin for the next request, so requests already accepted can outlast it.
+3. **Gateway path:** `GATEWAY_GROUP_PIN_TTL_S` (default 900 s) has passed since the gateway read the new routing, so every old-version pin has expired, and the requests accepted for the old version before that (which wait up to 600 s for a free pod) and the evaluations in progress have also finished. Check that `sandbox_busy` is 0 on every old-version pod.
+    - **What `sandbox_busy` does not show**: this metric shows only evaluations running on a pod; requests waiting for a free pod or being retried in the gateway do not appear in it. The gateway in this repository has no per-pool metric for unfinished requests.
+    - **What the TTL decides**: the TTL only decides the pin for the next request, so requests already accepted can outlast it.
 
-Once the pods are gone, a Karpenter node becomes a reclaim candidate after staying empty for `consolidateAfter` (10 minutes for gVisor, 30 minutes for Kata GPU), and billing runs until the node actually terminates, while the hands-on EKS managed node groups keep billing until you scale them down (for example `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`). When you no longer expect a rollback, delete the pool with `kubectl -n sandbox delete deployment/sandbox-gvisor-v1 service/sandbox-gvisor-v1`.
+Once the pods are gone, node billing stops differently depending on the kind of node.
+
+- **Karpenter NodePool nodes**: a node becomes a reclaim candidate after staying empty for `consolidateAfter` (10 minutes for gVisor, 30 minutes for Kata GPU), and billing runs until the node actually terminates.
+- **Hands-on EKS managed node groups**: they keep billing until you scale them down (for example `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`).
+
+When you no longer expect a rollback, delete the pool with `kubectl -n sandbox delete deployment/sandbox-gvisor-v1 service/sandbox-gvisor-v1`.
 
 ## Harness changes that shift rewards on purpose
 
@@ -223,14 +264,20 @@ A change that alters how scores are computed, such as v2's 10x speedup cap, is h
 
 GRPO advantages are computed relative to the group, so a change that adds the same amount to every member of a group cancels out, while a change that reorders samples within a group, such as the speedup cap, changes the learning signal itself.
 
-The INTELLECT-3 report also describes environments that are "versioned independently of the trainer", and Prime Intellect's Environments Hub distributes environments as standalone Python modules with pinnable dependencies. This is the same idea as this page's sandbox versions managed separately from the run.
+??? note "Examples from other projects"
+    The INTELLECT-3 report also describes environments that are "versioned independently of the trainer", and Prime Intellect's Environments Hub distributes environments as standalone Python modules with pinnable dependencies. This is the same idea as this page's sandbox versions managed separately from the run.
 
 ## How to verify
 
 - The `ops/rollout.sh` output shows a `PASS` line per golden entry and `{"event": "parity", ..., "passed": true}`.
 - About a minute after step 4 the ConfigMap is in place, and the next reward batch that calls the sandbox logs `sandbox_version_switch`.
 - Later `reward_batch` events show only the new version in `served_versions`, and their `status` has verdicts other than `sandbox_error`.
-- After `--finish`, `kubectl -n sandbox get deploy` shows the old version at `0/0`. In the gVisor pool each pod takes its own GPU node, so running both pools adds node cost. In the Kata pool, with the default 4 replicas each, both pools can share one g4dn.metal (8 T4). If the switch added nodes, check that they are returned after you scale the old pool down. The hands-on procedure is in [06 Updating the sandbox during training](../handson/06_sandbox_update.md).
+- After `--finish`, `kubectl -n sandbox get deploy` shows the old version at `0/0`.
+- **gVisor pool**: each pod takes its own GPU node, so running both pools adds node cost.
+- **Kata pool**: with the default 4 replicas each, both pools can share one g4dn.metal (8 T4).
+- **If the switch added nodes**: check that they are returned after you scale the old pool down.
+
+The hands-on procedure is in [06 Updating the sandbox during training](../handson/06_sandbox_update.md).
 
 ## Scope and limits
 

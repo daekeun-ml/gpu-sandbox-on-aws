@@ -5,7 +5,11 @@
 
 ## 기존 Pain Point
 
-샌드박스 쪽에 장애가 생겨도 대개 학습은 중단되지 않습니다. 인증 실패(401)가 대량으로 발생해도 TRL은 `sandbox_error` 샘플을 `None`으로 처리해 제외합니다. 모든 샘플이 제외되면 advantage가 0이 되어 학습 신호 없이 step만 진행됩니다. 풀의 Ready pod가 줄어도 Ready가 아닌 pod는 headless Service DNS에서 제외될 뿐이므로, 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking이 일어나면 reward 값은 오히려 올라갑니다. 이를 알려 주는 flag(`implausible_speedup`, `timed_output_mismatch` 등)는 verdict에만 기록되고 지표로 집계되지 않습니다.
+샌드박스 쪽에 장애가 생겨도 대개 학습은 중단되지 않습니다.
+
+- **인증 실패(401)가 대량으로 발생해도**: TRL은 `sandbox_error` 샘플을 `None`으로 처리해 제외합니다. 모든 샘플이 제외되면 advantage가 0이 되어 학습 신호 없이 step만 진행됩니다.
+- **풀의 Ready pod가 줄어도**: Ready가 아닌 pod는 headless Service DNS에서 제외될 뿐이므로, 남은 pod로 요청이 몰려 step만 느려집니다.
+- **reward hacking이 일어날 때**: reward 값은 오히려 올라갑니다. 이를 알려 주는 flag(`implausible_speedup`, `timed_output_mismatch` 등)는 verdict에만 기록되고 지표로 집계되지 않습니다.
 
 ![a: 인증 실패(401 응답이 대량으로 발생)가 나면 sandbox_error 샘플이 None으로 제외되고 그 샘플의 advantage는 0이 됩니다. 모든 샘플이 제외되면 학습 신호 없이 step만 진행됩니다. 풀이 줄면 Ready가 아닌 pod가 DNS에서 빠지고 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking은 flag가 verdict에만 기록되고 지표로 집계되지 않아 reward가 오르는 것처럼 보입니다. 세 경우 모두 학습은 멈추지 않습니다. b: 같은 세 고장을 각각 경보에 연결합니다. status.sandbox_error / n으로 sandbox_error 비율 경보(TRL 5% 초과, 3 batch 연속)를, 활성 풀 Deployment별 available과 desired replicas 비교로 Ready pod 부족 경보(available이 desired 미만인 상태 10분)를, flag 개수(저장소에 없는 확장, 점선)로 reward hacking 신호 경보(flag 비율 상승 추세)를 만듭니다.](../images/figures/production-07_observability_and_operations.svg)
 
@@ -58,14 +62,23 @@ flowchart LR
 
 ### 수집기 인증과 NetworkPolicy
 
-샌드박스 pod의 `/metrics`는 audience `gpu-sandbox` 토큰을 cluster issuer의 JWKS로 오프라인 검증하고, 주체가 `SANDBOX_ALLOWED_SUBJECTS`에 있어야 합니다. gateway의 `/metrics`는 audience `gpu-sandbox-gateway` 토큰을 TokenReview로 확인하고, `GATEWAY_ALLOWED_SUBJECTS`에 주체가 있는지 확인합니다. NetworkPolicy가 기본적으로 ingress를 차단하므로, 수집기 네임스페이스의 접근을 허용하는 NetworkPolicy도 필요합니다.
+- **샌드박스 pod의 `/metrics`**: audience `gpu-sandbox` 토큰을 cluster issuer의 JWKS로 오프라인 검증하고, 주체가 `SANDBOX_ALLOWED_SUBJECTS`에 있어야 합니다.
+- **gateway의 `/metrics`**: audience `gpu-sandbox-gateway` 토큰을 TokenReview로 확인하고, `GATEWAY_ALLOWED_SUBJECTS`에 주체가 있는지 확인합니다.
+- **NetworkPolicy**: 기본적으로 ingress를 차단하므로, 수집기 네임스페이스의 접근을 허용하는 NetworkPolicy도 필요합니다.
 
 | 방식 | 필요한 것 | 장점 | 주의 |
 |---|---|---|---|
 | gateway만 수집 | 수집기 SA를 `GATEWAY_ALLOWED_SUBJECTS`에 추가, audience `gpu-sandbox-gateway` 토큰, 8080 허용 NetworkPolicy | 샌드박스 ingress를 gateway 하나로 유지 | pod별 `busy`, `ready`, `reaped`는 수집되지 않음 |
 | 샌드박스 pod도 수집 | 위 항목과 함께 `SANDBOX_ALLOWED_SUBJECTS`에 추가하고 `scripts/06_deploy_sandboxes.sh` 재실행, audience `gpu-sandbox` 토큰, 8000 허용 NetworkPolicy | pod별 지표 | allowlist는 경로를 구분하지 않아 그 주체가 `/v1/evaluate`도 호출할 수 있음. 수집 전용 SA를 쓰세요 |
 
-`SANDBOX_ALLOWED_SUBJECTS`를 설정하면 `06_deploy_sandboxes.sh`가 기본 목록(`grpo-trainer`, `sandbox-probe`, `gateway`) 대신 그 값만 쓰므로, 현재 풀에 설정된 주체 목록에 수집기 주체를 더해 넣으세요. 기본 배포라면 세 기본 주체를, [02 보안](02_security.md)의 운영 구성이라면 `gateway`와 `sandbox-probe`를 유지합니다. 세 번째 인자로 현재 replica 수를 넘기지 않으면 프로필의 기본 replica 수로 돌아갑니다. 실행 중인 풀에 다시 적용하면 pod template이 바뀌어 pod가 하나씩 다시 생성되므로(Kata는 새 VM), 학습 run 사이에 적용하세요. 아래 Prometheus 예시의 label과 경로는 설치 방식에 맞게 바꾸세요.
+`SANDBOX_ALLOWED_SUBJECTS`를 설정하면 `06_deploy_sandboxes.sh`가 기본 목록(`grpo-trainer`, `sandbox-probe`, `gateway`) 대신 그 값만 쓰므로, 현재 풀에 설정된 주체 목록에 수집기 주체를 더해 넣으세요.
+
+- **기본 배포라면**: 세 기본 주체를 유지합니다.
+- **[02 보안](02_security.md)의 운영 구성이라면**: `gateway`와 `sandbox-probe`를 유지합니다.
+- **replica 수**: 세 번째 인자로 현재 replica 수를 넘기지 않으면 프로필의 기본 replica 수로 돌아갑니다.
+- **실행 중인 풀에 다시 적용하면**: pod template이 바뀌어 pod가 하나씩 다시 생성되므로(Kata는 새 VM), 학습 run 사이에 적용하세요.
+
+아래 Prometheus 예시의 label과 경로는 설치 방식에 맞게 바꾸세요.
 
 ```yaml
 # Prometheus pod: one projected token per audience (example)
@@ -122,7 +135,14 @@ spec:
 | `jwks_synced` (도구) | JWKS 동기화 | `keys` (kid 목록) |
 
 !!! note "`n`과 `pass_rate`의 집계 대상"
-    `reward_batch`는 이번 호출에서 샌드박스로 보낸 completion만 집계합니다. 코드 블록이 없거나 정적 정책을 위반한 completion, 이미 같은 풀의 캐시에 결과가 있는 completion은 보내지 않으므로 빠집니다. 다른 풀로 캐시돼 이 batch의 풀에서 다시 채점한 completion은 들어갑니다. 동일한 유효 completion은 한 요청에 한 번만 담깁니다. 풀이 바뀌어 같은 completion을 다시 보내도 `n`과 `status`에는 그 completion의 마지막 결과 한 건만 들어갑니다. 따라서 `pass_rate`는 "샌드박스로 보낸 completion 가운데 통과한 비율"입니다. `n`은 캐시 적중으로도 줄어드니, format 붕괴는 `n`과 TRL의 `format_reward`를 함께 보고 판단하세요. 샌드박스로 보낸 completion이 없으면 그 batch의 `reward_batch`는 기록되지 않습니다.
+    `reward_batch`는 이번 호출에서 샌드박스로 보낸 completion만 집계합니다.
+
+    - **빠지는 것**: 코드 블록이 없거나 정적 정책을 위반한 completion, 이미 같은 풀의 캐시에 결과가 있는 completion은 보내지 않으므로 빠집니다.
+    - **들어가는 것**: 다른 풀로 캐시돼 이 batch의 풀에서 다시 채점한 completion은 들어갑니다.
+    - **같은 completion**: 동일한 유효 completion은 한 요청에 한 번만 담깁니다. 풀이 바뀌어 같은 completion을 다시 보내도 `n`과 `status`에는 그 completion의 마지막 결과 한 건만 들어갑니다.
+    - **`pass_rate`의 뜻**: 그래서 `pass_rate`는 "샌드박스로 보낸 completion 가운데 통과한 비율"입니다.
+    - **format 붕괴 판단**: `n`은 캐시 적중으로도 줄어드니, format 붕괴는 `n`과 TRL의 `format_reward`를 함께 보고 판단하세요.
+    - **샌드박스로 보낸 completion이 없으면**: 그 batch의 `reward_batch`는 기록되지 않습니다.
 
 아래 명령은 trainer 로그에서 `reward_batch` 줄만 골라 경보에 쓸 필드를 요약합니다. 작업 PC에 `jq`가 필요하고, `RUN_ID`는 `scripts/07_run_grpo.sh`가 Job 이름에 쓴 값입니다.
 
@@ -131,7 +151,10 @@ kubectl -n rl-trainer logs "job/grpo-${RUN_ID}" | grep '"event": "reward_batch"'
   | jq -c '{step: .global_step, version, served_versions, n, pass_rate, sandbox_error: (.status.sandbox_error // 0), p95: .eval_p95_s}'
 ```
 
-**확인할 것:** batch마다 `{"step":...,"version":"v1","served_versions":{"v1":...},"n":...,"pass_rate":...,"sandbox_error":0,"p95":...}` 형태의 줄이 출력됩니다. `sandbox_error`가 계속 0보다 크면 아래 런북의 401, 403 행부터 확인하세요.
+**확인할 것:**
+
+- batch마다 `{"step":...,"version":"v1","served_versions":{"v1":...},"n":...,"pass_rate":...,"sandbox_error":0,"p95":...}` 형태의 줄이 출력됩니다.
+- **`sandbox_error`가 계속 0보다 크면**: 아래 런북의 401, 403 행부터 확인하세요.
 
 ### flag는 아직 지표가 아닙니다
 
@@ -142,7 +165,10 @@ verdict의 `flags` 목록(`implausible_speedup`, `timed_output_mismatch`, `trito
 "flags": dict(Counter(f for r in results for f in r.get("flags") or [])),
 ```
 
-확장하지 않아도 간접적으로 확인할 수 있는 신호가 있습니다. `timed_output_mismatch`가 붙은 결과는 `wrong_answer`로 집계됩니다. `implausible_speedup`이 붙으면 speedup이 1.0으로 바뀌므로, `custom_kernel_rate`는 높은데 `mean_speedup`이 1.0 근처에 머뭅니다(위협 유형은 [04 Reward 무결성](04_reward_integrity.md) 참고).
+확장하지 않아도 간접적으로 확인할 수 있는 신호가 있습니다.
+
+- **`timed_output_mismatch`**: 이 flag가 붙은 결과는 `wrong_answer`로 집계됩니다.
+- **`implausible_speedup`**: 이 flag가 붙으면 speedup이 1.0으로 바뀌므로, `custom_kernel_rate`는 높은데 `mean_speedup`이 1.0 근처에 머뭅니다(위협 유형은 [04 Reward 무결성](04_reward_integrity.md) 참고).
 
 ## 권장 경보
 
@@ -151,12 +177,18 @@ verdict의 `flags` 목록(`implausible_speedup`, `timed_output_mismatch`, `trito
 | 경보 | 신호 | 시작 조건 (예시) | 먼저 볼 곳 |
 |---|---|---|---|
 | pass rate 붕괴 | `reward_batch.pass_rate`, 버전별 `ok` 비율 | 직전 20 batch 평균의 절반 미만이 3 batch 연속 | `sandbox_version_switch` 여부, 풀 상태 |
-| `sandbox_error` 비율 | TRL은 `reward_batch`의 `status.sandbox_error / n`(gateway가 거부한 401, 403 포함), veRL은 `compute_score`가 반환한 `sandbox_error`의 샘플별 집계(호출자 인증 실패 포함). gateway `status="sandbox_error"` 비율은 인증을 통과해 풀로 전달된 요청만 집계 | TRL 5% 초과가 3 batch 연속, veRL은 더 낮게 | 런북의 401, 403, 풀 크기 |
+| `sandbox_error` 비율 | TRL은 `reward_batch`의 `status.sandbox_error / n`, veRL은 `compute_score`가 반환한 `sandbox_error`의 샘플별 집계 | TRL 5% 초과가 3 batch 연속, veRL은 더 낮게 | 런북의 401, 403, 풀 크기 |
 | p95 지연 | `sandbox_evaluation_seconds`, `gateway_evaluation_seconds`, `eval_p95_s` | 기준선의 2배 | GPU 상태, recycle, 노드 |
 | reward hacking 신호 | flag 개수(확장), `wrong_answer` 급증, `mean_speedup`이 1.0 근처에 머묾 | flag 비율이 상승 추세 | 샘플 직접 검토, 04 페이지 |
-| Ready pod 부족 | 활성 풀 Deployment별 kube-state-metrics의 desired와 available replicas. `sandbox_ready`에는 runtime과 version label이 없어 합계에 다른 풀의 pod도 들어감 | 활성 풀의 available이 desired 미만인 상태가 10분. routing이 replica 0인 풀을 가리키면 두 값이 모두 0이라 이 비교가 거짓이므로, 트래픽을 받을 활성 풀에는 available이 0인 경보도 따로 둠. 수집 대상이 모두 사라지면 시계열도 없어지므로 지표 누락 경보를 따로 둠 | 런북의 "Ready가 되지 않음" |
+| Ready pod 부족 | 활성 풀 Deployment별 kube-state-metrics의 desired와 available replicas | 활성 풀의 available이 desired 미만인 상태가 10분 | 런북의 "Ready가 되지 않음" |
 | 강제 종료 프로세스 증가 | `sandbox_reaped_processes_total` | 최근 30분 증가량(`increase`)이 0보다 큼 | 데몬을 남기는 후보 코드 검토 |
-| recycle 과다 | `gateway_recycled_pods_total`. 재활용 카운터에는 runtime과 version label이 없어, 여러 버전을 함께 운영하면 v1의 `gpu_fault` 재활용도 함께 셈 | 횟수 기반 재활용을 켠 버전(v2)의 평가 수 ÷ `SANDBOX_MAX_EVALS`의 2배. gateway 평가 수에는 빈 pod를 얻지 못해 pod에 닿지 않은 요청이 들어가고, probe Job이 풀에 직접 보낸 평가는 빠지므로 이 분모는 근사값 | `gpu_fault`, 노드 GPU 상태 |
+| recycle 과다 | `gateway_recycled_pods_total` | 횟수 기반 재활용을 켠 버전(v2)의 평가 수 ÷ `SANDBOX_MAX_EVALS`의 2배 | `gpu_fault`, 노드 GPU 상태 |
+
+- **`sandbox_error` 비율에 들어가는 것**: TRL 값에는 gateway가 거부한 응답(401, 403)이 포함되고, veRL 값에는 호출자 인증 실패가 포함됩니다. gateway `status="sandbox_error"` 비율은 인증을 통과해 풀로 전달된 요청만 집계합니다.
+- **Ready pod 부족에 `sandbox_ready`를 쓰지 않는 이유**: `sandbox_ready`에는 runtime과 version label이 없어 합계에 다른 풀의 pod도 들어갑니다.
+- **Ready pod 부족의 추가 경보**: routing이 replica 0인 풀을 가리키면 두 값이 모두 0이라 이 비교가 거짓이므로, 트래픽을 받을 활성 풀에는 available이 0인 경보도 따로 둡니다. 수집 대상이 모두 사라지면 시계열도 없어지므로 지표 누락 경보를 따로 둡니다.
+- **recycle 카운터의 범위**: 재활용 카운터에는 runtime과 version label이 없어, 여러 버전을 함께 운영하면 v1의 `gpu_fault` 재활용도 함께 셉니다.
+- **recycle 기준의 분모**: gateway 평가 수에는 빈 pod를 얻지 못해 pod에 닿지 않은 요청이 들어가고, probe Job이 풀에 직접 보낸 평가는 빠지므로 이 분모는 근사값입니다.
 
 위 경보의 PromQL 예시입니다. Prometheus나 Amazon Managed Service for Prometheus의 쿼리 화면에 한 줄씩 넣어 기준선과 비교하세요.
 
@@ -211,7 +243,11 @@ fields @timestamp, @message
 | gateway가 Ready가 되지 않음 | `sandbox-gateway` 네임스페이스에 `sandbox-routing` ConfigMap이 없거나 형식이 틀림 | ConfigMap 생성 (`ops/rollout.sh`는 이미 있는 네임스페이스만 갱신) |
 | recycle이 기대보다 많음 | `gpu_fault`로 draining된 pod가 많음 | 해당 노드의 GPU 상태 확인, 필요하면 노드 교체 |
 
-샌드박스가 보낸 401의 오류 본문은 서버 로그에 남지 않고 클라이언트 결과(`sandbox_error`의 `error`)에 일부만 포함됩니다. `scripts/ops/verify.sh <runtime> <version>`의 probe 단계로 원인을 확인하세요. golden 항목마다 `expected ok, got sandbox_error: HTTP 401: ...` 형태로 출력됩니다. 다만 probe는 `sandbox-probe` 주체로 샌드박스를 직접 호출하므로, allowlist에서 trainer 주체만 빠져서 생긴 403이나 gateway가 거부한 401, 403은 재현되지 않습니다. gateway가 거부하면 trainer 쪽 `error`에는 HTTP 상태만 남으니, 실제 호출 주체의 토큰으로 gateway를 호출해 응답 본문을 확인하세요.
+샌드박스가 보낸 401의 오류 본문은 서버 로그에 남지 않고 클라이언트 결과(`sandbox_error`의 `error`)에 일부만 포함됩니다.
+
+- **원인 확인**: `scripts/ops/verify.sh <runtime> <version>`의 probe 단계로 원인을 확인하세요. golden 항목마다 `expected ok, got sandbox_error: HTTP 401: ...` 형태로 출력됩니다.
+- **probe로 재현되지 않는 것**: probe는 `sandbox-probe` 주체로 샌드박스를 직접 호출하므로, allowlist에서 trainer 주체만 빠져서 생긴 403이나 gateway가 거부한 401, 403은 재현되지 않습니다.
+- **gateway가 거부하면**: trainer 쪽 `error`에는 HTTP 상태만 남으니, 실제 호출 주체의 토큰으로 gateway를 호출해 응답 본문을 확인하세요.
 
 JWKS 변경을 자동으로 반영하려면 `k8s/production/jwks-sync.yaml.tpl`의 CronJob(매시 17분)을 쓰고, `sandbox-gateway` 네임스페이스를 먼저 만들어 두세요. 아래 명령은 CronJob을 적용하고 Job 하나를 바로 실행해 결과를 확인한 뒤, 비교를 위해 두 namespace의 routing 표를 출력합니다.
 
@@ -225,7 +261,11 @@ kubectl -n rl-trainer get configmap sandbox-routing -o jsonpath='{.data.routing\
 kubectl -n sandbox-gateway get configmap sandbox-routing -o jsonpath='{.data.routing\.json}'
 ```
 
-**확인할 것:** `wait`가 `job.batch/jwks-sync-manual condition met`으로 끝나고, Job 로그에 `{"event": "jwks_synced", "keys": [...]}` 한 줄이 출력됩니다. 두 routing 표의 `active`가 같아야 합니다.
+**확인할 것:**
+
+- `wait`가 `job.batch/jwks-sync-manual condition met`으로 끝납니다.
+- Job 로그에 `{"event": "jwks_synced", "keys": [...]}` 한 줄이 출력됩니다.
+- 두 routing 표의 `active`가 같아야 합니다.
 
 **문제가 생기면:** Job이 실패하면 `kubectl -n sandbox-gateway describe job jwks-sync-manual`과 [문제 해결](../reference/troubleshooting.md)의 "401, 403 응답" 표를 보세요.
 

@@ -5,7 +5,12 @@
 
 ## Pain point
 
-An EKS cluster created with defaults leaves settings that are risky for sandboxes. With an IMDS hop limit of 2 or more on the node, pods can reach the node's instance credentials, and a public API endpoint can be tried from anywhere on the internet even though IAM authentication still applies, so company account security checks flag it (for example Security Hub control EKS.1). eksctl, which this repository used before, does not support creating a cluster with only the private endpoint enabled (eksctl docs). On the image side, TRL, vLLM, torch and transformers pin each other's version ranges, so if pip upgrades one of them, imports break.
+An EKS cluster created with defaults leaves settings that are risky for sandboxes.
+
+- **IMDS hop limit**: with an IMDS hop limit of 2 or more on the node, pods can reach the node's instance credentials.
+- **Public API endpoint**: it can be tried from anywhere on the internet even though IAM authentication still applies, so company account security checks flag it (for example Security Hub control EKS.1).
+- **eksctl**: eksctl, which this repository used before, does not support creating a cluster with only the private endpoint enabled (eksctl docs).
+- **Version ranges in the image**: TRL, vLLM, torch and transformers pin each other's version ranges, so if pip upgrades one of them, imports break.
 
 ![a: in an EKS cluster created with defaults, the internet can try the EKS API on the public endpoint (IAM auth still applies), and on a node with IMDS hop limit 2 or more, code in a pod reaches the node instance credentials through IMDS 169.254.169.254. b: the CDK stack enables only the private endpoint, so the internet path is closed and the work PC connects through an SSM tunnel, and nodes require IMDSv2 with hop limit 1, so the pod gets no IMDS response](../images/figures/handson-01_cluster_and_images.svg)
 
@@ -51,18 +56,22 @@ Every script reads this file through `scripts/lib.sh`; if a required value is em
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AWS_REGION` | `us-west-2` | the Region for the cluster, the ECR images and HyperPod. The 09 demo site (`demo/deploy.sh`) always deploys to `us-east-1`, whatever this value is |
+| `AWS_REGION` | `us-west-2` | the Region for the cluster, the ECR images and HyperPod |
 | `CLUSTER_NAME` | `gpu-sandbox` | the EKS cluster name, also used in the CDK stack name (`<CLUSTER_NAME>-cdk`), the kubectl context (`<CLUSTER_NAME>-tunnel`) and the AMI builder instance names; not used in AMI names |
 | `K8S_VERSION` | `1.36` | inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes (the HyperPod prerequisites page still says up to 1.35) |
 | `SCENARIO` | `A` | what `02_create_cluster.sh` builds (A, B1, B2, C). An option to `02_create_cluster.sh` (`--hyperpod` and so on) wins over it |
 | `WITH_KATA_CPU`, `WITH_KATA_GPU` | `0`, `0` | `1` adds the Kata CPU node (`c8i.2xlarge`) and the Kata GPU node (`g4dn.metal`, needs `KATA_IOMMU_AMI_ID`) to any scenario ([03 Kata sandboxes](03_kata.md)) |
-| `ADMIN_PRINCIPAL_ARN` | empty | IAM role or user ARNs (comma-separated) that get the cluster admin access entry. Empty: `cdk/deploy.sh` uses your IAM user ARN, or for a role session the role ARN it derives from the session. For a role with a path, set the full ARN yourself |
+| `ADMIN_PRINCIPAL_ARN` | empty | IAM role or user ARNs (comma-separated) that get the cluster admin access entry |
 | `EKS_PUBLIC_ACCESS_CIDR` | none (commented out) | only if you accept a public endpoint: your workstation's single IPv4 address as `/32`. Other ranges are rejected when the settings are read |
 | `ECR_REPO_PREFIX`, `IMAGE_TAG` | `gpu-sandbox`, `v1` | ECR repository prefix and image tag |
 | `GVISOR_RELEASE` | `20261109.0` | the release installed on the gVisor nodes |
 | `GVISOR_NODES` | `2` | number of gVisor nodes (one sandbox per node) |
 
-If your role has a path (for example one created by IAM Identity Center), put the ARN from `aws iam get-role --role-name <role> --query Role.Arn --output text` into `ADMIN_PRINCIPAL_ARN`. Access entries do not accept STS session ARNs.
+- **09 demo site**: `demo/deploy.sh` always deploys to `us-east-1`, whatever the `AWS_REGION` value is.
+- **If `ADMIN_PRINCIPAL_ARN` is empty**: `cdk/deploy.sh` uses your IAM user ARN, or for a role session the role ARN it derives from the session.
+- **If your role has a path (for example one created by IAM Identity Center)**: set the full ARN yourself. Put the ARN from `aws iam get-role --role-name <role> --query Role.Arn --output text` into `ADMIN_PRINCIPAL_ARN`.
+
+Whether or not the role has a path, access entries do not accept STS session ARNs.
 
 !!! note "config.env values win over command-line environment variables"
     `lib.sh` sources `config.env`, so a variable defined there (`IMAGE_TAG`, `GVISOR_NODES`, `SCENARIO` and so on) overrides `IMAGE_TAG=v2 scripts/...` on the command line. Edit config.env for those, and pass variables not in config.env (`HYPERPOD`, `ACTIVE_RUNTIME`, `ENABLE_EXPERIMENTAL_CLH_GPU`, `KATA_QEMU_REPLICAS` and others) on the command line.
@@ -112,7 +121,10 @@ If your role has a path (for example one created by IAM Identity Center), put th
 
 ## Preflight: `01_check_prereqs.sh`
 
-This check is read-only. Check 1 prints nothing when it passes; a missing tool or variable prints `missing tool: <name>` or `set <VAR> in scripts/config.env` and stops the script. After it passes, items 2 onward are printed in order.
+This check is read-only.
+
+- **When check 1 passes**: it prints nothing, and items 2 onward are printed in order.
+- **When a tool or variable is missing**: it prints `missing tool: <name>` or `set <VAR> in scripts/config.env` and stops the script.
 
 ```bash
 scripts/01_check_prereqs.sh
@@ -130,10 +142,14 @@ scripts/01_check_prereqs.sh
 
 | Output | Passes when |
 |---|---|
-| 4, G and VT quota | for scenario A, at least 16 for the minimal path (24 during a version switch) and at least 112 for the full path (120 during a version switch). Scenario C has no GPU nodes and does not need it, unless you add Kata GPU (`g4dn.metal`), which needs at least 96 |
+| 4, G and VT quota | for scenario A, at least 16 for the minimal path (24 during a version switch) and at least 112 for the full path (120 during a version switch) |
 | 5, Standard quota | at least 6 for the minimal path (system nodes 4, access instance 2), 14 for scenario C, up to 16 for the full path |
 | 6, `SupportedFeatures` | contains `nested-virtualization` if you use the Kata CPU node |
-| 7, AZ list | each GPU type you use is listed in at least one of the AZs of the stack's two private subnets (the first two in the Region AZ list CDK looks up). Types you do not use may show `NOT OFFERED` (for example `g4dn.metal` with gVisor only) |
+| 7, AZ list | each GPU type you use is listed in at least one of the AZs of the stack's two private subnets |
+
+- **Item 4, scenario C**: it has no GPU nodes and does not need the G and VT quota, unless you add Kata GPU (`g4dn.metal`), which needs at least 96.
+- **The two AZs in item 7**: the first two in the Region AZ list CDK looks up.
+- **Item 7, types you do not use**: they may show `NOT OFFERED` (for example `g4dn.metal` with gVisor only).
 
 Request increases for low quotas in the Service Quotas console (the vCPU math is in the prerequisites section of [00 Overview](00_overview.md)).
 
@@ -162,7 +178,10 @@ scripts/02_create_cluster.sh --cpu-only      # scenario C: the c8i node only, no
 
 **What to look for:**
 
-1. If `ADMIN_PRINCIPAL_ARN` is empty and you run as a role session (STS assumed-role), a warning `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` appears at the start. As an IAM user, it uses your user ARN without a warning. If your role has a path, answer `n` to the item 4 question, put the ARN from the `aws iam get-role` command in the warning into `ADMIN_PRINCIPAL_ARN`, and run it again.
+1. If `ADMIN_PRINCIPAL_ARN` is empty, what happens depends on who runs it.
+    - **As a role session (STS assumed-role)**: a warning `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` appears at the start.
+    - **As an IAM user**: it uses your user ARN without a warning.
+    - **If your role has a path**: answer `n` to the item 4 question, put the ARN from the `aws iam get-role` command in the warning into `ADMIN_PRINCIPAL_ARN`, and run it again.
 2. In the list of IAM and security group changes, check that no inbound rule is open to `0.0.0.0/0`, then press `y`. The only inbound rule the stack creates is 443 from the access instance to the control plane.
 3. At the end, `Outputs` lists `ClusterName`, `ClusterEndpoint`, `AccessInstanceId` and `EndpointPublicAccess = false`, followed by this guidance:
 
@@ -199,7 +218,11 @@ In the EKS console, the cluster's Networking tab must show API server endpoint a
 
 ### Open the tunnel (cdk/tunnel.sh)
 
-Keep it running in a second terminal while you use kubectl or helm. It reads the endpoint and the access instance ID from the stack Outputs, creates and switches to the kubeconfig context `<CLUSTER_NAME>-tunnel` (server `https://127.0.0.1:8443`) and opens an SSM port forwarding session.
+Keep it running in a second terminal while you use kubectl or helm. The script works in this order.
+
+1. It reads the endpoint and the access instance ID from the stack Outputs.
+2. It creates and switches to the kubeconfig context `<CLUSTER_NAME>-tunnel` (server `https://127.0.0.1:8443`).
+3. It opens an SSM port forwarding session.
 
 ```bash
 cdk/tunnel.sh
@@ -225,11 +248,15 @@ B1 (`--hyperpod`) has no trainer line, B2 only the two system nodes, and C two s
 
 **If it fails:**
 
-- `TargetNotConnected` means the access instance's SSM agent has not registered yet; right after the deploy, wait a few minutes and retry. If it still fails after 10 minutes, check its status with the command below. If it is `ConnectionLost`, reboot it with `aws ec2 reboot-instances --region "$AWS_REGION" --instance-ids <instance-id>` and retry once it is `Online`. The instance ID is the `via i-...` value that `tunnel.sh` prints.
+- `TargetNotConnected` means the access instance's SSM agent has not registered yet. The instance ID is the `via i-...` value that `tunnel.sh` prints.
+    1. Right after the deploy, wait a few minutes and retry.
+    2. If it still fails after 10 minutes, check its status with the command below.
 
-    ```bash
-    aws ssm describe-instance-information --region "$AWS_REGION" --filters Key=InstanceIds,Values=<instance-id> --query 'InstanceInformationList[0].PingStatus' --output text
-    ```
+        ```bash
+        aws ssm describe-instance-information --region "$AWS_REGION" --filters Key=InstanceIds,Values=<instance-id> --query 'InstanceInformationList[0].PingStatus' --output text
+        ```
+
+    3. If it is `ConnectionLost`, reboot it with `aws ec2 reboot-instances --region "$AWS_REGION" --instance-ids <instance-id>` and retry once it is `Online`.
 
 - If kubectl fails with `TLS handshake timeout`, a tunnel to an earlier cluster may still hold `127.0.0.1:8443`. Close the terminal of the old tunnel with Ctrl-C and run it again.
 - For `missing tool: session-manager-plugin`, do item 2 of preparation 2.
@@ -242,16 +269,19 @@ The stack code is in `cdk/gpusandbox_cdk/stack.py`; `cdk/tests` checks the secur
 
 | Resource | Value | Reason |
 |---|---|---|
-| VPC | 2 AZs, 1 NAT gateway, public subnets (only the NAT, no automatic public IPs) and private subnets. The private subnets are tagged `kubernetes.io/role/internal-elb=1` and `karpenter.sh/discovery=<CLUSTER_NAME>` | nodes stay in private subnets. The HyperPod script ([07](07_hyperpod.md)) finds a subnet by the internal-elb tag, and the Production Karpenter EC2NodeClasses by the discovery tag |
+| VPC | 2 AZs, 1 NAT gateway, public subnets (only the NAT, no automatic public IPs) and private subnets | nodes stay in private subnets |
 | EKS version | `${K8S_VERSION}` (1.36) | inside EKS standard support |
 | API endpoint | private only. Public only for a single /32 when `EKS_PUBLIC_ACCESS_CIDR` is set | keeps the cluster API off the internet |
 | Authentication | mode `API_AND_CONFIG_MAP`, access entry (`AmazonEKSClusterAdminPolicy`) for `ADMIN_PRINCIPAL_ARN` | HyperPod requires `API` or `API_AND_CONFIG_MAP`. The CloudFormation execution role gets no cluster admin permissions |
 | Secrets encryption, logs | Kubernetes secrets encrypted with a KMS key (automatic rotation), 5 control plane log types (api, audit, authenticator, controllerManager, scheduler, 30-day retention), VPC flow log (rejected traffic) | audits and incident investigation |
 | Service CIDR | `172.20.0.0/16` | set explicitly because the Kata GPU node's NodeConfig must state it |
-| Add-ons | `vpc-cni` (`{"enableNetworkPolicy": "true"}`), `kube-proxy`, `coredns`, `eks-pod-identity-agent` | eBPF-based NetworkPolicy, needs VPC CNI 1.21+ (HyperPod needs 1.18.3+). The self-managed copies of these components are not installed (`BootstrapSelfManagedAddons: false`) |
+| Add-ons | `vpc-cni` (`{"enableNetworkPolicy": "true"}`), `kube-proxy`, `coredns`, `eks-pod-identity-agent` | eBPF-based NetworkPolicy, needs VPC CNI 1.21+ (HyperPod needs 1.18.3+) |
 | Access instance | `t4g.nano`, private subnet, no inbound rules, HTTPS egress only, IMDSv2 | the hop for the SSM tunnel |
 | `system` managed node group | `m6i.large` x2 (min 2, max 3), 50 GB, label `gpusandbox/role=system` | CoreDNS and add-ons |
 | Launch templates of all nodes | IMDSv2 required, hop limit 1, encrypted gp3 root volume, instance tag `project=gpu-sandbox-on-aws` | pods cannot reach node credentials. The cleanup script (`08_cleanup.sh`) finds leftover instances by this tag |
+
+- **Tags on the private subnets**: they are tagged `kubernetes.io/role/internal-elb=1` and `karpenter.sh/discovery=<CLUSTER_NAME>`. The HyperPod script ([07](07_hyperpod.md)) finds a subnet by the internal-elb tag, and the Production Karpenter EC2NodeClasses by the discovery tag.
+- **Self-managed copies of the add-ons**: the self-managed copies of these components are not installed (`BootstrapSelfManagedAddons: false`).
 
 ### Node groups per scenario
 
@@ -281,7 +311,13 @@ The stack code is in `cdk/gpusandbox_cdk/stack.py`; `cdk/tests` checks the secur
 
 `gpusandbox/device-plugin=cdi` selects the nodes for the device plugin that `04_install_gpu_stack.sh` installs, and `nvidia.com/gpu.deploy.operands=false` keeps the GPU Operator that the Kata GPU node step (`scripts/kata/gpu_nodes.sh`) installs away from these nodes.
 
-`infra/eks/userdata.py` builds the gVisor node group's user data. The launch template sets no AMI, so EKS merges in the bootstrap the node needs to join (per the EKS launch template documentation). nodeadm merges the first part, the NodeConfig, on every boot, so the `runsc` handler survives reboots. The next command prints it locally, without AWS.
+`infra/eks/userdata.py` builds the gVisor node group's user data.
+
+??? note "How the user data is merged"
+    - The launch template sets no AMI, so EKS merges in the bootstrap the node needs to join (per the EKS launch template documentation).
+    - nodeadm merges the first part, the NodeConfig, on every boot, so the `runsc` handler survives reboots.
+
+The next command prints it locally, without AWS.
 
 ```bash
 source scripts/config.env
@@ -353,7 +389,11 @@ New connections from the VPC CNI pod veth interfaces (prefix `eni`) to the node 
 
 ### Manifest rendering (render.py)
 
-The scripts from `04_install_gpu_stack.sh` onward fill the templates under `k8s/` (`*.tpl`) with `scripts/render.py` and apply them. It substitutes `${VAR}` from environment variables and `KEY=VALUE` arguments and, unlike envsubst, stops when a variable name the template references is in neither the environment nor the arguments, so a typo in a variable name never yields a manifest with an empty image name or namespace. A variable defined as an empty string (for example `ACTIVE_RUNTIME=`) is inserted as is. For the `$$` (literal `$`) and `@@include path@@` syntax, see the [Repository map](../reference/repository_map.md).
+The scripts from `04_install_gpu_stack.sh` onward fill the templates under `k8s/` (`*.tpl`) with `scripts/render.py` and apply them. It substitutes `${VAR}` from environment variables and `KEY=VALUE` arguments.
+
+- **When a variable name the template references is in neither the environment nor the arguments**: unlike envsubst, it stops. So a typo in a variable name never yields a manifest with an empty image name or namespace.
+- **A variable defined as an empty string (for example `ACTIVE_RUNTIME=`)**: it is inserted as is.
+- **The `$$` (literal `$`) and `@@include path@@` syntax**: see the [Repository map](../reference/repository_map.md).
 
 You can see the rendered result locally, without contacting AWS.
 
@@ -370,7 +410,10 @@ python3 scripts/render.py k8s/base/routing.json.tpl ACTIVE_RUNTIME=gvisor ACTIVE
   "pools": {
 ```
 
-**If it fails:** `render: <template>: missing variable 'X'` means the renderer did not receive `X` as an environment variable or a `KEY=VALUE` argument. A value in `config.env` or your shell does not reach it unless it is exported, so check that it is written as `export X=...` or pass `X=...` to the `render.py` command. If that does not help, see the "config and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:**
+
+- **On `render: <template>: missing variable 'X'`**: the renderer did not receive `X` as an environment variable or a `KEY=VALUE` argument. A value in `config.env` or your shell does not reach it unless it is exported, so check that it is written as `export X=...` or pass `X=...` to the `render.py` command.
+- **If that does not help**: see the "config and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ## Build and push the images: `03_build_push_images.sh`
 
@@ -407,7 +450,12 @@ The base images (PyTorch, vLLM) are large, so the build needs a lot of disk and 
 | `trainer` | `trainer/Dockerfile` | `vllm/vllm-openai:v0.33.0` | TRL 1.18.0, PEFT 0.21.3, `datasets>=4.7`, `gpusandbox[client]`, `rl/`, `hyperpod-elastic-agent` (with `HYPERPOD=1`) | base image default |
 | `control` | `gateway/Dockerfile` | `public.ecr.aws/docker/library/python:3.14-slim` | `gpusandbox[gateway]`, the gateway and operator tools (`probe`, `parity`, `bench`, `sync-jwks` of `python -m gpusandbox.tools`), no torch and no GPU | uid 10001 |
 
-gVisor and Kata share the sandbox image. It carries no credentials and no NVIDIA kernel driver, only the CUDA user-space libraries from the PyTorch wheel; gVisor uses the host driver through nvproxy, Kata the driver inside the guest VM. The CUDA 12.6 build supports the T4 (sm_75) used with Kata and runs on lower driver versions than a CUDA 13 build. The pod spec enforces `runAsNonRoot` and a read-only root filesystem; only `/work` and `/tmp` are writable emptyDirs.
+gVisor and Kata share the sandbox image.
+
+- **What the image holds**: no credentials and no NVIDIA kernel driver, only the CUDA user-space libraries from the PyTorch wheel.
+- **Driver**: gVisor uses the host driver through nvproxy, Kata the driver inside the guest VM.
+- **CUDA 12.6 build**: it supports the T4 (sm_75) used with Kata and runs on lower driver versions than a CUDA 13 build.
+- **Pod spec**: it enforces `runAsNonRoot` and a read-only root filesystem; only `/work` and `/tmp` are writable emptyDirs.
 
 ### Version pinning in the trainer image
 
@@ -460,14 +508,24 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 # resume later: the same commands with desiredSize=2 (sandbox-gvisor) and desiredSize=1 (trainer)
 ```
 
-**What to look for:** each command returns JSON with `"status": "InProgress"` and `"type": "ConfigUpdate"`. After a few minutes, with the tunnel open, `kubectl get nodes -L gpusandbox/role` shows only the two system nodes. Without the tunnel, use `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-gvisor --query nodegroup.scalingConfig`. When you finish the hands-on, delete the whole stack with [99 Cleanup](99_cleanup.md).
+**What to look for:**
+
+- Each command returns JSON with `"status": "InProgress"` and `"type": "ConfigUpdate"`.
+- After a few minutes, with the tunnel open, `kubectl get nodes -L gpusandbox/role` shows only the two system nodes.
+- Without the tunnel, use `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-gvisor --query nodegroup.scalingConfig`.
+
+When you finish the hands-on, delete the whole stack with [99 Cleanup](99_cleanup.md).
 
 !!! note "These values change outside the CDK stack"
     These commands bypass CloudFormation, so the node count then differs from the stack's desired value (sandbox-gvisor 2, trainer 1); set it back with the same command before rerunning `02_create_cluster.sh`. What CloudFormation does if you redeploy without setting it back was not checked.
 
 ## Next step
 
-Keep the tunnel running and continue on the page for your scenario. A runs `04_install_gpu_stack.sh` in [02 gVisor GPU sandboxes](02_gvisor.md); B1 and B2 continue in [07 HyperPod scenario](07_hyperpod.md). If you created the cluster here with `--hyperpod` (`--hyperpod-b2` for B2) and added the three `export` lines of the images pushed with `HYPERPOD=1` to `config.env`, start B1 at step 3 of "B1 steps" and B2 at `scripts/04_install_gpu_stack.sh` in step 1 of the [B2 procedure](07_hyperpod.md#b2). Rebuilding the images with the same `IMAGE_TAG` can be rejected on push because the tags are IMMUTABLE. C continues with `kata/cpu_nodes.sh` in [10 CPU-only path on c8i](10_cpu_only.md).
+Keep the tunnel running and continue on the page for your scenario.
+
+- **A**: run `04_install_gpu_stack.sh` in [02 gVisor GPU sandboxes](02_gvisor.md).
+- **B1 and B2**: continue in [07 HyperPod scenario](07_hyperpod.md). If you created the cluster here with `--hyperpod` (`--hyperpod-b2` for B2) and added the three `export` lines of the images pushed with `HYPERPOD=1` to `config.env`, start B1 at step 3 of "B1 steps" and B2 at `scripts/04_install_gpu_stack.sh` in step 1 of the [B2 procedure](07_hyperpod.md#b2). Rebuilding the images with the same `IMAGE_TAG` can be rejected on push because the tags are IMMUTABLE.
+- **C**: continue with `kata/cpu_nodes.sh` in [10 CPU-only path on c8i](10_cpu_only.md).
 
 ??? note "References"
     | Topic | Link |

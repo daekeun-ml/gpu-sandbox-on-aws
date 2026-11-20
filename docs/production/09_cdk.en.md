@@ -5,7 +5,10 @@
 
 ## Pain points
 
-Creating the cluster, node groups and launch templates in several scripts helps understanding, but when you recreate the environment or hand it to a team, steps get missed. Deletion means removing each step's resources (launch templates, log groups and so on) one by one, and one leftover costs money or breaks the next creation. Account security checks flag a public API endpoint, IMDSv1, unencrypted volumes or a wide-open security group right away (for example Security Hub control EKS.1). eksctl cannot create a cluster with a private-only endpoint (eksctl documentation), so a public endpoint stays, which is why this asset removed the eksctl path.
+- **Creating in several scripts**: creating the cluster, node groups and launch templates in several scripts helps understanding, but when you recreate the environment or hand it to a team, steps get missed.
+- **Deleting a setup created in several scripts**: it means removing each step's resources (launch templates, log groups and so on) one by one, and one leftover costs money or breaks the next creation.
+- **Account security checks**: they flag a public API endpoint, IMDSv1, unencrypted volumes or a wide-open security group right away (for example Security Hub control EKS.1).
+- **eksctl**: it cannot create a cluster with a private-only endpoint (eksctl documentation), so a public endpoint stays, which is why this asset removed the eksctl path.
 
 ![a: several scripts run in order create the cluster in step 1, node groups in step 2 and launch templates and log groups in step 3, and deletion goes step by step, resource by resource, so one leftover costs money or makes the next creation fail. b: cdk/deploy.sh deploys the same resources as one CDK stack (CloudFormation) and cdk/destroy.sh deletes the whole stack with everything in it, while the HyperPod cluster, AMIs and ECR are deleted separately](../images/figures/production-09_cdk.svg)
 
@@ -30,7 +33,13 @@ Creating the cluster, node groups and launch templates in several scripts helps 
     - **Access entry**: an EKS resource that decides which permissions an IAM role has in the cluster.
 
 !!! warning "Verification status"
-    Deploying, checking and deleting scenario C, the gVisor path of scenario A and the Kata GPU node group (`scripts/kata/gpu_nodes.sh`) ran in a practice account. For scenario C the checks covered cluster and node status, the private endpoint, nested virtualization and `/dev/kvm` on the c8i node, gVisor and the node guard on the node, kubectl through the SSM tunnel (the tunnel listened on `127.0.0.1` only), the Kata CPU node script `scripts/kata/cpu_nodes.sh` (kata-deploy, the `gvisor-cpu` RuntimeClass, the smoke pods of the three runtimes), and the resources left after deletion. The B1 and B2 stacks were deployed only as intermediate steps while creating the scenario A cluster; the HyperPod steps (`scripts/hyperpod/`) and `ops/rollout.sh` during scenario A training were not run on AWS. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record). Locally, synth checks the security defaults (`cdk/tests`, 18 tests) and cdk-nag.
+    - **Run in a practice account**: deploying, checking and deleting scenario C, the gVisor path of scenario A and the Kata GPU node group (`scripts/kata/gpu_nodes.sh`).
+    - **Checked for scenario C**: cluster and node status, the private endpoint, nested virtualization and `/dev/kvm` on the c8i node, gVisor and the node guard on the node, kubectl through the SSM tunnel (the tunnel listened on `127.0.0.1` only), the Kata CPU node script `scripts/kata/cpu_nodes.sh` (kata-deploy, the `gvisor-cpu` RuntimeClass, the smoke pods of the three runtimes), and the resources left after deletion.
+    - **Deployed only as intermediate steps**: the B1 and B2 stacks, while creating the scenario A cluster.
+    - **Not run on AWS**: the HyperPod steps (`scripts/hyperpod/`) and `ops/rollout.sh` during scenario A training.
+    - **Checked locally**: synth checks the security defaults (`cdk/tests`, 18 tests) and cdk-nag.
+
+    The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Layout
 
@@ -98,11 +107,18 @@ This CDK stack owns the infrastructure, and the scripts in `scripts/` own what r
 
     By CDK default the CloudFormation execution role gets `AdministratorAccess`. To narrow it, create a managed policy with EC2, EKS, IAM (role creation), KMS, CloudWatch Logs, Lambda and SSM permissions and pass it with `--cloudformation-execution-policies <policy ARN>`.
 
-4. **Settings:** `scripts/config.env` is the same as for the hands-on, and `SCENARIO`, `WITH_KATA_CPU` and `WITH_KATA_GPU` decide the stack's node groups. Access entries do not accept STS session ARNs, so if your role has a path (an SSO role, for example), put the ARN from `aws iam get-role --role-name <role> --query Role.Arn --output text` into `ADMIN_PRINCIPAL_ARN`. For several roles or users, join the ARNs with commas; if you leave it empty, `deploy.sh` derives the role ARN from the current session.
+4. **Settings:** `scripts/config.env` is the same as for the hands-on, and `SCENARIO`, `WITH_KATA_CPU` and `WITH_KATA_GPU` decide the stack's node groups.
+    - **Role ARN**: access entries do not accept STS session ARNs, so if your role has a path (an SSO role, for example), put the ARN from `aws iam get-role --role-name <role> --query Role.Arn --output text` into `ADMIN_PRINCIPAL_ARN`.
+    - **Several roles or users**: join the ARNs with commas.
+    - **If you leave it empty**: `deploy.sh` derives the role ARN from the current session.
 
 ## Step 1: Deploy (cdk/deploy.sh)
 
-This command deploys scenario C (system nodes and the c8i node), the same as `scripts/02_create_cluster.sh --cpu-only` in the hands-on. The other scenarios are `cdk/deploy.sh A`, `cdk/deploy.sh B1` and `cdk/deploy.sh B2`, and A with the c8i node is `cdk/deploy.sh A --with-kata-cpu`. With `WITH_KATA_GPU=1`, `deploy.sh` asks you to type `metal` before it adds `g4dn.metal` (about 7.8 USD per hour).
+This command deploys scenario C (system nodes and the c8i node), the same as `scripts/02_create_cluster.sh --cpu-only` in the hands-on.
+
+- **Other scenarios**: `cdk/deploy.sh A`, `cdk/deploy.sh B1` and `cdk/deploy.sh B2`.
+- **A with the c8i node**: `cdk/deploy.sh A --with-kata-cpu`.
+- **With `WITH_KATA_GPU=1`**: `deploy.sh` asks you to type `metal` before it adds `g4dn.metal` (about 7.8 USD per hour).
 
 ```bash
 cdk/deploy.sh C
@@ -160,7 +176,11 @@ aws ec2 describe-instances --region "$AWS_REGION" \
 
 The result must contain `"NestedVirtualization": "enabled"`. Without it, the Kata smoke pods of the Kata CPU node script (`scripts/kata/cpu_nodes.sh`) fail to open KVM.
 
-**If it fails:** `TargetNotConnected` means the access instance's SSM agent has not registered yet; right after a deploy, wait a few minutes and run it again. If `session-manager-plugin` is missing, install the plugin from preparation step 1, and if kubectl says `Unable to connect`, check that the tunnel terminal is still running.
+**If it fails:**
+
+- **`TargetNotConnected`**: the access instance's SSM agent has not registered yet; right after a deploy, wait a few minutes and run it again.
+- **If `session-manager-plugin` is missing**: install the plugin from preparation step 1.
+- **If kubectl says `Unable to connect`**: check that the tunnel terminal is still running.
 
 ## Step 3: In-cluster setup (existing scripts)
 
@@ -168,21 +188,52 @@ CDK created the node groups, so run only the in-cluster steps, with the tunnel f
 
 | Scenario | Steps to run next |
 |---|---|
-| C | add `export KATA_CPU_REPLICAS="1"` to `scripts/config.env` as in preparation step 2 of [10 CPU-only path on c8i](../handson/10_cpu_only.md) (with the CPU profiles' default of 2 replicas, four pools do not fit on one `c8i.2xlarge`), `scripts/kata/cpu_nodes.sh` (kata-deploy, the `gvisor-cpu` RuntimeClass, the smoke pods; about 14 minutes in the practice account), `ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`, then [10 CPU-only path on c8i](../handson/10_cpu_only.md) from step 6 |
+| C | set `KATA_CPU_REPLICAS`, then run `scripts/kata/cpu_nodes.sh` and `scripts/05_setup_namespaces_auth.sh` (the "Scenario C" list below the table) |
 | A | `scripts/04_install_gpu_stack.sh`, `scripts/05_setup_namespaces_auth.sh`, `scripts/06_deploy_sandboxes.sh gvisor v1`, `scripts/ops/verify.sh gvisor v1`, then [05 On-policy GRPO training](../handson/05_grpo_training.md) |
-| B1, B2 | B1: `scripts/hyperpod/create.sh`. B2: put the `export HYPERPOD_B2_AMI_ID=...` line printed by `scripts/hyperpod/build_b2_ami.sh` into `scripts/config.env`, then run `scripts/hyperpod/create.sh --b2` (it stops if the value is empty). The HyperPod script picks a private subnet that CDK tagged with `kubernetes.io/role/internal-elb`. The rest of the order is in [07 HyperPod scenario](../handson/07_hyperpod.md) |
+| B1, B2 | create the HyperPod cluster with `scripts/hyperpod/create.sh`; B2 prepares the custom AMI first (the "B1, B2" list below the table) |
 
-Build the images as in the hands-on with `scripts/03_build_push_images.sh`. Add `--no-trainer` for scenario C. For B1 and B2 with `HyperPodPyTorchJob`, build with `HYPERPOD=1 scripts/03_build_push_images.sh` so the trainer image includes `hyperpodrun`.
+- **Scenario C**:
+    1. Add `export KATA_CPU_REPLICAS="1"` to `scripts/config.env` as in preparation step 2 of [10 CPU-only path on c8i](../handson/10_cpu_only.md) (with the CPU profiles' default of 2 replicas, four pools do not fit on one `c8i.2xlarge`).
+    2. Run `scripts/kata/cpu_nodes.sh` (kata-deploy, the `gvisor-cpu` RuntimeClass, the smoke pods; about 14 minutes in the practice account).
+    3. Run `ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`.
+    4. Then continue with [10 CPU-only path on c8i](../handson/10_cpu_only.md) from step 6.
+- **B1, B2**:
+    - **B1**: run `scripts/hyperpod/create.sh`.
+    - **B2**: put the `export HYPERPOD_B2_AMI_ID=...` line printed by `scripts/hyperpod/build_b2_ami.sh` into `scripts/config.env`, then run `scripts/hyperpod/create.sh --b2` (it stops if the value is empty).
+    - **Subnet choice**: the HyperPod script picks a private subnet that CDK tagged with `kubernetes.io/role/internal-elb`.
+    - **The rest of the order**: it is in [07 HyperPod scenario](../handson/07_hyperpod.md).
+
+Build the images as in the hands-on with `scripts/03_build_push_images.sh`.
+
+- **Scenario C**: add `--no-trainer`.
+- **For B1 and B2 with `HyperPodPyTorchJob`**: build with `HYPERPOD=1 scripts/03_build_push_images.sh` so the trainer image includes `hyperpodrun`.
 
 ## Step 4: Delete (cdk/destroy.sh)
 
-Before you start deleting anything, check that `kubectl config current-context` is `<CLUSTER_NAME>-tunnel`; both scripts below use the current context as is. For B1 and B2, delete the HyperPod cluster with `scripts/hyperpod/delete.sh` before this step. If the HyperPod CRD exists, that script deletes every `HyperPodPyTorchJob` in `rl-trainer` of the current context, then deletes the HyperPod cluster. If the current kubectl context shows a `sandbox` namespace, this command first deletes every Job in `rl-trainer` and every Deployment and Service in `sandbox` in that context, regardless of app labels, then deletes the whole stack `<CLUSTER_NAME>-cdk` of `CLUSTER_NAME`. The script does not check that the current context belongs to `CLUSTER_NAME`. It continues only after you type the cluster name. In the hands-on, `scripts/08_cleanup.sh` asks for the cluster name, calls this script with `--yes`, asks whether to delete the IOMMU AMI and the B2 AMI, and with `--images` also deletes the ECR repositories.
+Before you start deleting anything, check that `kubectl config current-context` is `<CLUSTER_NAME>-tunnel`; both scripts below use the current context as is.
+
+For B1 and B2, delete the HyperPod cluster with `scripts/hyperpod/delete.sh` before this step. If the HyperPod CRD exists, that script deletes every `HyperPodPyTorchJob` in `rl-trainer` of the current context, then deletes the HyperPod cluster.
+
+`cdk/destroy.sh` works as follows.
+
+- **What it deletes**: if the current kubectl context shows a `sandbox` namespace, this command first deletes every Job in `rl-trainer` and every Deployment and Service in `sandbox` in that context, regardless of app labels, then deletes the whole stack `<CLUSTER_NAME>-cdk` of `CLUSTER_NAME`.
+- **No context check**: the script does not check that the current context belongs to `CLUSTER_NAME`.
+- **Name confirmation**: it continues only after you type the cluster name.
+
+To delete the CDK stack, run the following command.
 
 ```bash
 cdk/destroy.sh
 ```
 
-**What to look for:** the final instance table is empty, and a command to delete the ECR repositories is printed. The script also deletes the Lambda log group created outside the stack (`/aws/lambda/<CLUSTER_NAME>-cdk-...`, from the default security group cleanup), and the secrets KMS key is scheduled for deletion after 7 days. The bootstrap stack `CDKToolkit` (CDK's S3 bucket, ECR repository and deployment roles) stays for the next deploy. For an account you will not use again, empty that S3 bucket and delete the `CDKToolkit` stack in CloudFormation.
+**What to look for:**
+
+- The final instance table is empty, and a command to delete the ECR repositories is printed.
+- **What the script also cleans up**: it deletes the Lambda log group created outside the stack (`/aws/lambda/<CLUSTER_NAME>-cdk-...`, from the default security group cleanup), and the secrets KMS key is scheduled for deletion after 7 days.
+- **What stays**: the bootstrap stack `CDKToolkit` (CDK's S3 bucket, ECR repository and deployment roles) stays for the next deploy.
+- **For an account you will not use again**: empty that S3 bucket and delete the `CDKToolkit` stack in CloudFormation.
+
+The hands-on `scripts/08_cleanup.sh` asks for the cluster name, calls `cdk/destroy.sh` with `--yes`, asks whether to delete the IOMMU AMI and the B2 AMI, and with `--images` also deletes the ECR repositories.
 
 ## Scope and limits
 

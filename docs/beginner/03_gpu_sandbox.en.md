@@ -5,7 +5,9 @@
 
 ## Pain points
 
-A sandbox that grades code usually needs only a CPU, so widely used microVM sandboxes (Firecracker-based ones and so on) have no device for handing over a GPU. But to give "how much faster did this GPU kernel get" as a score, the place that does the grading needs a real GPU. And the GPU driver runs inside the kernel, so a driver bug is a kernel bug, and container isolation alone cannot block this path.
+A sandbox that grades code usually needs only a CPU, so widely used microVM sandboxes (Firecracker-based ones and so on) have no device for handing over a GPU. But to give "how much faster did this GPU kernel get" as a score, the place that does the grading needs a real GPU.
+
+And the GPU driver runs inside the kernel, so a driver bug is a kernel bug, and container isolation alone cannot block this path.
 
 ![a: grading a GPU kernel needs a real GPU; a Firecracker-based microVM has no device for a GPU, so it cannot grade, and in a regular container (runc) a driver bug reaches the server kernel. b: gVisor + nvproxy (g5.xlarge) checks ioctls and lets only allowlisted calls reach the server driver, and Kata + VFIO (g4dn.metal) hands the whole GPU to the VM, so the driver runs inside the VM, while risks in the hypervisor and the GPU device itself remain](../images/figures/beginner-03_gpu_sandbox.svg)
 
@@ -46,7 +48,9 @@ When a program inside gVisor issues a GPU order form (ioctl), nvproxy compares i
 
 **Kata: bringing the GPU inside the house (VFIO passthrough)**
 
-Kata hands one whole GPU to that pod's VM. The NVIDIA driver runs in the guest kernel inside the VM (the server does not load it), and the IOMMU limits the memory the GPU can reach to the memory given to that VM. So code that exploits a driver bug first lands in that VM's kernel. Still, the hypervisor or the GPU itself can have flaws, and state from earlier work can stay on the GPU after the VM is replaced.
+Kata hands one whole GPU to that pod's VM. The NVIDIA driver runs in the guest kernel inside the VM (the server does not load it), and the IOMMU limits the memory the GPU can reach to the memory given to that VM. So code that exploits a driver bug first lands in that VM's kernel.
+
+Still, the hypervisor or the GPU itself can have flaws, and state from earlier work can stay on the GPU after the VM is replaced.
 
 - **Good points:** The wall is the thickest.
 - **Weak points:** The server has to hold the GPU directly, so the requirements are strict (`/dev/kvm` and the IOMMU, and the server itself must not load the NVIDIA driver). The GPU path that upstream Kata officially supports is the QEMU hypervisor, and GPU support in Cloud Hypervisor is still experimental.
@@ -75,7 +79,12 @@ Kata hands one whole GPU to that pod's VM. The NVIDIA driver runs in the guest k
 
 ## One more thing to watch in a GPU sandbox
 
-A GPU leaves state behind when it runs kernels (computations), so one run that breaks the GPU state can throw off the next run too. This repository therefore runs each grading in a separate process. A v2 sandbox stops taking new requests after 200 gradings. Through the production gateway, the gateway deletes that pod and the Deployment starts a new one (a new VM under Kata). In the basic exercise, which calls the pool directly, the pod stays NotReady and the operator replaces it.
+A GPU leaves state behind when it runs kernels (computations), so one run that breaks the GPU state can throw off the next run too. This repository therefore runs each grading in a separate process.
+
+A v2 sandbox stops taking new requests after 200 gradings.
+
+- **Through the production gateway**: the gateway deletes that pod and the Deployment starts a new one (a new VM under Kata).
+- **In the basic exercise, which calls the pool directly**: the pod stays NotReady and the operator replaces it.
 
 ## In one line
 

@@ -5,7 +5,12 @@
 
 ## 기존 Pain Point
 
-코드 실행 RL용 샌드박스는 대부분 CPU 전용이라 GPU에서 커널의 정확성과 속도를 측정하는 과제는 채점하지 못합니다. 샌드박스에 GPU를 연결하면 신뢰할 수 없는 코드가 GPU 드라이버를 직접 호출할 수 있습니다. 평가 여러 개가 한 GPU를 차례로 사용하면 이전 평가의 상태가 다음 평가에 남고, 샌드박스마다 GPU를 하나씩 할당하면 비용이 커집니다. reward가 speedup 측정값이면 policy가 커널을 빠르게 만드는 대신 측정 방식을 속이는 방법을 학습할 수도 있습니다.
+코드 실행 RL용 샌드박스는 대부분 CPU 전용이라 GPU에서 커널의 정확성과 속도를 측정하는 과제는 채점하지 못합니다.
+
+- **샌드박스에 GPU를 연결하면**: 신뢰할 수 없는 코드가 GPU 드라이버를 직접 호출할 수 있습니다.
+- **평가 여러 개가 한 GPU를 차례로 사용하면**: 이전 평가의 상태가 다음 평가에 남습니다.
+- **샌드박스마다 GPU를 하나씩 할당하면**: 비용이 커집니다.
+- **reward가 speedup 측정값이면**: policy가 커널을 빠르게 만드는 대신 측정 방식을 속이는 방법을 학습할 수도 있습니다.
 
 ![두 패널 그림입니다. a: 후보 커널 코드를 CPU 전용 샌드박스로 보내면 GPU에서 측정하는 과제를 채점할 수 없습니다. GPU 샌드박스로 보내면 네 가지 위험이 생깁니다. 신뢰할 수 없는 코드가 GPU 드라이버에 접근하고, 이전 평가의 상태가 다음 평가에 남고, 샌드박스마다 GPU 1개가 필요해 비용이 늘고, 측정을 속여 reward를 얻을 수 있습니다. b: 이 에셋은 CPU에서 형식과 AST 정책을 먼저 검사해, 위반은 GPU 실행 전에 판정합니다. GPU 샌드박스 pod는 pod당 GPU 1개와 평가 1개를 쓰고, gVisor 또는 Kata가 노드를 보호합니다. 실행마다 새 프로세스 트리와 캐시를 쓰고, GPU로는 정확성과 timing만 측정하며, host clock timing과 출력 checksum 비교로 측정 조작을 막습니다.](../images/figures/concepts-01_why_gpu_sandbox.svg)
 
@@ -48,11 +53,14 @@
 
 | 이유 | 설명 |
 |---|---|
-| Firecracker에 GPU passthrough가 없음 | Firecracker는 virtio 장치 중심의 최소 장치 모델을 씁니다(FAQ 기준 에뮬레이션 장치 6개). 1.13.0에서 PCI 지원이 추가됐지만, 변경 이력에 VFIO GPU passthrough는 없습니다. Firecracker 기반 샌드박스 서비스(E2B 등)가 주로 CPU 위주인 배경 중 하나입니다. |
+| Firecracker에 GPU passthrough가 없음 | Firecracker는 virtio 장치 중심의 최소 장치 모델을 씁니다(FAQ 기준 에뮬레이션 장치 6개). 1.13.0에서 PCI 지원이 추가됐지만, 변경 이력에 VFIO GPU passthrough는 없습니다. |
 | 관리형 격리도 출시 시점에는 CPU 전용 | AWS Nitro Sandboxes(EKS isolated pods, 2026-11-09 출시) 문서에는 "GPU and other device passthrough are not supported at launch"라고 명시돼 있습니다. |
-| CUDA 상태 오염 | 신뢰할 수 없는 코드 실행 여러 개가 한 GPU를 차례로 사용하면 남은 프로세스, Triton과 CUDA 컴파일 캐시, 드라이버 상태가 다음 평가에 영향을 줄 수 있습니다. 실행마다 프로세스 트리와 캐시를 새로 만들어야 합니다. 장치 리셋은 Kata에서 기존 VM이 GPU를 반납할 때 VFIO가 하고, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 계속 씁니다. GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권고합니다. |
+| CUDA 상태 오염 | 신뢰할 수 없는 코드 실행 여러 개가 한 GPU를 차례로 사용하면 남은 프로세스, Triton과 CUDA 컴파일 캐시, 드라이버 상태가 다음 평가에 영향을 줄 수 있습니다. 실행마다 프로세스 트리와 캐시를 새로 만들어야 합니다. |
 | 비용과 밀도 | timing을 신뢰하려면 평가 하나가 GPU 하나를 독점해야 합니다. 이 에셋은 pod당 GPU 1개, 한 번에 평가 1개(처리 중이면 503)로 운영하므로 CPU 샌드박스처럼 한 노드에 샌드박스를 많이 배치할 수 없습니다. |
 | 드라이버 버전 의존성 | gVisor는 host 드라이버 버전이 nvproxy 지원 목록과 정확히 일치해야 하고, Kata는 guest VM 안에 드라이버를 따로 설치해야 합니다. 그만큼 관리할 버전 조합이 늘어납니다. |
+
+- **Firecracker 기반 서비스**: Firecracker에 GPU passthrough가 없는 것은 Firecracker 기반 샌드박스 서비스(E2B 등)가 주로 CPU 위주인 배경 중 하나입니다.
+- **CUDA 상태 오염과 장치 리셋**: 장치 리셋은 Kata에서 기존 VM이 GPU를 반납할 때 VFIO가 하고, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 계속 씁니다. GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권고합니다.
 
 ## 두 계층 패턴: CPU에서 거르고 GPU에서 측정합니다
 
@@ -63,13 +71,26 @@ GPU 노드는 CPU 노드보다 시간당 요금이 높으므로(예: `g5.xlarge`
 *그림 요약: 코드가 없거나 정책을 위반한 completion은 GPU 샌드박스를 호출하기 전에 CPU에서 판정되고, GPU 샌드박스는 정확성과 timing만 측정합니다.*
 
 
-첫 단계는 trainer 프로세스 안의 `KernelRewards`입니다. `KernelRewards`는 코드 블록을 추출해 `check_source`로 AST 정책을 검사합니다. 정책 위반이면 샌드박스를 호출하지 않고, 샌드박스가 반환하는 것과 같은 `policy_violation` verdict를 기록합니다. 샌드박스 harness도 같은 정책을 다시 검사합니다. 이 정책은 reward 무결성을 위한 검사이고, 노드를 보호하는 보안 경계는 gVisor나 Kata입니다.
+첫 단계는 trainer 프로세스 안의 `KernelRewards`입니다.
 
-CPU 계층은 `kata-clh-cpu` 프로필과 Kata + Cloud Hypervisor 노드 그룹으로 구성됩니다. 이 노드 그룹은 nested virtualization(일반 EC2 VM 안에서 다시 VM을 실행하는 기능)을 켠 `c8i.2xlarge` 노드를 씁니다. 핸즈온에서는 `g4dn.metal` 비용이 발생하기 전에 이 계층에서 Kata를 적은 비용으로 연습합니다. Production에서는 nvcc 컴파일처럼 GPU가 필요 없는 단계를 이 계층에 둘 수 있습니다. harness에는 컴파일만 하는 모드가 없으므로 그 단계는 직접 만들어야 합니다.
+1. `KernelRewards`는 코드 블록을 추출해 `check_source`로 AST 정책을 검사합니다.
+2. 정책 위반이면 샌드박스를 호출하지 않고, 샌드박스가 반환하는 것과 같은 `policy_violation` verdict를 기록합니다.
+
+샌드박스 harness도 같은 정책을 다시 검사합니다. 이 정책은 reward 무결성을 위한 검사이고, 노드를 보호하는 보안 경계는 gVisor나 Kata입니다.
+
+CPU 계층은 `kata-clh-cpu` 프로필과 Kata + Cloud Hypervisor 노드 그룹으로 구성됩니다. 이 노드 그룹은 nested virtualization(일반 EC2 VM 안에서 다시 VM을 실행하는 기능)을 켠 `c8i.2xlarge` 노드를 씁니다.
+
+- **핸즈온에서는**: `g4dn.metal` 비용이 발생하기 전에 이 계층에서 Kata를 적은 비용으로 연습합니다.
+- **Production에서는**: nvcc 컴파일처럼 GPU가 필요 없는 단계를 이 계층에 둘 수 있습니다. harness에는 컴파일만 하는 모드가 없으므로 그 단계는 직접 만들어야 합니다.
 
 ## 이 에셋의 시나리오
 
-코드 모델(기본 `Qwen/Qwen2.5-Coder-1.5B-Instruct`, Apache-2.0)은 PyTorch 모듈을 Triton 커널을 사용하는 `ModelNew`로 다시 작성합니다. 샌드박스가 정확성과 속도를 측정해 결과를 보내면, trainer가 format, correctness, speedup 점수를 계산합니다. 과제 형식은 KernelBench와 비슷합니다. 각 과제 모듈은 신뢰할 수 있는 reference `Model`, `get_init_inputs()`, seed별 입력을 만드는 `get_inputs(seed, device, size)`, 허용 오차 `ATOL`과 `RTOL`을 정의합니다.
+코드 모델(기본 `Qwen/Qwen2.5-Coder-1.5B-Instruct`, Apache-2.0)은 PyTorch 모듈을 Triton 커널을 사용하는 `ModelNew`로 다시 작성합니다. 샌드박스가 정확성과 속도를 측정해 결과를 보내면, trainer가 format, correctness, speedup 점수를 계산합니다. 과제 형식은 KernelBench와 비슷합니다. 각 과제 모듈은 다음을 정의합니다.
+
+- 신뢰할 수 있는 reference `Model`
+- `get_init_inputs()`
+- seed별 입력을 만드는 `get_inputs(seed, device, size)`
+- 허용 오차 `ATOL`과 `RTOL`
 
 ### 과제 10개 (`src/gpusandbox/tasks/`)
 

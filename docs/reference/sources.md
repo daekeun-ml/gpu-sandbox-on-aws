@@ -37,7 +37,10 @@ gVisor 릴리스, nvproxy 드라이버 목록, AMI에 포함된 드라이버, �
 
 ## 이 저장소에서 확인한 것
 
-아래 첫 명령은 AWS와 GPU 없이 로컬 테스트 전체를 실행하고, 두 번째 명령은 CDK 라이브러리를 설치한 가상 환경에서 CDK 스택 테스트를 따로 실행합니다. 환경 구성은 [시작하기](../getting_started.md)를 따르세요. 테스트는 서버의 프로세스 정리 동작을 끈 채로 실행되므로 Linux 호스트에서도 안전합니다. 다만 Linux 호스트에서 서버를 직접 띄우면 같은 사용자의 다른 프로세스가 종료될 수 있으니, 그 전에 그 페이지의 경고를 읽어 주세요.
+아래 첫 명령은 AWS와 GPU 없이 로컬 테스트 전체를 실행하고, 두 번째 명령은 CDK 라이브러리를 설치한 가상 환경에서 CDK 스택 테스트를 따로 실행합니다. 환경 구성은 [시작하기](../getting_started.md)를 따르세요.
+
+- **테스트를 실행할 때**: 테스트는 서버의 프로세스 정리 동작을 끈 채로 실행되므로 Linux 호스트에서도 안전합니다.
+- **Linux 호스트에서 서버를 직접 띄울 때**: 같은 사용자의 다른 프로세스가 종료될 수 있으니, 그 전에 그 페이지의 경고를 읽으세요.
 
 ```bash
 # Full local test suite on CPU (no AWS, no GPU)
@@ -46,7 +49,13 @@ python -m pytest -q
 (cd cdk && python -m pytest -q tests)
 ```
 
-**확인할 것:** 실패 없이 `passed`로 끝납니다. 이 페이지를 쓰는 동안(2026-11-13) macOS(CPU 전용)에서 전체 테스트가 통과했습니다. 테스트 수는 저장소가 바뀌면 달라지므로 여기에 적지 않습니다. 현재 체크아웃의 테스트 수는 저장소 루트에서 `python -m pytest --collect-only -q`로 확인하세요(CDK 스택 테스트는 따로). **문제가 생기면:** [문제 해결](troubleshooting.md)
+**확인할 것:**
+
+- 실패 없이 `passed`로 끝납니다.
+- 이 페이지를 쓰는 동안(2026-11-13) macOS(CPU 전용)에서 전체 테스트가 통과했습니다.
+- 테스트 수는 저장소가 바뀌면 달라지므로 여기에 적지 않습니다. 현재 체크아웃의 테스트 수는 저장소 루트에서 `python -m pytest --collect-only -q`로 확인하세요(CDK 스택 테스트는 따로).
+
+**문제가 생기면:** [문제 해결](troubleshooting.md)
 
 | 테스트 파일 | 로컬 테스트로 확인한 것 |
 |---|---|
@@ -58,7 +67,12 @@ python -m pytest -q
 | `tests/test_agent_sandbox.py` | 가짜 API로 SandboxClaim 본문, Ready 대기와 `serviceFQDN` 선택, claim과 해제, Ready가 되지 않을 때의 해제 |
 | `tests/test_multiturn.py` | 가짜 API와 loopback CPU 샌드박스 서버로 에피소드 하나가 claim 하나를 쓰는지, 정답에서 멈추는지, 오류가 나도 claim을 삭제하는지, 이벤트와 episode reward, veRL tool 로직(veRL 미설치) |
 | `tests/test_demo.py` | 데모 CloudFormation 템플릿(private bucket, `AWS:SourceArn` 조건이 붙은 CloudFront 허용, TLS가 아닌 요청 거부, HTTPS 리디렉션과 보안 헤더), 외부 리소스와 HTML 주입이 없는 정적 사이트, 녹화 스키마와 reward 일관성 |
-| `cdk/tests/test_stack.py` | synth한 CDK 템플릿: private endpoint(public은 /32 opt-in만), `0.0.0.0/0` inbound 없음, 시나리오 A에 Kata CPU를 추가해 synth한 모든 launch template의 IMDSv2 필수(hop limit과 EBS 볼륨은 템플릿에 명시된 경우에만 hop limit 1과 암호화를 확인), 시나리오별 노드 그룹, c8i의 nested virtualization, Kata GPU 노드 그룹의 IOMMU AMI와 user data(이 구성의 IMDSv2는 검사하지 않음), 시나리오마다 cdk-nag 통과 |
+| `cdk/tests/test_stack.py` | synth한 CDK 템플릿: private endpoint(public은 /32 opt-in만), `0.0.0.0/0` inbound 없음, 시나리오별 노드 그룹, 시나리오마다 cdk-nag 통과. 나머지는 표 아래 목록 |
+
+`cdk/tests/test_stack.py`가 더 확인하는 것은 다음과 같습니다.
+
+- **IMDSv2**: 시나리오 A에 Kata CPU를 추가해 synth한 모든 launch template의 IMDSv2 필수(hop limit과 EBS 볼륨은 템플릿에 명시된 경우에만 hop limit 1과 암호화를 확인)
+- **노드 그룹 설정**: c8i의 nested virtualization, Kata GPU 노드 그룹의 IOMMU AMI와 user data(이 구성의 IMDSv2는 검사하지 않음)
 
 TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 셸 스크립트는 shellcheck 검사를 통과했습니다(저자 기록, 2026-11).
 
@@ -82,12 +96,10 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 
 **AWS에서 실행하지 않은 것:**
 
-- `01_check_prereqs.sh`
 - 학습 중의 시나리오 A `ops/rollout.sh`와 `ops/rollout.sh --finish`(어느 시나리오에서도 실행하지 않음)
-- 기본값 60 step 학습
 - HyperPod 단계(`hyperpod/create.sh`부터)와 `ml.g5`의 B1, B2. B1과 B2 CDK 스택은 2026-11-18 시나리오 A 클러스터를 만들 때 중간 단계로만 배포함
 - `hyperpod/delete.sh`, `demo/teardown.sh`(shellcheck만 통과)
-- [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)의 절차(로컬 테스트만 통과)
+- [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)의 `gvisor-cpu` warm pool과 GPU 절(`kata-clh-cpu` warm pool로는 실행함)
 - 운영 가이드가 핸즈온에 더하는 구성: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity
 
 나머지는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
@@ -96,8 +108,16 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 
 아래 값은 2026-11 기준이며, 배포나 공유 전에 하나씩 다시 확인하세요.
 
-- [ ] **버전 고정 값:** gVisor `GVISOR_RELEASE=20261109.0`, Kata `KATA_VERSION=4.3.1`, GPU Operator `v26.7.2`, NVIDIA device plugin `0.20.1`, Karpenter v1.15.2(LTS v1.14.3), AWS CDK CLI 2.1148.1 이상과 `aws-cdk-lib` 2.276.0, cdk-nag 3.0.2, Agent Sandbox v1.0.11, TRL 1.18.0(trainer 이미지의 vLLM 0.33.0), veRL 0.9.1(veRL 이미지의 vLLM 0.24.0), KubeRay v1.7.2. 각 프로젝트의 릴리스 페이지에서 새 버전과 변경점을 확인합니다.
-- [ ] **노드 드라이버와 nvproxy 목록:** EKS AL2023 NVIDIA AMI v20261107의 기본 드라이버는 580.178.04(g5에서는 proprietary 모듈에 GSP 꺼짐, g6에서는 open 모듈), HyperPod EKS AMI 1.34~1.36(2026-10-16)은 595.91.07, 1.33은 580.178.04입니다. B2 custom AMI의 `B2_NVIDIA_DRIVER_VERSION`과 노드 드라이버가 고정한 gVisor 릴리스의 supported 목록에 있는지 확인합니다.
+- [ ] **버전 고정 값:** 각 프로젝트의 릴리스 페이지에서 새 버전과 변경점을 확인합니다.
+    - gVisor `GVISOR_RELEASE=20261109.0`, Kata `KATA_VERSION=4.3.1`
+    - GPU Operator `v26.7.2`, NVIDIA device plugin `0.20.1`
+    - Karpenter v1.15.2(LTS v1.14.3)
+    - AWS CDK CLI 2.1148.1 이상과 `aws-cdk-lib` 2.276.0, cdk-nag 3.0.2
+    - Agent Sandbox v1.0.11
+    - TRL 1.18.0(trainer 이미지의 vLLM 0.33.0), veRL 0.9.1(veRL 이미지의 vLLM 0.24.0), KubeRay v1.7.2
+- [ ] **노드 드라이버와 nvproxy 목록:** B2 custom AMI의 `B2_NVIDIA_DRIVER_VERSION`과 노드 드라이버가 고정한 gVisor 릴리스의 supported 목록에 있는지 확인합니다.
+    - **EKS AL2023 NVIDIA AMI v20261107**: 기본 드라이버는 580.178.04입니다(g5에서는 proprietary 모듈에 GSP 꺼짐, g6에서는 open 모듈).
+    - **HyperPod EKS AMI**: 1.34~1.36(2026-10-16)은 595.91.07, 1.33은 580.178.04입니다.
 - [ ] **가격:** EC2 온디맨드 요금과 SageMaker AI(HyperPod `ml.*`) 요금. 이 가이드의 값(`c8i.2xlarge` 0.37484 USD/시간 등)은 2026-11 기준입니다.
 - [ ] **quota:** Running On-Demand G and VT instances(vCPU 기준, 새 계정은 0일 수 있음), Running On-Demand Standard instances, HyperPod의 `ml.<type> for cluster usage`.
 - [ ] **HyperPod가 지원하는 Kubernetes 버전:** 사전 요구사항 페이지는 1.30부터 1.35까지, AMI 릴리스 노트는 1.36까지 적습니다. 이 가이드는 1.36을 씁니다.
@@ -115,7 +135,11 @@ driver="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
 /usr/local/bin/runsc nvproxy list-supported-drivers | grep -wF "$driver"
 ```
 
-**확인할 것:** 두 번째 명령이 그 드라이버 버전을 한 줄 출력하면 지원 목록에 있습니다. 아무것도 나오지 않으면 그 노드에서 gVisor GPU 샌드박스가 Ready가 되지 않습니다. HyperPod 노드는 `scripts/hyperpod/check_gvisor.sh`가 같은 확인을 해 줍니다.
+**확인할 것:**
+
+- **두 번째 명령이 그 드라이버 버전을 한 줄 출력하면**: 지원 목록에 있습니다.
+- **아무것도 나오지 않으면**: 그 노드에서 gVisor GPU 샌드박스가 Ready가 되지 않습니다.
+- **HyperPod 노드**: `scripts/hyperpod/check_gvisor.sh`가 같은 확인을 해 줍니다.
 
 아래 명령은 quota와 nested virtualization 지원을 한 번에 출력합니다(읽기 전용).
 
@@ -157,9 +181,12 @@ scripts/01_check_prereqs.sh
 |---|---|
 | [AWS Containers 블로그 (2024): Kata Containers로 워크로드 격리 강화](https://aws.amazon.com/blogs/containers/enhancing-kubernetes-workload-isolation-and-security-using-kata-containers/) | i3.metal에서 Kata + Firecracker |
 | [AWS China 블로그 (2026-07)](https://aws.amazon.com/cn/blogs/china/amazon-eks-build-security-ai-agent/) | c5.metal, Kata 3.31.0 + Cloud Hypervisor, OpenSandbox, Karpenter 1.12.1. 블로그 측정값: cold start 약 3 s, pool claim 약 230 ms. "CLH 약 130 MB, QEMU 약 160 MB"는 Kata 3.31.0의 `podFixed` 기본값과 같아 측정값이 아닐 가능성이 큼 |
-| [AWS 기술 블로그 "AWS에서 AI 에이전트 실행 환경 격리하기" 1부](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-1/) | EKS 1.36의 Agent Sandbox v1.0.5 + gVisor release-20260928.0, 격리 4계층(Pod 보안 설정, gVisor, NetworkPolicy, 전용 노드 그룹의 IMDS 설정), NodeConfig로 runsc 등록, IMDSv2 필수와 hop limit 1, EKS Auto Mode는 runsc 등록 불가, RuntimeClass 스케줄링은 같은 taint에 toleration이 있는 다른 pod가 그 노드에 배치되는 것을 막지 못함 |
-| [같은 시리즈 2부](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/) | 기본 SandboxTemplate 정책의 인터넷 egress 허용과 공개 resolver DNS 주입, NetworkPolicy 활성화 전의 IMDS와 API 접근, sandbox-router 인가(기본 allow-all, TokenReview는 유효성만 증명, Tunnel mode는 NetworkPolicy 우회). 블로그 측정값(EKS 1.36, m7i.xlarge): SandboxClaim에서 Ready까지 cold 약 2 s, warm pool 약 55 ms, gVisor의 syscall 비용 약 0.18 us에서 2.2 us |
+| [AWS 기술 블로그 "AWS에서 AI 에이전트 실행 환경 격리하기" 1부](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-1/) | EKS 1.36의 Agent Sandbox v1.0.5 + gVisor release-20260928.0, 격리 4계층(Pod 보안 설정, gVisor, NetworkPolicy, 전용 노드 그룹의 IMDS 설정). 나머지는 표 아래 목록 |
+| [같은 시리즈 2부](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/) | 기본 SandboxTemplate 정책의 인터넷 egress 허용과 공개 resolver DNS 주입, NetworkPolicy 활성화 전의 IMDS와 API 접근, sandbox-router 인가(기본 allow-all, TokenReview는 유효성만 증명, Tunnel mode는 NetworkPolicy 우회). 측정값은 표 아래 목록 |
 | [같은 시리즈 3부](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-3/) | 에이블리(Ably) 운영 사례: 프로젝트마다 Sandbox 하나, 전용 on-demand Karpenter NodePool과 `karpenter.sh/do-not-disrupt`, Kyverno와 ExternalDNS, v1.0.8 `SandboxClaim.spec.env`는 warm pool 없이 새로 시작, 현재 runc이며 API는 유지한 채 Kata 평가 계획 |
+
+- **1부의 나머지 내용**: NodeConfig로 runsc 등록, IMDSv2 필수와 hop limit 1, EKS Auto Mode는 runsc 등록 불가, RuntimeClass 스케줄링은 같은 taint에 toleration이 있는 다른 pod가 그 노드에 배치되는 것을 막지 못함
+- **2부의 블로그 측정값(EKS 1.36, m7i.xlarge)**: SandboxClaim에서 Ready까지 cold 약 2 s, warm pool 약 55 ms, gVisor의 syscall 비용 약 0.18 us에서 2.2 us
 
 ### GitHub 저장소와 프로젝트 문서
 
@@ -167,7 +194,7 @@ scripts/01_check_prereqs.sh
 |---|---|
 | [gVisor 설치](https://gvisor.dev/docs/user_guide/install/) | 최신 release-20261109.0. release-20260831부터 tarball 배포(`runsc`, `containerd-shim-runsc-v1`, `runsc`와 같은 디렉터리에 두어야 하는 `gvisor-bin/`) |
 | [gVisor 릴리스 tarball (고정 URL)](https://storage.googleapis.com/gvisor/releases/release/20261109.0/x86_64/gvisor.tar.bz2) | 고정한 릴리스를 URL로 받을 수 있음 (`.sha512`와 함께 검증) |
-| [gVisor GPU 지원](https://gvisor.dev/docs/user_guide/gpu/) | `nvproxy = "true"`, 기본 capabilities `compute,utility`, 드라이버 정책(supported, unsupported, unknown), NVIDIA open 드라이버 기준 설명(proprietary 드라이버 언급 없음), 580.178.04는 release-20260831.0부터 supported, 문서화된 GPU(T4, A100/A10G, L4, H100), CDI 호환, 보안 범위("much less effective ...", DMA buffer 미검증), VM에서는 systrap 플랫폼 |
+| [gVisor GPU 지원](https://gvisor.dev/docs/user_guide/gpu/) | `nvproxy = "true"`, 기본 capabilities `compute,utility`, 드라이버 정책(supported, unsupported, unknown), 580.178.04는 release-20260831.0부터 supported. 나머지는 표 아래 목록 |
 | [gVisor nvproxy 드라이버 표 (release-20261109.0)](https://github.com/google/gvisor/blob/release-20261109.0/pkg/sentry/devices/nvproxy/version.go) | 580.159.04, 580.178.04는 `addDriverABI`(supported), 595.71.05는 `addUnsupportedDriverABI`, 595.91.07은 없음(unknown). 개발 브랜치에도 595.91.07 없음(2026-11-14) |
 | [NVIDIA 580.178.04 .run 설치 파일](https://download.nvidia.com/XFree86/Linux-x86_64/580.178.04/), [CUDA repo (Amazon Linux 2023)](https://developer.download.nvidia.com/compute/cuda/repos/amzn2023/x86_64/) | `.run`의 sha256 `5975a86e...6d6f9`(NVIDIA `.sha256sum`, gVisor 표와 같음). repo에 `kmod-nvidia-open-dkms-580.178.04`, `nvidia-driver-580.178.04` 등 |
 | [google/gvisor](https://github.com/google/gvisor) | gVisor 소스 저장소 |
@@ -195,9 +222,13 @@ scripts/01_check_prereqs.sh
 | [Qwen2.5-Coder-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct) | qwen-research(비상업) 라이선스, 이 에셋에서 쓰지 않음 |
 | [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) | v1.0.11(2026-11-12), CRD v1beta1(Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim), RuntimeClass로 격리를 런타임에 맡김, Kata 예시와 GKE gVisor + L4 GPU 예시, SDK(Python `k8s-agent-sandbox`, Go, TypeScript), sandbox-router |
 | [agent-sandbox v1.0.11 설치 매니페스트](https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.11/sandbox-with-extensions.yaml) | controller와 extension을 한 번에 설치하는 매니페스트 |
-| [AI on EKS: Agent Sandbox on EKS](https://awslabs.github.io/ai-on-eks/ko/docs/infra/agents/agent-sandbox), [awslabs/ai-on-eks](https://github.com/awslabs/ai-on-eks) | gVisor 커널 격리, agent-sandbox CRD(Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim, v1beta1)로 수명 주기 관리, FQDN 기반 egress 제어(Standard EKS는 Cilium, EKS Auto Mode는 `ApplicationNetworkPolicy`), KRO의 `AgentSandbox` 리소스, Karpenter와 gVisor NodePool(`runsc`를 AL2023 user data로 설치), 런타임 계층 `standard`(runc), `gvisor`(Auto Mode 미지원), `isolated-sandbox`(Nitro Sandboxes, EKS Auto Mode의 Kubernetes 1.36 이상 또는 custom AMI를 쓰는 Standard EKS), Kata + Firecracker는 향후 계층(미포함), GPU 언급 없음(2026-11 확인) |
+| [AI on EKS: Agent Sandbox on EKS](https://awslabs.github.io/ai-on-eks/ko/docs/infra/agents/agent-sandbox), [awslabs/ai-on-eks](https://github.com/awslabs/ai-on-eks) | gVisor 커널 격리, agent-sandbox CRD(Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim, v1beta1)로 수명 주기 관리, GPU 언급 없음(2026-11 확인). 나머지는 표 아래 목록 |
 | [opensandbox-group/OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) | release-1.2.1, Pool과 BatchSandbox(v1alpha1) |
 | [bytedance/SandboxFusion](https://github.com/bytedance/SandboxFusion) | `POST /run_code`, GPU 실행은 직렬화 |
+
+- **gVisor GPU 지원의 나머지 내용**: NVIDIA open 드라이버 기준 설명(proprietary 드라이버 언급 없음), 문서화된 GPU(T4, A100/A10G, L4, H100), CDI 호환, 보안 범위("much less effective ...", DMA buffer 미검증), VM에서는 systrap 플랫폼
+- **AI on EKS의 egress와 노드 구성**: FQDN 기반 egress 제어(Standard EKS는 Cilium, EKS Auto Mode는 `ApplicationNetworkPolicy`), KRO의 `AgentSandbox` 리소스, Karpenter와 gVisor NodePool(`runsc`를 AL2023 user data로 설치)
+- **AI on EKS의 런타임 계층**: `standard`(runc), `gvisor`(Auto Mode 미지원), `isolated-sandbox`(Nitro Sandboxes, EKS Auto Mode의 Kubernetes 1.36 이상 또는 custom AMI를 쓰는 Standard EKS), Kata + Firecracker는 향후 계층(미포함)
 
 ### 논문, 블로그, reward hacking 보고
 

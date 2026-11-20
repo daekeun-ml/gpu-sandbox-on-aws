@@ -5,7 +5,10 @@
 
 ## Pain point
 
-When each trainer process decides alone which pod is free, several TRL ranks and veRL reward workers send requests to the same pod, get 503 and retry. veRL scores samples one at a time with no batch snapshot, so samples of the same GRPO group can be scored by different versions before and after a routing switch. If the pinning rules live separately in each trainer's code, it is also hard to version environments independently of the trainer. INTELLECT-3 reported that `kubectl exec` through the API grew to about 2.5 s per command, and switched to a gateway, headless Service and sidecar design (arXiv 2512.16144).
+- **When each trainer process decides alone which pod is free**: several TRL ranks and veRL reward workers send requests to the same pod, get 503 and retry.
+- **veRL scoring samples one at a time**: with no batch snapshot, samples of the same GRPO group can be scored by different versions before and after a routing switch.
+- **If the pinning rules live separately in each trainer's code**: it is also hard to version environments independently of the trainer.
+- **Another case**: INTELLECT-3 reported that `kubectl exec` through the API grew to about 2.5 s per command, and switched to a gateway, headless Service and sidecar design (arXiv 2512.16144).
 
 ![a: TRL rank 0 and a veRL reward worker each see sandbox pod A as free and send to the same pod, which answers 503 and makes them retry; sample 1 of group 17 is scored by v1 and sample 2, after a routing switch, by v2, so one group spans two versions. b: all four requests pass one sandbox gateway, which counts in-flight requests in one place and sends one at a time to pod A and pod B, and its group_key pin scores both samples with the pinned version v1 (group pin, TTL 900 s)](../images/figures/production-03_gateway_and_pools.svg)
 
@@ -14,7 +17,8 @@ When each trainer process decides alone which pod is free, several TRL ranks and
 
 ## Why
 
-- **In-flight requests are counted in one place.** Normally every request passes through a single gateway process, so it never sends two requests to the same pod at once. While the gateway Deployment is being replaced, the old and new gateway run side by side for a short time and can pick the same pod. The sandbox then answers the second request with 503 (busy), and the gateway sends it to another pod.
+- **In-flight requests are counted in one place.** Normally every request passes through a single gateway process, so it never sends two requests to the same pod at once.
+    - **While the gateway Deployment is being replaced**: the old and new gateway run side by side for a short time and can pick the same pod. The sandbox then answers the second request with 503 (busy), and the gateway sends it to another pod.
 - **Version pinning is centralized.** A batch is bound to one snapshot and samples to a `group_key` pin, and TRL and veRL use the same path through a single `SANDBOX_GATEWAY` without knowing the pinning rules.
 - **Recycling is automatic.** Worn-out pods are deleted and replaced with new ones; under Kata a new pod is a new VM.
 
@@ -36,9 +40,14 @@ When each trainer process decides alone which pod is free, several TRL ranks and
 | `POST /v1/evaluate` | Bearer | `{task_id, code, request_id?, group_key, runtime?}` | One verdict | Per sample, `group_key` pin (veRL) |
 | `GET /v1/routing` | Bearer | | `{runtime, version, revision}` | Check the current routing |
 | `GET /metrics` | Bearer | | Prometheus format | Monitoring |
-| `GET /healthz`, `GET /readyz` | None | | `readyz` returns 503 if no valid routing table has been read yet or the active pool has no address in the table. After a good table has been read, file read or JSON parse errors fall back to the last good table | kubelet probes |
+| `GET /healthz`, `GET /readyz` | None | | `readyz` returns 503 when there is no valid routing table or the active pool has no address in it (below the table) | kubelet probes |
 
-Field lengths are limited to 64 characters for `task_id`, 32,768 for `code`, 128 for `request_id`, 256 for `group_key` and 32 for `runtime`. A result from a pod that finished the evaluation carries the sandbox verdict (`status`, `correct`, `custom_kernel`, `speedup`, `flags` and so on) plus the gateway's `sandbox_version`, `runtime`, `routing_revision`, `pod`, `endpoint`, `attempts` and `draining`. A `sandbox_error` result for a request that got no free pod or a 4xx from the sandbox has only `status`, `error` and the three gateway fields, so read `status` and `error` first and use the other fields only when present. Trainers call it through the client library (a one-item batch example).
+- **When `readyz` returns 503**: if no valid routing table has been read yet or the active pool has no address in the table. After a good table has been read, file read or JSON parse errors fall back to the last good table.
+- **Field lengths**: limited to 64 characters for `task_id`, 32,768 for `code`, 128 for `request_id`, 256 for `group_key` and 32 for `runtime`.
+- **A result from a pod that finished the evaluation**: it carries the sandbox verdict (`status`, `correct`, `custom_kernel`, `speedup`, `flags` and so on) plus the gateway's `sandbox_version`, `runtime`, `routing_revision`, `pod`, `endpoint`, `attempts` and `draining`.
+- **A `sandbox_error` result**: for a request that got no free pod or a 4xx from the sandbox, it has only `status`, `error` and the three gateway fields, so read `status` and `error` first and use the other fields only when present.
+
+Trainers call it through the client library (a one-item batch example).
 
 ```python
 from gpusandbox.client import SandboxClient
@@ -76,9 +85,15 @@ sequenceDiagram
 - The runtime is pinned at the first request too, so once a pin exists the request's `runtime` value is ignored.
 - Pins live only in gateway memory and disappear when the gateway restarts, so groups in flight at that moment can mix versions.
 - The TTL must be longer than the longest time to score one group (otherwise the last sample gets a new snapshot).
-- Keep the old pool until every pin has expired. Scaling it to zero with `scripts/ops/rollout.sh <runtime> <from> <to> --finish` right after the switch leaves groups pinned to the old version without a destination. The gateway waits up to 600 seconds for a free pod, but a veRL per-sample request ends as `sandbox_error` first if the client gets no response within its default 300 seconds. Wait for the TTL (15 minutes by default) plus the time in-flight batches need, then finish. ([05 Sandbox versioning](05_sandbox_updates.md))
+- Keep the old pool until every pin has expired. ([05 Sandbox versioning](05_sandbox_updates.md))
+    - **If you scale it to zero with `scripts/ops/rollout.sh <runtime> <from> <to> --finish` right after the switch**: groups pinned to the old version are left without a destination. The gateway waits up to 600 seconds for a free pod, but a veRL per-sample request ends as `sandbox_error` first if the client gets no response within its default 300 seconds.
+    - **When to finish the switch**: wait for the TTL (15 minutes by default) plus the time in-flight batches need, then finish.
 
-`evaluate_batch` takes one snapshot for the whole batch, without group pins, which is enough when one process sends all completions of a group in one batch. If one group's completions are split across several training ranks (depends on the TRL configuration), each rank takes its own snapshot, so a group can span two versions at the moment of a switch. Collect the `reward_batch` events of every rank for the same `global_step` and compare `version` and `served_versions`. These fields count only the items that process actually sent, and a rank that scored everything from its cache emits no event, so the event cannot tell you which pool that rank's results came from.
+`evaluate_batch` takes one snapshot for the whole batch, without group pins.
+
+- **When one process sends all completions of a group in one batch**: this is enough.
+- **If one group's completions are split across several training ranks (depends on the TRL configuration)**: each rank takes its own snapshot, so a group can span two versions at the moment of a switch.
+- **How to check**: collect the `reward_batch` events of every rank for the same `global_step` and compare `version` and `served_versions`. These fields count only the items that process actually sent, and a rank that scored everything from its cache emits no event, so the event cannot tell you which pool that rank's results came from.
 
 ## Scheduling
 
@@ -89,7 +104,9 @@ sequenceDiagram
 - 4xx responses are not retried, because an authentication or request problem is not fixed by another pod.
 - The timeout for one sandbox call is 300 seconds, and the outer limit of the harness inside the sandbox is `SANDBOX_EVAL_TIMEOUT_S` (default 90 s) × 2 + 30 s = 210 s.
 
-GPU timing is clean only with one GPU to itself, so requests are limited to one per pod: concurrent evaluations equal the number of Ready sandbox pods, and one batch takes roughly ⌈items / pods⌉ × evaluation time. The AWS numbers in [08 Runtime benchmark](../handson/08_benchmark.md) come from calling the sandbox pools directly, without the gateway. Batch time through the gateway was not measured, so measure it yourself.
+GPU timing is clean only with one GPU to itself, so requests are limited to one per pod: concurrent evaluations equal the number of Ready sandbox pods, and one batch takes roughly ⌈items / pods⌉ × evaluation time.
+
+The AWS numbers in [08 Runtime benchmark](../handson/08_benchmark.md) come from calling the sandbox pools directly, without the gateway. Batch time through the gateway was not measured, so measure it yourself.
 
 ## Recycling
 
@@ -127,7 +144,10 @@ What to look for: `rollout status` ends with `deployment "gateway" successfully 
 [{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"sandbox-gateway"}},"podSelector":{"matchLabels":{"app.kubernetes.io/name":"gpu-sandbox-gateway"}}}]
 ```
 
-If it fails: for an error such as `render: ... missing variable 'CONTROL_IMAGE_URI'`, see the configuration and scripts table in [Troubleshooting](../reference/troubleshooting.md). If the gateway pod does not become Ready, see the runbook in [07 Observability and operations](07_observability_and_operations.md).
+If it fails:
+
+- **For an error such as `render: ... missing variable 'CONTROL_IMAGE_URI'`**: see the configuration and scripts table in [Troubleshooting](../reference/troubleshooting.md).
+- **If the gateway pod does not become Ready**: see the runbook in [07 Observability and operations](07_observability_and_operations.md).
 
 - The gateway pod stays in ContainerCreating until the `sandbox-routing` ConfigMap exists, and starts after step 2.
 - Step 2 copies the `rl-trainer` routing table as is, so the gateway uses the same active pool as the trainer (for example `gvisor-hyperpod` in B2 or `kata-clh-cpu` in C). The gateway's `/readyz` only checks that it can read the routing table, not that the active pool is deployed.
@@ -159,7 +179,9 @@ With one replica, requests fail while the gateway restarts. The trainer gets `sa
 | `allow-clients-to-sandbox-api` | `sandbox` | The gateway pod in `sandbox-gateway` to sandboxes on TCP 8000 (overwrites the hands-on policy of the same name) |
 | `default-deny-all` | `sandbox` | Kept as is |
 
-Because it overwrites the policy of the same name, the trainer and the probe Jobs no longer reach sandboxes directly from the moment you apply it. Step 3 of `scripts/ops/verify.sh` and the parity step of `scripts/ops/rollout.sh` call sandboxes directly from a Job in `rl-trainer`, so in production add a policy that admits the verification Jobs. NetworkPolicies are additive: save the example below (not a file in the repository) and add it with `kubectl apply -f <file>`. If step 3 shows `PASS` again afterwards, the policy works.
+Because it overwrites the policy of the same name, the trainer and the probe Jobs no longer reach sandboxes directly from the moment you apply it. Step 3 of `scripts/ops/verify.sh` and the parity step of `scripts/ops/rollout.sh` call sandboxes directly from a Job in `rl-trainer`, so in production add a policy that admits the verification Jobs.
+
+NetworkPolicies are additive: save the example below (not a file in the repository) and add it with `kubectl apply -f <file>`. If step 3 shows `PASS` again afterwards, the policy works.
 
 ```yaml
 # Example (not in the repo): admit the operator Jobs (probe, parity) in production.
@@ -213,7 +235,7 @@ Change the trainer container's `env` and the pod's `volumes` in `k8s/trainer/job
 
 | Symptom | Cause | What the trainer gets | Action |
 |---|---|---|---|
-| Gateway returns 401 | Token audience is not `gpu-sandbox-gateway`, the token expired, or the gateway's audience or allowlist is not set | `sandbox_error` for every item in that request, including cached items re-sent because another pool produced them (in TRL, items decided locally and cached items not in that request keep their results) | Check the trainer's projected token audience and `GATEWAY_AUTH_AUDIENCE` |
+| Gateway returns 401 | Token audience is not `gpu-sandbox-gateway`, the token expired, or the gateway's audience or allowlist is not set | `sandbox_error` for every item in that request (cached items below the table) | Check the trainer's projected token audience and `GATEWAY_AUTH_AUDIENCE` |
 | Gateway returns 403 | Subject not in `GATEWAY_ALLOWED_SUBJECTS` | Same as 401 | Add the ServiceAccount to the allowlist |
 | Sandbox returns 401, 403 to the gateway | Gateway subject not in `SANDBOX_ALLOWED_SUBJECTS`, stale JWKS | `sandbox_error` for that item (no retry) | Check the allowlist and the status of the `jwks-sync` CronJob |
 | `no free sandbox` after a long wait | No Ready pods (scaled to zero, NotReady), or all of them busy | `sandbox_error` after up to 600 s (300 s client timeout for veRL per-sample requests) | Check replicas, NodePool limits, ResourceQuota and pod readiness |
@@ -221,6 +243,8 @@ Change the trainer container's `env` and the pod's `volumes` in `k8s/trainer/job
 | Connection errors | Gateway restart or failure | `sandbox_error`, in-flight group pins are lost | Check the gateway pod status and events |
 | Draining pods remain | Pod deletion failed (RBAC, API errors) | Lower throughput | Check `could not recycle` in the gateway log and the Role |
 | `gpu_fault` flag | CUDA error on the reference path | `sandbox_error` for that item | Check that the pod is recycled and whether it repeats on the same node |
+
+- **Cached items when the gateway returns 401 or 403**: cached items re-sent because another pool produced them also get `sandbox_error`. In TRL, items decided locally and cached items not in that request keep their results.
 
 ## ❓ Misconceptions
 

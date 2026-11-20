@@ -18,7 +18,11 @@ gVisor runs on A10G (`g5.xlarge`) and Kata QEMU on T4 (`g4dn.metal`), so side-by
 - **Results land in JSONL.** `bench-<timestamp>.jsonl` at the repository root is easy to turn into a table.
 - **Clean comparison axes are kept separate.** Comparisons within one GPU type, and Kata CLH CPU against Kata QEMU CPU on the same `c8i` node.
 
-**Before you start:** the pools you want to compare must be deployed with [04 Deploy and verify sandbox pools](04_sandbox_pools.md) (for Kata, [03 Kata sandboxes](03_kata.md) prepares the nodes and runtimes, and `scripts/06_deploy_sandboxes.sh` in 04 deploys the v1 pool to measure; `bench.sh` skips any runtime without v1 pods). How the three runtimes differ in structure is in [Isolation runtimes](../concepts/02_isolation_runtimes.md), and terms are in the [Glossary](../reference/glossary.md).
+**Before you start:**
+
+- The pools you want to compare must be deployed with [04 Deploy and verify sandbox pools](04_sandbox_pools.md). `bench.sh` skips any runtime without v1 pods.
+- **For Kata**: [03 Kata sandboxes](03_kata.md) prepares the nodes and runtimes, and `scripts/06_deploy_sandboxes.sh` in 04 deploys the v1 pool to measure.
+- How the three runtimes differ in structure is in [Isolation runtimes](../concepts/02_isolation_runtimes.md), and terms are in the [Glossary](../reference/glossary.md).
 
 ??? note "Terms (expand if a word is new to you)"
     - **Cold start**: on this page, the time from when a pod is created to when it last became Ready.
@@ -44,7 +48,10 @@ List the pods in the `sandbox` namespace with their runtime and version labels.
 kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version
 ```
 
-**What to look for:** every runtime you want to measure has pods with VERSION `v1`, and READY is `1/1` for all of them. The script silently skips runtimes without v1 pods.
+**What to look for:**
+
+- Every runtime you want to measure has pods with VERSION `v1`, and READY is `1/1` for all of them.
+- The script silently skips runtimes without v1 pods.
 
 Measure while training is stopped. A sandbox pod evaluates one request at a time, so if training and the benchmark share pods, the time spent waiting for a pod lowers the throughput.
 
@@ -62,9 +69,11 @@ scripts/ops/bench.sh 64     # more requests per pool
 | Order | What the script does |
 |---|---|
 | 1 | Goes through `gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`, `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu` in that order and picks only pools that have `version=v1` pods |
-| 2 | For every pod that is Ready now, prints the cold start in seconds: the Ready condition's `lastTransitionTime` minus `creationTimestamp`. `lastTransitionTime` is when the pod last became Ready, so a pod that lost readiness and recovered does not show its first startup time |
+| 2 | For every pod that is Ready now, prints the cold start in seconds: the Ready condition's `lastTransitionTime` minus `creationTimestamp` |
 | 3 | Picks `relu_bias_triton` for GPU pools and `relu_bias_torch_only` for pools whose name ends in `-cpu` |
 | 4 | Runs `gpusandbox.tools bench` as Job `bench-<runtime>-<epoch>` in `rl-trainer` and appends the one-line JSON result to `bench-<YYYYmmdd-HHMMSS>.jsonl` |
+
+- **Cold start value in step 2**: `lastTransitionTime` is when the pod last became Ready, so a pod that lost readiness and recovered does not show its first startup time.
 
 **What to look for:** each pool prints a block like this (example shape; values differ per environment):
 
@@ -76,11 +85,16 @@ scripts/ops/bench.sh 64     # more requests per pool
 [hh:mm:ss] bench  gvisor  ok 32/32  p50 ...s  p95 ...s  ... eval/s  speedup ...
 ```
 
-The last line is `[hh:mm:ss] results: <repository path>/bench-<YYYYmmdd-HHMMSS>.jsonl`. On each `bench` line the two numbers of `ok 32/32` should match. The terminal shows the summary, and the JSONL file keeps the raw JSON with every field.
+- **Last line**: `[hh:mm:ss] results: <repository path>/bench-<YYYYmmdd-HHMMSS>.jsonl`.
+- **`bench` line**: the two numbers of `ok 32/32` should match.
+- **Terminal and JSONL**: the terminal shows the summary, and the JSONL file keeps the raw JSON with every field. The cold start values go only to the terminal, not to the JSONL, so write them down.
+- **Version measured**: the script measures only v1 pools. v2 uses a different number of seeds (5), so its evaluation time can differ; compare within one version.
 
-The cold start values go only to the terminal, not to the JSONL, so write them down. The script measures only v1 pools; v2 uses a different number of seeds (5), so its evaluation time can differ; compare within one version.
+**If it fails:**
 
-**If it fails:** if every result of a pool fails (`ok` is 0), the bench Job fails and the script stops at that pool (later pools are not measured; behavior of the script code). If `ok` is smaller than `requests`, the bench JSON does not keep the status or error of the failed requests. Run `scripts/ops/verify.sh <runtime> v1` on the same pool. If the golden requests reproduce the problem, the `FAIL` lines show the status and error; look those strings up in the "Viewing /info with the probe tool" and "Sandbox pools and readiness" sections of [Troubleshooting](../reference/troubleshooting.md).
+- **If every result of a pool fails (`ok` is 0)**: the bench Job fails and the script stops at that pool (later pools are not measured; behavior of the script code).
+- **If `ok` is smaller than `requests`**: the bench JSON does not keep the status or error of the failed requests.
+- **To find the cause**: run `scripts/ops/verify.sh <runtime> v1` on the same pool. If the golden requests reproduce the problem, the `FAIL` lines show the status and error; look those strings up in the "Viewing /info with the probe tool" and "Sandbox pools and readiness" sections of [Troubleshooting](../reference/troubleshooting.md).
 
 ### bench JSON fields
 
@@ -98,7 +112,12 @@ The cold start values go only to the terminal, not to the JSONL, so write them d
 
 ## What goes into evaluation latency
 
-`duration_s` is the time from when the server takes a request until it returns the verdict; the kernel run is only part of it. Time the client spent waiting for a pod is not included. The server creates a fresh process tree per request and goes through the stages below. CUDA initialization and Triton compilation in the chart apply only to `relu_bias_triton` on GPU pools; `relu_bias_torch_only`, used on CPU pools, runs only PyTorch operations on CPU tensors.
+`duration_s` is the time from when the server takes a request until it returns the verdict; the kernel run is only part of it. Time the client spent waiting for a pod is not included.
+
+The server creates a fresh process tree per request and goes through the stages below. The stages depend on the golden.
+
+- **`relu_bias_triton` on GPU pools**: CUDA initialization and Triton compilation in the chart apply only to this case.
+- **`relu_bias_torch_only`, used on CPU pools**: runs only PyTorch operations on CPU tensors.
 
 ```mermaid
 flowchart LR
@@ -116,11 +135,17 @@ The 3 warmup and 20 timed iterations are the server defaults (`HARNESS_WARMUP`, 
 
 | Comparison | Conditions | Metrics to look at |
 |---|---|---|
-| Kata CLH CPU vs Kata QEMU CPU | Same `c8i.2xlarge` node (nested virtualization), same image, same golden, same profile except the RuntimeClass. The RuntimeClass sets the hypervisor and the per-pod reservation (`overhead.podFixed`), and the input seeds are drawn fresh per request | Cold start, `eval_p50_s`, `eval_p95_s` |
-| Kata QEMU vs Kata CLH GPU (experimental) | Same `g4dn.metal`, same T4 | The metrics above and `ref_ms_median`. CLH GPU is not supported upstream, and on 2026-11-18 its VM never started, so it was not measured |
+| Kata CLH CPU vs Kata QEMU CPU | Same `c8i.2xlarge` node (nested virtualization), same image, same golden, same profile except the RuntimeClass | Cold start, `eval_p50_s`, `eval_p95_s` |
+| Kata QEMU vs Kata CLH GPU (experimental) | Same `g4dn.metal`, same T4 | The metrics above and `ref_ms_median` |
 | gVisor (A10G) | This repository has no runc baseline on the same A10G | The values themselves, and the same pool measured at another time |
-| gVisor CPU vs Kata CPU | Same `c8i.2xlarge` node, same image, same golden. The isolation method (user-space kernel vs VM) and the RuntimeClass settings differ, and the input seeds are drawn fresh per request. Scenario C in [10 CPU-only path on c8i](10_cpu_only.md) brings up all three pools together | Cold start, `eval_p50_s`, `eval_p95_s` |
+| gVisor CPU vs Kata CPU | Same `c8i.2xlarge` node, same image, same golden | Cold start, `eval_p50_s`, `eval_p95_s` |
 | Pools with different GPU types | A10G vs T4 | Do not use them to compare overhead. Treat speedups as per-GPU numbers only |
+
+- **Kata CLH CPU vs Kata QEMU CPU**: the RuntimeClass sets the hypervisor and the per-pod reservation (`overhead.podFixed`), and the input seeds are drawn fresh per request.
+- **Kata CLH GPU (experimental)**: CLH GPU is not supported upstream, and on 2026-11-18 its VM never started, so it was not measured.
+- **gVisor CPU vs Kata CPU**: the isolation method (user-space kernel vs VM) and the RuntimeClass settings differ, and the input seeds are drawn fresh per request. Scenario C in [10 CPU-only path on c8i](10_cpu_only.md) brings up all three pools together.
+
+Keep the following in mind as well when you read the results.
 
 - **Throughput depends on the number of Ready pods,** because each pod evaluates one request at a time. The defaults are 2 for `gvisor`, 4 for `kata-qemu`, 2 for `kata-clh` and 2 for each CPU pool. For pools with different replica counts, record the total throughput together with the value divided by the number of Ready pods.
 - **Do not make the request count too large.** A pod evaluates one request at a time, so the client waits for a free pod, and a wait beyond 600 seconds (acquire timeout) turns the request into a `sandbox_error` and lowers `ok`.
@@ -149,7 +174,10 @@ kubectl -n sandbox rollout status deployment/sandbox-kata-qemu-v1 --timeout=30m
 scripts/ops/bench.sh
 ```
 
-**What to look for:** the second command ends with `deployment "sandbox-kata-qemu-v1" successfully rolled out`, and the `kata-qemu` cold start lines of the third command show the new pod names.
+**What to look for:**
+
+- The second command ends with `deployment "sandbox-kata-qemu-v1" successfully rolled out`.
+- The `kata-qemu` cold start lines of the third command show the new pod names.
 
 The values in the results table below (pass 2) were measured after restarting every pool this way.
 
@@ -245,7 +273,15 @@ This hands-on starts pods in advance with Deployments, so the counterpart of the
 
 ## Time and cost
 
-The benchmark is one Job per pool. In pass 2 on 2026-11-18 the evaluation window (computed as 32 ÷ throughput) was about 100 s (`kata-qemu`) to about 300 s (`gvisor`) per pool, and about 13 minutes for all five pools; Job creation, the cold start output and the pool restarts are not included. The cost is the node charges meanwhile, and `g4dn.metal` at 7.824 USD per hour is the largest (us-east-1 and us-west-2 On-Demand). `g5.2xlarge`, used for the gVisor node, is 1.212 USD per hour and `c8i.2xlarge` 0.37484 USD per hour (same basis). When you are done, scale the GPU node groups to zero or delete them as described in [99 Cleanup](99_cleanup.md).
+The benchmark is one Job per pool.
+
+- **Time**: in pass 2 on 2026-11-18 the evaluation window (computed as 32 ÷ throughput) was about 100 s (`kata-qemu`) to about 300 s (`gvisor`) per pool, and about 13 minutes for all five pools. Job creation, the cold start output and the pool restarts are not included.
+- **Cost**: the node charges meanwhile (us-east-1 and us-west-2 On-Demand).
+    - `g4dn.metal`: 7.824 USD per hour, the largest.
+    - `g5.2xlarge` (used for the gVisor node): 1.212 USD per hour
+    - `c8i.2xlarge`: 0.37484 USD per hour
+
+When you are done, scale the GPU node groups to zero or delete them as described in [99 Cleanup](99_cleanup.md).
 
 ## How to verify
 

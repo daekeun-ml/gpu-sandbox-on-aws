@@ -5,7 +5,12 @@
 
 ## 기존 Pain Point
 
-시나리오 A는 GPU 노드가 있어야 시작할 수 있습니다. 그런데 `Running On-Demand G and VT instances` 쿼터가 0인 계정이 많아서, 쿼터 증가가 승인되기 전에는 실습을 시작할 수 없습니다. 가장 작은 구성도 컴퓨트 비용만 시간당 약 3.42 USD이고, Kata GPU까지 포함하면 11 USD를 넘습니다. 또 gVisor는 `g5.xlarge`(A10G)에서, Kata GPU는 `g4dn.metal`(T4)에서 실행되므로 런타임 차이만 따로 비교하기 어렵습니다. Kata에는 bare metal이 필요하다고 알고 실습을 미루는 경우도 있지만, `.metal` 인스턴스가 필요한 경우는 Kata에서 GPU passthrough를 쓸 때뿐입니다.
+시나리오 A는 GPU 노드가 있어야 시작할 수 있습니다.
+
+- **GPU 쿼터**: `Running On-Demand G and VT instances` 쿼터가 0인 계정이 많아서, 쿼터 증가가 승인되기 전에는 실습을 시작할 수 없습니다.
+- **비용**: 가장 작은 구성도 컴퓨트 비용만 시간당 약 3.42 USD이고, Kata GPU까지 포함하면 11 USD를 넘습니다.
+- **비교 조건**: gVisor는 `g5.xlarge`(A10G)에서, Kata GPU는 `g4dn.metal`(T4)에서 실행되므로 런타임 차이만 따로 비교하기 어렵습니다.
+- **bare metal에 대한 오해**: Kata에는 bare metal이 필요하다고 알고 실습을 미루는 경우도 있지만, `.metal` 인스턴스가 필요한 경우는 Kata에서 GPU passthrough를 쓸 때뿐입니다.
 
 ![두 패널 그림입니다. a: G and VT 쿼터가 0이면(0인 계정이 많습니다) 승인을 기다리는 동안 실습을 시작할 수 없습니다. 승인되면 시나리오 A(컴퓨트 시간당 약 3.42 USD, Kata GPU까지 포함하면 11 USD 초과)의 gVisor 풀은 g5.xlarge(A10G)에, Kata GPU 풀은 g4dn.metal(T4)에 배치됩니다. 노드와 GPU가 다르므로 런타임 차이만 분리하기 어렵습니다. b: 시나리오 C는 Standard 쿼터만 있으면 되고(컴퓨트 시간당 약 0.57 USD, A의 약 6분의 1, 추정), c8i.2xlarge 한 대에 gVisor, Kata CLH, Kata QEMU 풀을 모두 배치합니다. CPU, 메모리, 커널이 같으므로 측정 차이를 런타임 차이로 해석하기 쉽습니다.](../images/figures/handson-10_cpu_only.svg)
 
@@ -69,7 +74,9 @@ flowchart LR
 
 ## 준비
 
-1. `scripts/config.env`를 [01 클러스터와 이미지](01_cluster_and_images.md)의 "준비 1"대로 만들고, CDK 준비(Node.js, CDK CLI, Session Manager plugin, `cdk/requirements.txt`, `cdk bootstrap`)도 01의 "준비 2"대로 한 번 실행해 둡니다. 필요한 값은 `AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`, `GVISOR_RELEASE`, `KATA_VERSION`, `KATA_CPU_INSTANCE_TYPE`(기본값 `c8i.2xlarge`), `SANDBOX_AUDIENCE`입니다. GPU 관련 값은 그대로 둬도 됩니다. `export SCENARIO="C"`로 설정하면 클러스터 생성(`02_create_cluster.sh`)을 옵션 없이 다시 실행해도 시나리오 C로 배포됩니다.
+1. `scripts/config.env`를 [01 클러스터와 이미지](01_cluster_and_images.md)의 "준비 1"대로 만들고, CDK 준비(Node.js, CDK CLI, Session Manager plugin, `cdk/requirements.txt`, `cdk bootstrap`)도 01의 "준비 2"대로 한 번 실행해 둡니다.
+    - **필요한 값**: `AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`, `GVISOR_RELEASE`, `KATA_VERSION`, `KATA_CPU_INSTANCE_TYPE`(기본값 `c8i.2xlarge`), `SANDBOX_AUDIENCE`입니다. GPU 관련 값은 그대로 둬도 됩니다.
+    - **`export SCENARIO="C"`로 설정하면**: 클러스터 생성(`02_create_cluster.sh`)을 옵션 없이 다시 실행해도 시나리오 C로 배포됩니다.
 2. `scripts/config.env`에 다음 줄을 추가합니다. 풀마다 replica가 1개여야 v2 풀까지 노드 한 대에 배치할 수 있습니다.
 
     ```bash
@@ -92,7 +99,10 @@ flowchart LR
 scripts/01_check_prereqs.sh
 ```
 
-**확인할 것:** Standard 쿼터 값이 14 이상이고 `c8i.2xlarge`의 지원 기능 목록에 `nested-virtualization`이 있으면 됩니다. G and VT 쿼터와 GPU 인스턴스의 AZ 목록은 무시하세요.
+**확인할 것:**
+
+- Standard 쿼터 값이 14 이상이고 `c8i.2xlarge`의 지원 기능 목록에 `nested-virtualization`이 있으면 됩니다.
+- G and VT 쿼터와 GPU 인스턴스의 AZ 목록은 무시하세요.
 
 **문제가 생기면:** 이 명령은 설정한 인스턴스 유형(`KATA_CPU_INSTANCE_TYPE`, 기본 `c8i.2xlarge`) 하나만 조회합니다. 지원 기능 목록에 `nested-virtualization`이 없으면 현재 리전에서 그 유형이 지원하지 않는 것이니 `us-east-1` 또는 `us-west-2`로 바꾸거나 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요.
 
@@ -104,7 +114,12 @@ CDK 스택 하나로 VPC, EKS 컨트롤 플레인(API endpoint는 private 전용
 scripts/02_create_cluster.sh --cpu-only
 ```
 
-**확인할 것:** IAM과 security group 변경 목록에 `0.0.0.0/0` inbound가 없는지 확인한 뒤 `Do you wish to deploy these changes (y/n)?`에 `y`로 답합니다. 실습 계정에서는 약 20분 걸렸습니다. 끝에 `Outputs`(`EndpointPublicAccess = false` 포함)와 `Next:` 안내가 나오면 정상입니다. 단계별 의미는 [01 클러스터와 이미지](01_cluster_and_images.md)의 클러스터 생성(`02_create_cluster.sh`) 절에 있습니다.
+**확인할 것:**
+
+- IAM과 security group 변경 목록에 `0.0.0.0/0` inbound가 없는지 확인한 뒤 `Do you wish to deploy these changes (y/n)?`에 `y`로 답합니다.
+- 실습 계정에서는 약 20분 걸렸습니다. 끝에 `Outputs`(`EndpointPublicAccess = false` 포함)와 `Next:` 안내가 나오면 정상입니다.
+
+단계별 의미는 [01 클러스터와 이미지](01_cluster_and_images.md)의 클러스터 생성(`02_create_cluster.sh`) 절에 있습니다.
 
 두 번째 터미널에서 터널을 열어 둡니다. 4단계의 Kata CPU 노드 추가(`kata/cpu_nodes.sh`)부터 kubectl과 helm은 모두 이 터널로 클러스터 API에 접속합니다.
 
@@ -122,11 +137,18 @@ cdk/tunnel.sh
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 ```
 
-**확인할 것:** `system` 두 대(`m6i.large`)와 `sandbox-kata` 한 대(`c8i.2xlarge`)가 `Ready`입니다. EKS 콘솔의 클러스터 화면에서는 노드 3, 노드 그룹 2, add-on 4로 표시됩니다.
+**확인할 것:**
+
+- `system` 두 대(`m6i.large`)와 `sandbox-kata` 한 대(`c8i.2xlarge`)가 `Ready`입니다.
+- EKS 콘솔의 클러스터 화면에서는 노드 3, 노드 그룹 2, add-on 4로 표시됩니다.
 
 ![EKS 클러스터 개요: Kubernetes 1.36, standard support until August 2, 2027, 노드 3, 노드 그룹 2, add-on 4, access entry 4](../images/console/eks-cluster.png)
 
-**문제가 생기면:** `set ... in scripts/config.env`가 나오면 그 값을 채우세요. 배포 오류는 [01](01_cluster_and_images.md)의 클러스터 생성(`02_create_cluster.sh`) 절 "문제가 생기면"과 [문제 해결](../reference/troubleshooting.md)의 "클러스터와 노드" 항목을 보세요. 터널 오류는 01의 "터널 열기" 절을 보세요.
+**문제가 생기면:**
+
+- **`set ... in scripts/config.env`가 나오면**: 그 값을 채우세요.
+- **배포 오류**: [01](01_cluster_and_images.md)의 클러스터 생성(`02_create_cluster.sh`) 절 "문제가 생기면"과 [문제 해결](../reference/troubleshooting.md)의 "클러스터와 노드" 항목을 보세요.
+- **터널 오류**: 01의 "터널 열기" 절을 보세요.
 
 ## 3단계: 이미지 두 개만 빌드 (`03_build_push_images.sh`)
 
@@ -175,9 +197,16 @@ kata-qemu: kernel seen inside: 6.18.56 #1 SMP Fri Oct 16 18:41:32 UTC 2026
 [23:10:36] host kernel for comparison: 6.18.56-125.164.amzn2023.x86_64
 ```
 
-세 커널 버전이 모두 마지막 줄의 호스트 커널과 다르면 정상입니다. 일반 runc 컨테이너라면 호스트 커널 버전이 그대로 나옵니다. gVisor는 시스템 콜을 처리하는 사용자 공간 커널 Sentry가 정한 버전을, Kata는 VM 안의 guest 커널 버전을 보고합니다.
+세 커널 버전이 모두 마지막 줄의 호스트 커널과 다르면 정상입니다.
 
-**문제가 생기면:** `no sandbox-kata-cpu node group: ...`이 나오면 클러스터 생성(`02_create_cluster.sh`)을 `--cpu-only`로 실행했는지 확인하세요. 이 메시지는 노드 그룹 조회 권한(`eks:DescribeNodegroup`)이 없거나 `CLUSTER_NAME`, `AWS_REGION`이 다를 때도 나오므로, `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-cpu`를 직접 실행해 오류를 확인합니다. `kata runtime classes missing`이 나오거나 smoke pod가 끝나지 않으면 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요. `gvisor-cpu` smoke pod만 실패하면 노드의 user data 로그(`/var/log/cloud-init-output.log`)에서 gVisor 설치 단계를 확인합니다.
+??? note "커널 버전이 호스트와 다른 이유"
+    일반 runc 컨테이너라면 호스트 커널 버전이 그대로 나옵니다. gVisor는 시스템 콜을 처리하는 사용자 공간 커널 Sentry가 정한 버전을, Kata는 VM 안의 guest 커널 버전을 보고합니다.
+
+**문제가 생기면:**
+
+- **`no sandbox-kata-cpu node group: ...`이 나오면**: 클러스터 생성(`02_create_cluster.sh`)을 `--cpu-only`로 실행했는지 확인하세요. 이 메시지는 노드 그룹 조회 권한(`eks:DescribeNodegroup`)이 없거나 `CLUSTER_NAME`, `AWS_REGION`이 다를 때도 나오므로, `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-cpu`를 직접 실행해 오류를 확인합니다.
+- **`kata runtime classes missing`이 나오거나 smoke pod가 끝나지 않으면**: [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요.
+- **`gvisor-cpu` smoke pod만 실패하면**: 노드의 user data 로그(`/var/log/cloud-init-output.log`)에서 gVisor 설치 단계를 확인합니다.
 
 ## 5단계: 네임스페이스와 routing 표 (`05_setup_namespaces_auth.sh`)
 
@@ -200,11 +229,17 @@ for rt in gvisor-cpu kata-clh-cpu kata-qemu-cpu; do
 done
 ```
 
-**확인할 것:** 풀마다 `pool sandbox-<runtime>-v1 verified`로 끝납니다. golden verdict는 CPU 세트 4개가 모두 `PASS`여야 합니다(정답 1개는 `ok`, 오답과 벤치마크 치팅은 `wrong_answer`, 호스트 파일 읽기는 `policy_violation`).
+**확인할 것:**
+
+- 풀마다 `pool sandbox-<runtime>-v1 verified`로 끝납니다.
+- golden verdict는 CPU 세트 4개가 모두 `PASS`여야 합니다(정답 1개는 `ok`, 오답과 벤치마크 치팅은 `wrong_answer`, 호스트 파일 읽기는 `policy_violation`).
 
 ![kata-clh-cpu v1 풀의 verify.sh 실행 화면: 샌드박스 커널 6.18.56과 노드 커널 6.18.62가 다르고, IMDS, Kubernetes API, kubelet, S3 연결이 모두 blocked, 미리 준비한 코드 4개가 PASS, default namespace의 접속도 blocked, 마지막 줄 pool sandbox-kata-clh-cpu-v1 verified](../images/terminal/verify-kata-clh-cpu.png)
 
-**문제가 생기면:** pod가 `Pending`이면 `kubectl -n sandbox describe pod <pod>`의 출력에 `Insufficient cpu` 또는 `Insufficient memory`가 있는지 확인하고, `KATA_CPU_REPLICAS=1`이 적용됐는지 확인하세요. 그 밖의 문제는 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
+**문제가 생기면:**
+
+- **pod가 `Pending`이면**: `kubectl -n sandbox describe pod <pod>`의 출력에 `Insufficient cpu` 또는 `Insufficient memory`가 있는지 확인하고, `KATA_CPU_REPLICAS=1`이 적용됐는지 확인하세요.
+- **그 밖의 문제**: [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
 
 ## 7단계: 모델 없는 reward 루프와 버전 교체 (`ops/simulate.sh`, `ops/rollout.sh`)
 
@@ -215,7 +250,12 @@ done
 scripts/ops/simulate.sh 30 20
 ```
 
-몇 배치 뒤 두 번째 작업 터미널에서 `kata-clh-cpu`를 v1에서 v2로 바꿉니다. `ops/rollout.sh`는 v2 풀 배포(1), 검증(2), v1과 같은 verdict를 내는지 확인하는 parity 검사(3), routing 표의 v2 전환(4)을 차례로 실행합니다.
+몇 배치 뒤 두 번째 작업 터미널에서 `kata-clh-cpu`를 v1에서 v2로 바꿉니다. `ops/rollout.sh`는 다음을 차례로 실행합니다.
+
+1. v2 풀 배포
+2. 검증
+3. v1과 같은 verdict를 내는지 확인하는 parity 검사
+4. routing 표의 v2 전환
 
 ```bash
 # work terminal 2
@@ -224,7 +264,11 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 
 ![rollout.sh kata-clh-cpu v1 v2 실행 화면: 1) v2 배포, 2) v2 검증(커널 비교, 외부 연결 차단, PASS 4개, verified), 3) parity에서 4개 PASS와 PARITY PASS, 4) routing 전환, 마지막에 SWITCH 줄을 기다리라는 안내](../images/terminal/rollout-kata-clh-cpu.png)
 
-**확인할 것:** 첫 번째 작업 터미널에 아래와 같은 줄이 나옵니다(실습 계정에서 `simulate.sh 16 15`로 실행한 출력 중 전환 부분). 클러스터에서는 ConfigMap 변경이 kubelet 동기화와 캐시 전파를 거쳐 pod에 반영되고, 스크립트는 이 시간을 약 1분으로 안내합니다. 클라이언트도 routing 파일을 최대 2초에 한 번 다시 읽습니다. 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다. 1분이 지나도 전환 이벤트가 없으면 `batch` 줄의 풀(`kata-clh-cpu/v1` 또는 `v2`)을 확인하세요. 모든 필드가 담긴 원래 JSON은 다음 실행부터 `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`처럼 붙여 보고, 이미 돌고 있는 시뮬레이션은 `kubectl -n rl-trainer logs -f job/simulate-<번호>`로 봅니다.
+**확인할 것:** 첫 번째 작업 터미널에 아래와 같은 줄이 나옵니다(실습 계정에서 `simulate.sh 16 15`로 실행한 출력 중 전환 부분).
+
+- **전환 이벤트는 늦게 나올 수 있습니다.** 클러스터에서는 ConfigMap 변경이 kubelet 동기화와 캐시 전파를 거쳐 pod에 반영되고, 스크립트는 이 시간을 약 1분으로 안내합니다. 클라이언트도 routing 파일을 최대 2초에 한 번 다시 읽습니다. 그래서 전환 이벤트가 `ops/rollout.sh`가 끝나고 몇 배치 뒤에 나올 수 있습니다.
+- **1분이 지나도 전환 이벤트가 없으면**: `batch` 줄의 풀(`kata-clh-cpu/v1` 또는 `v2`)을 확인하세요.
+- **원래 JSON을 보려면**: 모든 필드가 담긴 원래 JSON은 다음 실행부터 `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`처럼 붙여 보고, 이미 돌고 있는 시뮬레이션은 `kubectl -n rl-trainer logs -f job/simulate-<번호>`로 봅니다.
 
 ```text
 [05:37:05] batch   6  kata-clh-cpu/v1  ok 1  wrong_answer 2  pass 33%  speedup 0.91  17.3s
@@ -233,8 +277,11 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
 - **`SWITCH` 줄이 배치 경계에서 한 번 나옵니다.** 배치 6까지는 v1, 배치 7부터는 v2입니다.
-- **`batch` 줄에 `MIXED VERSIONS`가 없습니다.** 한 배치의 verdict에 v1과 v2의 결과가 섞이지 않았다는 뜻입니다(원래 JSON에서는 `served_versions`에 버전이 하나만 있습니다). 학습에서 필요한 결과가 모두 같은 풀의 캐시에 있는 배치는 샌드박스를 부르지 않아 `reward_batch` 줄이 없습니다. 서로 다른 풀의 캐시가 섞이면 한 풀에서 다시 채점하고 그 줄을 남깁니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요합니다.
+- **`batch` 줄에 `MIXED VERSIONS`가 없습니다.** 한 배치의 verdict에 v1과 v2의 결과가 섞이지 않았다는 뜻입니다(원래 JSON에서는 `served_versions`에 버전이 하나만 있습니다).
 - **교체 전후 결과가 같습니다.** 두 배치 모두 `ok` 1건, `wrong_answer` 2건, pass 33%입니다. 제출물마다 두 버전의 판정이 같은지는 `ops/rollout.sh` parity 출력의 `PASS` 줄로 확인합니다.
+
+??? note "한 배치에서 서로 다른 버전의 채점 결과를 섞지 않는 이유"
+    학습에서 필요한 결과가 모두 같은 풀의 캐시에 있는 배치는 샌드박스를 부르지 않아 `reward_batch` 줄이 없습니다. 서로 다른 풀의 캐시가 섞이면 한 풀에서 다시 채점하고 그 줄을 남깁니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요합니다.
 
 전체 실행 화면은 아래와 같습니다.
 
@@ -242,17 +289,27 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 
 제출물은 4개인데 3건만 채점된 것은, 호스트 파일을 읽는 제출물을 trainer 쪽 AST 검사가 샌드박스에 보내기 전에 걸러 내기 때문입니다(원래 JSON의 `n`이 3). speedup(`mean_speedup`)은 CPU 측정 노이즈 때문에 배치마다 달라지므로(로컬 실행에서 0.66에서 1.65 사이) 런타임 비교에 쓰지 마세요.
 
-v2 전환을 확인했으면 v1을 0으로 줄입니다. v1 Deployment는 남지만 replica가 0이라 요청을 받지 못합니다. 되돌릴 때는 `scripts/ops/rollout.sh kata-clh-cpu v2 v1`이 v1 pod를 다시 띄우고 검증과 parity를 마친 뒤 routing을 바꿉니다. 8단계에서 세 런타임을 비교하려면 이 명령은 벤치마크를 마친 뒤에 실행하세요.
+v2 전환을 확인했으면 아래 명령으로 v1을 0으로 줄입니다. v1 Deployment는 남지만 replica가 0이라 요청을 받지 못합니다.
+
+- **8단계에서 세 런타임을 비교하려면**: 아래 `v1 v2 --finish` 명령은 벤치마크를 마친 뒤에 실행하세요.
 
 ```bash
 scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 ```
 
-**문제가 생기면:** `ops/simulate.sh`가 `no routing table`로 멈추면 5단계의 `05_setup_namespaces_auth.sh`를 다시 실행하세요. `ops/rollout.sh`가 parity에서 멈추면 v2는 트래픽을 받지 않고 v1이 그대로 active로 남습니다(자세한 내용은 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)). CPU 풀은 측정 노이즈가 커서, 정답 제출물의 speedup이 크게 흔들리면 parity가 `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365`처럼 실패할 수 있습니다(2026-11-20 실행). 판정(`status`)이 같다면 같은 명령을 다시 실행하세요.
+되돌릴 때는 `scripts/ops/rollout.sh kata-clh-cpu v2 v1`이 v1 pod를 다시 띄우고 검증과 parity를 마친 뒤 routing을 바꿉니다.
+
+**문제가 생기면:**
+
+- **`ops/simulate.sh`가 `no routing table`로 멈추면**: 5단계의 `05_setup_namespaces_auth.sh`를 다시 실행하세요.
+- **`ops/rollout.sh`가 parity에서 멈추면**: v2는 트래픽을 받지 않고 v1이 그대로 active로 남습니다(자세한 내용은 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)).
+- **speedup 차이로 parity가 실패하면**: CPU 풀은 측정 노이즈가 커서, 정답 제출물의 speedup이 크게 흔들리면 parity가 `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365`처럼 실패할 수 있습니다(2026-11-20 실행). 판정(`status`)이 같다면 같은 명령을 다시 실행하세요.
 
 ## 8단계 (선택): 세 런타임(gVisor, Kata + Cloud Hypervisor, Kata + QEMU) 비교 (`ops/bench.sh`)
 
-6단계에서 배포한 세 풀(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)에 같은 정답 코드를 보내 비교합니다. 세 풀이 같은 노드, 같은 CPU, 같은 커널 위에 있어서 측정 차이를 런타임 차이로 보기 쉽습니다. v1 풀마다 cold start(pod 생성에서 Ready까지)와 평가 지연을 측정합니다. `ops/bench.sh`는 v1 pod가 없는 풀을 건너뜁니다. 7단계의 `--finish`로 `kata-clh-cpu` v1을 0으로 줄였다면 그 풀의 결과가 빠지니, v1 풀 세 개가 Ready인 상태에서 실행하세요.
+6단계에서 배포한 세 풀(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)에 같은 정답 코드를 보내 비교합니다. 세 풀이 같은 노드, 같은 CPU, 같은 커널 위에 있어서 측정 차이를 런타임 차이로 보기 쉽습니다. v1 풀마다 cold start(pod 생성에서 Ready까지)와 평가 지연을 측정합니다.
+
+`ops/bench.sh`는 v1 pod가 없는 풀을 건너뜁니다. 7단계의 `--finish`로 `kata-clh-cpu` v1을 0으로 줄였다면 그 풀의 결과가 빠지니, v1 풀 세 개가 Ready인 상태에서 실행하세요.
 
 ```bash
 scripts/ops/bench.sh 16
@@ -262,7 +319,9 @@ scripts/ops/bench.sh 16
 
 ## 9단계 (선택): Agent Sandbox를 활용해 에피소드마다 샌드박스 빌려 쓰기
 
-1~8단계의 풀은 요청이 올 때마다 비어 있는 pod 하나를 골라 한 번 채점하고 끝납니다. multi-turn 학습에서는 모델이 코드를 내고, 피드백을 읽고, 고쳐서 다시 냅니다. 그래서 한 에피소드가 끝날 때까지 같은 샌드박스를 계속 써야 합니다. 이 단계에서는 그 방식의 기본 동작만 확인합니다. 샌드박스를 미리 띄워 두고(warm pool), 하나를 빌렸다가(claim) 다 쓰면 돌려주는 흐름입니다.
+1~8단계의 풀은 요청이 올 때마다 비어 있는 pod 하나를 골라 한 번 채점하고 끝납니다. multi-turn 학습에서는 모델이 코드를 내고, 피드백을 읽고, 고쳐서 다시 냅니다. 그래서 한 에피소드가 끝날 때까지 같은 샌드박스를 계속 써야 합니다.
+
+이 단계에서는 그 방식의 기본 동작만 확인합니다. 샌드박스를 미리 띄워 두고(warm pool), 하나를 빌렸다가(claim) 다 쓰면 돌려주는 흐름입니다.
 
 ```bash
 scripts/extensions/agent_sandbox.sh install                # once: Agent Sandbox controller and CRDs
@@ -270,7 +329,11 @@ scripts/extensions/agent_sandbox.sh pool kata-clh-cpu 1    # keep one kata-clh-c
 scripts/extensions/agent_sandbox.sh claim kata-clh-cpu     # borrow it, print its address, give it back
 ```
 
-**확인할 것:** `claim`이 빌린 샌드박스의 이름과 주소(`sandbox: ...  address: ...`)를 출력하고 claim을 지웁니다. 돌려준 샌드박스는 다시 쓰지 않고 지워지며, warm pool이 새 샌드박스를 띄워 대기 수 1을 다시 채웁니다. 아래 화면의 마지막 명령(`kubectl -n sandbox get sandboxwarmpool,sandbox`)에서 빌린 샌드박스(`...-6bdp7`) 대신 새 샌드박스(`...-qnwbh`)가 대기 중인 것을 볼 수 있습니다.
+**확인할 것:**
+
+- `claim`이 빌린 샌드박스의 이름과 주소(`sandbox: ...  address: ...`)를 출력하고 claim을 지웁니다.
+- 돌려준 샌드박스는 다시 쓰지 않고 지워지며, warm pool이 새 샌드박스를 띄워 대기 수 1을 다시 채웁니다.
+- 아래 화면의 마지막 명령(`kubectl -n sandbox get sandboxwarmpool,sandbox`)에서 빌린 샌드박스(`...-6bdp7`) 대신 새 샌드박스(`...-qnwbh`)가 대기 중인 것을 볼 수 있습니다.
 
 ![agent_sandbox.sh 실행 화면: install이 controller와 CRD 네 개, claim 권한을 만들고, pool kata-clh-cpu 1이 SandboxTemplate과 SandboxWarmPool을 만들고, claim이 샌드박스 kernel-eval-kata-clh-cpu-6bdp7의 주소를 출력한 뒤 claim을 지우고, 마지막 kubectl get에서 warm pool READY 1과 새 샌드박스 kernel-eval-kata-clh-cpu-qnwbh가 True](../images/terminal/agent-sandbox-claim.png)
 

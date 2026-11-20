@@ -5,7 +5,11 @@
 
 ## Pain points
 
-A reward pool picks a free pod for every request, so the turns of one episode can be graded on different pods. After each request the server removes that request's work directory and leftover processes. A new sandbox per episode means waiting until it is Ready, and a Kata GPU VM can take minutes to reach its first Ready (deployment template comment). If you first try this on a GPU warm pool, every waiting sandbox holds one GPU even while it evaluates nothing, and you pay for that GPU time.
+A reward pool picks a free pod for every request, so the turns of one episode can be graded on different pods.
+
+- **After each request**: the server removes that request's work directory and leftover processes.
+- **A new sandbox per episode**: it means waiting until it is Ready, and a Kata GPU VM can take minutes to reach its first Ready (deployment template comment).
+- **If you first try this on a GPU warm pool**: every waiting sandbox holds one GPU even while it evaluates nothing, and you pay for that GPU time.
 
 ![Two panels. a without per-episode sandboxes: in one episode the turn 1 submission goes to pod A of the reward pool (Deployment) and the revised turn 2 submission to pod B, and both pods clear the request's work directory and leftover processes after each request. On the dashed red path, a new sandbox per episode means waiting for Ready, which can take minutes for a Kata GPU VM. b Agent Sandbox in scenario C: on the c8i.2xlarge node (nested virtualization) the SandboxWarmPool kernel-eval-gvisor-cpu keeps 2 sandboxes waiting. The Job episodes in the rl-trainer namespace (ServiceAccount sandbox-episode) creates one SandboxClaim per episode (1) and gets one waiting sandbox assigned (2). The Job submits turns 1, 2 and 3 to that sandbox (3) and gets each verdict back as feedback (4); the turns are graded on the same pod, but the work directory is removed after each submission. When the episode ends the Job deletes the claim (5), and the sandbox is deleted with it.](../images/figures/handson-11_multi_turn.svg)
 
@@ -61,7 +65,11 @@ sequenceDiagram
 
 *Takeaway: one episode takes one sandbox through one claim, sends every turn to that sandbox and deletes the claim at the end. The next episode gets another sandbox through a new claim.*
 
-An episode ends when the kernel is solved (`solved`), after `max_turns` submissions, or on a `sandbox_error` verdict. An episode that ends on `sandbox_error` has the reward `None` and is left out of the means.
+An episode ends on any of these.
+
+- The kernel is solved (`solved`)
+- After `max_turns` submissions
+- On a `sandbox_error` verdict. An episode that ends on `sandbox_error` has the reward `None` and is left out of the means.
 
 | Component | In this lab | File |
 |---|---|---|
@@ -73,7 +81,15 @@ An episode ends when the kernel is solved (`solved`), after `max_turns` submissi
 
 ## Preparation
 
-1. **Scenario C cluster:** run steps 1 to 5 of [10](10_cpu_only.md): cluster creation (`scripts/02_create_cluster.sh --cpu-only`), the tunnel (`cdk/tunnel.sh`), Kata CPU nodes (`scripts/kata/cpu_nodes.sh`, which includes the `gvisor-cpu` RuntimeClass), and namespaces and authentication (`ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`). The Deployment pools of step 6 in 10 are not needed for this lab.
+1. **Scenario C cluster:** run steps 1 to 5 of [10](10_cpu_only.md). You need the following.
+
+    - cluster creation (`scripts/02_create_cluster.sh --cpu-only`)
+    - the tunnel (`cdk/tunnel.sh`)
+    - Kata CPU nodes (`scripts/kata/cpu_nodes.sh`, which includes the `gvisor-cpu` RuntimeClass)
+    - namespaces and authentication (`ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`)
+
+    The Deployment pools of step 6 in 10 are not needed for this lab.
+
 2. **Control image:** the Job runs `python -m gpusandbox.tools multiturn` from the control image (`CONTROL_IMAGE_URI`). If you built the images before the `multiturn` subcommand existed, rebuild them. The ECR repositories are created with immutable tags (`IMMUTABLE`), so first set `IMAGE_TAG` in `scripts/config.env` to a new value.
 
     ```bash
@@ -85,7 +101,10 @@ An episode ends when the kernel is solved (`solved`), after `max_turns` submissi
     scripts/03_build_push_images.sh --no-trainer
     ```
 
-    **What to look for:** the two lines at the end, `SANDBOX_IMAGE_URI` and `CONTROL_IMAGE_URI`, carry the new tag. Paste them into `scripts/config.env`. The new sandbox image is used only by the warm pool of step 2; the Deployment pools deployed in 10 keep their old image.
+    **What to look for:**
+
+    - The two lines at the end, `SANDBOX_IMAGE_URI` and `CONTROL_IMAGE_URI`, carry the new tag. Paste them into `scripts/config.env`.
+    - The new sandbox image is used only by the warm pool of step 2; the Deployment pools deployed in 10 keep their old image.
 
 3. **Settings:** `scripts/config.env` needs `SANDBOX_IMAGE_URI`, `CONTROL_IMAGE_URI` and `SANDBOX_AUDIENCE`. `pool` reads `SANDBOX_IMAGE_URI` and `SANDBOX_AUDIENCE`; `episodes` reads `CONTROL_IMAGE_URI` and `SANDBOX_AUDIENCE`.
 
@@ -113,7 +132,10 @@ kubectl auth can-i get pods -n sandbox --as=system:serviceaccount:rl-trainer:san
 
 **What to look for:** the first command prints `yes` and the second `no`, because the Role holds only `sandboxclaims` permissions.
 
-**If it fails:** if the CRDs are missing, check with `kubectl get pods -A` that the controller pod is Running. Common script errors (a missing `scripts/config.env` and the like) are under "Configuration and scripts" in [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:**
+
+- **If the CRDs are missing**: check with `kubectl get pods -A` that the controller pod is Running.
+- **Common script errors (a missing `scripts/config.env` and the like)**: they are under "Configuration and scripts" in [Troubleshooting](../reference/troubleshooting.md).
 
 ## Step 2: Create a CPU warm pool (`extensions/agent_sandbox.sh pool`)
 
@@ -141,10 +163,20 @@ The default allowed subjects include `system:serviceaccount:rl-trainer:sandbox-e
     kubectl -n sandbox get sandboxwarmpool kernel-eval-gvisor-cpu -o jsonpath='{.status.readyReplicas}{"\n"}'
     ```
 
-**If it fails:** if a pod is `Pending`, look for `Insufficient cpu` or `Insufficient memory` in `kubectl -n sandbox describe pod <pod>`. Each pod requests 1 CPU and 2Gi of memory. While an episode runs, the warm pool starts a sandbox to replace the claimed one, so up to 3 `gvisor-cpu` pods can run (2 waiting and 1 claimed; inferred from the code). If the Deployment pools from 10 run on the same node and CPU runs short, scale those pools to zero (`kubectl -n sandbox scale deployment/sandbox-<runtime>-<version> --replicas=0`) or the warm pool to 1 (`pool gvisor-cpu 1`). If pods never become Ready, look for the `egress is open` line in the server log. Causes and fixes are under "Sandbox pools and readiness" and "NetworkPolicy" in [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:**
+
+- **If a pod is `Pending`**: look for `Insufficient cpu` or `Insufficient memory` in `kubectl -n sandbox describe pod <pod>`. Each pod requests 1 CPU and 2Gi of memory.
+- **While an episode runs**: the warm pool starts a sandbox to replace the claimed one, so up to 3 `gvisor-cpu` pods can run (2 waiting and 1 claimed; inferred from the code).
+- **If the Deployment pools from 10 run on the same node and CPU runs short**: scale those pools to zero (`kubectl -n sandbox scale deployment/sandbox-<runtime>-<version> --replicas=0`) or the warm pool to 1 (`pool gvisor-cpu 1`).
+- **If pods never become Ready**: look for the `egress is open` line in the server log.
+- **Causes and fixes**: they are under "Sandbox pools and readiness" and "NetworkPolicy" in [Troubleshooting](../reference/troubleshooting.md).
 
 !!! note "To run it in Kata (Cloud Hypervisor) VMs"
-    Use `kata-clh-cpu` instead of `gvisor-cpu` in steps 2 to 4 to run the same lab in Kata VMs on the same c8i node (`pool kata-clh-cpu 2`, `episodes kata-clh-cpu 2 3`). A Kata pod adds the VM's overhead of 250m CPU and 130Mi of memory. Each time a claim is deleted, the VM of that sandbox is deleted too and the pool starts a new VM. If you created the `kernel-eval-kata-clh-cpu` pool in step 9 of 10, run `pool kata-clh-cpu 2` again to update the template and the replica count.
+    Use `kata-clh-cpu` instead of `gvisor-cpu` in steps 2 to 4 to run the same lab in Kata VMs on the same c8i node (`pool kata-clh-cpu 2`, `episodes kata-clh-cpu 2 3`).
+
+    - **VM overhead**: a Kata pod adds 250m CPU and 130Mi of memory.
+    - **Each time a claim is deleted**: the VM of that sandbox is deleted too and the pool starts a new VM.
+    - **If you created the `kernel-eval-kata-clh-cpu` pool in step 9 of 10**: run `pool kata-clh-cpu 2` again to update the template and the replica count.
 
 ## Step 3: Run multi-turn episodes (`extensions/agent_sandbox.sh episodes`)
 
@@ -154,7 +186,12 @@ Run 2 episodes with up to 3 turns each. This step compares event fields (`claim`
 GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
 ```
 
-To follow progress only, leave out `GPUSANDBOX_LOG=json`. You then get a line for each episode start, turn (`episode 1 turn 2  wrong_answer ...`) and episode end, followed by the overall summary. Below is the summary view from a scenario C cluster with the `kata-clh-cpu` warm pool (one waiting sandbox). With one waiting sandbox the script warns, but episode 2 takes the sandbox the warm pool started in its place and carries on. The final `No resources found` means the cleanup step that deletes leftover claims found none.
+To follow progress only, leave out `GPUSANDBOX_LOG=json`. You then get a line for each episode start, turn (`episode 1 turn 2  wrong_answer ...`) and episode end, followed by the overall summary.
+
+Below is the summary view from a scenario C cluster with the `kata-clh-cpu` warm pool (one waiting sandbox).
+
+- **Warning**: with one waiting sandbox the script warns, but episode 2 takes the sandbox the warm pool started in its place and carries on.
+- **The final `No resources found`**: the cleanup step that deletes leftover claims found none.
 
 ![episodes kata-clh-cpu 2 3: a warning about one waiting sandbox, episodes 1 and 2 each going through policy_violation, wrong_answer and ok in 3 turns to solved, rewards 1.3268 and 1.315231, and the final summary solved 2/2, mean reward 1.321](../images/terminal/agent-sandbox-episodes.png)
 
@@ -162,11 +199,13 @@ The script runs in this order.
 
 | Order | What it does |
 |---|---|
-| Preflight | checks the CRDs, the ServiceAccount `sandbox-episode`, the claim permission (`kubectl auth can-i ... --as`), the warm pool's Ready count (`status.readyReplicas` at least 1), and that the waiting sandboxes have `sandbox-episode` in their allowlist. Warns when fewer sandboxes are Ready than there are episodes |
+| Preflight | checks the CRDs, the ServiceAccount `sandbox-episode`, the claim permission, the warm pool's Ready count (at least 1), and that the waiting sandboxes have `sandbox-episode` in their allowlist |
 | Device | `cpu` if the runtime name ends in `-cpu`, otherwise `cuda` |
 | Job | creates the Job `episodes-<unix time>` from `job-multiturn.yaml.tpl` and follows its log. The Job runs `python -m gpusandbox.tools multiturn --warm-pool kernel-eval-gvisor-cpu --episodes 2 --max-turns 3 --device cpu --run-id episodes-<unix time>` |
 | Leftover claims | after the Job, deletes the claims labelled `gpusandbox/run=<Job name>`. The Job deletes each episode's claim itself, so this covers a Job pod that was killed before it could |
 | Exit code | the Job's result |
+
+- **Preflight details**: the claim permission is checked with `kubectl auth can-i ... --as`, and the Ready count with `status.readyReplicas`. The script warns when fewer sandboxes are Ready than there are episodes.
 
 On CPU the scripted policy submits `read_host_file` (policy violation), `relu_bias_wrong` (wrong answer) and `relu_bias_torch_only` (correct answer) in that order and ends the episode when the kernel is solved (`solved`). If the Job receives a termination signal (SIGTERM), it leaves through the normal exit path, so the open claim is deleted at once instead of at `shutdownTime`.
 
@@ -177,7 +216,11 @@ Keep the terminal with the SSM tunnel from step 2 of 10 open. In one more work t
 kubectl -n sandbox get sandboxclaims -l gpusandbox/episode=true -w
 ```
 
-**What to look for:** events like these, one per line. The first two lines are the shape the script and the CLI code print; the rest is a shortened local run (loopback CPU sandbox servers). Claim, sandbox and pod names and the speedup differ from run to run.
+**What to look for:**
+
+- Events like these, one per line.
+- The first two lines are the shape the script and the CLI code print; the rest is a shortened local run (loopback CPU sandbox servers).
+- Claim, sandbox and pod names and the speedup differ from run to run.
 
 ```text
 [hh:mm:ss] kernel-eval-gvisor-cpu: 2 episode(s), up to 3 turn(s) each, device cpu
@@ -205,20 +248,32 @@ Check these five things in the events.
 kubectl -n sandbox get sandboxclaims -l gpusandbox/run=<Job name>
 ```
 
-**What to look for:** `No resources found in sandbox namespace.` The warm pool starts new sandboxes in place of the deleted ones, so `readyReplicas` returns to the warm count a little later (2 by default, 1 if you ran `pool gvisor-cpu 1`). Check the script's exit code with `echo $?` in the terminal where the `episodes` command ran, before you run anything else there. It should be 0. Run the claim query above in the extra work terminal so that it does not overwrite the exit code.
+**What to look for:**
 
-The `single_turn_reward` of each turn is `0.1 × format + 1.0 × correctness + 0.5 × speedup score`. A policy violation gets only the format score of 0.1 if the code parses and defines `ModelNew`, and 0 otherwise. A wrong answer gets 0.1 plus a correctness of 0.2, which is 0.3. The CPU path does not require Triton (`require_triton=False`), so a correct answer has a correctness of 1.0, and the speedup score changes from run to run with CPU timing noise.
+- `No resources found in sandbox namespace.`
+- The warm pool starts new sandboxes in place of the deleted ones, so `readyReplicas` returns to the warm count a little later (2 by default, 1 if you ran `pool gvisor-cpu 1`).
+- Check the script's exit code with `echo $?` in the terminal where the `episodes` command ran, before you run anything else there. It should be 0. Run the claim query above in the extra work terminal so that it does not overwrite the exit code.
 
-The CLI exits with 1 if a turn's verdict differs from what its golden expects (recorded in `unexpected`), if a `sandbox_error` occurred, or if more than one pod answered the turns of one episode.
+The `single_turn_reward` of each turn is `0.1 × format + 1.0 × correctness + 0.5 × speedup score`.
+
+- **Policy violation**: it gets only the format score of 0.1 if the code parses and defines `ModelNew`, and 0 otherwise.
+- **Wrong answer**: it gets 0.1 plus a correctness of 0.2, which is 0.3.
+- **Correct answer**: the CPU path does not require Triton (`require_triton=False`), so a correct answer has a correctness of 1.0, and the speedup score changes from run to run with CPU timing noise.
+
+The CLI exits with 1 in these cases.
+
+- A turn's verdict differs from what its golden expects (recorded in `unexpected`)
+- A `sandbox_error` occurred
+- More than one pod answered the turns of one episode
 
 **If it fails:**
 
-- The preflight messages (`agent-sandbox CRDs not found`, `ServiceAccount rl-trainer/sandbox-episode not found`, `... may not create SandboxClaims`, `warm pool ... not found`, `... has no Ready sandbox`, `sandboxes started without ... in their allowlist`) and their fixes are under "Agent Sandbox and multi-turn episodes" in [Troubleshooting](../reference/troubleshooting.md). The last one appears when sandboxes from step 9 of 10 that started before `sandbox-episode` was on the allowlist are still waiting.
-- If the Job log shows `invalid choice: 'multiturn'`, the control image predates the `multiturn` subcommand. Rebuild it with a new tag as in preparation 2.
-- `job episodes-<unix time> did not start` means the Job's pod did not start within 10 minutes. Look for image pull or scheduling errors in the events of `kubectl -n rl-trainer describe pods -l job-name=<Job name>`.
-- An `episode_error` event with `TimeoutError: claim ... not Ready in 600.0s` means the claim got no sandbox within 600 seconds. The CLI asks to delete the claim before it raises this error, so the claim may already be gone when you read it. If the wait for Ready runs long, check the events of `kubectl -n sandbox describe sandboxclaim <name>` and the pod state from step 2 in the extra work terminal while it waits.
-- If a turn's `status` is `sandbox_error`, its feedback ends with `infrastructure failure, not caused by your code`. Causes of 401 and 403 responses are under "401 and 403 responses" in [Troubleshooting](../reference/troubleshooting.md).
-- Stopping the script with Ctrl-C does not stop the Job: it keeps running in the cluster and deletes each episode's claim. If the Job's pod was killed and claims were left, delete them with `kubectl -n sandbox delete sandboxclaim -l gpusandbox/run=<Job name>`. Otherwise they expire at `shutdownTime` (3600 seconds after creation).
+- **Preflight messages** (`agent-sandbox CRDs not found`, `ServiceAccount rl-trainer/sandbox-episode not found`, `... may not create SandboxClaims`, `warm pool ... not found`, `... has no Ready sandbox`, `sandboxes started without ... in their allowlist`): their causes and fixes are under "Agent Sandbox and multi-turn episodes" in [Troubleshooting](../reference/troubleshooting.md). The last one appears when sandboxes from step 9 of 10 that started before `sandbox-episode` was on the allowlist are still waiting.
+- **If the Job log shows `invalid choice: 'multiturn'`**: the control image predates the `multiturn` subcommand. Rebuild it with a new tag as in preparation 2.
+- **On `job episodes-<unix time> did not start`**: the Job's pod did not start within 10 minutes. Look for image pull or scheduling errors in the events of `kubectl -n rl-trainer describe pods -l job-name=<Job name>`.
+- **On an `episode_error` event with `TimeoutError: claim ... not Ready in 600.0s`**: the claim got no sandbox within 600 seconds. The CLI asks to delete the claim before it raises this error, so the claim may already be gone when you read it. If the wait for Ready runs long, check the events of `kubectl -n sandbox describe sandboxclaim <name>` and the pod state from step 2 in the extra work terminal while it waits.
+- **If a turn's `status` is `sandbox_error`**: its feedback ends with `infrastructure failure, not caused by your code`. Causes of 401 and 403 responses are under "401 and 403 responses" in [Troubleshooting](../reference/troubleshooting.md).
+- **Stopping the script with Ctrl-C**: it does not stop the Job, which keeps running in the cluster and deletes each episode's claim. If the Job's pod was killed and claims were left, delete them with `kubectl -n sandbox delete sandboxclaim -l gpusandbox/run=<Job name>`. Otherwise they expire at `shutdownTime` (3600 seconds after creation).
 
 ## Step 4: Single-turn baseline (`episodes gvisor-cpu 2 1`)
 
@@ -228,7 +283,12 @@ Run the same warm pool again with `max_turns` set to 1. The sandboxes claimed in
 GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1
 ```
 
-**What to look for:** each episode has one turn, and the score of the first submission (a policy violation) becomes the episode reward. Below is the shape expected from the code and the tests.
+**What to look for:**
+
+- Each episode has one turn.
+- The score of the first submission (a policy violation) becomes the episode reward.
+
+Below is the shape expected from the code and the tests.
 
 ```text
 {"event": "episode_end", "episode": 1, "turns_used": 1, "stop_reason": "max_turns", "final_status": "policy_violation", "solved": false, "reward": 0.1, "first_turn_reward": 0.1, "released": true, ...}
@@ -248,9 +308,20 @@ A multi-turn episode can submit again after reading the feedback, so it gets the
 With GPU quota you can run the same commands on the gVisor GPU nodes of scenario A (`g5.xlarge`, A10G). This section was not run on a cluster either.
 
 !!! warning "A waiting GPU sandbox holds its GPU"
-    A warm pool sandbox holds one GPU even while it evaluates nothing. The gVisor profile runs one sandbox per `g5.xlarge`, so one waiting sandbox holds a node at 1.006 USD per hour (On-Demand pricing in us-east-1 and us-west-2). Deleting a claim also deletes its sandbox, so every episode's sandbox is replaced, and the pool starts a new sandbox that initialises its GPU from scratch. On the Kata GPU profile that replacement is a new Kata GPU VM, which can take minutes to reach its first Ready. Scale the pool to zero as soon as you are done.
+    A warm pool sandbox holds one GPU even while it evaluates nothing.
 
-In the default scenario A layout the Deployment pool (`sandbox-gvisor-v1`, 2 replicas) uses the GPUs of both `g5.xlarge` nodes, so a warm sandbox stays `Pending` until a GPU is free. While no training (05) runs, scale the Deployment pool to zero, or add nodes to the node group with the command in the preparation section of [06](06_sandbox_update.md) (1.006 USD per hour per added node).
+    - **gVisor profile**: it runs one sandbox per `g5.xlarge`, so one waiting sandbox holds a node at 1.006 USD per hour (On-Demand pricing in us-east-1 and us-west-2).
+    - **Deleting a claim**: it also deletes its sandbox, so every episode's sandbox is replaced, and the pool starts a new sandbox that initialises its GPU from scratch.
+    - **Kata GPU profile**: that replacement is a new Kata GPU VM, which can take minutes to reach its first Ready.
+
+    Scale the pool to zero as soon as you are done.
+
+In the default scenario A layout the Deployment pool (`sandbox-gvisor-v1`, 2 replicas) uses the GPUs of both `g5.xlarge` nodes, so a warm sandbox stays `Pending` until a GPU is free. Do one of these.
+
+- While no training (05) runs, scale the Deployment pool to zero.
+- Add nodes to the node group with the command in the preparation section of [06](06_sandbox_update.md) (1.006 USD per hour per added node).
+
+Run the first line of the block below only when you scale the Deployment pool to zero while no training runs. If you added nodes instead, run only the second line.
 
 ```bash
 # Free the GPUs of the Deployment pool while no training runs (nodes still bill)
@@ -273,7 +344,12 @@ GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor 2 3
 - **The device is `cuda`.** The scripted policy submits `read_host_file`, `relu_bias_wrong` and `relu_bias_triton` in that order, and a solved kernel needs a custom Triton kernel (`require_triton`).
 - **The Job runs one episode at a time, so a pool of 1 works.** The script then warns `1 sandbox(es) Ready: later episodes wait for the pool to start replacements`, and episode 2 waits until the sandbox the pool started is Ready (up to 600 seconds, `ready_timeout_s` of `EpisodeSandbox`).
 
-**What to look for:** the same five conditions as in step 3. In addition, `gpu` in `episode_start` holds the GPU name the sandbox reports, the last turn of each episode is `status: ok`, and `solved` in `multiturn_summary` is 2.
+**What to look for:**
+
+- The same five conditions as in step 3.
+- In addition, `gpu` in `episode_start` holds the GPU name the sandbox reports.
+- The last turn of each episode is `status: ok`.
+- `solved` in `multiturn_summary` is 2.
 
 When you are done, scale the warm pool to zero and return the Deployment pool to its original replica count (2 by default).
 
@@ -290,16 +366,24 @@ The Kata GPU profile (`kata-qemu`, a T4 of `g4dn.metal`) takes the same commands
 !!! warning "Never run with veRL"
     `rl/verl/sandbox_tool.py` and `rl/verl/sandbox_tool_config.yaml` in this section were written against the veRL v0.9.1 source (github.com/verl-project/verl, tag v0.9.1) but have never been run with veRL. The local tests, without veRL installed, cover only how the tool class keeps and releases claims and how it computes the reward.
 
-`KernelSandboxTool` is the tool `submit_kernel(code=...)` that the model calls. The first call claims one sandbox from the warm pool, and every later call of the same trajectory is graded in that sandbox. The verdict becomes feedback through `format_feedback` and reaches the model as the tool response. The episode ends, and the claim is deleted, when the kernel is solved, after `max_turns` submissions, or on a `sandbox_error`.
+`KernelSandboxTool` is the tool `submit_kernel(code=...)` that the model calls.
+
+- **First call**: it claims one sandbox from the warm pool.
+- **Later calls of the same trajectory**: every one is graded in that sandbox.
+- **Verdict**: it becomes feedback through `format_feedback` and reaches the model as the tool response.
+- **End of the episode**: the episode ends, and the claim is deleted, when the kernel is solved, after `max_turns` submissions, or on a `sandbox_error`.
 
 | veRL v0.9.1 behaviour | What `sandbox_tool.py` does |
 |---|---|
 | `ToolAgentLoop` runs create, execute and release for every tool call (`tool_agent_loop.py`), so a tool instance lasts one call, not one trajectory | keeps episodes by a per-trajectory key, stored in `agent_data.extra_fields`. Release does not delete the trajectory's claim |
 | under full determinism `request_id` becomes `det-<priority>` and repeats every step | does not use `request_id` as the key |
-| `calc_reward` is defined only in `base_tool.py`, and nothing in v0.9.1 calls it | writes the episode summary to `agent_data.extra_fields["gpusandbox_episode"]`; the reward function `compute_score` reads it from `extra_info`. That `extra_fields` reach `extra_info` is confirmed only for the reward-loop managers (`naive`, `remote`, `limited`) |
+| `calc_reward` is defined only in `base_tool.py`, and nothing in v0.9.1 calls it | writes the episode summary to `agent_data.extra_fields["gpusandbox_episode"]`; the reward function `compute_score` reads it from `extra_info` |
 | the metrics value that execute returns is not used | returns a per-turn reward of 0.0 and puts turn, status, claim and pod in the metrics for reference only |
-| `ToolAgentLoop` has no hook that tells a tool the trajectory ended | `SandboxToolAgentLoop` (registered as `sandbox_tool_agent`) deletes the claim when the trajectory ends. Under the plain `tool_agent` loop, the next tool instance it creates (`create()`) releases claims with no call for more than 600 seconds (`idle_release_s`). If no tool call comes at all, that cleanup does not run either, and the controller deletes the claim at `shutdownTime` (3600 seconds after creation) |
+| `ToolAgentLoop` has no hook that tells a tool the trajectory ended | `SandboxToolAgentLoop` (registered as `sandbox_tool_agent`) deletes the claim when the trajectory ends |
 | tool responses are cut at `multi_turn.max_tool_response_length` (256 characters by default) | keeps the feedback within `max_feedback_chars` (240 characters) |
+
+- **How far `extra_fields` reach**: that `extra_fields` reach `extra_info` is confirmed only for the reward-loop managers (`naive`, `remote`, `limited`).
+- **Under the plain `tool_agent` loop**: the next tool instance it creates (`create()`) releases claims with no call for more than 600 seconds (`idle_release_s`). If no tool call comes at all, that cleanup does not run either, and the controller deletes the claim at `shutdownTime` (3600 seconds after creation).
 
 The tool config file follows the `tools[].class_name`, `config.type: native`, `tool_schema` format (the same format as `tests/tools/test_mixed_tools_on_cpu.py` in v0.9.1). The keys that connect it to veRL are in the docstring of `sandbox_tool.py`.
 
@@ -320,7 +404,12 @@ Not confirmed (`# TODO verify` in the code):
 
 - The registration of `SandboxToolAgentLoop` and the tool as a whole; it was never run with veRL.
 - How to put the `rl/verl` directory on the `PYTHONPATH` of the Ray workers (pod env, or `env_vars` of `ray job submit --runtime-env-json`).
-- What the rollout workers need. `k8s/production/raycluster-verl.yaml.tpl` does not provide: a mounted Kubernetes API token (the workers' ServiceAccount `grpo-trainer` is bound to the `sandbox-claims` Role, but `automountServiceAccountToken` is `false`), the `kubernetes` Python package, and a sandbox-audience token (the current `SANDBOX_TOKEN_FILE` is a gateway-audience token). The workers already have the label `gpusandbox/client=true`, and `grpo-trainer` is on the warm pool's default allowlist.
+- What the rollout workers need. `k8s/production/raycluster-verl.yaml.tpl` does not provide the following.
+    - a mounted Kubernetes API token (the workers' ServiceAccount `grpo-trainer` is bound to the `sandbox-claims` Role, but `automountServiceAccountToken` is `false`)
+    - the `kubernetes` Python package
+    - a sandbox-audience token (the current `SANDBOX_TOKEN_FILE` is a gateway-audience token)
+
+    The workers already have the label `gpusandbox/client=true`, and `grpo-trainer` is on the warm pool's default allowlist.
 
 ## Cleanup
 
@@ -337,7 +426,12 @@ kubectl -n sandbox delete sandboxtemplate kernel-eval-gvisor-cpu
 kubectl -n sandbox get sandboxclaims
 ```
 
-**What to look for:** `kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox,gpusandbox/runtime=gvisor-cpu` lists no pods, and `kubectl -n sandbox get sandboxclaims -l gpusandbox/run=<Job name>` is empty. Check the idle pods of other runtimes' pools and the claims of other runs separately, by that runtime and Job name. A finished Job `episodes-<unix time>` is deleted automatically after one hour (`ttlSecondsAfterFinished: 3600`).
+**What to look for:**
+
+- `kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox,gpusandbox/runtime=gvisor-cpu` lists no pods.
+- `kubectl -n sandbox get sandboxclaims -l gpusandbox/run=<Job name>` is empty.
+- Check the idle pods of other runtimes' pools and the claims of other runs separately, by that runtime and Job name.
+- A finished Job `episodes-<unix time>` is deleted automatically after one hour (`ttlSecondsAfterFinished: 3600`).
 
 If you no longer need the cluster, run `scripts/08_cleanup.sh` as in the cleanup section of [10](10_cpu_only.md) to delete the pools, Jobs and the CDK stack. More in [99 Cleanup](99_cleanup.md).
 
@@ -360,7 +454,9 @@ The warm pool and the Job run on the nodes created in [10](10_cpu_only.md), so u
 - **This is not training.** The scripted policy does not read the feedback and submits fixed golden submissions in order. The lab checks only that one claim, feedback between turns, early stop, final-submission grading and claim deletion work.
 - **No GPU and no Triton.** The CPU path grades with `require_triton=False`, and the speedup is CPU timing. The GPU path has to be checked yourself in the optional section above.
 - **Episodes run one after another.** The Job runs one episode at a time, so contention between concurrent episodes (waiting for claims, short node resources) is not reproduced here. Keep as many warm sandboxes as the episodes you want to start at once without waiting. On GPU pools each running sandbox holds one GPU, so the GPU count is the upper bound.
-- **Only this Job mounts a Kubernetes API token.** The `sandbox-claims` RoleBinding lists both `sandbox-episode` and `grpo-trainer`, but the default trainer Job turns off the automatic token mount. The default GRPO trainer already has the sandbox-audience token and the claim permission. To use `EpisodeSandbox` from a trainer, mount a Kubernetes API token and provide the `kubernetes` package; the `.[client]` extra that the trainer image installs does not include it (the requirements table in [Concepts 06](../concepts/06_agent_sandbox.md)). The comment in the RBAC file recommends a small broker that handles only claims over giving the GPU trainer API access.
+- **Only this Job mounts a Kubernetes API token.** The `sandbox-claims` RoleBinding lists both `sandbox-episode` and `grpo-trainer`, but the default trainer Job turns off the automatic token mount. The default GRPO trainer already has the sandbox-audience token and the claim permission.
+    - **To use `EpisodeSandbox` from a trainer**: mount a Kubernetes API token and provide the `kubernetes` package; the `.[client]` extra that the trainer image installs does not include it (the requirements table in [Concepts 06](../concepts/06_agent_sandbox.md)).
+    - **The comment in the RBAC file**: it recommends a small broker that handles only claims over giving the GPU trainer API access.
 
 ## Next steps
 

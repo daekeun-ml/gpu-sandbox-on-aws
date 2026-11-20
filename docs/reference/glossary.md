@@ -45,7 +45,12 @@
 :   데이터 내용으로 계산한 짧은 값으로, 두 데이터의 내용이 같은지 비교하는 데 씁니다. harness는 타이밍 반복마다 후보 출력의 checksum을 레퍼런스와 비교해서, 측정 구간에서만 틀리는 출력("벤치마크 때만 틀리기")을 검출합니다. 쓰는 곳: [04 Reward 무결성](../production/04_reward_integrity.md)
 
 **Cloud Hypervisor (CLH)**
-:   Kata가 쓸 수 있는 가벼운 하이퍼바이저입니다. 이 저장소는 장치가 없는 Kata CPU 풀에 씁니다. 이 풀을 만들 때 배포 스크립트에 넘기는 프로필은 `kata-clh-cpu`입니다. v1 Deployment 이름은 `sandbox-kata-clh-cpu-v1`이고, 프로필이 지정하는 RuntimeClass는 `kata-clh`입니다. 배포 스크립트에 `kata-clh`를 주면 실험용 GPU 프로필이 선택됩니다. Kata upstream은 CLH의 GPU passthrough를 지원하지 않습니다. 쓰는 곳: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
+:   Kata가 쓸 수 있는 가벼운 하이퍼바이저입니다. 이 저장소는 장치가 없는 Kata CPU 풀에 씁니다. Kata upstream은 CLH의 GPU passthrough를 지원하지 않습니다.
+
+    - **CPU 풀을 만들 때**: 배포 스크립트에 넘기는 프로필은 `kata-clh-cpu`입니다. v1 Deployment 이름은 `sandbox-kata-clh-cpu-v1`이고, 프로필이 지정하는 RuntimeClass는 `kata-clh`입니다.
+    - **배포 스크립트에 `kata-clh`를 줄 때**: 실험용 GPU 프로필이 선택됩니다.
+
+    쓰는 곳: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
 
 **Completion**
 :   RL에서 모델이 prompt 하나를 받아 생성한 답입니다. 이 저장소의 GRPO는 prompt마다 completion 8개(group 하나)를 생성하고, completion 안의 코드 블록을 샌드박스에서 채점합니다. 쓰는 곳: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
@@ -301,10 +306,16 @@
 ## ❓ 오해
 
 !!! question "❓ 오해: rollout은 Kubernetes 배포 용어다"
-    이 가이드북에서는 두 뜻으로 씁니다. RL 문맥(GRPO, veRL)의 rollout은 policy가 completion을 생성하는 단계입니다. 배포 문맥의 rollout은 명령마다 하는 일이 다릅니다. `kubectl rollout status`는 지정한 Deployment의 배포가 끝날 때까지 기다리고, `scripts/ops/rollout.sh`는 새 버전의 풀을 별도 Deployment로 배포해 검증한 뒤 routing 표를 바꿔 트래픽을 옮깁니다. 주변 문장이 학습을 설명하는지 배포를 설명하는지로 구분하세요.
+    이 가이드북에서는 두 뜻으로 씁니다. 주변 문장이 학습을 설명하는지 배포를 설명하는지로 구분하세요.
+
+    - **RL 문맥(GRPO, veRL)**: rollout은 policy가 completion을 생성하는 단계입니다.
+    - **배포 문맥**: rollout은 명령마다 하는 일이 다릅니다.
+        - `kubectl rollout status`는 지정한 Deployment의 배포가 끝날 때까지 기다립니다.
+        - `scripts/ops/rollout.sh`는 새 버전의 풀을 별도 Deployment로 배포해 검증한 뒤 routing 표를 바꿔 트래픽을 옮깁니다.
 
 !!! question "❓ 오해: warm placeholder도 GPU를 미리 점유한다"
-    Production의 warm placeholder는 CPU와 메모리만 요청하고 GPU는 요청하지 않습니다. 노드를 점유하기만 하고, 샌드박스 pod를 배치해야 하면 제거됩니다. 반대로 Agent Sandbox의 SandboxWarmPool은 프로필에 지정한 자원으로 샌드박스 pod를 미리 실행합니다. GPU 프로필이면 요청이 없는 동안에도 GPU를 점유하고, CPU 프로필(예: `kata-clh-cpu`)이면 GPU를 요청하지 않습니다.
+    - **Production의 warm placeholder**: CPU와 메모리만 요청하고 GPU는 요청하지 않습니다. 노드를 점유하기만 하고, 샌드박스 pod를 배치해야 하면 제거됩니다.
+    - **Agent Sandbox의 SandboxWarmPool**: 프로필에 지정한 자원으로 샌드박스 pod를 미리 실행합니다. GPU 프로필이면 요청이 없는 동안에도 GPU를 점유하고, CPU 프로필(예: `kata-clh-cpu`)이면 GPU를 요청하지 않습니다.
 
 !!! question "❓ 오해: Kata는 `.metal` 인스턴스에서만 실행된다"
     GPU passthrough를 할 때만 그렇습니다. 장치를 할당하지 않는 Kata는 EC2 nested virtualization이 제공하는 `/dev/kvm`을 사용해 `.metal` 없이 실행됩니다. GPU를 VM에 할당하려면 호스트가 물리 GPU와 IOMMU를 직접 쓸 수 있어야 해서 이 저장소의 x86 구성에서는 `g4dn.metal`이 필요합니다.

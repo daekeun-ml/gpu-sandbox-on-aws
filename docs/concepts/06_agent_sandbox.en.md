@@ -5,7 +5,12 @@
 
 ## Pain point
 
-This repository's reward pools pick a free pod for every request, so when an agent revises and resubmits a kernel several times in one episode, each turn can be scored by a different pod on a different GPU. Agent apps must keep files, running processes and installed packages until the next turn. The scoring server, however, creates a fresh working directory for each submission and, when the evaluation ends, removes that directory and any processes still running. This extension uses the same server, so what an episode keeps to the end is the pod, the GPU and the sandbox version, and the agent submits its whole code again every turn. Starting a fresh sandbox per episode instead means waiting: a Kata GPU VM pins all guest memory and initialises CUDA inside the guest, so its first Ready can take several minutes (deployment template comment). People also often treat Agent Sandbox as a gVisor-only tool or put it on the same layer as the isolation runtime.
+This repository's reward pools pick a free pod for every request.
+
+- **When an agent revises and resubmits a kernel several times in one episode**: each turn can be scored by a different pod on a different GPU.
+- **Agent app state**: agent apps must keep files, running processes and installed packages until the next turn. The scoring server, however, creates a fresh working directory for each submission and, when the evaluation ends, removes that directory and any processes still running. This extension uses the same server, so what an episode keeps to the end is the pod, the GPU and the sandbox version, and the agent submits its whole code again every turn.
+- **When you start a fresh sandbox per episode instead**: you wait, because a Kata GPU VM pins all guest memory and initialises CUDA inside the guest, so its first Ready can take several minutes (deployment template comment).
+- **A common misreading**: people also often treat Agent Sandbox as a gVisor-only tool or put it on the same layer as the isolation runtime.
 
 ![Two panels. a reward pools: in one episode the turn 1 submission goes to pod A on GPU 1 and the turn 2 revised submission to pod B on GPU 2, and both clear the request's work directory and leftover processes after the request; the dashed fresh-start-per-episode path makes a Kata GPU VM take minutes to first Ready (red). b Agent Sandbox: the episode creates a SandboxClaim, the SandboxWarmPool, started ahead and Ready after the egress check, hands over a waiting Sandbox, and turn 1 and turn 2 both go to that one claimed sandbox (same pod and GPU, files removed per submission, isolation from the RuntimeClass, gVisor or Kata).](../images/figures/concepts-06_agent_sandbox.svg)
 
@@ -37,7 +42,9 @@ This repository's reward pools pick a free pod for every request, so when an age
 
 ## Overview
 
-This repository's reward pools are for single-turn grading: each completion is graded on its own in a free pod, with no step where the model reads the verdict and resubmits. A multi-turn agent submits code, reads the verdict, revises the code and submits again within one episode, so every turn has to be graded in the same sandbox. Agent Sandbox assigns one sandbox started ahead of time to each episode and deletes that sandbox when the episode ends. Isolation stays with the RuntimeClass (gVisor, Kata). If you are new to this, read the beginner guide [06 Multi-turn agents and Agent Sandbox](../beginner/06_multi_turn_agent.md) first.
+This repository's reward pools are for single-turn grading: each completion is graded on its own in a free pod, with no step where the model reads the verdict and resubmits. A multi-turn agent submits code, reads the verdict, revises the code and submits again within one episode, so every turn has to be graded in the same sandbox.
+
+Agent Sandbox assigns one sandbox started ahead of time to each episode and deletes that sandbox when the episode ends. Isolation stays with the RuntimeClass (gVisor, Kata). If you are new to this, read the beginner guide [06 Multi-turn agents and Agent Sandbox](../beginner/06_multi_turn_agent.md) first.
 
 ## What Agent Sandbox does
 
@@ -45,10 +52,12 @@ Agent Sandbox is developed under Kubernetes SIG Apps, and the upstream README in
 
 | Resource | API group (all `v1beta1`) | What it does | In this extension |
 |---|---|---|---|
-| `Sandbox` | `agents.x-k8s.io` | One sandbox. It manages one pod and, depending on settings, a headless Service and PVCs. Setting `operatingMode` to `Suspended` deletes the pod and keeps the object and its volumes | Created by the warm pool, never by hand |
+| `Sandbox` | `agents.x-k8s.io` | One sandbox. It manages one pod and, depending on settings, a headless Service and PVCs | Created by the warm pool, never by hand |
 | `SandboxTemplate` | `extensions.agents.x-k8s.io` | The blueprint of a Sandbox: `podTemplate`, `networkPolicy`, `service`, `envVarsInjectionPolicy`, `volumeClaimTemplates` | `kernel-eval-<runtime>` per runtime profile |
 | `SandboxWarmPool` | `extensions.agents.x-k8s.io` | How many Sandboxes to keep started from a template (`replicas`) and how to refresh them (`updateStrategy`: `OnReplenish` or `Recreate`) | `kernel-eval-<runtime>` per runtime profile |
 | `SandboxClaim` | `extensions.agents.x-k8s.io` | Borrows one Sandbox from a warm pool: `spec.warmPoolRef` (required), `spec.lifecycle` (`shutdownTime`, `ttlSecondsAfterFinished`, `shutdownPolicy`), `status.sandbox` (`name`, `podIPs`, `serviceFQDN`) | One per episode |
+
+- **`operatingMode` of a `Sandbox`**: setting it to `Suspended` deletes the pod and keeps the object and its volumes.
 
 There are also Python (`pip install k8s-agent-sandbox`), Go and TypeScript SDKs, and `sandbox-router` (optional), a reverse proxy that forwards HTTP requests from the SDKs or external clients to sandbox pods. This extension uses neither: it creates claims through the Kubernetes API (`CustomObjectsApi`) and sends evaluation requests straight to the claim's `serviceFQDN` (the router row of "Lessons from the AWS blog series" below explains why).
 
@@ -75,7 +84,9 @@ sequenceDiagram
 
 *Takeaway: one episode has one sandbox to itself from start to finish, and a returned sandbox is deleted rather than reused.*
 
-The moment a claim binds, ownership of the Sandbox moves from the warm pool to the claim, and the pool no longer manages it (v1.0.11 `sandboxwarmpool_types.go` comment), so deleting the claim deletes that Sandbox and its pod. `shutdownTime` is the absolute time at which the claim expires and the controller deletes the Sandbox resources. The default `shutdownPolicy`, `Retain`, keeps the claim object in the `Expired` state, while `Delete` removes the claim as well.
+- **The moment a claim binds**: ownership of the Sandbox moves from the warm pool to the claim, and the pool no longer manages it (v1.0.11 `sandboxwarmpool_types.go` comment), so deleting the claim deletes that Sandbox and its pod.
+- **`shutdownTime`**: the absolute time at which the claim expires and the controller deletes the Sandbox resources.
+- **`shutdownPolicy`**: the default, `Retain`, keeps the claim object in the `Expired` state, while `Delete` removes the claim as well.
 
 ## Agent Sandbox follows the RuntimeClass
 
@@ -90,7 +101,11 @@ Agent Sandbox decides the lifetime and assignment of pods; the `runtimeClassName
 | Kata on EKS | AWS blog part 3: Ably runs runc today and plans to evaluate Kata (microVM), keeping the Agent Sandbox API and swapping only the runtime | Planned |
 | This repository (profiles `gvisor`, `gvisor-cpu`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`, `kata-clh-cpu`, `kata-qemu-cpu`) | `template.yaml.tpl` renders with all seven profiles | Only the local rendering tests pass. Not run on a cluster. Kata GPU inside a SandboxTemplate (`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`) is unverified |
 
-Where each RuntimeClass can run on AWS follows the location table of [02 Isolation runtimes](02_isolation_runtimes.md), independently of Agent Sandbox. Kata + GPU runs only on `g4dn.metal` in this repository's x86 setup, Kata CPU also runs on nested-virtualization instances, and gVisor + GPU runs on regular GPU VMs.
+Where each RuntimeClass can run on AWS follows the location table of [02 Isolation runtimes](02_isolation_runtimes.md), independently of Agent Sandbox.
+
+- **Kata + GPU**: it runs only on `g4dn.metal` in this repository's x86 setup.
+- **Kata CPU**: it also runs on nested-virtualization instances.
+- **gVisor + GPU**: it runs on regular GPU VMs.
 
 !!! question "❓ Misconception: Agent Sandbox is a gVisor tool"
     Agent Sandbox does not implement isolation itself; it leaves isolation to the runtime selected through RuntimeClass, and the upstream examples cover both Kata (AKS, GKE) and gVisor (GKE). Part 1 of the AWS blog also describes strong isolation as gVisor or Kata selected through RuntimeClass ("RuntimeClass로 지정하는 gVisor나 Kata"), and the series used gVisor on EKS by its own choice, not because Agent Sandbox requires it.
@@ -102,13 +117,16 @@ Both structures share the server image and authentication; they differ in the li
 | Aspect | This repository's reward pools | Agent Sandbox per-episode sandboxes |
 |---|---|---|
 | Resources | A Deployment and a headless Service per (runtime, version) (`sandbox-<runtime>-<version>`) | A SandboxTemplate and a SandboxWarmPool per runtime, a SandboxClaim per episode |
-| Pod lifetime | Long-lived. Pods keep processing evaluations one after another. A v2 pod stops taking new requests after 200 evaluations; the Production gateway deletes it so it is replaced, and in direct mode it stays NotReady | One episode. Deleting the claim deletes the Sandbox and its pod |
+| Pod lifetime | Long-lived. Pods keep processing evaluations one after another (v2 pods: list below the table) | One episode. Deleting the claim deletes the Sandbox and its pod |
 | Concurrency | One evaluation per pod at a time. A busy pod returns 503 and the client moves to another pod | One episode has one sandbox to itself |
-| State | Stateless. Every request gets a fresh process tree, cleaned up at the end | Agent Sandbox itself can keep a workspace (files, processes) and supports pause (`Suspended`), resume and PVCs. This extension scores every submission of an episode on the same pod and GPU, and cleans up each submission's work directory and processes when its evaluation ends |
+| State | Stateless. Every request gets a fresh process tree, cleaned up at the end | This extension scores every submission of an episode on the same pod and GPU, and cleans up each submission's work directory and processes when its evaluation ends |
 | Address | One Service DNS name in front of several Ready pod IPs. The client picks a free pod | The claim's `status.sandbox.serviceFQDN` (one headless Service per Sandbox) |
 | Version pinning | Routing ConfigMap; one version per batch (group) | Within an episode there is one sandbox, so versions do not mix. After a template change, claims can get different versions during the transition (see "Scope and limits") |
 | Idle cost | Holds as many GPUs as the Deployment replicas | Holds as many GPUs as the warm pool replicas plus the claimed sandboxes |
 | Fits | Single-turn reward scoring (GRPO scores each completion on its own) | Multi-turn agentic RL and agent apps (tool calls, reading feedback and revising) |
+
+- **v2 pods in the reward pools**: a v2 pod stops taking new requests after 200 evaluations; the Production gateway deletes it so it is replaced, and in direct mode it stays NotReady.
+- **State features of Agent Sandbox itself**: Agent Sandbox itself can keep a workspace (files, processes) and supports pause (`Suspended`), resume and PVCs.
 
 How to choose:
 
@@ -133,7 +151,11 @@ How to choose:
 | [`src/gpusandbox/multiturn.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/multiturn.py) | Episode runner, Policy interface, `ScriptedPolicy`, feedback formatting, stop rules and JSON events. Used by `python -m gpusandbox.tools multiturn` |
 | [`rl/verl/sandbox_tool.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool.py), [`rl/verl/sandbox_tool_config.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool_config.yaml) | The veRL v0.9.1 tool `KernelSandboxTool`, the reward function `compute_score`, `SandboxToolAgentLoop`, and a tool config example ("Connecting to veRL multi-turn rollouts" below) |
 
-The sandbox server, image and authentication are the same as for the pools in [Hands-on 04](../handson/04_sandbox_pools.md). This extension's unit tests (four in `tests/test_agent_sandbox.py`, sixteen in `tests/test_multiturn.py`, plus `tests/test_manifests.py`) pass locally; what they check is under "Scope and limits" below. On a cluster `install`, `pool`, `claim` and `episodes` ran (scenario C, `kata-clh-cpu`), so verify the rest with the checks attached to each command. The commands in order are in [11 Multi-turn episodes](../handson/11_multi_turn.md).
+The sandbox server, image and authentication are the same as for the pools in [Hands-on 04](../handson/04_sandbox_pools.md).
+
+- **Local tests**: this extension's unit tests (four in `tests/test_agent_sandbox.py`, sixteen in `tests/test_multiturn.py`, plus `tests/test_manifests.py`) pass locally; what they check is under "Scope and limits" below.
+- **Cluster runs**: on a cluster `install`, `pool`, `claim` and `episodes` ran (scenario C, `kata-clh-cpu`), so verify the rest with the checks attached to each command.
+- **Order of commands**: the commands in order are in [11 Multi-turn episodes](../handson/11_multi_turn.md).
 
 ### Template settings and why
 
@@ -148,7 +170,8 @@ The sandbox server, image and authentication are the same as for the pools in [H
 | `updateStrategy` | `OnReplenish` | A template change does not reboot every waiting Kata GPU VM at once |
 | `replicas` | `WARM_REPLICAS` (default 1) | With a GPU profile each waiting sandbox holds one GPU; with a CPU profile (`kata-clh-cpu`, `gvisor-cpu`) it takes the pod's CPU and memory requests on the node. Size it to the number of episodes that run at the same time, not to the rollout batch |
 
-The v1.0.11 controller (`extensions/controllers/utils.go`) inserts `dnsPolicy: None` with nameservers `8.8.8.8` and `1.1.1.1` only when the template omits `networkPolicy` (so the default policy applies) and the pod's `dnsPolicy` is empty. This template sets its own policy, so v1.0.11 does not inject, but the template still sets `dnsPolicy` so that no external resolver comes in if the policy block is deleted or the controller's behaviour changes. Nothing answers DNS on `127.0.0.1`.
+??? note "When the controller injects external resolvers"
+    The v1.0.11 controller (`extensions/controllers/utils.go`) inserts `dnsPolicy: None` with nameservers `8.8.8.8` and `1.1.1.1` only when the template omits `networkPolicy` (so the default policy applies) and the pod's `dnsPolicy` is empty. This template sets its own policy, so v1.0.11 does not inject, but the template still sets `dnsPolicy` so that no external resolver comes in if the policy block is deleted or the controller's behaviour changes. Nothing answers DNS on `127.0.0.1`.
 
 !!! warning "NetworkPolicies add up"
     Even with the `default-deny-all` policy in the `sandbox` namespace ([Hands-on 04](../handson/04_sandbox_pools.md)), NetworkPolicy allow rules add up ("they are additive", per the Kubernetes documentation), so the egress of a default policy created by the controller (public internet allowed) is open. That is why the template replaces the default policy, and why you should check the generated policy after applying it.
@@ -163,7 +186,13 @@ scripts/extensions/agent_sandbox.sh install
 AGENT_SANDBOX_VERSION=<release-tag> scripts/extensions/agent_sandbox.sh install
 ```
 
-Internally it runs `kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml`, shows the CRDs with `kubectl get crd | grep agents.x-k8s.io`, then applies `k8s/base/trainer-rbac.yaml` and `trainer-claims-rbac.yaml`. `05_setup_namespaces_auth.sh` applies `trainer-rbac.yaml` too; `install` applies it again so that clusters where that script ran before `sandbox-episode` was added also get the account. Applying it more than once gives the same result.
+Internally it runs these steps in order.
+
+1. Runs `kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml`.
+2. Shows the CRDs with `kubectl get crd | grep agents.x-k8s.io`.
+3. Applies `k8s/base/trainer-rbac.yaml` and `trainer-claims-rbac.yaml`.
+
+`05_setup_namespaces_auth.sh` applies `trainer-rbac.yaml` too; `install` applies it again so that clusters where that script ran before `sandbox-episode` was added also get the account. Applying it more than once gives the same result.
 
 **What to look for:**
 
@@ -185,7 +214,10 @@ Internally it runs `kubectl apply -f https://github.com/kubernetes-sigs/agent-sa
       --as=system:serviceaccount:rl-trainer:sandbox-episode
     ```
 
-**If it fails:** if the CRDs are missing, check with `kubectl get pods -A` that the controller pod is Running. Common script errors (a missing `scripts/config.env` and so on) are in the "Settings and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:**
+
+- **If the CRDs are missing**: check with `kubectl get pods -A` that the controller pod is Running.
+- **Common script errors (a missing `scripts/config.env` and so on)**: they are in the "Settings and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ### pool: SandboxTemplate and warm pool
 
@@ -200,7 +232,10 @@ VERSION_FILE=v2 scripts/extensions/agent_sandbox.sh pool gvisor 1   # harness se
 - It reads `k8s/sandbox/profiles/<runtime>.env` and `k8s/sandbox/versions/${VERSION_FILE:-v1}.env`, renders the template and applies it.
 - `scripts/config.env` must contain `SANDBOX_IMAGE_URI` and `SANDBOX_AUDIENCE`; the OIDC issuer comes from `aws eks describe-cluster`.
 - The allowed subjects default to `grpo-trainer`, `sandbox-probe` and `sandbox-episode` (unlike `06_deploy_sandboxes.sh`, without the production gateway); change them with `SANDBOX_ALLOWED_SUBJECTS`.
-- If you created a pool before `sandbox-episode` was in the default, run `pool` again after `install`. If you set `SANDBOX_ALLOWED_SUBJECTS` yourself, add `system:serviceaccount:rl-trainer:sandbox-episode` to it first. `pool` applies the template and the warm count together, so pass the version file you run now (`VERSION_FILE`, default v1) and the warm count (default 1). Waiting sandboxes keep the env they started with (`updateStrategy: OnReplenish`), so one started earlier answers the episode's requests with 403. The `episodes` preflight prints the pod names of such sandboxes, claimed or not. Find the Sandbox each pod belongs to and delete only waiting Sandboxes that no claim holds.
+- If you created a pool before `sandbox-episode` was in the default, run `pool` again after `install`.
+- **If you set `SANDBOX_ALLOWED_SUBJECTS` yourself**: add `system:serviceaccount:rl-trainer:sandbox-episode` to it first.
+- **When you run `pool` again**: it applies the template and the warm count together, so pass the version file you run now (`VERSION_FILE`, default v1) and the warm count (default 1).
+- **Waiting sandboxes started earlier**: waiting sandboxes keep the env they started with (`updateStrategy: OnReplenish`), so one started earlier answers the episode's requests with 403. The `episodes` preflight prints the pod names of such sandboxes, claimed or not. Find the Sandbox each pod belongs to and delete only waiting Sandboxes that no claim holds.
 - `05_setup_namespaces_auth.sh` from [Hands-on 04](../handson/04_sandbox_pools.md) (namespaces, the `gpu-sandbox` ServiceAccount, the `sandbox-auth-jwks` ConfigMap) must have run and the profile's nodes ([02 gVisor](../handson/02_gvisor.md), [03 Kata](../handson/03_kata.md)) must exist first.
 - To see the flow without a GPU, try `kata-clh-cpu` first (on `c8i` nodes with nested virtualization turned on).
 
@@ -220,7 +255,11 @@ VERSION_FILE=v2 scripts/extensions/agent_sandbox.sh pool gvisor 1   # harness se
     kubectl -n sandbox get networkpolicy -o yaml
     ```
 
-**If it fails:** if the pod is Pending, check whether the Deployment pool of the same profile already uses the GPUs. If it never becomes Ready, look for `egress is open` lines in the server log. Fixes by cause are in the "Sandbox pools and readiness" and "NetworkPolicy" sections of [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:**
+
+- **If the pod is Pending**: check whether the Deployment pool of the same profile already uses the GPUs.
+- **If it never becomes Ready**: look for `egress is open` lines in the server log.
+- **Fixes by cause**: they are in the "Sandbox pools and readiness" and "NetworkPolicy" sections of [Troubleshooting](../reference/troubleshooting.md).
 
 ### claim: borrow and give back
 
@@ -241,7 +280,7 @@ sandboxclaim.extensions.agents.x-k8s.io "episode-check-12345" deleted
 
 The script waits up to 10 minutes for the claim to become Ready. With a waiting sandbox in the pool the claim gets it right away; otherwise it waits until a new one has started (inferred from part 2 of the blog, where claims beyond the pool size became Ready later).
 
-**If it fails:** if the claim is not Ready within 10 minutes, `set -e` ends the script before the delete step and the claim stays. This claim has no `shutdownTime`, so delete it yourself. Look for the cause in the claim's events.
+**If it fails:** if the claim is not Ready within 10 minutes, `set -e` ends the script before the delete step and the claim stays. Look for the cause in the claim's events. This claim has no `shutdownTime`, so delete it yourself after checking the cause.
 
 ```bash
 kubectl -n sandbox get sandboxclaims
@@ -270,7 +309,11 @@ bash -c "source scripts/lib.sh && source scripts/lib_jobs.sh && run_tool_job pro
 kubectl -n sandbox delete sandboxclaim episode-manual
 ```
 
-**What to look for:** the first line is the `/info` summary and must show `"egress_blocked": true`. After it, all six GPU goldens (`vector_add_triton`, `relu_bias_triton`, `relu_bias_torch_only`, `relu_bias_wrong`, `relu_bias_benchmark_cheat`, `read_host_file`) must be `PASS`. For a CPU profile, use `--device cpu`; there are four goldens.
+**What to look for:**
+
+- The first line is the `/info` summary and must show `"egress_blocked": true`.
+- After it, all six GPU goldens (`vector_add_triton`, `relu_bias_triton`, `relu_bias_torch_only`, `relu_bias_wrong`, `relu_bias_benchmark_cheat`, `read_host_file`) must be `PASS`.
+- **For a CPU profile**: use `--device cpu`; there are four goldens.
 
 ### episodes: multi-turn episodes
 
@@ -282,7 +325,8 @@ scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3   # multi-turn: 2 ep
 scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1   # single-turn baseline (max_turns 1)
 ```
 
-- The Job runs `python -m gpusandbox.tools multiturn` from the control image (`CONTROL_IMAGE_URI`). The image must contain `gpusandbox.multiturn`, so if you built the images before that module was added, build them again. The ECR repositories cannot overwrite an existing tag (`IMMUTABLE`), so set `IMAGE_TAG` in `scripts/config.env` to a new value and run `scripts/03_build_push_images.sh --no-trainer`. Put the printed `SANDBOX_IMAGE_URI` and `CONTROL_IMAGE_URI` into `scripts/config.env` (steps in [Hands-on 11](../handson/11_multi_turn.md)).
+- The Job runs `python -m gpusandbox.tools multiturn` from the control image (`CONTROL_IMAGE_URI`). The image must contain `gpusandbox.multiturn`.
+    - **If you built the images before that module was added**: build them again. The ECR repositories cannot overwrite an existing tag (`IMMUTABLE`), so set `IMAGE_TAG` in `scripts/config.env` to a new value and run `scripts/03_build_push_images.sh --no-trainer`. Put the printed `SANDBOX_IMAGE_URI` and `CONTROL_IMAGE_URI` into `scripts/config.env` (steps in [Hands-on 11](../handson/11_multi_turn.md)).
 - The preflight checks the CRDs, the ServiceAccount `rl-trainer/sandbox-episode`, that account's permission to create claims, and a Ready sandbox in `kernel-eval-<runtime>` (`status.readyReplicas` at least 1). If one is missing, it prints the command to run (`install` or `pool`) and exits.
 - If a sandbox pod started without `sandbox-episode` in its allowlist, the preflight prints the pod name and exits. It does not tell waiting sandboxes from claimed ones.
 - The device is `cpu` for `*-cpu` runtimes and `cuda` otherwise. With more episodes than Ready sandboxes, it prints a warning and goes on.
@@ -315,7 +359,12 @@ scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1   # single-turn base
 - A waiting sandbox holds its accelerator while idle (one GPU on GPU pools). Scale the pool to zero when you are not using it.
 - If a run crashes, its remaining claims expire at `shutdownTime` (CLI default 3600 seconds). The script's label cleanup normally deletes them sooner.
 
-**If it fails:** if the preflight ends with `sandboxes started without ... in their allowlist` and you set `SANDBOX_ALLOWED_SUBJECTS` yourself, add the full `sandbox-episode` subject to it. Then run `pool <runtime>` again with the version file and warm count you run now, and find the Sandbox each pod in the message belongs to. A Sandbox listed under `status.sandbox.name` in `kubectl -n sandbox get sandboxclaims -o yaml` is in use by an episode, so clean it up after that episode ends. Delete only waiting Sandboxes with the old settings so that the pool replaces them.
+**If it fails:** if the preflight ends with `sandboxes started without ... in their allowlist`, handle it in this order.
+
+1. If you set `SANDBOX_ALLOWED_SUBJECTS` yourself, add the full `sandbox-episode` subject to it.
+2. Run `pool <runtime>` again with the version file and warm count you run now.
+3. Find the Sandbox each pod in the message belongs to. A Sandbox listed under `status.sandbox.name` in `kubectl -n sandbox get sandboxclaims -o yaml` is in use by an episode, so clean it up after that episode ends.
+4. Delete only waiting Sandboxes with the old settings so that the pool replaces them.
 
 ```bash
 # Same VERSION_FILE and warm count as the running pool (here v1 and 2)
@@ -338,7 +387,14 @@ kubectl -n sandbox delete sandboxtemplate kernel-eval-gvisor
 kubectl -n sandbox get sandboxclaims
 ```
 
-**What to look for:** `kubectl -n sandbox get sandboxwarmpool` no longer lists `kernel-eval-gvisor`, and `kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox,gpusandbox/runtime=gvisor` shows only pods of claims still in use. Check idle pods of other runtimes in their own pools. The minimum of `SandboxWarmPool.spec.replicas` is 0 (v1.0.11 source comments). Node and full cluster cleanup are in [99 Cleanup](../handson/99_cleanup.md).
+**What to look for:**
+
+- `kubectl -n sandbox get sandboxwarmpool` no longer lists `kernel-eval-gvisor`.
+- `kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox,gpusandbox/runtime=gvisor` shows only pods of claims still in use.
+- Check idle pods of other runtimes in their own pools.
+- The minimum of `SandboxWarmPool.spec.replicas` is 0 (v1.0.11 source comments).
+
+Node and full cluster cleanup are in [99 Cleanup](../handson/99_cleanup.md).
 
 ### EpisodeSandbox: using it from code
 
@@ -348,10 +404,12 @@ kubectl -n sandbox get sandboxclaims
 |---|---|
 | `__enter__` | Creates a SandboxClaim named `episode-<12 hex characters>` with the label `gpusandbox/episode: "true"` plus your labels, `spec.warmPoolRef.name`, `spec.lifecycle.shutdownTime` (now plus `max_lifetime_s`, 3600 seconds by default) and `shutdownPolicy: Delete` |
 | Waiting for Ready | Reads the claim every second; once the `Ready` condition is `True`, it uses `serviceFQDN:8000` as the address (`address`, or `podIPs[0]:8000` if there is no FQDN) and records the claim's `status.sandbox.name` in `sandbox_name`. If that does not happen within `ready_timeout_s` (600 seconds by default), it deletes the claim and raises `TimeoutError` |
-| When `__enter__` fails | Not only on the timeout but also on an API error or an interrupt while waiting for Ready, it deletes the claim and re-raises. `__exit__` does not run when `__enter__` fails, so without this the claim would hold a GPU sandbox until `shutdownTime` |
+| When `__enter__` fails | Not only on the timeout but also on an API error or an interrupt while waiting for Ready, it deletes the claim and re-raises |
 | `info()` | Sends `GET /info` to the claimed sandbox and returns the runtime, version, kernel and GPU that the sandbox reports |
 | `evaluate(task_id=..., code=...)` | Sends `POST /v1/evaluate` to that single address and returns the verdict with `episode_claim` (the claim name) added |
 | `release()`, `__exit__` | Closes the HTTP client and deletes the claim. An already missing claim (404) is ignored |
+
+- **Why the claim is deleted when `__enter__` fails**: `__exit__` does not run when `__enter__` fails, so without this the claim would hold a GPU sandbox until `shutdownTime`.
 
 The constructor's `loop` argument takes a `BackgroundLoop`. `BackgroundLoop` threads never stop, so without it every instance adds one thread. When one process runs several episodes, pass one loop to every `EpisodeSandbox`. The `multiturn` CLI and the veRL tool share one loop this way.
 
@@ -394,10 +452,13 @@ The comment in the RBAC file recommends a small broker Deployment that handles o
 
 | Component | What it does |
 |---|---|
-| `KernelSandboxTool` (tool name `submit_kernel`) | When the model calls `submit_kernel(code=...)`, the trajectory's first call claims one sandbox from the warm pool (`EpisodeSandbox`), and later calls are evaluated in the same sandbox. The verdict summary (`format_feedback`) comes back as the tool response, which the model reads before its next turn. The claim is deleted when the kernel is solved, after `max_turns` submissions, or on a `sandbox_error` |
-| `compute_score` | A veRL custom reward function. It returns the final submission's score from the episode summary in `extra_info`. The sandbox already graded every submission during the rollout, so there is no second GPU evaluation per trajectory |
+| `KernelSandboxTool` (tool name `submit_kernel`) | When the model calls `submit_kernel(code=...)`, the trajectory's first call claims one sandbox from the warm pool (`EpisodeSandbox`), and later calls are evaluated in the same sandbox. The verdict summary (`format_feedback`) comes back as the tool response, which the model reads before its next turn |
+| `compute_score` | A veRL custom reward function. It returns the final submission's score from the episode summary in `extra_info` |
 | `SandboxToolAgentLoop` (registered as `sandbox_tool_agent`) | Wraps `run()` of `ToolAgentLoop`. It creates an episode key per trajectory, puts it in `tools_kwargs`, and deletes the claim when the trajectory ends |
 | `sandbox_tool_config.yaml` | `tools[].class_name: sandbox_tool.KernelSandboxTool`, `config.type: native`, and a `tool_schema` in OpenAI function format. `config` holds `warm_pool`, `max_turns` (3), `require_triton`, `max_feedback_chars` (240), `idle_release_s` (600), `claim_lifetime_s` (3600) and `ready_timeout_s` (600) |
+
+- **When `KernelSandboxTool` deletes the claim**: the claim is deleted when the kernel is solved, after `max_turns` submissions, or on a `sandbox_error`.
+- **Why `compute_score` does not evaluate on the GPU again**: the sandbox already graded every submission during the rollout, so there is no second GPU evaluation per trajectory.
 
 ### How veRL v0.9.1 behaves and what this code does about it
 
@@ -408,8 +469,10 @@ veRL v0.9.1 drives tools as shown below. Claiming in `create` and releasing in `
 | `ToolAgentLoop` runs `create`, `execute` and `release` for every tool call (`tool_agent_loop.py` lines 485 to 496). A tool instance lasts one call, not one trajectory, and the metrics value that `execute` returns is not used | Episodes live in a registry inside the tool object, looked up by a key stored in the trajectory's `agent_data.extra_fields` (one `AgentData` per trajectory). `release` runs after every call, so it does not delete the claim |
 | With `rollout.full_determinism` on, `agent_data.request_id` becomes `det-<priority>`, and priorities restart at 0 every batch | `request_id` is not used as the episode key |
 | `calc_reward` is defined only in `base_tool.py`, and nothing in v0.9.1 calls it | The episode summary goes into `agent_data.extra_fields["gpusandbox_episode"]`. The reward loop merges `extra_fields` into the reward function's `extra_info` (`reward_loop/reward_manager/naive.py`), and `compute_score` reads it there. `calc_reward` is implemented to return the same score, but it is never called |
-| `ToolAgentLoop` has no hook that calls tools at the end of a trajectory | `SandboxToolAgentLoop` deletes the claim when `run()` ends. The plain `tool_agent` loop has no timer: the next tool call's `create()` releases the sandboxes of episodes idle for longer than `idle_release_s` (default 600 s), and without further calls the claim's `shutdownTime` is the last safety net. `idle_release_s` must exceed the longest generation between two turns |
+| `ToolAgentLoop` has no hook that calls tools at the end of a trajectory | `SandboxToolAgentLoop` deletes the claim when `run()` ends. For the plain `tool_agent` loop, see the list below the table |
 | Tool responses longer than `multi_turn.max_tool_response_length` (default 256) are cut | Feedback is capped at `max_feedback_chars` (default 240). Keep it at or below the veRL setting |
+
+- **With the plain `tool_agent` loop**: the plain `tool_agent` loop has no timer. The next tool call's `create()` releases the sandboxes of episodes idle for longer than `idle_release_s` (default 600 s), and without further calls the claim's `shutdownTime` is the last safety net. `idle_release_s` must exceed the longest generation between two turns.
 
 ### Reward and resources
 
@@ -440,7 +503,12 @@ None of this has run with veRL, so the following items are unconfirmed (`# TODO 
 - **The tool as a whole and the registration of `SandboxToolAgentLoop`.** Registration relies on `AgentLoopWorker` loading the tools (and so this module) before it looks up `default_agent_loop`, as read from `agent_loop.py` in v0.9.1.
 - **How to put `rl/verl` on the Ray workers' `PYTHONPATH`.** Whether an env var on the RayCluster pods or `env_vars` in `ray job submit --runtime-env-json` works has to be checked on a cluster.
 - **The path from `extra_fields` to `extra_info`.** It was confirmed in the source only for the reward-loop managers (naive, remote, limited).
-- **What the rollout workers need.** The workers in `k8s/production/raycluster-verl.yaml.tpl` already have the `gpusandbox/client=true` label and the `grpo-trainer` ServiceAccount, which is a default allowed subject of the warm pool and is in the `sandbox-claims` RoleBinding that `install` applies. What is missing is a Kubernetes API token (`automountServiceAccountToken: false`), the `kubernetes` Python package in the veRL image (it installs only the `client` extra), and a sandbox-audience token in `SANDBOX_TOKEN_FILE` (the mounted token has the gateway audience). Decide first whether rollout workers create claims themselves or hand that to a broker (requirements table above).
+- **What the rollout workers need.** The workers in `k8s/production/raycluster-verl.yaml.tpl` already have the `gpusandbox/client=true` label and the `grpo-trainer` ServiceAccount, which is a default allowed subject of the warm pool and is in the `sandbox-claims` RoleBinding that `install` applies. What is missing is this.
+    - a Kubernetes API token (`automountServiceAccountToken: false`)
+    - the `kubernetes` Python package in the veRL image (it installs only the `client` extra)
+    - a sandbox-audience token in `SANDBOX_TOKEN_FILE` (the mounted token has the gateway audience)
+
+    Decide first whether rollout workers create claims themselves or hand that to a broker (requirements table above).
 
 ## Lessons from the AWS blog series applied to GPU sandboxes
 
@@ -449,18 +517,22 @@ The source is parts 1, 2 and 3 of the AWS Tech Blog series "AWS에서 AI 에이�
 | Lesson (source) | What it means for GPU sandboxes | What this repository does |
 |---|---|---|
 | Turn on VPC CNI NetworkPolicy first. Before that, the sandbox reached IMDS and the Kubernetes API (parts 1 and 2) | Without an enforcer, NetworkPolicy objects block nothing | The CDK stack (`cdk/gpusandbox_cdk/stack.py`) sets `enableNetworkPolicy` on the vpc-cni add-on, and readiness turns Ready only after the IMDS, API server and kubelet denials are verified |
-| The SandboxTemplate default policy takes ingress only from sandbox-router and allows egress to `0.0.0.0/0` minus RFC1918 and `169.254.0.0/16`. The internet stays open, so data exfiltration, C2 and mining are not prevented. The blog recommends a custom policy, an egress proxy or AWS Network Firewall (part 2) | On GPU sandboxes, mining turns directly into GPU cost | The template sets `networkPolicy` itself: ingress from the trainer only, egress `[]` |
+| The SandboxTemplate default policy takes ingress only from sandbox-router and allows egress to `0.0.0.0/0` minus RFC1918 and `169.254.0.0/16` (part 2) | On GPU sandboxes, mining turns directly into GPU cost | The template sets `networkPolicy` itself: ingress from the trainer only, egress `[]` |
 | The default DNS injection (`dnsPolicy: None`, `8.8.8.8`, `1.1.1.1`) bypasses the Route 53 Resolver (part 2) | An external resolver can become a path for sending data out through DNS (inference) | `dnsPolicy: None` with `127.0.0.1` is explicit, and with egress `[]` DNS cannot leave either |
-| sandbox-router's default authorization allows everything, and SDK v1.0.5 sent no authentication header. TokenReview proves that a token is valid, not that it is authorized. port-forward (Tunnel mode) bypasses NetworkPolicy, and commands longer than 30 seconds got 502 (part 2) | GPU evaluations can exceed 30 seconds because of compilation and timing (inference). With port-forward permission, someone can step over the network boundary | No router, no SDK. The server checks audience, issuer and the subject allowlist itself, and the client request timeout is 300 seconds (the `SandboxPool` default). Keep `pods/portforward` and `pods/exec` permissions in the `sandbox` namespace to a minimum |
+| sandbox-router's default authorization allows everything, and SDK v1.0.5 sent no authentication header (part 2) | GPU evaluations can exceed 30 seconds because of compilation and timing (inference). With port-forward permission, someone can step over the network boundary | No router, no SDK. The server checks audience, issuer and the subject allowlist itself, and the client request timeout is 300 seconds (the `SandboxPool` default) |
 | RuntimeClass scheduling does not stop other pods that tolerate the same taint from landing on the node (part 1) | If other pods land on a GPU sandbox node, the one-sandbox-per-node assumption breaks (inference) | A dedicated taint `gpusandbox/role` and the node guard. Check the pods on a node yourself with `kubectl get pods -A -o wide --field-selector spec.nodeName=<node>` |
 | Require IMDSv2 and set hop limit 1 on the dedicated node group (part 1). The EKS Best Practices guide recommends the same | Keeps the node's IAM credentials away from the sandbox | Every node group launch template in the CDK stack requires IMDSv2 with hop limit 1, and Karpenter uses hop limit 1 by default. Readiness also verifies that IMDS is blocked |
 | runsc cannot be registered on EKS Auto Mode (part 1) | The same holds for GPU sandboxes that need a custom runtime | EKS managed node groups from the CDK stack and Karpenter NodePools |
-| A warm pool cut SandboxClaim-to-Ready from about 2 s (cold start) to about 55 ms (part 2: EKS 1.36, `m7i.xlarge`, CPU, before turning on NetworkPolicy, 10 runs per pool) | Cold starts of GPU sandboxes can be longer. A Kata GPU VM can take several minutes to its first Ready (template comment), so a warm pool saves more and also costs more | These are the blog's numbers, not this repository's. In this extension, the time from creating a claim to getting a usable address is recorded as `claim_ready_s` in the `episode_start` event. The CLI polls the claim once a second, so it is hard to compare directly with the blog's 55 ms |
+| A warm pool cut SandboxClaim-to-Ready from about 2 s (cold start) to about 55 ms (part 2: EKS 1.36, `m7i.xlarge`, CPU, before turning on NetworkPolicy, 10 runs per pool) | Cold starts of GPU sandboxes can be longer. A Kata GPU VM can take several minutes to its first Ready (template comment), so a warm pool saves more and also costs more | These are the blog's numbers, not this repository's. In this extension, the time from creating a claim to getting a usable address is recorded as `claim_ready_s` in the `episode_start` event |
 | Six simultaneous claims on a pool of three: three took 100 to 179 ms, and two of the other three took about 15 s. The cause was the VPC CNI IP cooldown; the blog recommends Prefix Delegation, `WARM_IP_TARGET` and sizing pools for the peak (part 2) | The gVisor GPU profile runs one sandbox per node, so GPUs and node count can become the limit before IPs do (inference) | Size pool replicas to the number of concurrent episodes |
 | gVisor's cost scales with syscalls: about 0.18 us to 2.2 us per syscall, file operations and process creation 4.7 to 6.5 times slower, exec from 0.6 ms to 3.8 ms, no difference for pure computation (part 2) | This harness creates a fresh process tree per request, so the fixed cost per evaluation can grow (inference) | Measure it with [08 Runtime benchmark](../handson/08_benchmark.md) |
 | Pause deletes the Pod and keeps the Sandbox object and the PVC; memory state is not kept (part 2) | Pausing frees the GPU, but resume is a cold start, which can take minutes under Kata GPU (inference) | This extension does not pause; it deletes the claim when the episode ends |
 | Setting `SandboxClaim.spec.env` skips the warm pool and starts fresh from the template (part 3, upstream v1.0.8). The v1.0.11 source comments say the same, and `volumeClaimTemplates` on a claim also force a cold start | On GPU sandboxes this can be a cold start of several minutes | `envVarsInjectionPolicy: Disallowed` blocks env on claims, and `EpisodeSandbox` adds neither env nor volumes |
 | Ably uses a dedicated on-demand Karpenter NodePool with `karpenter.sh/do-not-disrupt` and scheduled disruption budgets (part 3) | If a node goes away mid-episode, that episode has to be discarded | The GPU sandbox NodePools use `consolidationPolicy: WhenEmpty`, so nodes with running sandboxes are not consolidated. `sandbox-kata-cpu` uses `WhenEmptyOrUnderutilized`; if you run episode sandboxes on the CPU tier, consider `do-not-disrupt` |
+
+- **SandboxTemplate default policy (part 2)**: the internet stays open, so data exfiltration, C2 and mining are not prevented. The blog recommends a custom policy, an egress proxy or AWS Network Firewall.
+- **sandbox-router and port-forward (part 2)**: TokenReview proves that a token is valid, not that it is authorized. port-forward (Tunnel mode) bypasses NetworkPolicy, and commands longer than 30 seconds got 502. In this repository, keep `pods/portforward` and `pods/exec` permissions in the `sandbox` namespace to a minimum.
+- **Warm pool measurement and comparison (part 2)**: this repository's CLI polls the claim once a second, so `claim_ready_s` is hard to compare directly with the blog's 55 ms.
 
 The gVisor profile runs one sandbox per `g5.xlarge`, so one waiting sandbox occupies a whole node at 1.006 USD per hour. A Kata GPU sandbox uses one T4 of a `g4dn.metal` (7.824 USD per hour for 8 T4), which by simple division is about 0.978 USD per hour per T4 (us-east-1 and us-west-2 On-Demand prices).
 
@@ -476,7 +548,9 @@ The [Agent Sandbox on EKS](https://awslabs.github.io/ai-on-eks/docs/infra/agents
 | Composition | KRO puts several resources behind one `AgentSandbox` resource | `template.yaml.tpl` rendered per profile |
 | Nodes | Karpenter and a gVisor NodePool (the `runsc` shim installed through AL2023 user data) | EKS managed node groups and Karpenter NodePools from the CDK stack |
 
-For agent sandboxes that need no GPU and allow outbound connections only to allowed domains, the AI on EKS solution applies. If you measure the reward on a GPU inside the sandbox, use this repository's GPU profiles. Nitro Sandboxes (`isolated-sandbox`) do not support GPU passthrough at launch ([Verified facts and sources](../reference/sources.md)), so they cannot be used for GPU kernel grading.
+- **For agent sandboxes that need no GPU and allow outbound connections only to allowed domains**: the AI on EKS solution applies.
+- **If you measure the reward on a GPU inside the sandbox**: use this repository's GPU profiles.
+- **Nitro Sandboxes (`isolated-sandbox`)**: they do not support GPU passthrough at launch ([Verified facts and sources](../reference/sources.md)), so they cannot be used for GPU kernel grading.
 
 ## Scope and limits
 
@@ -485,7 +559,9 @@ For agent sandboxes that need no GPU and allow outbound connections only to allo
 - **Run on a cluster:** `install`, `pool kata-clh-cpu 1` and `claim kata-clh-cpu` on scenario C. The claim got a sandbox address and released it, and the warm pool refilled with a new sandbox (step 9 of [10 c8i-only low-cost path](../handson/10_cpu_only.md)). Then `episodes kata-clh-cpu 2 3` ran two episodes through `EpisodeSandbox` inside a pod, with one claim and one sandbox per episode, and the claims were released ([11 Multi-turn episodes](../handson/11_multi_turn.md)).
 - **Not run on a cluster:** the evaluation check above. Kata GPU inside a SandboxTemplate (`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`) is not verified either. The veRL tool has not been run with veRL ("Not confirmed" above).
 - **Using it from the trainer needs more preparation.** Decide the API token, the `kubernetes` package and whether to use a broker (requirements table above).
-- **The template name has no version.** Re-applying `pool` with `VERSION_FILE=v2` changes the same `kernel-eval-<runtime>` template. `OnReplenish` leaves waiting stale sandboxes in place until they are claimed or deleted, so during a transition claims can get v1 or v2 (inferred from the upstream comments). The `multiturn` CLI shows it as `version` in each `turn` event. The veRL tool does not put the version in the episode summary or in the `compute_score` result, so if versions must not mix within a GRPO group in veRL training, record that value yourself, or keep a separately named template and pool per version and send the group's claims to one pool (neither is in this repository).
+- **The template name has no version.** Re-applying `pool` with `VERSION_FILE=v2` changes the same `kernel-eval-<runtime>` template. `OnReplenish` leaves waiting stale sandboxes in place until they are claimed or deleted, so during a transition claims can get v1 or v2 (inferred from the upstream comments).
+    - **In the `multiturn` CLI**: it shows as `version` in each `turn` event.
+    - **In the veRL tool**: the veRL tool does not put the version in the episode summary or in the `compute_score` result, so if versions must not mix within a GRPO group in veRL training, record that value yourself, or keep a separately named template and pool per version and send the group's claims to one pool (neither is in this repository).
 - **The template has no livenessProbe.** Unlike the Deployment pools, kubelet does not restart a sandbox that went draining after a GPU error. The remaining evaluations of that episode become `sandbox_error` (from the code), so discard the episode and take a new claim.
 - **Without `loop`, `EpisodeSandbox` starts one event-loop thread per instance and never stops it.** If one process runs a very large number of episodes the threads pile up, so pass one `BackgroundLoop` as `loop` (found in code review). The `multiturn` CLI and the veRL tool share one loop.
 - **Upstream moves fast.** Field names follow `sandboxclaim_types.go` in v1.0.11.

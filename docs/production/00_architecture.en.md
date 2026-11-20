@@ -5,7 +5,12 @@
 
 ## Pain point
 
-Scaled up as is, the hands-on setup, kept simple for a one-day exercise, first breaks because each trainer process picks a free pod alone: several TRL ranks and dozens of veRL reward workers pile onto the same pods and 503 retries grow. veRL scores samples one at a time and has no batch routing snapshot, so versions can mix inside a group. Node group sizes and `scripts/ops/sync_jwks.sh` are handled by hand, so GPU nodes sit idle regardless of load or grow too late, and when the issuer signing key changes, sandboxes reject every token signed with the new key (fail closed) until the new public key is synced.
+Scaled up as is, the hands-on setup, kept simple for a one-day exercise, runs into these problems.
+
+- **Each trainer process picks a free pod alone**: this breaks first. Several TRL ranks and dozens of veRL reward workers pile onto the same pods and 503 retries grow.
+- **veRL scores per sample**: veRL scores samples one at a time and has no batch routing snapshot, so versions can mix inside a group.
+- **Node group sizes handled by hand**: GPU nodes sit idle regardless of load or grow too late.
+- **`scripts/ops/sync_jwks.sh` run by hand**: when the issuer signing key changes, sandboxes reject every token signed with the new key (fail closed) until the new public key is synced.
 
 ![a: scaled up as is, the hands-on setup lets every trainer process pick a free pod alone, so requests pile onto sandbox pod A (more 503 retries); the veRL reward worker routes each sample separately, so v1 and v2 can mix inside one group; node group desired values set by hand leave GPU nodes idle or growing too late; and scripts/ops/sync_jwks.sh run by hand means tokens signed with a new key are all rejected until the new public key is synced. b: in production the trainers call only the sandbox gateway, which sends one evaluation per pod and versions stay one per batch for TRL (batch snapshot) and one per group for veRL (group_key pins); Karpenter NodePools grow and shrink their own nodes from zero with demand (one warm g4dn.metal), while the managed node groups from the hands-on CDK stay until you lower their desired value by hand; and the jwks-sync CronJob patches the ConfigMap hourly at :17 to follow key rotation](../images/figures/production-00_architecture.svg)
 
@@ -39,7 +44,7 @@ Solid lines are evaluation requests, dotted lines Kubernetes API calls, and `aud
 
 ![TRL ranks (Job) and veRL Ray workers (RayCluster) in the rl-trainer namespace (trainer NodePool g6e, p5 or a HyperPod instance group) call only the sandbox gateway in the sandbox-gateway namespace (system nodes), with tokens of audience gpu-sandbox-gateway; the gateway does TokenReview, routing, group pins, one request per pod and recycling. With tokens of audience gpu-sandbox the gateway calls the pools of the sandbox namespace: sandbox-kata-qemu-v1 (kata-qemu-nvidia-gpu), sandbox-gvisor-v1, v2 (gvisor) and sandbox-kata-clh-cpu-v1 (kata-clh), while a warm placeholder holds a metal node. Below the pools sit the Karpenter NodePools sandbox-kata-gpu (g4dn.metal), sandbox-gvisor (g5.xlarge, g5.2xlarge) and sandbox-kata-cpu (c8i, m8i, r8i). Dashed lines are Kubernetes API calls: TokenReview and deleting draining pods from the gateway, reading JWKS and patching the ConfigMap from the jwks-sync CronJob](../images/figures/production-00_architecture--overview.svg)
 
-*Figure: trainers call only the gateway, and the gateway is the only caller that reaches sandbox pods.*
+*Figure: trainers call only the gateway, and their evaluation requests reach the sandbox pods through the gateway.*
 
 ## Components
 
@@ -68,7 +73,7 @@ Taints, labels, consolidation, `expireAfter` and user data are covered in [01 Ca
 
 | Item | Hands-on | Production | Reason |
 |---|---|---|---|
-| Node supply | EKS managed node groups from the CDK stack (fixed desired, min, max) | Karpenter NodePools (from zero, `limits`, consolidation) | When you raise a pool's replicas and new pods have no room, Karpenter adds nodes, and the nodes Karpenter created become candidates for removal once empty. Karpenter does not shrink the managed node groups from the hands-on CDK stack (such as `sandbox-gvisor` in A and B1), so lower their desired size yourself based on usage. If replicas stay the same, evaluation requests wait for the existing pods. |
+| Node supply | EKS managed node groups from the CDK stack (fixed desired, min, max) | Karpenter NodePools (from zero, `limits`, consolidation) | See the list below the table. |
 | Call path | trainer → sandbox headless Service (`SANDBOX_ROUTING_FILE`, direct mode) | trainer → gateway (`SANDBOX_GATEWAY`) → sandbox | One place for scheduling and version pins. |
 | Sandbox ingress | Pods labelled `gpusandbox/client=true` in `rl-trainer` | Only the gateway pod in `sandbox-gateway` (replaces the policy of the same name, `allow-clients-to-sandbox-api`) | Training requests reach sandboxes along one path, through the gateway. |
 | JWKS | Run `scripts/ops/sync_jwks.sh` by hand | `jwks-sync` CronJob (`17 * * * *`) | Follow signing key rotation automatically. |
@@ -77,6 +82,13 @@ Taints, labels, consolidation, `expireAfter` and user data are covered in [01 Ca
 | Version pinning | The trainer scores each batch with one version | The gateway offers batch snapshots and `group_key` pins | Supports trainers that score per sample, such as veRL. |
 | Pod recycling | None (draining pods stay NotReady) | The gateway deletes draining pods | Under Kata a new pod is a new VM. |
 | Capacity buffer | None | Warm placeholder, PDB, ResourceQuota | Hide slow metal boots and stop runaway usage. |
+
+Node supply changes as follows.
+
+- **When you raise a pool's replicas and new pods have no room**: Karpenter adds nodes.
+- **When a node Karpenter created becomes empty**: it becomes a candidate for removal.
+- **Managed node groups from the hands-on CDK stack (such as `sandbox-gvisor` in A and B1)**: Karpenter does not shrink them, so lower their desired size yourself based on usage.
+- **If replicas stay the same**: evaluation requests wait for the existing pods.
 
 ## CPU tier and GPU tier (optional)
 
@@ -98,7 +110,11 @@ The EC2 documentation recommends bare metal for performance-sensitive virtualiza
 !!! warning "What the repository provides and what you build"
     **Provided:** the `kata-clh-cpu` profile, the `sandbox-kata-cpu` NodePool, and a gateway API that lets each request choose a `runtime`.
 
-    **You build:** the two-stage pipeline itself. The harness has no compile-only mode, and the sandbox image (`pytorch/pytorch:*-runtime`) usually lacks `nvcc` (check the tag contents). The single active version in the routing document applies to every runtime, so deploy CPU pools with the same version names as the GPU pools. [`routing.json.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/routing.json.tpl) registers both `v1` and `v2` addresses for the three CPU runtimes (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`), but you deploy the pools behind them yourself. Before you switch the active version, deploy that version of the CPU pools you use.
+    **You build:** the two-stage pipeline itself.
+
+    - **Harness and image**: the harness has no compile-only mode, and the sandbox image (`pytorch/pytorch:*-runtime`) usually lacks `nvcc` (check the tag contents).
+    - **Version names**: the single active version in the routing document applies to every runtime, so deploy CPU pools with the same version names as the GPU pools.
+    - **Deploying CPU pools**: [`routing.json.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/routing.json.tpl) registers both `v1` and `v2` addresses for the three CPU runtimes (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`), but you deploy the pools behind them yourself. Before you switch the active version, deploy that version of the CPU pools you use.
 
 ## Request flow
 
@@ -130,15 +146,22 @@ veRL sends each sample with a `group_key` to `POST /v1/evaluate`, and the gatewa
 
 ## Scenario B: training on HyperPod
 
-B1 moves only the trainer to a HyperPod instance group (the veRL RayCluster template selects HyperPod nodes through `VERL_NODE_SELECTOR`) and keeps the sandbox pools on EC2 NodePools in the same EKS cluster. B2, which puts the sandboxes on HyperPod nodes too, is experimental: the nvproxy in gVisor release-20261109.0 does not know NVIDIA driver 595.91.07 in the HyperPod EKS AMI, so B2 needs a custom AMI with the driver swapped to 580.178.04 (steps in [07 HyperPod scenario](../handson/07_hyperpod.md#b2)).
+- **B1**: moves only the trainer to a HyperPod instance group and keeps the sandbox pools on EC2 NodePools in the same EKS cluster. The veRL RayCluster template selects HyperPod nodes through `VERL_NODE_SELECTOR`.
+- **B2**: puts the sandboxes on HyperPod nodes too, and is experimental. The nvproxy in gVisor release-20261109.0 does not know NVIDIA driver 595.91.07 in the HyperPod EKS AMI, so B2 needs a custom AMI with the driver swapped to 580.178.04 (steps in [07 HyperPod scenario](../handson/07_hyperpod.md#b2)).
 
 ## Order of operations
 
 1. Prepare the EKS cluster and the three images (`sandbox`, `trainer`, `control`) with hands-on [01 Cluster and images](../handson/01_cluster_and_images.md).
-2. Install Karpenter with the official guide, then apply the EC2NodeClasses and NodePools. All four EC2NodeClasses render from one template, so the IOMMU AMI for Kata GPU must exist first. If it does not, build it with `infra/kata/build-iommu-ami.sh` and put the printed `export KATA_IOMMU_AMI_ID=...` line into `scripts/config.env`. ([01 Capacity and nodes](01_capacity_and_nodes.md))
+2. Install Karpenter with the official guide, then apply the EC2NodeClasses and NodePools. ([01 Capacity and nodes](01_capacity_and_nodes.md))
+    - **The IOMMU AMI comes first**: all four EC2NodeClasses render from one template, so the IOMMU AMI for Kata GPU must exist first.
+    - **If the AMI does not exist**: build it with `infra/kata/build-iommu-ami.sh` and put the printed `export KATA_IOMMU_AMI_ID=...` line into `scripts/config.env`.
 3. Install the NVIDIA device plugin, the gVisor RuntimeClass, the GPU Operator and kata-deploy. ([01 Capacity and nodes](01_capacity_and_nodes.md))
-4. Create namespaces, NetworkPolicies, JWKS and the routing table with `scripts/05_setup_namespaces_auth.sh`. Run it during the initial setup. Re-running it after the gateway is deployed in step 7 puts back the hands-on `allow-clients-to-sandbox-api` NetworkPolicy, which lets trainer pods call sandboxes directly, and rebuilds the `rl-trainer` routing table with `ACTIVE_VERSION` (default `v1`). After that, use `scripts/ops/sync_jwks.sh` when you only need to refresh the public keys.
-5. Deploy pools with `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]`. In the pod list the script prints after the rollout, every pod should show READY `1/1`. When you deploy the Kata GPU pool (`kata-qemu`) for the first time and there are no metal nodes, apply the placeholder from step 6 (`pool-hardening.yaml`, `warm-capacity.yaml`) first. The GPU Operator creates the `nvidia.com/pgpu` resource the pod requests and the `nvidia.com/cc.ready.state` label the RuntimeClass selects on a metal node, so with no such node Karpenter does not start one. The placeholder asks only for CPU and memory, so Karpenter starts a metal node for it.
+4. Create namespaces, NetworkPolicies, JWKS and the routing table with `scripts/05_setup_namespaces_auth.sh`. Run it during the initial setup.
+    - **If you re-run it after the gateway is deployed in step 7**: it puts back the hands-on `allow-clients-to-sandbox-api` NetworkPolicy, which lets trainer pods call sandboxes directly, and rebuilds the `rl-trainer` routing table with `ACTIVE_VERSION` (default `v1`).
+    - **After that, when you only need to refresh the public keys**: use `scripts/ops/sync_jwks.sh`.
+5. Deploy pools with `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]`. In the pod list the script prints after the rollout, every pod should show READY `1/1`.
+    - **When you deploy the Kata GPU pool (`kata-qemu`) for the first time and there are no metal nodes**: apply the placeholder from step 6 (`pool-hardening.yaml`, `warm-capacity.yaml`) first.
+    - **Why**: the GPU Operator creates the `nvidia.com/pgpu` resource the pod requests and the `nvidia.com/cc.ready.state` label the RuntimeClass selects on a metal node, so with no such node Karpenter does not start one. The placeholder asks only for CPU and memory, so Karpenter starts a metal node for it.
 6. Apply pool hardening and warm capacity. ([01 Capacity and nodes](01_capacity_and_nodes.md))
 7. Deploy the gateway and the JWKS CronJob, then switch the trainer to gateway mode. ([03 Gateway and pools](03_gateway_and_pools.md))
 8. Review the security controls and the reward controls. ([02 Security](02_security.md), [04 Reward integrity](04_reward_integrity.md))

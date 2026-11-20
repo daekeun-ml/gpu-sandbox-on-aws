@@ -25,7 +25,12 @@
 
 ## Pain point
 
-For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, but **tasks whose reward is itself measured on a GPU** (rewarding "how much faster did the CUDA or Triton kernel get") need a GPU inside the sandbox. Untrusted code from the policy then reaches the GPU driver, and a plain container (runc) shares the host kernel and driver as they are. Firecracker-based sandboxes (E2B and others) have no device door to hand a GPU through, and gVisor and Kata handle GPUs differently, so the AWS instance requirements come first. When the sandbox image or the scoring harness changes during on-policy training that runs for days, versions that mix within one GRPO group break the advantage computation.
+For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, but **tasks whose reward is itself measured on a GPU** (rewarding "how much faster did the CUDA or Triton kernel get") need a GPU inside the sandbox. Untrusted code from the policy then reaches the GPU driver.
+
+- **A plain container (runc)**: it shares the host kernel and driver as they are.
+- **Firecracker-based sandboxes (E2B and others)**: they have no device door to hand a GPU through.
+- **gVisor and Kata**: they handle GPUs differently, so the AWS instance requirements come first.
+- **When you change versions during training**: when the sandbox image or the scoring harness changes during on-policy training that runs for days, versions that mix within one GRPO group break the advantage computation.
 
 ![a: two separate problems. In the top row, kernel code from the policy shares the host kernel and GPU driver in a runc container. In the bottom row, changing the image or harness during training mixes v1 and v2 rewards in one GRPO group whatever the runtime, so the advantage goes wrong. b: in the top row, gVisor or Kata, chosen by RuntimeClass, stands between the code and the host kernel; in the bottom row, one version scores each batch (or group), so rewards stay consistent](images/figures/index.svg)
 
@@ -83,7 +88,10 @@ All four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key,
 
 ### Request path
 
-- Each time the trainer sends requests to the sandbox, it picks the runtime and version from a snapshot of the routing ConfigMap (`sandbox-routing`), and it takes all results of one reward batch from one pool. If you switch to v2 during training, cached results from the previous pool that fall in the same batch are scored again on the v2 pool. When every completion in a batch is already cached from one pool, the trainer uses those results without calling the sandbox. If the routing switches more than once within one batch, the third request sends the whole batch to one pool, so one batch is always scored by one version.
+- Each time the trainer sends requests to the sandbox, it picks the runtime and version from a snapshot of the routing ConfigMap (`sandbox-routing`), and it takes all results of one reward batch from one pool.
+    - **If you switch to v2 during training**: when the batch has completions that still need scoring, cached results from the previous pool that fall in the same batch are scored again on the v2 pool.
+    - **When every completion in a batch is already cached from one pool**: the trainer uses those results without calling the sandbox, even after a switch.
+    - **If the routing switches more than once within one batch**: the third request sends the whole batch to one pool, so one batch is always scored by one version.
 - The trainer resolves the headless Service through CoreDNS and sends `POST /v1/evaluate` straight to each Ready pod. A busy pod answers `503`, and the trainer retries another pod.
 - Each request carries a projected ServiceAccount token with the audience `gpu-sandbox`, which the pod verifies offline against the JWKS. The `sandbox` namespace is default-deny, so only labelled pods from `rl-trainer` can connect.
 
@@ -109,7 +117,10 @@ Node groups, namespaces and a step-by-step reading of each arrow are in [Hands-o
 ## Validation status
 
 !!! warning "What you need to check yourself"
-    Scenario A (gVisor GPU on `g5`), scenario C (three CPU runtimes) with a version switch, Kata GPU (`g4dn.metal`), the runtime benchmark on five pools ([08 Runtime benchmark](handson/08_benchmark.md)) and the public demo site ran in a practice account. The experimental Kata CLH GPU did not start its VM, and `ops/rollout.sh` during training, `rollout.sh --finish` and HyperPod B1 and B2 have not been run yet. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record). Confirm the steps that were not run with the checks on each hands-on page. Numbers such as prices and versions come from official documentation and public material, not measurements. What the local tests cover is in [Getting started](getting_started.md).
+    - **What ran**: scenario A (gVisor GPU on `g5`), scenario C (three CPU runtimes) with a version switch, Kata GPU (`g4dn.metal`), the runtime benchmark on five pools ([08 Runtime benchmark](handson/08_benchmark.md)) and the public demo site ran in a practice account. The experimental Kata CLH GPU did not start its VM. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record).
+    - **What did not run**: `ops/rollout.sh` during training, `rollout.sh --finish` and HyperPod B1 and B2 have not been run yet. Confirm the steps that were not run with the checks on each hands-on page.
+    - **Where the numbers come from**: numbers such as prices and versions come from official documentation and public material, not measurements.
+    - **Local tests**: what they cover is in [Getting started](getting_started.md).
 
 !!! warning "Cost"
     GPU instances are billed while they run, and `g4dn.metal` costs about 7.8 USD per hour (us-east-1 and us-west-2 On-Demand). Scale the GPU nodes to zero while you take a break, and when you finish the hands-on, make sure to run [99 Cleanup](handson/99_cleanup.md).

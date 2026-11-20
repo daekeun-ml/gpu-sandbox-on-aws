@@ -5,7 +5,9 @@
 
 ## Pain points
 
-A container makes files and processes look separate and can also limit privileges and system calls, but it shares the kernel underneath with the server. So a kernel weakness that one container can exploit can put other containers on the same server at risk. The alternatives come with many names too (runc, gVisor, Kata, Firecracker, QEMU, Cloud Hypervisor), and it is confusing which is an alternative to which, and which goes inside which. To choose, you also need to know what you lose when the wall gets thicker (speed, compatibility, the servers you can use).
+A container makes files and processes look separate and can also limit privileges and system calls, but it shares the kernel underneath with the server. So a kernel weakness that one container can exploit can put other containers on the same server at risk.
+
+The alternatives come with many names too (runc, gVisor, Kata, Firecracker, QEMU, Cloud Hypervisor), and it is confusing which is an alternative to which, and which goes inside which. To choose, you also need to know what you lose when the wall gets thicker (speed, compatibility, the servers you can use).
 
 ![a: containers A, B and C share one server kernel, so a kernel weakness that one container can exploit may put A, B and C at risk. b: in each sandbox pod, a Sentry or a VM kernel stands between the containers inside it and the server kernel, adding one more wall in front of A, B and C](../images/figures/beginner-02_container_vs_sandbox.svg)
 
@@ -42,13 +44,11 @@ In part 1 of the blog, typing `uname -r` (show the kernel version) inside a cont
 *Takeaway: runc reaches the server kernel directly, gVisor has a Sentry kept for each pod take the calls instead, and Kata keeps a separate VM, with its own kernel, for each pod.*
 
 
-**If we compare it to buildings**
+- **runc:** namespaces and cgroups divide what each container can see and how much it can use, and the server kernel handles the allowed system calls directly. Even with limited privileges and system calls the kernel is shared, so a kernel vulnerability usable from one container can threaten the other containers on the same node.
+- **gVisor:** runs a user-space kernel called Sentry for each pod. Sentry handles most of a program's system calls and passes only a necessary few to the server kernel, so far fewer calls reach the server kernel directly.
+- **Kata:** starts a small VM for each pod, and the kernel inside that VM handles the system calls. The VM and the server are separated by hardware virtualization (KVM).
 
-- **runc is a shared house.** The rooms are separate, but everyone shares the kitchen and the plumbing (the kernel). Each room can lock some doors (privileges and system call limits), but a burst pipe that one room can cause can still reach the other rooms.
-- **gVisor is a front desk kept separately for each unit.** Most of a resident's requests are handled directly by that unit's own desk (Sentry), and only a necessary few are passed on to the building's management office (the server kernel), so the paths that reach the office directly shrink a lot.
-- **Kata is a small detached house built separately for each pod.** Each house has its own management office (the kernel inside the VM), and the boundary between houses is guarded by hardware virtualization (KVM).
-
-The analogy is wrong in places too. gVisor still sends a reduced set of calls to the server kernel, and Kata's VM runs on the same server, so weaknesses in the hypervisor remain.
+gVisor and Kata do not remove the risk entirely either. gVisor still sends some calls to the server kernel, and Kata's VM runs on the same server, so a vulnerability in the hypervisor can still affect it.
 
 | Item | runc | gVisor | Kata |
 |---|---|---|---|
@@ -69,7 +69,12 @@ Part 2 of the blog compared runc and gVisor on the same node (EKS 1.36, `m7i.xla
 | Creating 1,000 files | 0.041 s | 0.195 s | About 4.7 times |
 | Running Python 5 times | 0.206 s | 0.399 s | About 1.9 times |
 
-The more system calls code makes, the slower it gets, and the blog says the cost of one system call went from about 0.18 µs to 2.2 µs. What the blog measured is the system call cost of CPU work. For GPU grading, keep the run time of one call of the submitted function apart from the time the server takes to grade one answer. In this repository's A10G gVisor recording, one call of the vector-add function, until its GPU work finished, took about 0.47 ms (including the output tensor allocation, median of several runs). The sandbox server took about 9.4 s to grade that one answer, from process start through CUDA initialization, checks and cleanup. Time the client spent waiting for a free pod is not part of this value ([08 Runtime benchmark](../handson/08_benchmark.md)).
+The more system calls code makes, the slower it gets, and the blog says the cost of one system call went from about 0.18 µs to 2.2 µs. What the blog measured is the system call cost of CPU work.
+
+For GPU grading, keep the run time of one call of the submitted function apart from the time the server takes to grade one answer. Below is this repository's A10G gVisor recording.
+
+- **Run time of one call of the submitted function**: one call of the vector-add function, until its GPU work finished, took about 0.47 ms (including the output tensor allocation, median of several runs).
+- **Time the server takes to grade one answer**: the sandbox server took about 9.4 s to grade that one answer, from process start through CUDA initialization, checks and cleanup. Time the client spent waiting for a free pod is not part of this value ([08 Runtime benchmark](../handson/08_benchmark.md)).
 
 ## Choosing a runtime per pod
 

@@ -105,6 +105,7 @@ plugins:
             참고: Reference
             용어 사전: Glossary
             저장소 구조: Repository map
+            스크립트 레퍼런스: Script reference
             설정 값: Configuration
             문제 해결: Troubleshooting
             자주 하는 오해: Misconceptions
@@ -185,6 +186,7 @@ nav:
       - 08 비용: production/08_cost.md
       - 09 CDK로 프로비저닝: production/09_cdk.md
   - 참고:
+      - 스크립트 레퍼런스: reference/scripts.md
       - 용어 사전: reference/glossary.md
       - 저장소 구조: reference/repository_map.md
       - 설정 값: reference/configuration.md

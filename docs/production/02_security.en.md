@@ -5,7 +5,11 @@
 
 ## Pain point
 
-A regular container (runc) uses the host kernel and NVIDIA driver directly, and if a sandbox pod holds a ServiceAccount token or a secret, candidate code can read it. In standard mode the VPC CNI applies NetworkPolicies asynchronously after a pod starts, and it allows traffic to the pod's own node IP regardless of policy. Consecutive evaluations in the same pod can also inherit leftover processes, caches and GPU state.
+- **A regular container (runc)**: it uses the host kernel and NVIDIA driver directly.
+- **Credentials in the pod**: if a sandbox pod holds a ServiceAccount token or a secret, candidate code can read it.
+- **When NetworkPolicies apply**: in standard mode the VPC CNI applies NetworkPolicies asynchronously after a pod starts.
+- **Node IP exception**: the VPC CNI allows traffic to the pod's own node IP regardless of policy.
+- **Consecutive evaluations in the same pod**: they can inherit leftover processes, caches and GPU state.
 
 ![a: candidate code in an unhardened runc pod shares the host kernel and NVIDIA driver directly, reads the ServiceAccount token and secrets in the pod, reaches node-local services on its own node IP, which is allowed regardless of NetworkPolicy, and passes leftover processes, caches and GPU state to the next evaluation in the same pod. b: in a sandbox pod (gVisor or Kata) the first three paths are stopped by gVisor Sentry or a Kata VM (gVisor still shares the host driver), no token or secrets mounted, and the node guard, which readiness checks. The path to the next evaluation is only narrowed by process reaping and per-request caches (dashed): v1 turns pod recycling off, and under gVisor a new pod still uses the same host driver and GPU](../images/figures/production-02_security.svg)
 
@@ -47,7 +51,6 @@ The attacker is the policy being trained. Even without malice, a policy searchin
 
 *Takeaway: Candidate code runs inside five layers of controls, and if one layer fails the outer layers remain.*
 
-*Figure: candidate code runs inside five layers of controls, and if one layer fails the outer layers remain.*
 
 ## Controls by layer
 
@@ -62,13 +65,15 @@ The attacker is the policy being trained. Even without malice, a policy searchin
 | Cluster API | The EKS API endpoint is private only. Operators connect with port forwarding through an SSM access instance that has no inbound rules | [`stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py), [`tunnel.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/tunnel.sh) | A public endpoint opens only when `EKS_PUBLIC_ACCESS_CIDR` is set to a single /32. |
 | IMDS | Hop limit 1 (Karpenter default). In the CDK stack, node launch templates require IMDSv2 with hop limit 1, and the SSM access instance requires IMDSv2 (no hop limit set) | [`nodeclasses.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodeclasses.yaml.tpl), [`stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py) | |
 | Node guard | The iptables chain `GPUSANDBOX-GUARD` drops new connections from pod veths (`eni+`) to the node and allows replies (ESTABLISHED, RELATED) only; a systemd unit applies it before kubelet starts | [`node-guard.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/eks/node-guard.sh) | |
-| Readiness | Ready only if `169.254.169.254:80`, the API server and `$(NODE_IP):10250` are unreachable. A refused connection counts as reachable. Rechecked every 30 s while blocked, every 5 s while open | [`server/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py) | |
+| Readiness | Ready only if `169.254.169.254:80`, the API server and `$(NODE_IP):10250` are unreachable (how it judges, below the table) | [`server/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py) | |
 | Processes | The server never imports torch. After each evaluation it SIGKILLs every process except itself and its ancestors (tini as PID 1); on timeout the child's whole session is killed | [`server/procs.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py), [`harness/evaluate.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/evaluate.py) | |
 | Caches and environment | Per request, fresh `HOME`, `TMPDIR`, `TRITON_CACHE_DIR`, `CUDA_CACHE_PATH` under a 0700 work directory that is deleted afterwards. The child env is an allowlist (`PATH`, `LD_LIBRARY_PATH`, CUDA and NVIDIA variables, `LANG`, `LC_ALL`, `CC`) | [`harness/evaluate.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/evaluate.py) | |
 | Reading outputs | Candidate outputs load with `torch.load(weights_only=True)`; the status file has a 1 MiB limit and type checks | [`harness/evaluate.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/evaluate.py) | |
 | Node placement | Dedicated tainted nodes per runtime. A Kata GPU node uses VM passthrough only (GPU Operator: "A node can only run one container runtime at a time") | [`nodepools.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodepools.yaml) | |
 | GPU state | Under Kata, vfio-pci resets the function (or bus) when the VM releases the GPU. T4 reportedly uses `reset_method=bus` (third-party report, not an NVIDIA guarantee) | Host kernel VFIO | Whether GPU firmware state persists between VMs is not verified. |
 | Recycling | Draining after `SANDBOX_MAX_EVALS` (v2: 200), then the gateway deletes the pod. Under Kata that is a new VM | [`server/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py), [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py) | Under gVisor a new pod still uses the same host driver and GPU. |
+
+- **How readiness judges**: a refused connection counts as reachable. It rechecks every 30 s while blocked, every 5 s while open.
 
 ## Authentication design
 
@@ -93,14 +98,29 @@ sequenceDiagram
 
 - **Audiences are separate.** The trainer's token has aud `gpu-sandbox-gateway`, and the token the gateway sends to sandboxes has aud `gpu-sandbox`.
 - **Sandboxes verify offline.** They check the RS256 signature and `exp`, `iat`, `iss`, `aud`, `sub` against the public keys in the `sandbox-auth-jwks` ConfigMap (30 s leeway) and reload the file when it changes. They need no API access, so the pod needs no token.
-- **The gateway uses TokenReview.** The API server checks the token itself, which is stronger than offline verification, and per the code comment it also rejects tokens of deleted pods. Successful reviews are cached for 60 s keyed by a token hash, so thousands of requests do not become thousands of TokenReviews, at the price that an invalidated token can pass for up to 60 s.
+- **The gateway uses TokenReview.** The API server checks the token itself, which is stronger than offline verification, and per the code comment it also rejects tokens of deleted pods.
+    - **Cache of successful reviews**: successful reviews are cached for 60 s keyed by a token hash, so thousands of requests do not become thousands of TokenReviews, at the price that an invalidated token can pass for up to 60 s.
 - **Sandbox-side tokens are short-lived.** Offline verification cannot see pod deletion, so a token stays valid until `exp`; the projected tokens therefore use `expirationSeconds: 3600`.
-- **Fail closed.** If the audience, issuer, allowlist or JWKS is missing or unreadable, every protected route returns 401, and when the gateway's audience or allowlist is empty, evaluation and `/metrics` requests get 401. `/readyz` checks only the routing table, so with a valid routing table the gateway pod still shows Ready in this state. `SANDBOX_AUTH_TEST_BYPASS=1` exists only for local loopback tests and is off by default.
-- **Minimal exposure.** The server and the gateway bind to `127.0.0.1` by default; the Deployments switch to `0.0.0.0` inside the pod network only. Services are ClusterIP only (headless for sandboxes), and the static manifest test checks that there is no NodePort or LoadBalancer. Dashboards such as Ray's are reached through a ClusterIP Service with `kubectl port-forward` (localhost only by default).
+- **Fail closed.**
+    - **Sandboxes**: if the audience, issuer, allowlist or JWKS is missing or unreadable, every protected route returns 401.
+    - **Gateway**: when the gateway's audience or allowlist is empty, evaluation and `/metrics` requests get 401. `/readyz` checks only the routing table, so with a valid routing table the gateway pod still shows Ready in this state.
+    - **`SANDBOX_AUTH_TEST_BYPASS=1`**: it exists only for local loopback tests and is off by default.
+- **Minimal exposure.**
+    - **Bind address**: the server and the gateway bind to `127.0.0.1` by default; the Deployments switch to `0.0.0.0` inside the pod network only.
+    - **Service type**: Services are ClusterIP only (headless for sandboxes), and the static manifest test checks that there is no NodePort or LoadBalancer.
+    - **Web UIs**: dashboards such as Ray's are reached through a ClusterIP Service with `kubectl port-forward` (localhost only by default).
 - **Probe routes reveal nothing.** Kubelet probes cannot carry a token, so `/healthz` and `/readyz` are unauthenticated and return no details, while `/info`, `/metrics` and `/v1/evaluate` require a token.
-- **JWKS rotation is followed.** The `jwks-sync` CronJob reads `/openid/v1/jwks` at minute 17 of every hour (`17 * * * *`, `concurrencyPolicy: Forbid`) and patches the ConfigMap. Its ServiceAccount has get and patch on `sandbox-auth-jwks` only, and it never publishes an empty key set. A ConfigMap change reaches mounted pods after the kubelet sync time, so expect auth failures right after a key change. The default metrics have no HTTP status code label, and the gateway counts a 401 returned by a sandbox together with other `sandbox_error` causes. Alert on a rise in the `sandbox_error` rate and read the result's `error` text (`HTTP 401: ...`) to confirm a JWKS problem. To watch 401s alone, add your own per-status count.
+- **JWKS rotation is followed.** The `jwks-sync` CronJob reads `/openid/v1/jwks` at minute 17 of every hour (`17 * * * *`, `concurrencyPolicy: Forbid`) and patches the ConfigMap.
+    - **Permissions**: its ServiceAccount has get and patch on `sandbox-auth-jwks` only, and it never publishes an empty key set.
+    - **When the change arrives**: a ConfigMap change reaches mounted pods after the kubelet sync time, so expect auth failures right after a key change.
+    - **Detecting those failures**: the default metrics have no HTTP status code label, and the gateway counts a 401 returned by a sandbox together with other `sandbox_error` causes. Alert on a rise in the `sandbox_error` rate and read the result's `error` text (`HTTP 401: ...`) to confirm a JWKS problem.
+    - **To watch 401s alone**: add your own per-status count.
 
-To narrow sandbox callers to the gateway and the verification Jobs in production, override the allowlist at deploy time (the default in `scripts/06_deploy_sandboxes.sh` is trainer, probe and gateway). If you omit the third argument (replicas), the script applies the profile default again (`GVISOR_NODES` for gVisor, default 2), which can shrink a pool you scaled up. The command below keeps the current replica count and redeploys the gVisor v1 pool without the trainer.
+To narrow sandbox callers to the gateway and the verification Jobs in production, override the allowlist at deploy time (the default in `scripts/06_deploy_sandboxes.sh` is trainer, probe and gateway).
+
+- **If you omit the third argument (replicas)**: the script applies the profile default again (`GVISOR_NODES` for gVisor, default 2), which can shrink a pool you scaled up.
+
+The command below keeps the current replica count and redeploys the gVisor v1 pool without the trainer.
 
 ```bash
 replicas="$(kubectl -n sandbox get deployment sandbox-gvisor-v1 -o jsonpath='{.spec.replicas}')"
@@ -116,7 +136,10 @@ kubectl -n sandbox get pod "$pod" \
   -o jsonpath='{range .spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}' | grep ALLOWED_SUBJECTS
 ```
 
-The output is one line, `SANDBOX_AUTH_ALLOWED_SUBJECTS=system:serviceaccount:sandbox-gateway:gateway,system:serviceaccount:rl-trainer:sandbox-probe`. Before the gateway-only NetworkPolicy is applied, direct trainer calls now get 403. If it fails, see the 401 and 403 table in [Troubleshooting](../reference/troubleshooting.md).
+- The output is one line, `SANDBOX_AUTH_ALLOWED_SUBJECTS=system:serviceaccount:sandbox-gateway:gateway,system:serviceaccount:rl-trainer:sandbox-probe`.
+- **Before the gateway-only NetworkPolicy is applied**: direct trainer calls now get 403.
+
+If it fails, see the 401 and 403 table in [Troubleshooting](../reference/troubleshooting.md).
 
 ## What is not covered
 
@@ -126,7 +149,11 @@ The output is one line, `SANDBOX_AUTH_ALLOWED_SUBJECTS=system:serviceaccount:san
 4. **GPU firmware state persistence is not verified.** NVIDIA does not guarantee that a VFIO reset clears all GPU state, and the T4 `reset_method=bus` is a third-party report.
 5. **The static policy is not a security boundary.** The design assumes candidate code can run arbitrary Python inside the pod and leaves the boundary to the runtime; the policy serves reward integrity ([04 Reward integrity](04_reward_integrity.md)).
 6. **Sandboxes on the same node share hardware.** Kata VMs on one `g4dn.metal` share CPU, memory bandwidth and PCIe, so timing interference and side channels remain possible; this repository did not evaluate them.
-7. **Some combinations are outside upstream validation.** NVIDIA's Kata CI covers A100 and H100, not T4 (`g4dn.metal`), and the GPU Operator's Kata path is validated on EKS with Ubuntu only; AL2023 is not listed. The gVisor documentation describes nvproxy against NVIDIA's open driver and does not mention the proprietary driver. On g5 (A10G), the gVisor pool's default, the AMI loads the proprietary kernel module (GSP off), so this combination is verified by this repository, not documented by gVisor. After changing the driver, the AMI or the gVisor version, re-run the smoke test and `scripts/ops/verify.sh`. If the sandbox pool holds every GPU on the nodes, the smoke pod stays `Pending`, so scale the pool down by one replica to free a GPU first ([02 gVisor](../handson/02_gvisor.md)). T4 (g4dn) under gVisor has the same driver condition as g5 but is not tested in this repository.
+7. **Some combinations are outside upstream validation.**
+    - **Kata**: NVIDIA's Kata CI covers A100 and H100, not T4 (`g4dn.metal`), and the GPU Operator's Kata path is validated on EKS with Ubuntu only; AL2023 is not listed.
+    - **gVisor and the proprietary driver**: the gVisor documentation describes nvproxy against NVIDIA's open driver and does not mention the proprietary driver. On g5 (A10G), the gVisor pool's default, the AMI loads the proprietary kernel module (GSP off), so this combination is verified by this repository, not documented by gVisor.
+    - **After changing the driver, the AMI or the gVisor version**: re-run the smoke test and `scripts/ops/verify.sh`. If the sandbox pool holds every GPU on the nodes, the smoke pod stays `Pending`, so scale the pool down by one replica to free a GPU first ([02 gVisor](../handson/02_gvisor.md)).
+    - **T4 (g4dn) under gVisor**: it has the same driver condition as g5 but is not tested in this repository.
 
 ## Production options
 

@@ -5,7 +5,12 @@
 
 ## 기존 Pain Point
 
-speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측정 방식의 허점을 찾을 수 있습니다. CUDA-L1 보고에서는 추가 CUDA stream이 250건 중 82건(32.8%)에서 timing을 속였습니다. 채점 코드와 후보가 같은 Python 프로세스에 있으면 후보가 timer, reference 연산, 비교 함수를 바꿔치기할 수 있습니다. 정답 비교를 한 번만 하면 정확성 검사 때만 맞고 벤치마크 때 틀리는 출력, 결과 캐싱, 계산을 측정 구간 밖으로 미루는 lazy 출력을 찾아낼 수 없습니다. 반대로 샌드박스 장애를 오답으로 채점하면 정답을 낸 completion이 낮은 reward를 받아, policy가 그런 출력을 오히려 덜 만들게 됩니다.
+speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측정 방식의 허점을 찾을 수 있습니다.
+
+- **추가 CUDA stream**: CUDA-L1 보고에서는 추가 CUDA stream이 250건 중 82건(32.8%)에서 timing을 속였습니다.
+- **채점 코드와 후보가 같은 Python 프로세스에 있으면**: 후보가 timer, reference 연산, 비교 함수를 바꿔치기할 수 있습니다.
+- **정답 비교를 한 번만 하면**: 정확성 검사 때만 맞고 벤치마크 때 틀리는 출력, 결과 캐싱, 계산을 측정 구간 밖으로 미루는 lazy 출력을 찾아낼 수 없습니다.
+- **반대로 샌드박스 장애를 오답으로 채점하면**: 정답을 낸 completion이 낮은 reward를 받아, policy가 그런 출력을 오히려 덜 만들게 됩니다.
 
 ![a: 후보 코드(ModelNew)가 채점 코드와 같은 Python 프로세스에서 실행되면 harness의 timer와 reference, 비교 함수를 바꿔치기할 수 있습니다. 추가 stream, 캐시, lazy 출력으로 측정 구간을 조작해, 더 빠른 커널 없이 높은 reward를 받습니다. b: 후보 코드는 신뢰하지 않는 자식 프로세스에서만 실행됩니다. timer 교체는 정적 정책의 속성 대입 거부로 막고, reference 출력과 비교는 부모 프로세스가 맡습니다. 자식도 과제 모듈을 불러오지만, 현재 요청의 reference 출력은 자식이 끝난 뒤 부모가 만듭니다. 측정 구간은 synchronize, 새 입력, checksum으로 보호합니다.](../images/figures/production-04_reward_integrity.svg)
 
@@ -51,7 +56,8 @@ speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측�
 | 5. 측정 검증 | 부모 | 같은 입력으로 reference 시간을 측정하고 timed 출력 checksum 비교 | `wrong_answer` + `timed_output_mismatch` flag |
 | 6. verdict | 부모 | speedup, `custom_kernel`, flags를 계산해 verdict 작성 | `ok` |
 
-부모의 reference 경로에서 발생한 예외는 후보 코드가 아니라 인프라의 문제로 판단해 `sandbox_error`를 반환합니다. CUDA 오류였다면 `gpu_fault` flag가 붙습니다. 서버는 그 pod를 draining 상태로 바꾸고, liveness probe가 실패해 컨테이너가 재시작됩니다. 자식이 상태 파일을 쓰지 않고 종료되면(segfault, CUDA abort 등) 후보 코드의 문제로 보고 `runtime_error`로 처리합니다. Triton은 첫 launch 때 커널을 컴파일하므로 커널 컴파일 오류도 `runtime_error`입니다.
+- **부모의 reference 경로에서 예외가 나면**: 후보 코드가 아니라 인프라의 문제로 판단해 `sandbox_error`를 반환합니다. CUDA 오류였다면 `gpu_fault` flag가 붙고, 이때 서버는 그 pod를 draining 상태로 바꿉니다. 그러면 liveness probe가 실패해 컨테이너가 재시작됩니다.
+- **자식이 상태 파일을 쓰지 않고 종료되면(segfault, CUDA abort 등)**: 후보 코드의 문제로 보고 `runtime_error`로 처리합니다. Triton은 첫 launch 때 커널을 컴파일하므로 커널 컴파일 오류도 `runtime_error`입니다.
 
 ### 평가 사이에 상태를 남기지 않는 장치
 
@@ -60,7 +66,10 @@ speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측�
 - **자식은 격리 모드와 새 session으로 실행합니다.** `python -I`(사용자 환경의 영향을 받지 않는 Python 실행 옵션)로 실행하고, timeout이 나면 session 전체를 SIGKILL합니다.
 - **자식 프로세스에는 allowlist에 있는 env만 전달합니다.** `PATH`, `LD_LIBRARY_PATH`, `CUDA_VISIBLE_DEVICES`, `NVIDIA_VISIBLE_DEVICES`, `NVIDIA_DRIVER_CAPABILITIES`, `LANG`, `LC_ALL`, `CC` 외의 pod env(토큰, 프록시 등)는 전달하지 않습니다.
 - **남은 프로세스를 정리합니다.** 평가가 끝나면 서버는 자신과 조상 프로세스(PID 1의 tini)를 제외한 모든 프로세스를 SIGKILL합니다(`server/procs.py`).
-- **자식이 쓴 파일은 신뢰하지 않습니다.** `runner.json`은 1 MiB 크기 제한과 타입 검사를 거칩니다. seed별 출력 텐서 파일은 크기 검사 없이 `weights_only=True`로 읽은 뒤 shape, dtype, 값을 reference와 비교합니다. timing 샘플은 개수가 `iters`와 같고 모두 유한한 양수여야 하며, 이 조건을 만족하지 않으면 `runtime_error`와 `invalid_runner_report` flag가 붙습니다.
+- **자식이 쓴 파일은 신뢰하지 않습니다.**
+    - `runner.json`은 1 MiB 크기 제한과 타입 검사를 거칩니다.
+    - seed별 출력 텐서 파일은 크기 검사 없이 `weights_only=True`로 읽은 뒤 shape, dtype, 값을 reference와 비교합니다.
+    - timing 샘플은 개수가 `iters`와 같고 모두 유한한 양수여야 하며, 이 조건을 만족하지 않으면 `runtime_error`와 `invalid_runner_report` flag가 붙습니다.
 - **verdict는 부모가 마지막에 씁니다.** 부모는 runner가 종료되면 결과를 검증하고 마지막에 verdict를 쓰므로, 자식이 미리 써 둔 파일이 있어도 덮어씁니다. 남은 프로세스는 평가가 끝난 뒤 서버가 정리합니다.
 
 ## 측정 계약
@@ -69,14 +78,18 @@ speedup을 reward로 주면 policy는 더 빠른 커널을 만드는 대신 측�
 
 | # | 계약 | 구현 | 막는 것 |
 |---|---|---|---|
-| 1 | host clock으로 `torch.cuda.synchronize()`까지 측정 | `time.perf_counter()`로 `forward` 호출과 장치 전체 동기화를 감쌈 | 추가 CUDA stream의 작업이 시간에서 빠지는 것. 기본 stream의 CUDA event만 보면 다른 stream의 작업을 놓칠 수 있고, KernelBench도 이 문제를 문서화함 |
+| 1 | host clock으로 `torch.cuda.synchronize()`까지 측정 | `time.perf_counter()`로 `forward` 호출과 장치 전체 동기화를 감쌈 | 추가 CUDA stream의 작업이 시간에서 빠지는 것 |
 | 2 | timed iteration마다 다른 입력 | warmup과 측정 입력을 `timing_seed + i`로 하나씩 따로 만듦 | 입력을 key로 한 출력 캐시 (적중하지 않음) |
-| 3 | 모든 timed 출력의 checksum 비교 | 출력마다 float64 (합, 절댓값 합)을 기록하고, 부모가 같은 입력의 reference와 비교. 허용 오차는 `ATOL × 원소 수 + RTOL × reference 절댓값 합` | "벤치마크가 시작되면 틀리기", 출력을 채우지 않는 커널, 다른 입력의 캐시 결과 |
+| 3 | 모든 timed 출력의 checksum 비교 | 출력마다 float64 (합, 절댓값 합)을 기록하고, 부모가 같은 입력의 reference와 비교 | "벤치마크가 시작되면 틀리기", 출력을 채우지 않는 커널, 다른 입력의 캐시 결과 |
 | 4 | 출력 타입이 정확히 `torch.Tensor` | 출력이 리스트나 튜플이면 원소마다 검사해, `type(t) is torch.Tensor`가 아닌 것이 있으면 실패. 정책이 Tensor 상속도 거부 | lazy tensor |
 | 5 | 요청마다 새 seed | `secrets.SystemRandom`으로 정확성 seed(v1 3개, v2 5개)와 timing seed를 새로 생성 | 출력을 하드코딩하거나 rollout 사이에 재사용하는 것 |
 | 6 | 요청별 Triton, CUDA 캐시 | `HOME`, `TMPDIR`, `TRITON_CACHE_DIR`, `CUDA_CACHE_PATH`를 요청 디렉터리 아래에 새로 만듦 | 이전 평가가 남긴 컴파일 캐시로 다음 평가를 오염시키는 것 |
 | 7 | 출력은 `weights_only=True`로 읽음 | `torch.load(..., weights_only=True)` | 후보가 쓴 파일을 읽는 순간 임의 객체가 unpickle되는 것 |
-| 8 | (선택) speedup 상한 | `HARNESS_MAX_SPEEDUP`: v1은 0(끔), v2는 10(KernelBench `excessive_speedup_threshold`와 같은 값). 넘으면 `implausible_speedup` flag를 붙이고 speedup을 1.0으로 바꿈 | 아직 발견되지 않은 측정 exploit이 큰 reward를 받는 것 |
+| 8 | (선택) speedup 상한 | `HARNESS_MAX_SPEEDUP`: v1은 0(끔), v2는 10 | 아직 발견되지 않은 측정 exploit이 큰 reward를 받는 것 |
+
+- **계약 1이 필요한 이유**: 기본 stream의 CUDA event만 보면 다른 stream의 작업을 놓칠 수 있고, KernelBench도 이 문제를 문서화합니다.
+- **계약 3의 허용 오차**: `ATOL × 원소 수 + RTOL × reference 절댓값 합`입니다.
+- **계약 8의 상한**: v2의 10은 KernelBench `excessive_speedup_threshold`와 같은 값입니다. 넘으면 `implausible_speedup` flag를 붙이고 speedup을 1.0으로 바꿉니다.
 
 자식과 부모는 같은 `timing_seed`로 입력을 만들므로, iteration마다 후보 출력과 reference 출력의 checksum을 하나씩 대응시켜 비교할 수 있습니다.
 
@@ -118,7 +131,10 @@ reward는 Triton 커널을 실제로 쓴 정답에만 속도 보너스를 주므
 1. **정책의 AST 신호:** `triton.jit`로 해석되는 데코레이터(별칭 포함)가 붙은 함수가 있으면 `uses_triton`이 참입니다.
 2. **자식의 launch counter:** GPU 환경에서 자식 프로세스는 후보를 import하기 전에 `triton.runtime.jit.JITFunction.run`을 감싸 호출 횟수를 집계합니다. 후보는 모듈 속성에 값을 대입할 수 없으므로 원래 메서드로 되돌릴 수 없습니다.
 
-`custom_kernel`은 `uses_triton`이 참이고 정확성 검사 구간에서 집계한 launch 횟수가 0보다 클 때 참입니다. 정의만 하고 호출하지 않은 커널이면 거짓이 되고 `triton_kernel_never_launched` flag가 붙습니다. counter는 best effort 방식이라 Triton이 없거나 내부 구조가 예상과 다르면 `None`이 되며, 이때는 AST 신호만으로 판정합니다.
+`custom_kernel`은 `uses_triton`이 참이고 정확성 검사 구간에서 집계한 launch 횟수가 0보다 클 때 참입니다.
+
+- **정의만 하고 호출하지 않은 커널이면**: 거짓이 되고 `triton_kernel_never_launched` flag가 붙습니다.
+- **Triton이 없거나 내부 구조가 예상과 다르면**: counter는 best effort 방식이라 `None`이 되며, 이때는 AST 신호만으로 판정합니다.
 
 ## 공개 보고된 reward hacking과 대응
 
@@ -138,7 +154,15 @@ reward는 Triton 커널을 실제로 쓴 정답에만 속도 보너스를 주므
 | CUDA-L1 | caching | timed iteration마다 다른 입력, 요청마다 새 seed와 새 프로세스 | 입력이 아닌 다른 key의 캐시는 checksum 비교에서 발견되며, checksum의 한계는 위와 같음 |
 
 !!! warning "해결하지 못한 부분: try/except fallback의 분류"
-    정책은 `try`와 `except`를 허용하고, launch counter는 원래 `run`을 호출하기 전에 횟수를 올립니다. 그래서 커널 launch가 예외로 실패한 뒤 PyTorch 연산으로 결과를 만든 제출물도 `custom_kernel`로 분류되어, correctness 1.0과 speedup 점수를 받을 수 있습니다(코드 기준 추론, GPU에서 확인하지 않음). 이 경우 출력은 실제로 정답이므로 정답 판정은 맞고, "커널을 썼다"는 분류만 틀립니다. 보완 방법으로는 성공한 launch만 집계하기, 커널 호출을 감싼 `try`를 정책에서 거부하기, 규칙 기반 linter나 LLM judge를 추가하기가 있습니다. 어느 방법이든 측정 계약이 바뀌므로 새 샌드박스 버전으로 배포하세요.
+    정책은 `try`와 `except`를 허용하고, launch counter는 원래 `run`을 호출하기 전에 횟수를 올립니다. 그래서 커널 launch가 예외로 실패한 뒤 PyTorch 연산으로 결과를 만든 제출물도 `custom_kernel`로 분류되어, correctness 1.0과 speedup 점수를 받을 수 있습니다(코드 기준 추론, GPU에서 확인하지 않음). 이 경우 출력은 실제로 정답이므로 정답 판정은 맞고, "커널을 썼다"는 분류만 틀립니다.
+
+    보완 방법으로는 다음이 있습니다.
+
+    - 성공한 launch만 집계하기
+    - 커널 호출을 감싼 `try`를 정책에서 거부하기
+    - 규칙 기반 linter나 LLM judge를 추가하기
+
+    어느 방법이든 측정 계약이 바뀌므로 새 샌드박스 버전으로 배포하세요.
 
 ## verdict를 reward로 바꾸는 방식
 
@@ -165,18 +189,27 @@ flowchart LR
 
 | 항목 | TRL (`KernelRewards`) | veRL (`rl/verl/reward_fn.py`) |
 |---|---|---|
-| 호출 단위 | reward batch 하나를 한 번에 평가하고 세 reward 함수가 결과를 공유 (보통 배치 호출 1회. 한 풀의 캐시로 끝나면 0회, 버전 전환으로 재채점하면 최대 3회) | 샘플 하나씩 async `compute_score` |
+| 호출 단위 | reward batch 하나를 한 번에 평가하고 세 reward 함수가 결과를 공유 (호출 횟수는 표 아래) | 샘플 하나씩 async `compute_score` |
 | 반환 | 함수마다 요소 값 하나, TRL이 `reward_weights`로 가중 합 | `score`(가중 합)와 `status`, `correctness`, `speedup_reward`, `sandbox_version`, `sandbox_error` |
 | 정책 위반 | trainer에서 미리 검사해 샌드박스 왕복 없이 `policy_violation` | 같음 (`check_source`) |
 | `sandbox_error` | 세 요소 모두 `None`. TRL은 모두 `None`인 샘플을 채점 불가로 보고 group baseline에서 제외하며 advantage를 0으로 설정 | "skip" 신호가 없어서 format 점수 0.1과 `sandbox_error: 1`을 반환 |
 
-veRL에서 인프라 오류가 난 샘플은 0.1을 받습니다. 같은 group의 정상 채점 샘플보다 낮을 수 있고, 코드를 내지 않은 `no_code`(0점)보다는 높습니다. 이 차이의 영향과 대응 방법은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 설명합니다. verdict의 `flags`는 아직 지표로 집계되지 않으니, reward hacking 경보를 설정하려면 [07 Observability와 운영](07_observability_and_operations.md)의 확장 방법을 참고하세요.
+- **TRL의 배치 호출 횟수**: 보통 1회입니다. 한 풀의 캐시로 끝나면 0회, 버전 전환으로 재채점하면 최대 3회입니다.
+
+veRL에서 인프라 오류가 난 샘플은 0.1을 받습니다. 같은 group의 정상 채점 샘플보다 낮을 수 있고, 코드를 내지 않은 `no_code`(0점)보다는 높습니다. 이 차이의 영향과 대응 방법은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 설명합니다.
+
+verdict의 `flags`는 아직 지표로 집계되지 않으니, reward hacking 경보를 설정하려면 [07 Observability와 운영](07_observability_and_operations.md)의 확장 방법을 참고하세요.
 
 ## 새 유형을 발견했을 때
 
-1. **재현 제출물을 golden 세트에 추가합니다.** 기대 verdict와 함께 `src/gpusandbox/golden.py`에 추가합니다. `scripts/ops/verify.sh`와 `parity`는 `CONTROL_IMAGE_URI` 이미지에 든 golden 세트를 실행하므로, `IMAGE_TAG`를 새 값으로 바꿔 `scripts/03_build_push_images.sh`로 이미지를 다시 빌드하고 `CONTROL_IMAGE_URI`를 갱신하세요. 그 뒤 검증 Job 출력에 새 사례 이름의 줄이 있는지 확인합니다.
+1. **재현 제출물을 golden 세트에 추가합니다.** 기대 verdict와 함께 `src/gpusandbox/golden.py`에 추가합니다.
+    - **이미지 다시 빌드**: `scripts/ops/verify.sh`와 `parity`는 `CONTROL_IMAGE_URI` 이미지에 든 golden 세트를 실행하므로, `IMAGE_TAG`를 새 값으로 바꿔 `scripts/03_build_push_images.sh`로 이미지를 다시 빌드하고 `CONTROL_IMAGE_URI`를 갱신하세요.
+    - **확인**: 그 뒤 검증 Job 출력에 새 사례 이름의 줄이 있는지 확인합니다.
 2. **대응 코드를 넣고 로컬 테스트를 추가합니다.** harness나 정책을 고친 뒤 `tests/test_policy.py`나 `tests/test_harness_cpu.py`에 같은 사례를 추가합니다.
-3. **새 버전으로 배포합니다.** 측정 계약이 바뀌므로 `HARNESS_VERSION`을 올리고 새 이미지로 새 샌드박스 버전을 배포합니다. 구버전이 새 사례의 기대 `status`나 `custom_kernel` 값을 내지 못하면 `parity`가 실패합니다. parity가 비교하는 값은 기대 `status`, 지정한 `custom_kernel`, 두 풀의 speedup 차이뿐이라, 새 `flags`만 붙는 변경이면 parity는 통과하고 그 flag는 따로 확인해야 합니다. `scripts/ops/rollout.sh`는 parity가 실패하면 전환하지 않으므로, 이때는 `scripts/ops/verify.sh`로 새 풀을 검증한 뒤 [05 샌드박스 버전 관리](05_sandbox_updates.md)의 routing 갱신 명령으로 전환하고, "reward가 의도적으로 바뀌는 harness 변경" 절차에 따라 기록하세요.
+3. **새 버전으로 배포합니다.** 측정 계약이 바뀌므로 `HARNESS_VERSION`을 올리고 새 이미지로 새 샌드박스 버전을 배포합니다.
+    - **parity가 실패하는 경우**: 구버전이 새 사례의 기대 `status`나 `custom_kernel` 값을 내지 못하면 `parity`가 실패합니다.
+    - **parity가 비교하는 값**: 기대 `status`, 지정한 `custom_kernel`, 두 풀의 speedup 차이뿐이라, 새 `flags`만 붙는 변경이면 parity는 통과하고 그 flag는 따로 확인해야 합니다.
+    - **parity가 실패하면**: `scripts/ops/rollout.sh`는 전환하지 않습니다. 이때는 `scripts/ops/verify.sh`로 새 풀을 검증한 뒤 [05 샌드박스 버전 관리](05_sandbox_updates.md)의 routing 갱신 명령으로 전환하고, "reward가 의도적으로 바뀌는 harness 변경" 절차에 따라 기록하세요.
 
 ## 확인 방법
 
@@ -189,7 +222,11 @@ veRL에서 인프라 오류가 난 샘플은 0.1을 받습니다. 같은 group�
 python -m pytest tests/test_harness_cpu.py tests/test_policy.py -q
 ```
 
-**확인할 것:** 마지막 줄이 `19 passed`입니다(2026-11-13 기준 테스트 수이며, 소요 시간은 환경마다 다릅니다). macOS(CPU 전용)에서 통과를 확인했고 Linux에서는 확인하지 않았습니다. 두 테스트 파일은 샌드박스 서버를 실행하지 않으므로 서버의 프로세스 정리 기능(reaper)도 호출하지 않습니다.
+**확인할 것:**
+
+- 마지막 줄이 `19 passed`입니다(2026-11-13 기준 테스트 수이며, 소요 시간은 환경마다 다릅니다).
+- macOS(CPU 전용)에서 통과를 확인했고 Linux에서는 확인하지 않았습니다.
+- 두 테스트 파일은 샌드박스 서버를 실행하지 않으므로 서버의 프로세스 정리 기능(reaper)도 호출하지 않습니다.
 
 | 테스트 | 확인하는 것 |
 |---|---|
@@ -204,7 +241,10 @@ python -m pytest tests/test_harness_cpu.py tests/test_policy.py -q
 
 verdict를 reward로 바꾸는 부분은 `tests/test_routing_and_rewards.py`가 확인합니다. 가짜 클라이언트로 verdict 네 개(커스텀 커널 2배, PyTorch만 쓴 정답, 오답, `sandbox_error`)를 채점하면 format `[1.0, 1.0, 1.0, None]`, correctness `[1.0, 0.3, 0.2, None]`, speedup `[1.0, 0.0, 0.0, None]`이 나오고, 샌드박스 왕복은 1번입니다. 같은 파일에서 정책을 위반한 completion이 샌드박스로 전송되지 않는지와 speedup 점수의 log 스케일, 상한도 확인합니다.
 
-**문제가 생기면:** import 오류나 torch 설치 문제는 [시작하기](../getting_started.md)의 환경 구성을 다시 보고, 그 밖의 증상은 [문제 해결](../reference/troubleshooting.md)을 보세요.
+**문제가 생기면:**
+
+- **import 오류나 torch 설치 문제**: [시작하기](../getting_started.md)의 환경 구성을 다시 보세요.
+- **그 밖의 증상**: [문제 해결](../reference/troubleshooting.md)을 보세요.
 
 ### 클러스터에서
 
@@ -214,7 +254,12 @@ verdict를 reward로 바꾸는 부분은 `tests/test_routing_and_rewards.py`가 
 scripts/ops/verify.sh gvisor v1
 ```
 
-**확인할 것:** 3단계 출력에서 golden마다 `PASS` 줄이 출력되어야 합니다. GPU 풀에서는 6개, CPU 풀(`*-cpu`)에서는 GPU 전용 2개를 제외한 4개가 실행됩니다. 아래 형식은 `src/gpusandbox/tools.py`의 출력 형식이고, speedup 값은 풀마다 다릅니다.
+**확인할 것:**
+
+- 3단계 출력에서 golden마다 `PASS` 줄이 출력되어야 합니다.
+- GPU 풀에서는 6개, CPU 풀(`*-cpu`)에서는 GPU 전용 2개를 제외한 4개가 실행됩니다.
+
+아래 형식은 `src/gpusandbox/tools.py`의 출력 형식이고, speedup 값은 풀마다 다릅니다.
 
 ```text
 PASS vector_add_triton            status=ok                speedup=<value>
@@ -226,7 +271,9 @@ PASS read_host_file               status=policy_violation  speedup=None
 ```
 
 - `vector_add_triton`과 `relu_bias_triton`의 PASS는 그 노드에서 Triton 커널이 컴파일, 실행되고 커스텀 커널로 판정됐다는 뜻입니다.
-- `relu_bias_benchmark_cheat`는 네 번째 `forward` 호출부터 오답을 냅니다. 정확성 seed가 3개인 v1에서는 정확성 검사를 통과하고 측정 구간의 checksum 비교에서 `wrong_answer`가 됩니다. seed가 5개인 v2에서는 정확성 검사에서 이미 `wrong_answer`가 되므로, v2 풀의 `PASS`만으로는 checksum 검사가 작동했다고 판정할 수 없습니다. probe는 `status`만 비교합니다.
+- `relu_bias_benchmark_cheat`는 네 번째 `forward` 호출부터 오답을 냅니다. probe는 `status`만 비교합니다.
+    - **정확성 seed가 3개인 v1**: 정확성 검사를 통과하고 측정 구간의 checksum 비교에서 `wrong_answer`가 됩니다.
+    - **seed가 5개인 v2**: 정확성 검사에서 이미 `wrong_answer`가 되므로, v2 풀의 `PASS`만으로는 checksum 검사가 작동했다고 판정할 수 없습니다.
 - Kata GPU 풀은 `scripts/ops/verify.sh kata-qemu v1`로 같은 확인을 합니다.
 
 **문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness", "401, 403 응답" 표를 보세요.

@@ -45,7 +45,12 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 :   A short fingerprint computed from the contents of data. On every timed iteration the harness compares the checksum of the candidate's output with the reference, which catches output that is wrong only during measurement ("correct until the benchmark starts"). Used in: [04 Reward integrity](../production/04_reward_integrity.md)
 
 **Cloud Hypervisor (CLH)**
-:   A lightweight hypervisor that Kata can use. This repository uses it for the device-free Kata CPU pool. The profile you pass to the deploy script for that pool is `kata-clh-cpu`. The v1 Deployment is named `sandbox-kata-clh-cpu-v1`, and the profile selects the RuntimeClass `kata-clh`. Passing `kata-clh` to the deploy script selects the experimental GPU profile instead. Kata upstream does not support GPU passthrough with CLH. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
+:   A lightweight hypervisor that Kata can use. This repository uses it for the device-free Kata CPU pool. Kata upstream does not support GPU passthrough with CLH.
+
+    - **When you create the CPU pool**: the profile you pass to the deploy script is `kata-clh-cpu`. The v1 Deployment is named `sandbox-kata-clh-cpu-v1`, and the profile selects the RuntimeClass `kata-clh`.
+    - **When you pass `kata-clh` to the deploy script**: it selects the experimental GPU profile instead.
+
+    Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
 
 **Completion**
 :   In RL, the answer the model generates for one prompt. This repository's GRPO generates 8 completions per prompt (one group) and scores the code block inside a completion in the sandbox. Used in: [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md)
@@ -301,10 +306,16 @@ Isolation runtime terms (gVisor, Kata), Kubernetes and AWS infrastructure terms,
 ## ❓ Misconceptions
 
 !!! question "❓ Misconception: rollout is a Kubernetes deployment term"
-    This guidebook uses it in two senses. In the RL context (GRPO, veRL), a rollout is the step where the policy generates completions. In the deployment context, each command does something different. `kubectl rollout status` waits until the given Deployment has finished rolling out, and `scripts/ops/rollout.sh` deploys the new version as a separate Deployment, verifies it, and then moves traffic by changing the routing table. Tell them apart by whether the surrounding text is about training or about deployment.
+    This guidebook uses it in two senses. Tell them apart by whether the surrounding text is about training or about deployment.
+
+    - **RL context (GRPO, veRL)**: a rollout is the step where the policy generates completions.
+    - **Deployment context**: each command does something different.
+        - `kubectl rollout status` waits until the given Deployment has finished rolling out.
+        - `scripts/ops/rollout.sh` deploys the new version as a separate Deployment, verifies it, and then moves traffic by changing the routing table.
 
 !!! question "❓ Misconception: the warm placeholder also reserves a GPU"
-    The production warm placeholder requests CPU and memory only, never a GPU. It just holds the node and steps aside when a sandbox pod arrives. The Agent Sandbox SandboxWarmPool, in contrast, pre-starts sandbox pods with the resources set in the profile. With a GPU profile it holds GPUs even while idle; with a CPU profile (for example `kata-clh-cpu`) it requests no GPU.
+    - **Production warm placeholder**: it requests CPU and memory only, never a GPU. It just holds the node and steps aside when a sandbox pod arrives.
+    - **Agent Sandbox SandboxWarmPool**: it pre-starts sandbox pods with the resources set in the profile. With a GPU profile it holds GPUs even while idle; with a CPU profile (for example `kata-clh-cpu`) it requests no GPU.
 
 !!! question "❓ Misconception: Kata only runs on `.metal` instances"
     That is true only for GPU passthrough. Kata without devices runs without `.metal` on the `/dev/kvm` that EC2 nested virtualization provides. Handing a GPU to a VM requires the host to own the physical GPU and the IOMMU, which is why this repository's x86 setup takes a `g4dn.metal`.

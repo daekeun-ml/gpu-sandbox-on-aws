@@ -5,7 +5,9 @@
 
 ## Pain point
 
-A live demo that sends visitor input to GPU sandboxes opens an execution path for untrusted code to the internet, and its GPU nodes bill while they are up and stop the demo when scaled down. Static hosting alone does not fix this: a public bucket or an S3 website endpoint (no OAC, per the CloudFront documentation) creates a path that bypasses CloudFront. The error messages and policy violations in a record are strings produced by evaluated code, so inserted as HTML they become script.
+- **Live demo**: a live demo that sends visitor input to GPU sandboxes opens an execution path for untrusted code to the internet. Its GPU nodes bill while they are up, and the demo stops when they are scaled down.
+- **Bypass paths in static hosting**: static hosting alone does not fix this: a public bucket or an S3 website endpoint (no OAC, per the CloudFront documentation) creates a path that bypasses CloudFront.
+- **Strings in the record**: the error messages and policy violations in a record are strings produced by evaluated code, so inserted as HTML they become script.
 
 ![Two panels. a: visitors reach a GPU sandbox that is billed while it is up through a live demo API open to the internet, reach the S3 bucket around CloudFront through a public bucket or website endpoint, and error and policy violation strings from the record run as script when inserted into the demo page as HTML. b: replaying a record means visitors reach only CloudFront and the GPU sandbox is needed only to record, OAC and AWS:SourceArn make direct bucket access return 403, and the page inserts record strings as text only with a CSP that allows only its own origin.](../images/figures/handson-09_demo_site.svg)
 
@@ -18,7 +20,13 @@ A live demo that sends visitor input to GPU sandboxes opens an execution path fo
 - **Keep the bucket private and let only this distribution read it.** OAC and an `AWS:SourceArn` condition do this, and `deploy.sh` checks that direct bucket access returns 403.
 - **Narrow the browser side too.** The CSP allows scripts, styles and connections only from the page's own origin, and the page inserts strings from the record as text only.
 
-**Before you start:** you need the local Python environment (section 2 of [Getting started](../getting_started.md)), and a GPU recording needs the pools deployed in [04](04_sandbox_pools.md). The GRPO chart in section 4 needs the training log from [05](05_grpo_training.md); the version switch chart can come from a training log that went through the switch in [06](06_sandbox_update.md) or from the CPU simulation log in [10](10_cpu_only.md). What the verdicts and rewards mean is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
+**Before you start:**
+
+- You need the local Python environment (section 2 of [Getting started](../getting_started.md)).
+- **GPU recording**: needs the pools deployed in [04](04_sandbox_pools.md).
+- **GRPO chart in section 4**: needs the training log from [05](05_grpo_training.md).
+- **Version switch chart in section 4**: can come from a training log that went through the switch in [06](06_sandbox_update.md) or from the CPU simulation log in [10](10_cpu_only.md).
+- What the verdicts and rewards mean is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
 
 ??? note "Terms (expand if a word is new to you)"
     - **Static site**: a site that serves only HTML, CSS and JavaScript files, with no server-side code.
@@ -39,15 +47,26 @@ A live demo that sends visitor input to GPU sandboxes opens an execution path fo
 
 | Section | What it shows | Data |
 |---|---|---|
-| Top | Key numbers (GPU runtimes, goldens matching their expected verdict, connections blocked in the two pools' `verify.sh` transcripts, benchmark requests answered ok) and a tour video (about 2 minutes, no sound) | `recording.json`, `extras.json`, `media/tour-ko.mp4` and `tour-en.mp4` |
-| 1. Architecture | A diagram whose components open a description and measurements when clicked. The play button shows the order in which one reward request passes the trainer, the reward function, the routing table and a sandbox pool | Text in the page and measurements from `extras.json` |
-| 2. Try scoring | Pick a golden submission (correct, wrong, code that turns wrong only during the benchmark, reading a host file, and so on) and press play: a progress bar fills for each pool based on its recorded evaluation time (`duration_s`) (4x speed by default; real time or result only can also be picked), then the verdict, reward components (format, correctness, speedup, total) and the reason appear | Golden evaluation results in `recording.json`, and rewards computed with the same `score_verdict` as the trainer |
-| 3. Attacks blocked | For each pool, the kernel inside the sandbox and the node kernel, the GPU and egress status. Eight cards of isolation and scoring checks (IMDS, Kubernetes API, kubelet and internet tried from inside the sandbox, a connection into the sandbox from the `default` namespace, the kernel inside the sandbox compared with the node's, and the golden host-file read and benchmark cheat), and a terminal replay that highlights the matching line when a card is clicked | `/info` in `recording.json`, terminal transcripts in `extras.json` (verify.sh, the gVisor smoke test, rollout.sh) |
+| Top | Key numbers and a tour video (about 2 minutes, no sound) | `recording.json`, `extras.json`, `media/tour-ko.mp4` and `tour-en.mp4` |
+| 1. Architecture | A diagram whose components open a description and measurements when clicked, and a play button | Text in the page and measurements from `extras.json` |
+| 2. Try scoring | Pick a golden submission and press play: a progress bar fills, then the verdict, reward components and the reason appear | Golden evaluation results in `recording.json`, and rewards computed with the same `score_verdict` as the trainer |
+| 3. Attacks blocked | For each pool, the kernel inside the sandbox and the node kernel, the GPU and egress status. Eight cards of isolation and scoring checks, and a terminal replay | `/info` in `recording.json`, terminal transcripts in `extras.json` (verify.sh, the gVisor smoke test, rollout.sh) |
 | 4. Training | A chart of the verdict mix, pass rate and mean reward per GRPO batch with step playback, and a chart of a version switch during training | `training` (GRPO Job logs) and `simulation` in `extras.json` (or `training` in `recording.json` when absent) |
 | 5. Benchmark | Bar charts of eval p50, p95, cold start, throughput per pod and speedup per runtime, for cached images or as deployed | `bench` in `extras.json` (output of `scripts/ops/bench.sh`) |
-| Architecture patterns (`architecture.html`) | Scenarios A, B1, B2 and C drawn with AWS icons. Each pattern replays "Setup and deploy", "One training step" and "Switching versions" step by step, with requests and results moving along the lines. Korean by default; `?lang=en` or the `EN` button switches to English | Static data in the page (`arch.js`); no data file is read |
+| Architecture patterns (`architecture.html`) | Scenarios A, B1, B2 and C drawn with AWS icons | Static data in the page (`arch.js`); no data file is read |
 
-What is published is HTML, CSS, JavaScript, AWS architecture icons (SVG), the tour videos (MP4) with their thumbnails (JPG), and two recording JSON files (`data/recording.json`, `data/extras.json`). The repository's `recording.json` sample is a laptop CPU pool recording; replace it with a GPU recording made on your cluster. The GPU recording published on 2026-11-18 is in `demo/recordings/2026-11-18-eks-gpu.json`, The GRPO chart and the benchmark in `extras.json` were built from the logs of the same day's EKS run (us-west-2), and the version switch chart uses the log of a CPU simulation run on 2026-11-17 with golden submissions instead of a model. The progress bar in section 2 is the recorded total evaluation time; per-stage times are not recorded, so the stages are filled in from the verdict once the evaluation ends.
+- **Key numbers at the top**: GPU runtimes, goldens matching their expected verdict, connections blocked in the two pools' `verify.sh` transcripts, benchmark requests answered ok.
+- **Play button in section 1**: shows the order in which one reward request passes the trainer, the reward function, the routing table and a sandbox pool.
+- **Try scoring in section 2**: the golden submissions are correct, wrong, code that turns wrong only during the benchmark, reading a host file, and so on. The progress bar fills for each pool based on its recorded evaluation time (`duration_s`) (4x speed by default; real time or result only can also be picked), and the reward components are format, correctness, speedup, total.
+- **Eight cards in section 3**: IMDS, Kubernetes API, kubelet and internet tried from inside the sandbox, a connection into the sandbox from the `default` namespace, the kernel inside the sandbox compared with the node's, and the golden host-file read and benchmark cheat. Clicking a card highlights the matching line in the terminal replay.
+- **Architecture patterns**: each pattern replays "Setup and deploy", "One training step" and "Switching versions" step by step, with requests and results moving along the lines. Korean by default; `?lang=en` or the `EN` button switches to English.
+
+The published data and recordings are these.
+
+- **Published files**: HTML, CSS, JavaScript, AWS architecture icons (SVG), the tour videos (MP4) with their thumbnails (JPG), and two recording JSON files (`data/recording.json`, `data/extras.json`).
+- **The repository's `recording.json` sample**: a laptop CPU pool recording; replace it with a GPU recording made on your cluster.
+- **The 2026-11-18 published copy**: the GPU recording is in `demo/recordings/2026-11-18-eks-gpu.json`. The GRPO chart and the benchmark in `extras.json` were built from the logs of the same day's EKS run (us-west-2), and the version switch chart uses the log of a CPU simulation run on 2026-11-17 with golden submissions instead of a model.
+- **Progress bar in section 2**: the recorded total evaluation time. Per-stage times are not recorded, so the stages are filled in from the verdict once the evaluation ends.
 
 ```mermaid
 flowchart LR
@@ -83,21 +102,29 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 
 Open http://127.0.0.1:8080 in a browser. Opening the file directly (`file://`) can make the browser block `fetch`, so the recording would not load.
 
-The page opens in Korean; `?lang=en` opens it in English. The `EN` button at the top right switches to English and becomes `KO`, which switches back. The choice stays in the address, so a reload keeps it.
-
 **What to look for:**
 
 - At the top, the recording source line shows text starting with `Local CPU smoke run on a laptop (127.0.0.1, no gVisor or Kata, no GPU).` and the recording time.
-- There are three key-number tiles: `8/8` (goldens matching their expected verdict), `10/10` (the tile label is "access attempts from inside a sandbox, blocked", but it also counts the checks of connections coming in from outside. It counts the lines that contain `blocked` in the two pools' `verify.sh` transcripts: 8 outbound checks and 2 checks of connections coming in from the `default` namespace. The denominator shows the same line count) and `160/160` (benchmark requests answered ok). The sample has no GPU pool, so the GPU runtime tile does not appear.
+- There are three key-number tiles. The sample has no GPU pool, so the GPU runtime tile does not appear.
+    - `8/8`: goldens matching their expected verdict
+    - `10/10`: the tile label is "access attempts from inside a sandbox, blocked", but it also counts the checks of connections coming in from outside. It counts the lines that contain `blocked` in the two pools' `verify.sh` transcripts: 8 outbound checks and 2 checks of connections coming in from the `default` namespace. The denominator shows the same line count.
+    - `160/160`: benchmark requests answered ok
 - Section 2 has four submission cards (PyTorch only, Missing ReLU, Benchmark cheat, Read a host file), and playing fills two lanes, `local-cpu v1` and `local-cpu v2`. Code is shown with syntax colors and line numbers.
 - Section 3 has eight attack cards and four terminal tabs (verify.sh gvisor, verify.sh kata-qemu, gVisor GPU smoke test, rollout.sh v1 → v2).
 - The summary under the lower chart in section 4 starts with "All 30 batches were scored. At step 8 the pool changed from kata-clh-cpu/v1 to kata-clh-cpu/v2".
 - In section 5, `kata-clh` is one of six bars and shows "not measured".
-- The `EN`/`KO` button switches the language, and the terminal logs a 200 response for each file.
+- The page opens in Korean; `?lang=en` opens it in English. The `EN` button at the top right switches to English and becomes `KO`, which switches back. The choice stays in the address, so a reload keeps it.
+- The terminal logs a 200 response for each file.
 
-These items were checked on 2026-11-18 with Chromium (Playwright) on Linux. The pool cards in section 3 read `recording.json`; the attack cards and terminals in section 3 and sections 4 and 5 come from the repository's `extras.json`, and each chart shows its source. In the published copy the GRPO training and the benchmark are from the 2026-11-18 EKS run, and the version switch is the 2026-11-17 CPU simulation.
+??? note "Where this was checked, and where each section's data comes from"
+    These items were checked on 2026-11-18 with Chromium (Playwright) on Linux. The pool cards in section 3 read `recording.json`; the attack cards and terminals in section 3 and sections 4 and 5 come from the repository's `extras.json`, and each chart shows its source. In the published copy the GRPO training and the benchmark are from the 2026-11-18 EKS run, and the version switch is the 2026-11-17 CPU simulation.
 
-**If it fails:** on `Address already in use`, use another port (for example `8081`) and its address. If `failed to load recording:` appears where the recording source should be, check that `demo/site/data/recording.json` exists and is valid JSON. Without `data/extras.json`, the blocked and benchmark tiles at the top and the terminal output disappear. Section 5 keeps its heading and an empty chart area. The attack cards in section 3 and the GRPO chart in section 4 show "This recording has no data for this part.", and the version switch chart in section 4 is drawn from the training events in `recording.json`. For anything else, see [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:**
+
+- **On `Address already in use`**: use another port (for example `8081`) and its address.
+- **If `failed to load recording:` appears where the recording source should be**: check that `demo/site/data/recording.json` exists and is valid JSON.
+- **Without `data/extras.json`**: the blocked and benchmark tiles at the top and the terminal output disappear. Section 5 keeps its heading and an empty chart area. The attack cards in section 3 and the GRPO chart in section 4 show "This recording has no data for this part.", and the version switch chart in section 4 is drawn from the training events in `recording.json`.
+- **For anything else**: see [Troubleshooting](../reference/troubleshooting.md).
 
 ## 2. Make a GPU recording on the cluster
 
@@ -108,7 +135,11 @@ These items were checked on 2026-11-18 with Chromium (Playwright) on Linux. The 
 - Reward components computed with the same `score_verdict` as the trainer
 - With `--training-events`, the `reward_batch` and `sandbox_version_switch` events from that file
 
-Pod IPs and endpoint addresses are not stored as fields of their own, and tokens are left out (according to the list of fields that `record` keeps). The `error` of a connection failure can still hold an endpoint address. Before uploading, `deploy.sh` looks for IP addresses with `demo/build_extras.py --check`. It allows `127.0.0.1`, `0.0.0.0` and `169.254.169.254` and stops on any other IP address, so check this in 2.5 first. The command must run inside the cluster, in a pod that meets all of the following.
+Pod IPs and endpoint addresses are not stored as fields of their own, and tokens are left out (according to the list of fields that `record` keeps). The `error` of a connection failure can still hold an endpoint address, though.
+
+Before uploading, `deploy.sh` looks for IP addresses with `demo/build_extras.py --check`. It allows `127.0.0.1`, `0.0.0.0` and `169.254.169.254` and stops on any other IP address, so check this in 2.5 first.
+
+`python -m gpusandbox.tools record` must run inside the cluster, in a pod that meets all of the following.
 
 | Requirement | Why |
 |---|---|
@@ -124,7 +155,10 @@ Two kinds of pod meet all four.
 | Recorder pod (`demo/recorder-pod.yaml.tpl`) | Recording without a running training Job | empty |
 | A running trainer pod | Recording the training events too. The events file `/outputs/grpo/sandbox_metrics.jsonl` is in this pod | filled |
 
-The recorder pod runs only `sleep` in the trainer image (`rl-trainer`). It has the label `gpusandbox/client: "true"`, the ServiceAccount `grpo-trainer`, a projected token with audience `gpu-sandbox` and Pod Security restricted (uid 2000), and runs on a system node without a GPU. The golden set runs in the sandbox pools.
+The recorder pod runs only `sleep` in the trainer image (`rl-trainer`).
+
+- **Settings it has**: the label `gpusandbox/client: "true"`, the ServiceAccount `grpo-trainer`, a projected token with audience `gpu-sandbox` and Pod Security restricted (uid 2000)
+- **Where it runs**: on a system node without a GPU. The golden set runs in the sandbox pools.
 
 ??? info "Why not record with the probe Job template (`k8s/probe/job-probe.yaml.tpl`)"
     The probe Job has the `rl-trainer` namespace, the client label and the audience token, but it cannot create or hand over a recording file.
@@ -139,7 +173,10 @@ The recorder pod runs only `sleep` in the trainer image (`rl-trainer`). It has t
 
 - **Without a training Job, record from the recorder pod (2.2).** The recording then has no training events. The version switch chart in section 4 uses `simulation` in `extras.json` first and the recording's training events only when that is missing; with neither, the chart is not shown.
 - **When you record from a trainer pod, run it while the training Job is Running.** Once it ends, the container stops and the events file in the emptyDir can no longer be copied out ([05 On-policy GRPO training](05_grpo_training.md)).
-- **To get a version switch into the training events**, switch routing with `scripts/ops/rollout.sh gvisor v1 v2` from [06](06_sandbox_update.md) and record after `sandbox_version_switch` appears in the trainer log. `record` reads only the events that are in the `--training-events` file when it runs. The addresses passed with `--pool` are where the goldens run, so to record the goldens of both pools as well, record before you scale v1 down with `--finish` and pass the v1 and v2 addresses as separate `--pool` options, as in the example in 2.3. In B2, the Service name uses `gvisor-hyperpod` (`sandbox-gvisor-hyperpod-v1`). The chart in section 4 uses `simulation` in `extras.json` first, so to show your own switch, leave out `--simulation-log` when you build `extras.json` in 2.6.
+- **To get a version switch into the training events**, switch routing with `scripts/ops/rollout.sh gvisor v1 v2` from [06](06_sandbox_update.md) and record after `sandbox_version_switch` appears in the trainer log. `record` reads only the events that are in the `--training-events` file when it runs.
+    - **To record the goldens of both pools as well**: the addresses passed with `--pool` are where the goldens run, so record before you scale v1 down with `--finish` and pass the v1 and v2 addresses as separate `--pool` options, as in the example in 2.3.
+    - **In B2**: the Service name uses `gvisor-hyperpod` (`sandbox-gvisor-hyperpod-v1`).
+    - **To show your own switch in the section 4 chart**: the chart in section 4 uses `simulation` in `extras.json` first, so leave out `--simulation-log` when you build `extras.json` in 2.6.
 - **Training can slow down briefly.** Recording uses the same pools and a pod evaluates one request at a time, so the golden evaluations slot in between the reward evaluations.
 
 ### 2.2 Find the trainer pod
@@ -153,7 +190,10 @@ POD="$(kubectl -n rl-trainer get pods -l app=grpo-trainer \
 echo "${POD}"
 ```
 
-**What to look for:** one pod name is printed (in scenario A, `grpo-<RUN_ID>-<suffix>`). If it is empty, no training is running; start with [05](05_grpo_training.md), or use the recorder pod below.
+**What to look for:**
+
+- One pod name is printed (in scenario A, `grpo-<RUN_ID>-<suffix>`).
+- **If it is empty**: no training is running; start with [05](05_grpo_training.md), or use the recorder pod below.
 
 **To record without a training Job,** create the recorder pod. The template is rendered with `TRAINER_IMAGE_URI` and `SANDBOX_AUDIENCE` from `scripts/config.env`.
 
@@ -165,7 +205,10 @@ kubectl -n rl-trainer wait --for=condition=Ready pod/demo-recorder --timeout=10m
 POD=demo-recorder
 ```
 
-**What to look for:** `pod/demo-recorder created` and `pod/demo-recorder condition met`. The recorder pod's container is named `recorder`, so replace `-c trainer` with `-c recorder` in 2.3 and 2.4, and drop the `--training-events` line in 2.3. The pod exits after three hours (`sleep 10800`); delete it with `kubectl -n rl-trainer delete pod demo-recorder` once you have copied the recording.
+**What to look for:** `pod/demo-recorder created` and `pod/demo-recorder condition met`.
+
+- **In 2.3 and 2.4**: the recorder pod's container is named `recorder`, so replace `-c trainer` with `-c recorder` in 2.3 and 2.4, and drop the `--training-events` line in 2.3.
+- **Removing the pod**: the pod exits after three hours (`sleep 10800`); delete it with `kubectl -n rl-trainer delete pod demo-recorder` once you have copied the recording.
 
 ### 2.3 Run record inside the trainer pod
 
@@ -189,13 +232,19 @@ kubectl -n rl-trainer exec "${POD}" -c trainer --\
 - **To include v1 and v2 together**, put the version in the label, for example `--pool "gvisor v1=sandbox-gvisor-v1.sandbox.svc.cluster.local:8000" --pool "gvisor v2=sandbox-gvisor-v2.sandbox.svc.cluster.local:8000"`.
 - **`--source` appears verbatim in the recording source line.** Write the conditions of the recording, such as Region, instances and date.
 
-**What to look for:** the last line is JSON like the following. `training_events` depends on how many batches have run by then, and is 0 on the recorder pod (the 2026-11-18 recording: `goldens: 6`, `training_events: 0`).
+**What to look for:** the last line is JSON like the following.
 
 ```text
 {"event": "recorded", "out": "/tmp/rec.json", "pools": ["gvisor", "kata-qemu"], "goldens": 6, "training_events": <N>}
 ```
 
-**If it fails:** a `sandbox_error` with `HTTP 401` or `HTTP 403` is a token or allowlist problem; see the "401, 403 responses" section of [Troubleshooting](../reference/troubleshooting.md), or its "NetworkPolicy" section if the connection itself fails.
+- `training_events` depends on how many batches have run by then.
+- **On the recorder pod**: `training_events` is 0 (the 2026-11-18 recording: `goldens: 6`, `training_events: 0`).
+
+**If it fails:**
+
+- **A `sandbox_error` with `HTTP 401` or `HTTP 403`**: a token or allowlist problem; see the "401, 403 responses" section of [Troubleshooting](../reference/troubleshooting.md).
+- **If the connection itself fails**: see its "NetworkPolicy" section.
 
 ### 2.4 Copy the recording out
 
@@ -209,7 +258,10 @@ kubectl -n rl-trainer cp -c trainer "${POD}:/tmp/rec.json" /tmp/rec.json
 python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['schema'] == 1 and d['pools']" /tmp/rec.json
 ```
 
-**What to look for:** `kubectl cp` may print one `tar` warning; the copy is fine. The schema check prints nothing and exits with code 0.
+**What to look for:**
+
+- `kubectl cp` may print one `tar` warning; the copy is fine.
+- The schema check prints nothing and exits with code 0.
 
 ### 2.5 Review before publishing
 
@@ -218,10 +270,13 @@ The page shows the recording verbatim, so check the following before publishing.
 | Item | What to check |
 |---|---|
 | `source` | Text you wrote. Make sure it contains no account details or personal names |
-| `pools[].info.egress_blocked` | `true` for every pool. A missing or `false` value shows as "open" on the page; do not publish it that way, fix the pool first |
-| `pools[].results[].status` and `expected_status` | Equal for every golden. A difference means a verdict went against expectations; find the cause first with the pool verification (`scripts/ops/verify.sh`) in [04](04_sandbox_pools.md) |
+| `pools[].info.egress_blocked` | `true` for every pool |
+| `pools[].results[].status` and `expected_status` | Equal for every golden |
 | `pools[].results[].error`, `violations` | Strings produced by evaluated code or by connection errors (last 400 characters of the error, up to 3 violations). Make sure they contain no pod addresses, internal paths or host names |
 | `training` | Only `reward_batch` and `sandbox_version_switch` events go in. Make sure the version names and routing revisions are fine to publish |
+
+- **If `egress_blocked` is missing or `false`**: it shows as "open" on the page; do not publish it that way, fix the pool first.
+- **If status and `expected_status` differ**: a verdict went against expectations; find the cause first with the pool verification (`scripts/ops/verify.sh`) in [04](04_sandbox_pools.md).
 
 The following script prints a summary.
 
@@ -240,7 +295,11 @@ print("training events:", len(rec["training"]))
 PY
 ```
 
-**What to look for:** every pool shows `egress_blocked: True`, and every golden line says `as expected`. In the 2026-11-18 recording both pools had `egress_blocked: True`, all 12 verdicts matched `expected_status`, and the file contained no IPs, account IDs or host names. Run against the repository's sample recording, it prints `local-cpu v1` and `local-cpu v2` with four goldens each and `training events: 7` (checked locally).
+**What to look for:**
+
+- Every pool shows `egress_blocked: True`, and every golden line says `as expected`.
+- **In the 2026-11-18 recording**: both pools had `egress_blocked: True`, all 12 verdicts matched `expected_status`, and the file contained no IPs, account IDs or host names.
+- **Run against the repository's sample recording**: it prints `local-cpu v1` and `local-cpu v2` with four goldens each and `training events: 7` (checked locally).
 
 To view it in a browser, copy the site to a temporary folder and serve it.
 
@@ -257,10 +316,14 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 
 | Data | How to make it | Options |
 |---|---|---|
-| Benchmark | Save the output of `scripts/ops/bench.sh 32` to `bench.log` with `tee`. `bench.sh` prints no separator, so if you measured twice, put a `=== run 1` and a `=== run 2` line before each run's output yourself. The page shows `pass2` by default, so for a single run use `--bench-log pass2=bench.log` | `--bench-log pass1=bench.log --bench-pass pass2`, node details with `--node` (see the example) |
+| Benchmark | Save the output of `scripts/ops/bench.sh 32` to `bench.log` with `tee` | `--bench-log pass1=bench.log --bench-pass pass2`, node details with `--node` (see the example) |
 | GRPO training | `kubectl -n rl-trainer logs job/<job> > grpo.log`. It reads the reward function's `reward_batch` JSON lines and the trainer's metric lines (`{'loss': ...}`) | `--training-log grpo.log --model <model-id>` |
 | Version switch | Save the output of `scripts/ops/simulate.sh 30 20` to `simulate.log`, and switch the version with `rollout.sh` from [06](06_sandbox_update.md) meanwhile | `--simulation-log simulate.log` |
-| Terminal output | Save the output of commands such as `scripts/ops/verify.sh gvisor v1` to a file. A first line `$ <command>` shows as the command line, and lines starting with `[HH:MM:SS]` set the replay timing | `--transcript verify-gvisor=verify-gvisor.txt` (repeatable) |
+| Terminal output | Save the output of commands such as `scripts/ops/verify.sh gvisor v1` to a file | `--transcript verify-gvisor=verify-gvisor.txt` (repeatable) |
+
+- **If you measured the benchmark twice**: `bench.sh` prints no separator, so put a `=== run 1` and a `=== run 2` line before each run's output yourself.
+- **If you measured the benchmark once**: the page shows `pass2` by default, so use `--bench-log pass2=bench.log`.
+- **Terminal output files**: a first line `$ <command>` shows as the command line, and lines starting with `[HH:MM:SS]` set the replay timing.
 
 ```bash
 # Build data/extras.json from the saved command output (paths are examples)
@@ -274,7 +337,13 @@ python3 demo/build_extras.py --out demo/site/data/extras.json \
   --transcript verify-gvisor=verify-gvisor.txt --transcript verify-kata-qemu=verify-kata-qemu.txt
 ```
 
-The script strips ANSI color codes and shell prompts from every string, and replaces IP addresses (IPv4, IPv6, pod DNS forms such as `10-0-12-34`) with `<private-ip>`, `<public-ip>` or `<ipv6>`, node names with `<node>`, and `*.amazonaws.com` hosts (EKS API endpoint, OIDC, ELB and so on) with `<aws-endpoint>`. Account IDs, ARNs, EC2 resource IDs and tokens (access keys, Hugging Face, GitHub, JWT) become placeholders too. Addresses that are the same for everyone, such as `169.254.169.254` (IMDS), stay. If any of these, an `*.internal` host, a `user@host` or a home path (`/home`, `/root`, `/Users`) is still there afterwards, it refuses to write the file.
+The script treats every string as follows.
+
+- It strips ANSI color codes and shell prompts.
+- It replaces IP addresses (IPv4, IPv6, pod DNS forms such as `10-0-12-34`) with `<private-ip>`, `<public-ip>` or `<ipv6>`, node names with `<node>`, and `*.amazonaws.com` hosts (EKS API endpoint, OIDC, ELB and so on) with `<aws-endpoint>`.
+- Account IDs, ARNs, EC2 resource IDs and tokens (access keys, Hugging Face, GitHub, JWT) become placeholders too.
+- Addresses that are the same for everyone, such as `169.254.169.254` (IMDS), stay.
+- **If anything is still there afterwards**: if any of these, an `*.internal` host, a `user@host` or a home path (`/home`, `/root`, `/Users`) is still there, it refuses to write the file.
 
 **What to look for:** the last line of the command above shows `"transcripts": 2`. Below is the output for the published file, built from the 2026-11-18 logs with four transcripts (`verify-gvisor`, `verify-kata-qemu`, `smoke-gvisor`, `rollout`).
 
@@ -286,7 +355,11 @@ The page shows terminal output verbatim, so read it once more with the same crit
 
 ### 2.7 Re-record the tour video (optional)
 
-`demo/record_tour.py` opens the page in Chromium, plays its features in turn and records the screen into `media/tour-ko.mp4`, `tour-en.mp4` and thumbnails. Captions and a click marker are drawn on top only while recording; the site files do not change. The page is served on `127.0.0.1` only while recording. Before recording, it runs the scan from 2.6 on the data files in `--site` and refuses to record on any finding. The hashes of the data it recorded go to `media/tour-data.json`, and `deploy.sh` warns when the published data differs (that file is not uploaded).
+`demo/record_tour.py` opens the page in Chromium, plays its features in turn and records the screen into `media/tour-ko.mp4`, `tour-en.mp4` and thumbnails. Captions and a click marker are drawn on top only while recording; the site files do not change.
+
+- **Serving the page**: the page is served on `127.0.0.1` only while recording.
+- **Scan before recording**: it runs the scan from 2.6 on the data files in `--site` and refuses to record on any finding.
+- **Data hashes**: the hashes of the data it recorded go to `media/tour-data.json`, and `deploy.sh` warns when the published data differs (that file is not uploaded).
 
 ```bash
 # Playwright and ffmpeg are needed on the workstation only (not project dependencies)
@@ -297,11 +370,20 @@ cp /tmp/rec.json /tmp/demo-stage/data/recording.json
 python3 demo/record_tour.py --site /tmp/demo-stage --out demo/site/media
 ```
 
-**What to look for:** a `[tour] demo/site/media/tour-ko.mp4 (<size> KiB)` line per language. With the 2026-11-18 data each video was about 2 minutes long. The captions contain numbers from that day's recording (for example, the Triton kernel's speedup of about 1.78x), so edit `CAPTIONS` in `record_tour.py` when you record another one.
+**What to look for:**
+
+- A `[tour] demo/site/media/tour-ko.mp4 (<size> KiB)` line per language. With the 2026-11-18 data each video was about 2 minutes long.
+- **When you record another recording**: the captions contain numbers from that day's recording (for example, the Triton kernel's speedup of about 1.78x), so edit `CAPTIONS` in `record_tour.py`.
 
 ### 2.8 Check the patterns page drawings (optional)
 
-After changing the drawings of `architecture.html` (the coordinates in `arch.js`), check them with `demo/check_arch_layout.py`. It opens the four patterns in Korean and in English and, in every step of every flow, checks that each arrow starts and ends on the edge of the box drawn around an icon, that no line or arrowhead overlaps a text, an icon or another line, and that no label or badge touches a box border. The page is served on `127.0.0.1` only while it checks.
+After changing the drawings of `architecture.html` (the coordinates in `arch.js`), check them with `demo/check_arch_layout.py`. It opens the four patterns in Korean and in English and, in every step of every flow, checks the following.
+
+- Each arrow starts and ends on the edge of the box drawn around an icon.
+- No line or arrowhead overlaps a text, an icon or another line.
+- No label or badge touches a box border.
+
+The page is served on `127.0.0.1` only while it checks.
 
 ```bash
 # Playwright is needed on the workstation only, as for record_tour.py
@@ -353,26 +435,36 @@ RECORDING=/tmp/rec.json demo/deploy.sh
 RECORDING=demo/recordings/2026-11-18-eks-gpu.json demo/deploy.sh
 ```
 
-**The Region is fixed to us-east-1,** because a WAF web ACL for CloudFront and CloudFront log delivery are us-east-1 resources. The script reads neither `AWS_REGION` nor `scripts/config.env`, and the template's `Rules` reject a deployment in any other Region (`Deploy the demo stack in us-east-1 ...`). The cluster can be in another Region (on 2026-11-18 the cluster was in us-west-2 and the demo in us-east-1). It needs permission to create CloudFormation, S3, CloudFront, AWS WAF and CloudWatch Logs (log delivery) resources; in a shared or production account, a dedicated demo account or a least-privilege role is safer.
+**The Region is fixed to us-east-1,** because a WAF web ACL for CloudFront and CloudFront log delivery are us-east-1 resources.
+
+- **Region settings**: the script reads neither `AWS_REGION` nor `scripts/config.env`, and the template's `Rules` reject a deployment in any other Region (`Deploy the demo stack in us-east-1 ...`).
+- **Cluster Region**: the cluster can be in another Region (on 2026-11-18 the cluster was in us-west-2 and the demo in us-east-1).
+- **Permissions needed**: it needs permission to create CloudFormation, S3, CloudFront, AWS WAF and CloudWatch Logs (log delivery) resources.
+- **In a shared or production account**: a dedicated demo account or a least-privilege role is safer.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | Region | `us-east-1` (fixed) | Region for the stack, the buckets and the WAF web ACL. `AWS_REGION` is ignored |
 | `RECORDING` | `demo/site/data/recording.json` | The recording to upload. It is stored in S3 as `data/recording.json` |
-| `EXTRAS` | `demo/site/data/extras.json` | Benchmark, training and terminal data (2.6). If the file is missing it is not uploaded. An earlier `data/extras.json` in S3 is not deleted, so delete that object too to take the old data down |
+| `EXTRAS` | `demo/site/data/extras.json` | Benchmark, training and terminal data (2.6). If the file is missing it is not uploaded |
 | `DEMO_STACK_NAME` | `gpu-sandbox-demo` | CloudFormation stack name |
 | `DEMO_DOMAIN`, `DEMO_CERT_ARN` | empty | Custom domain and an ACM certificate in us-east-1. Both are needed for it to apply |
 
+- **An earlier `data/extras.json` when the `EXTRAS` file is missing**: the upload is skipped and an earlier `data/extras.json` in S3 is not deleted, so delete that object too to take the old data down.
+
 | Step | What the script does |
 |---|---|
-| 1 | Checks the recording (`schema` is 1 and `pools` is not empty; `extras.json` has `schema` `extras-1`). Then `demo/build_extras.py --check` scans both files for IP addresses (except the allowed `127.0.0.1`, `0.0.0.0` and `169.254.169.254`), node names, account IDs, ARNs and tokens, and stops on any finding |
+| 1 | Checks the recording (`schema` is 1 and `pools` is not empty; `extras.json` has `schema` `extras-1`). Then `demo/build_extras.py --check` scans both files |
 | 2 | Deploys `demo/infra/site.yaml` to us-east-1 with `aws cloudformation deploy` (no failure when nothing changed) |
 | 3 | Reads the stack outputs `BucketName`, `DistributionId` and `DistributionDomainName` |
-| 4 | Uploads only the allow-listed files (`index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`) with `aws s3 sync --delete`, and uploads the data as `data/recording.json` and `data/extras.json` (`application/json`, `no-cache`). Before that, it warns if the videos were recorded with other data than what it publishes |
+| 4 | Uploads only the allow-listed files with `aws s3 sync --delete`, and uploads the data as `data/recording.json` and `data/extras.json` (`application/json`, `no-cache`) |
 | 5 | Creates a CloudFront invalidation (`/*`) and checks that the distribution's `WebACLId` is a WAF web ACL ARN, stopping with an error if not |
 | 6 | Sends an anonymous request to `https://<bucket>.s3.us-east-1.amazonaws.com/index.html` and stops with an error unless it gets 403 |
 | 7 | Checks every 20 seconds, up to 30 times, until the public URL returns 200, then stops with an error if the response lacks the CSP or HSTS header, or if an `http://` request does not return 301 |
 | 8 | Prints `[demo] live: <URL>` |
+
+- **`--check` in step 1**: it scans both files for IP addresses (except the allowed `127.0.0.1`, `0.0.0.0` and `169.254.169.254`), node names, account IDs, ARNs and tokens, and stops on any finding.
+- **Allow list in step 4**: `index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`. Before uploading, it warns if the videos were recorded with other data than what it publishes.
 
 **What to look for:** the following lines appear in this order, with AWS CLI output in between.
 
@@ -390,12 +482,12 @@ Step 7 moves on to the header check even if 200 never arrives, so open the final
 
 **If it fails:**
 
-- `the data files above would leak details. Fix before publishing.`: the `[check]` lines just above name the file and the place. Remove or mask that line in the input logs and rebuild `extras.json` (2.6). The stack has not been changed yet.
-- `no WAF web ACL on <distribution>. Fix before sharing.`: no web ACL is attached to the distribution. Check the `WebAcl` resource in the stack events, and do not share the URL until it is fixed.
-- `direct S3 access returned <code>, expected 403`: check whether the bucket policy or the Block Public Access settings changed, and do not share the URL until it is fixed.
-- `CSP header missing` or `HSTS header missing`: the distribution may still be propagating; run the same command again a few minutes later (rerunning is safe).
-- `http:// returned <code>, expected a 301 redirect to https`: check that the distribution's `ViewerProtocolPolicy` is `redirect-to-https`; if it is still propagating, run it again a few minutes later.
-- Stack creation failed: find the failed resource and the reason with `aws cloudformation describe-stack-events --region us-east-1 --stack-name gpu-sandbox-demo`. Cleanup and cost issues are in the "Cleanup and cost" section of [Troubleshooting](../reference/troubleshooting.md).
+- **`the data files above would leak details. Fix before publishing.`**: the `[check]` lines just above name the file and the place. Remove or mask that line in the input logs and rebuild `extras.json` (2.6). The stack has not been changed yet.
+- **`no WAF web ACL on <distribution>. Fix before sharing.`**: no web ACL is attached to the distribution. Check the `WebAcl` resource in the stack events, and do not share the URL until it is fixed.
+- **`direct S3 access returned <code>, expected 403`**: check whether the bucket policy or the Block Public Access settings changed, and do not share the URL until it is fixed.
+- **`CSP header missing` or `HSTS header missing`**: the distribution may still be propagating; run the same command again a few minutes later (rerunning is safe).
+- **`http:// returned <code>, expected a 301 redirect to https`**: check that the distribution's `ViewerProtocolPolicy` is `redirect-to-https`; if it is still propagating, run it again a few minutes later.
+- **If stack creation failed**: find the failed resource and the reason with `aws cloudformation describe-stack-events --region us-east-1 --stack-name gpu-sandbox-demo`. Cleanup and cost issues are in the "Cleanup and cost" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ## 5. Custom domain (optional)
 
@@ -432,20 +524,27 @@ The settings live in [`demo/infra/site.yaml`](https://github.com/daekeun-ml/gpu-
 | Bucket | Default encryption with SSE-S3 (`AES256`) | Stored objects left unencrypted |
 | Bucket policy | `s3:GetObject` allowed only for `cloudfront.amazonaws.com`, and only when `AWS:SourceArn` is this distribution's ARN | Other CloudFront distributions (including those in other accounts) reading this bucket |
 | Bucket policy | Deny every `s3:*` request where `aws:SecureTransport` is `false` | Accessing the bucket over plain HTTP |
-| OAC | `SigningBehavior: always`, `sigv4` | Unsigned origin requests. With every origin request signed (`always`), traffic between CloudFront and S3 also uses HTTPS only (CloudFront documentation) |
+| OAC | `SigningBehavior: always`, `sigv4` | Unsigned origin requests |
 | CloudFront | `ViewerProtocolPolicy: redirect-to-https` | Viewing the page over plain HTTP |
 | CloudFront | `AllowedMethods: [GET, HEAD]` | Write requests such as PUT, POST and DELETE |
 | CloudFront | `DefaultRootObject: index.html` | Exposing the distribution's contents on a request for the root URL |
-| WAF | A web ACL attached to the distribution (scope `CLOUDFRONT`, default action Allow): a rate limit that blocks an IP above 1000 requests per 5 minutes, a separate limit of 100 requests per 5 minutes per IP on the video path (`/media/`), and the AWS managed rule groups `AWSManagedRulesAmazonIpReputationList`, `AWSManagedRulesCommonRuleSet` and `AWSManagedRulesKnownBadInputsRuleSet` | Excessive requests from one IP and transfer cost from repeated video downloads, IPs on the reputation list, common web attack patterns and known bad inputs |
+| WAF | A web ACL attached to the distribution (scope `CLOUDFRONT`, default action Allow): a rate limit, a limit on the video path, and three AWS managed rule groups | Excessive requests from one IP and transfer cost from repeated video downloads, IPs on the reputation list, common web attack patterns and known bad inputs |
 | Access logs | CloudFront standard logging v2 (CloudWatch Logs vended delivery: `AWS::Logs::DeliverySource`, `DeliveryDestination`, `Delivery`) into the log bucket | No record of access to the public endpoint |
 | Access logs | S3 server access logs of the site bucket into the same log bucket under the `s3-access/` prefix | No record of bucket access |
-| Log bucket | All four Block Public Access settings, `BucketOwnerEnforced`, SSE-S3, 90-day expiration, non-TLS requests denied, writes allowed only for this account's log delivery services (`logging.s3.amazonaws.com`, `delivery.logs.amazonaws.com`), `DeletionPolicy: Retain` | Logs becoming public or piling up forever, and logs disappearing with the stack |
+| Log bucket | All four Block Public Access settings, `BucketOwnerEnforced`, SSE-S3, 90-day expiration, non-TLS requests denied, restricted writes, `DeletionPolicy: Retain` | Logs becoming public or piling up forever, and logs disappearing with the stack |
 | Response headers | CSP `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` | External scripts, styles, media, connections, form submissions, and framing by other sites |
 | Response headers | HSTS `max-age` 63072000, `includeSubDomains` | Downgrading to HTTP |
 | Response headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` | MIME sniffing, clickjacking, referrer leaks, use of browser features |
-| Page | `index.html` loads only `style.css` and `app.js`, and `app.js` fetches only `data/recording.json` and `data/extras.json` from the same origin. The videos also play from `media/` on the same origin. Every value from the data goes in as a text node (charts are SVG elements with text nodes); no HTML insertion such as `innerHTML` is used | Strings in the data (error tails and policy violations produced by evaluated code, terminal output) running as HTML or script |
-| Published data | `build_extras.py` masks IP addresses (IPv4, IPv6, pod DNS form), node names, AWS endpoint hosts, account IDs, ARNs, EC2 resource IDs and tokens, and `deploy.sh` runs the same scan (`--check`) again before uploading. `record_tour.py` runs the same scan before recording and keeps the hashes of the data it recorded, so `deploy.sh` warns when the published data differs | Internal addresses and identifiers in cluster logs becoming public, and unscanned data showing up in the videos |
-| Upload | `aws s3 sync` uploads only an allow list (`index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`), and only the two scanned data files are uploaded separately | Leftover or unscanned files in `demo/site` becoming public |
+| Page | Every value from the data goes in as a text node (charts are SVG elements with text nodes); no HTML insertion such as `innerHTML` is used | Strings in the data (error tails and policy violations produced by evaluated code, terminal output) running as HTML or script |
+| Published data | `build_extras.py` masks internal addresses and identifiers, and `deploy.sh` runs the same scan (`--check`) again before uploading | Internal addresses and identifiers in cluster logs becoming public, and unscanned data showing up in the videos |
+| Upload | `aws s3 sync` uploads only an allow list, and only the two scanned data files are uploaded separately | Leftover or unscanned files in `demo/site` becoming public |
+
+- **`always` in OAC**: with every origin request signed (`always`), traffic between CloudFront and S3 also uses HTTPS only (CloudFront documentation).
+- **WAF rules**: a rate limit that blocks an IP above 1000 requests per 5 minutes, a separate limit of 100 requests per 5 minutes per IP on the video path (`/media/`), and the AWS managed rule groups `AWSManagedRulesAmazonIpReputationList`, `AWSManagedRulesCommonRuleSet` and `AWSManagedRulesKnownBadInputsRuleSet`.
+- **Restricted writes on the log bucket**: writes are allowed only for this account's log delivery services (`logging.s3.amazonaws.com`, `delivery.logs.amazonaws.com`).
+- **Files the page loads**: `index.html` loads only `style.css` and `app.js`, and `app.js` fetches only `data/recording.json` and `data/extras.json` from the same origin. The videos also play from `media/` on the same origin.
+- **Values masked in published data**: IP addresses (IPv4, IPv6, pod DNS form), node names, AWS endpoint hosts, account IDs, ARNs, EC2 resource IDs and tokens. `record_tour.py` runs the same scan before recording and keeps the hashes of the data it recorded, so `deploy.sh` warns when the published data differs.
+- **Upload allow list**: `index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`.
 
 Every response header uses `Override: true`, so the policy value wins over the same header sent by the origin. The bucket policy's `AWS:SourceArn` condition is a fixed value, so S3 does not consider the policy public and it applies with `BlockPublicPolicy` turned on (the definition of "public" in the S3 documentation).
 
@@ -456,7 +555,18 @@ Every response header uses `Override: true`, so the policy value wins over the s
     With the default `*.cloudfront.net` certificate the viewer security policy is fixed at TLSv1, and on 2026-11-18 the endpoint accepted TLS 1.0 and 1.1 handshakes (it also offers TLS 1.2 and 1.3). `TLSv1.2_2021` is available only with a custom domain and an ACM certificate in us-east-1 (`DEMO_DOMAIN`, `DEMO_CERT_ARN`); see section 5. This practice account has no Route 53 hosted zone, so the default certificate was used.
 
 !!! note "Validation status"
-    Locally, the eleven tests in `tests/test_demo.py`, `cfn-lint demo/infra/site.yaml` and `node --check demo/site/app.js` pass. Every feature was clicked through in Chromium against a local server that sends the same CSP header as the deployment, with no CSP violation. The tests check the four Block Public Access settings on the bucket, that the only Allow statement is for the CloudFront service principal with an `AWS:SourceArn` condition, the denial of non-TLS access, `redirect-to-https`, GET and HEAD only, the CSP directives (including `media-src 'self'`) and HSTS of at least one year, that the page loads nothing external, uses no HTML insertion such as `innerHTML` and fetches only `data/recording.json` and `data/extras.json`, that each verdict in the sample and in `demo/recordings/` matches its expected status and its reward equals `score_verdict`, that no published data file contains an IP address, node name, account ID, ARN or token while the masking keeps the IMDS address, that `extras.json` has the expected benchmark, training, version switch and transcript structure, that WAF limits `/media/` requests per IP while `deploy.sh` uploads only an allow list and runs `--check` first, and that the architecture patterns page loads nothing external, injects no HTML and fetches nothing, with icon SVGs free of scripts and external references.
+    Locally, the eleven tests in `tests/test_demo.py`, `cfn-lint demo/infra/site.yaml` and `node --check demo/site/app.js` pass. Every feature was clicked through in Chromium against a local server that sends the same CSP header as the deployment, with no CSP violation. The tests check the following.
+
+    - The four Block Public Access settings on the bucket
+    - That the only Allow statement is for the CloudFront service principal with an `AWS:SourceArn` condition
+    - The denial of non-TLS access, `redirect-to-https`, GET and HEAD only
+    - The CSP directives and HSTS of at least one year
+    - That the page loads nothing external, uses no HTML insertion such as `innerHTML`, fetches only `data/recording.json` and `data/extras.json`, and that the CSP has `media-src 'self'`
+    - That each verdict in the sample and in `demo/recordings/` matches its expected status and its reward equals `score_verdict`
+    - That no published data file contains an IP address, node name, account ID, ARN or token, while the masking keeps the IMDS address
+    - That `extras.json` has the expected benchmark, training, version switch and transcript structure
+    - That WAF limits `/media/` requests per IP, while `deploy.sh` uploads only an allow list and runs `--check` first
+    - That the architecture patterns page loads nothing external, injects no HTML and fetches nothing, with icon SVGs free of scripts and external references
 
     The stack was deployed to us-east-1, and an external check after the deploy found the following ([run record](../reference/sources.md#aws-run-record)):
 
@@ -470,7 +580,10 @@ Every response header uses `Override: true`, so the policy value wins over the s
 After deploying, check the following in order.
 
 1. The last line of `deploy.sh` is `[demo] live: https://...`.
-2. Opening that URL in a browser shows your own `--source` text in the recording source line, and every pool card in section 3 shows egress "verified" ("외부 연결 차단: 확인됨" in the Korean view). This shows the server's `egress_blocked` value, so for a GPU cluster recording, compare it with the blocked lines in that pool's `verify.sh` transcript. The local CPU sample has no egress targets and shows "verified" without running the check. Check that the video at the top plays as well (`curl -sI https://<distribution-domain>/media/tour-en.mp4` returns `content-type: video/mp4`).
+2. Opening that URL in a browser shows your own `--source` text in the recording source line, and every pool card in section 3 shows egress "verified" ("외부 연결 차단: 확인됨" in the Korean view). This shows the server's `egress_blocked` value.
+    - **For a GPU cluster recording**: compare it with the blocked lines in that pool's `verify.sh` transcript.
+    - **The local CPU sample**: has no egress targets and shows "verified" without running the check.
+    - Check that the video at the top plays as well (`curl -sI https://<distribution-domain>/media/tour-en.mp4` returns `content-type: video/mp4`).
 3. The six security headers are present.
 
     ```bash
@@ -508,12 +621,16 @@ Empties the site bucket with `aws s3 rm --recursive`, deletes the CloudFormation
 demo/teardown.sh
 ```
 
-**What to look for:** the script continues only after you answer `Delete demo stack gpu-sandbox-demo and all files in its bucket? Type 'gpu-sandbox-demo':` with the stack name, and the deletion output ends with the two lines below. If you used another stack name, pass `DEMO_STACK_NAME` as well.
+**What to look for:**
 
-```text
-deleted gpu-sandbox-demo
-kept the access log bucket <log-bucket>; when you no longer need the logs: aws s3 rb s3://<log-bucket> --force
-```
+- The script continues only after you answer `Delete demo stack gpu-sandbox-demo and all files in its bucket? Type 'gpu-sandbox-demo':` with the stack name.
+- **If you used another stack name**: pass `DEMO_STACK_NAME` as well.
+- The deletion output ends with the two lines below.
+
+    ```text
+    deleted gpu-sandbox-demo
+    kept the access log bucket <log-bucket>; when you no longer need the logs: aws s3 rb s3://<log-bucket> --force
+    ```
 
 The log objects expire after 90 days, but the bucket itself stays. When you no longer need the logs, delete the log bucket with the printed `aws s3 rb` command.
 
@@ -521,7 +638,9 @@ GPU node and cluster cleanup are in [99 Cleanup](99_cleanup.md).
 
 ## Scope and limits
 
-- **Run on AWS.** A GPU recording (gVisor A10G, Kata QEMU T4) was made with `record` in the recorder pod, published to us-east-1 with `deploy.sh`, and checked from outside (the validation status under "Security design"). The published recording comes from real GPU pools and has no training events. The GRPO chart in section 4 comes from the five-step scenario A training log, and the version switch chart from the scenario C simulation (golden submissions stood in for model outputs; no training). The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
+- **Run on AWS.** A GPU recording (gVisor A10G, Kata QEMU T4) was made with `record` in the recorder pod, published to us-east-1 with `deploy.sh`, and checked from outside (the validation status under "Security design"). The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
+    - The published recording comes from real GPU pools and has no training events.
+    - The GRPO chart in section 4 comes from the five-step scenario A training log, and the version switch chart from the scenario C simulation (golden submissions stood in for model outputs; no training).
 - **Visitors cannot run code.** Section 2 replays records, and per-stage times are not recorded. The attack cards in section 3 are limited to what `verify.sh` actually tried and to the golden submissions.
 - **`record` runs in a trainer-image pod.** Training events in the recording go in only when you record from a trainer pod while training runs (section 2).
 - **Waiting for 200 is not treated as a failure** (step 7 of `deploy.sh`).

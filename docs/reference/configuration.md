@@ -5,7 +5,11 @@
 
 ## 기존 Pain Point
 
-코드 기본값(`127.0.0.1` bind, egress 자기 점검 꺼짐, 인증 미설정)은 로컬 테스트용이고, 클러스터에서는 매니페스트가 다른 값을 넣습니다. 값은 `config.env`, 스크립트, `render.py`, 매니페스트의 `env`나 실행 인자, 프로세스 순서로 전달되므로 중간 단계 하나를 놓치면 원인을 찾기 어렵습니다. `SANDBOX_RUNTIME`, `SANDBOX_VERSION`처럼 서버와 클라이언트에서 뜻과 기본값이 다른 이름도 있습니다. 값을 해석하는 규칙도 변수마다 다릅니다. `SANDBOX_AUTH_TEST_BYPASS`는 정확히 `1`일 때만 켜지고, `HARNESS_ALLOW_CUDA_CPP`는 `1`, `true`, `yes`를 모두 받습니다.
+코드 기본값(`127.0.0.1` bind, egress 자기 점검 꺼짐, 인증 미설정)은 로컬 테스트용이고, 클러스터에서는 매니페스트가 다른 값을 넣습니다.
+
+- **전달 단계가 많음**: 값은 `config.env`, 스크립트, `render.py`, 매니페스트의 `env`나 실행 인자, 프로세스 순서로 전달되므로 중간 단계 하나를 놓치면 원인을 찾기 어렵습니다.
+- **이름은 같고 뜻이 다른 변수**: `SANDBOX_RUNTIME`, `SANDBOX_VERSION`처럼 서버와 클라이언트에서 뜻과 기본값이 다른 이름도 있습니다.
+- **변수마다 다른 해석 규칙**: `SANDBOX_AUTH_TEST_BYPASS`는 정확히 `1`일 때만 켜지고, `HARNESS_ALLOW_CUDA_CPP`는 `1`, `true`, `yes`를 모두 받습니다.
 
 ## Why
 
@@ -41,22 +45,28 @@ flowchart LR
 
 *그림: 클러스터에서 프로세스가 읽는 값은 매니페스트의 `env`나 실행 인자(`args`)를 거쳐 옵니다. trainer의 모델과 학습 step 수는 실행 인자로 전달되므로, 값이 이상하면 pod의 env와 실행 인자를 함께 확인합니다.*
 
-스크립트는 `scripts/config.env`를 source 한 셸에서 실행되기 때문에, config.env에 `export`로 적은 값은 템플릿의 `${VAR}`에 그대로 쓰입니다. config.env에 없는 변수는 `ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh`처럼 명령 앞에 붙여 한 번만 바꿀 수 있습니다. config.env에 `export`로 적은 변수는 스크립트가 그 파일을 나중에 읽어 명령 앞의 값을 덮어쓰므로, 파일의 값을 고칩니다.
+스크립트는 `scripts/config.env`를 source 한 셸에서 실행되기 때문에, config.env에 `export`로 적은 값은 템플릿의 `${VAR}`에 그대로 쓰입니다.
+
+- **config.env에 없는 변수**: `ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh`처럼 명령 앞에 붙여 한 번만 바꿀 수 있습니다.
+- **config.env에 `export`로 적은 변수**: 스크립트가 그 파일을 나중에 읽어 명령 앞의 값을 덮어쓰므로, 파일의 값을 고칩니다.
 
 ## 1. scripts/config.env
 
-파일이 없을 때만 `test -f scripts/config.env || cp scripts/config.env.example scripts/config.env`로 만든 뒤 편집합니다. 이미 있는 파일을 덮어쓰면 채워 둔 값이 사라집니다. 스크립트가 요구하는 필수값이 비었거나 `__SET_ME__`를 포함하면 그 스크립트는 `set <NAME> in scripts/config.env` 오류를 내고 멈춥니다. `ADMIN_PRINCIPAL_ARN`, `EKS_PUBLIC_ACCESS_CIDR`처럼 빈 값일 때의 동작이 정해진 변수는 아래 표에 적었습니다.
+파일이 없을 때만 `test -f scripts/config.env || cp scripts/config.env.example scripts/config.env`로 만든 뒤 편집합니다. 이미 있는 파일을 덮어쓰면 채워 둔 값이 사라집니다.
+
+- **필수값이 비었거나 `__SET_ME__`를 포함할 때**: 그 스크립트는 `set <NAME> in scripts/config.env` 오류를 내고 멈춥니다.
+- **빈 값일 때의 동작이 정해진 변수**: `ADMIN_PRINCIPAL_ARN`, `EKS_PUBLIC_ACCESS_CIDR`처럼 정해진 동작은 아래 표에 적었습니다.
 
 | 변수 | 예시 파일 값 | 뜻 | 쓰는 곳 |
 |---|---|---|---|
-| `AWS_REGION` | `us-west-2` | 클러스터, 이미지, HyperPod 작업의 AWS 리전. 데모 사이트(`demo/deploy.sh`)는 이 값과 관계없이 `us-east-1`에 배포 | 전체 |
+| `AWS_REGION` | `us-west-2` | 클러스터, 이미지, HyperPod 작업의 AWS 리전 | 전체 |
 | `CLUSTER_NAME` | `gpu-sandbox` | EKS 클러스터 이름. CDK 스택 이름 `<CLUSTER_NAME>-cdk`와 kubectl 컨텍스트 `<CLUSTER_NAME>-tunnel`에도 쓰임 | 전체 |
-| `K8S_VERSION` | `1.36` | EKS Kubernetes 버전. EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 범위에 포함 (HyperPod 전제조건 페이지는 아직 1.35까지) | `cdk/`, `build-iommu-ami.sh` |
-| `SCENARIO` | `A` | CDK 스택이 만들 노드 그룹 구성. `A`(system, trainer, gVisor), `B1`(system, gVisor), `B2`(system만), `C`(system, Kata CPU). `02_create_cluster.sh`의 옵션(`--hyperpod`, `--hyperpod-b2`, `--cpu-only`)이 이 값을 덮어씀 | `02_create_cluster.sh`, `cdk/` |
-| `CHANGE_SCENARIO` | 없음 (스크립트 기본 `0`) | `1`이면 이미 배포된 스택의 시나리오(Outputs의 `Scenario`)와 다른 시나리오로 배포하는 것을 허용. 첫 배포와 같은 시나리오의 재배포에는 필요 없고, 시나리오가 다를 때 이 값이 없으면 `cdk/deploy.sh`가 멈춤 | `cdk/deploy.sh` |
-| `ADMIN_PRINCIPAL_ARN` | 비우면 `cdk/deploy.sh`가 현재 세션에서 만듦 | 클러스터 관리자 access entry를 받을 IAM 역할이나 사용자 ARN. 여러 개는 쉼표로 구분(STS 세션 ARN 불가). 역할에 path가 있으면 직접 적음 | `cdk/` |
+| `K8S_VERSION` | `1.36` | EKS Kubernetes 버전 | `cdk/`, `build-iommu-ami.sh` |
+| `SCENARIO` | `A` | CDK 스택이 만들 노드 그룹 구성 | `02_create_cluster.sh`, `cdk/` |
+| `CHANGE_SCENARIO` | 없음 (스크립트 기본 `0`) | `1`이면 이미 배포된 스택의 시나리오(Outputs의 `Scenario`)와 다른 시나리오로 배포하는 것을 허용 | `cdk/deploy.sh` |
+| `ADMIN_PRINCIPAL_ARN` | 비우면 `cdk/deploy.sh`가 현재 세션에서 만듦 | 클러스터 관리자 access entry를 받을 IAM 역할이나 사용자 ARN | `cdk/` |
 | `EKS_PUBLIC_ACCESS_CIDR` | 없음 (주석 처리, private만) | public endpoint를 켤 때만, IPv4 /32 하나. 다른 범위는 설정 단계에서 거부 | `cdk/` |
-| `WITH_KATA_CPU` | `0` | `1`이면 어느 시나리오에든 `sandbox-kata-cpu`(c8i) 노드 그룹을 추가(`cdk/deploy.sh <시나리오> --with-kata-cpu`와 같음). 시나리오 C에는 항상 있음. Kata CPU 노드 추가(`kata/cpu_nodes.sh`) 전에 넣고 `02_create_cluster.sh`를 다시 실행 | `02_create_cluster.sh`, `cdk/` |
+| `WITH_KATA_CPU` | `0` | `1`이면 어느 시나리오에든 `sandbox-kata-cpu`(c8i) 노드 그룹을 추가. 시나리오 C에는 항상 있음 | `02_create_cluster.sh`, `cdk/` |
 | `WITH_KATA_GPU` | `0` | `1`이고 `KATA_IOMMU_AMI_ID`가 있으면 `sandbox-kata-gpu`(`g4dn.metal`) 노드 그룹을 추가. `cdk/deploy.sh`가 `metal` 입력으로 한 번 더 확인 | `02_create_cluster.sh`, `cdk/` |
 | `ECR_REPO_PREFIX` | `gpu-sandbox` | ECR 저장소 접두사(`<prefix>/sandbox`, `/trainer`, `/control`) | `03_build_push_images.sh`, `08_cleanup.sh` |
 | `IMAGE_TAG` | `v1` | 세 이미지 공통 태그. 저장소가 IMMUTABLE이라 같은 태그로 다시 push 할 수 없음 | `03_build_push_images.sh` |
@@ -64,7 +74,7 @@ flowchart LR
 | `TRAINER_INSTANCE_TYPE` | `g5.2xlarge` | 시나리오 A trainer 노드(A10G 24 GB 1개, 8 vCPU, 32 GiB). `g6.2xlarge`(L4)도 지정할 수 있음 | `cdk/`, `01_check_prereqs.sh` |
 | `GVISOR_INSTANCE_TYPE` | `g5.xlarge` | gVisor 노드. 노드당 A10G 1개, 샌드박스 pod 1개. `g6.xlarge`(L4)도 지정할 수 있음([04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)) | `cdk/`, `01_check_prereqs.sh` |
 | `GVISOR_NODES` | `2` | gVisor 노드 수. gVisor 풀 replica의 기본값이기도 함 | `cdk/`, `profiles/gvisor.env` |
-| `KATA_CPU_INSTANCE_TYPE` | `c8i.2xlarge` | Kata CPU 노드(nested virtualization, GPU 없음). 다른 유형은 `cdk/gpusandbox_cdk/config.py`의 `CPU_TOPOLOGY`에 코어 수와 코어당 스레드 수를 추가해야 함 | `01_check_prereqs.sh`, `cdk/` |
+| `KATA_CPU_INSTANCE_TYPE` | `c8i.2xlarge` | Kata CPU 노드(nested virtualization, GPU 없음) | `01_check_prereqs.sh`, `cdk/` |
 | `KATA_GPU_INSTANCE_TYPE` | `g4dn.metal` | Kata GPU 노드(T4 8개) | `01_check_prereqs.sh`, `cdk/`, `kata/gpu_nodes.sh` |
 | `GVISOR_RELEASE` | `20261109.0` | 설치할 gVisor 릴리스 | `install-gvisor.sh`(`infra/eks/userdata.py`가 노드 user data에 넣음), `hyperpod/check_gvisor.sh` |
 | `KATA_VERSION` | `4.3.1` | kata-deploy Helm chart 버전 | `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh` |
@@ -75,11 +85,24 @@ flowchart LR
 | `HYPERPOD_TRAINER_INSTANCE_TYPE` | `ml.g5.2xlarge` | HyperPod trainer instance group. `ml.g6.2xlarge`도 지정할 수 있음 | `cluster.json.tpl`, `hyperpod-job-grpo.yaml.tpl` |
 | `HYPERPOD_LCS_BUCKET` | `sagemaker-gpu-sandbox-lcs-__SET_ME__` | lifecycle 스크립트 버킷. HyperPod 관리형 정책이 `sagemaker-` 접두사를 전제로 하므로 유지 | `hyperpod/create.sh`, `hyperpod/delete.sh` |
 | `B2_NVIDIA_DRIVER_VERSION` | `580.178.04` | B2 custom AMI에 넣을 드라이버. 고정한 gVisor의 nvproxy 지원 목록에 있어야 함 | `hyperpod/build_b2_ami.sh` |
-| `B2_NVIDIA_RUNFILE_SHA256` | `5975a86e...` (64자) | 위 드라이버의 `.run` 설치 파일 sha256. base AMI가 `.run`으로 설치했을 때만 씀. NVIDIA의 `.sha256sum`과 gVisor nvproxy 표의 값과 같음 | `hyperpod/build_b2_ami.sh` |
+| `B2_NVIDIA_RUNFILE_SHA256` | `5975a86e...` (64자) | 위 드라이버의 `.run` 설치 파일 sha256 | `hyperpod/build_b2_ami.sh` |
 | `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | B2 `sandbox` 인스턴스 그룹. `ml.g6.xlarge`도 지정할 수 있음 | `instance-group-sandbox.json.tpl` |
 
+- **`AWS_REGION`**: 데모 사이트(`demo/deploy.sh`)는 이 값과 관계없이 `us-east-1`에 배포합니다.
+- **`K8S_VERSION`**: 예시 값 `1.36`은 EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 범위에 포함됩니다(HyperPod 전제조건 페이지는 아직 1.35까지).
+- **`SCENARIO`**: `A`(system, trainer, gVisor), `B1`(system, gVisor), `B2`(system만), `C`(system, Kata CPU). `02_create_cluster.sh`의 옵션(`--hyperpod`, `--hyperpod-b2`, `--cpu-only`)이 이 값을 덮어씁니다.
+- **`CHANGE_SCENARIO`**: 첫 배포와 같은 시나리오의 재배포에는 필요 없습니다. 시나리오가 다를 때 이 값이 없으면 `cdk/deploy.sh`가 멈춥니다.
+- **`ADMIN_PRINCIPAL_ARN`**: 여러 개는 쉼표로 구분합니다(STS 세션 ARN 불가). 역할에 path가 있으면 직접 적습니다.
+- **`WITH_KATA_CPU`**: `1`로 설정하면 `cdk/deploy.sh <시나리오> --with-kata-cpu`와 같습니다. Kata CPU 노드 추가(`kata/cpu_nodes.sh`) 전에 넣고 `02_create_cluster.sh`를 다시 실행합니다.
+- **`KATA_CPU_INSTANCE_TYPE`**: 다른 유형은 `cdk/gpusandbox_cdk/config.py`의 `CPU_TOPOLOGY`에 코어 수와 코어당 스레드 수를 추가해야 합니다.
+- **`B2_NVIDIA_RUNFILE_SHA256`**: base AMI가 `.run`으로 설치했을 때만 씁니다. NVIDIA의 `.sha256sum`과 gVisor nvproxy 표의 값과 같습니다.
+
 !!! warning "EKS_PUBLIC_ACCESS_CIDR"
-    기본으로는 비워 두세요. 비워 두면 EKS API 엔드포인트는 private만 열리고, `cdk/tunnel.sh`(SSM 포트 포워딩)로 접속합니다. 값을 넣으면 그 /32 주소 하나에서만 public 엔드포인트에 접근할 수 있고(IAM 인증은 그대로 적용), `0.0.0.0/0`이나 /24 같은 범위는 설정 단계에서 거부됩니다. 계정 보안 점검(예: Security Hub 컨트롤 EKS.1)은 public 엔드포인트 자체를 지적할 수 있습니다.
+    기본으로는 비워 두세요.
+
+    - **비워 둘 때**: EKS API 엔드포인트는 private만 열리고, `cdk/tunnel.sh`(SSM 포트 포워딩)로 접속합니다.
+    - **값을 넣을 때**: 그 /32 주소 하나에서만 public 엔드포인트에 접근할 수 있습니다(IAM 인증은 그대로 적용). `0.0.0.0/0`이나 /24 같은 범위는 설정 단계에서 거부됩니다.
+    - **계정 보안 점검**: 점검 도구(예: Security Hub 컨트롤 EKS.1)는 public 엔드포인트 자체를 지적할 수 있습니다.
 
 ### 스크립트가 출력하는 값 (config.env에 추가)
 
@@ -96,12 +119,19 @@ flowchart LR
 | `HYPERPOD` | `0` | `1`이면 trainer 이미지에 `hyperpod-elastic-agent`(hyperpodrun)를 설치 | `03_build_push_images.sh` |
 | `ENABLE_EXPERIMENTAL_CLH_GPU` | `0` | `1`이면 실험용 `kata-clh-nvidia-gpu` RuntimeClass 추가 | `kata/gpu_nodes.sh` |
 | `ACTIVE_RUNTIME`, `ACTIVE_VERSION` | `gvisor`, `v1` | 처음 만드는 routing 표의 active 값 | `05_setup_namespaces_auth.sh` |
-| `SANDBOX_ALLOWED_SUBJECTS` | `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(쉼표로 연결) | 샌드박스 API를 호출할 수 있는 ServiceAccount. `extensions/agent_sandbox.sh pool`은 기본값이 다릅니다(`grpo-trainer`, `sandbox-probe`, `sandbox-episode`) | `06_deploy_sandboxes.sh`, `extensions/agent_sandbox.sh pool` |
-| `KATA_QEMU_REPLICAS`, `KATA_CLH_REPLICAS`, `KATA_CPU_REPLICAS` | `4`, `2`, `2` | 풀 replica 기본값. `06_deploy_sandboxes.sh`의 세 번째 인자가 있으면 그 값이 우선. 시나리오 C 실습에서는 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가(c8i 한 대에 풀 4개) | `profiles/*.env` |
+| `SANDBOX_ALLOWED_SUBJECTS` | `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(쉼표로 연결) | 샌드박스 API를 호출할 수 있는 ServiceAccount | `06_deploy_sandboxes.sh`, `extensions/agent_sandbox.sh pool` |
+| `KATA_QEMU_REPLICAS`, `KATA_CLH_REPLICAS`, `KATA_CPU_REPLICAS` | `4`, `2`, `2` | 풀 replica 기본값. `06_deploy_sandboxes.sh`의 세 번째 인자가 있으면 그 값이 우선 | `profiles/*.env` |
 | `RUN_ID` | 현재 시각(`%Y%m%d-%H%M%S`) | Job 이름 `grpo-<RUN_ID>` | `07_run_grpo.sh`, `hyperpod/run_grpo.sh` |
 | `MODEL_ID` | `Qwen/Qwen2.5-Coder-1.5B-Instruct` | 학습할 모델 | `07_run_grpo.sh`, `hyperpod/run_grpo.sh` |
 
-스크립트가 직접 계산하는 값도 있습니다. `06_deploy_sandboxes.sh`는 `OIDC_ISSUER`를 `aws eks describe-cluster`에서 읽고, `hyperpod/create.sh`는 `EKS_CLUSTER_ARN`, `HYPERPOD_SECURITY_GROUP_ID`, `HYPERPOD_SUBNET_ID`, `HYPERPOD_EXECUTION_ROLE_ARN`을 만듭니다. `cdk/tunnel.sh`는 스택 출력(`ClusterEndpoint`, `AccessInstanceId`)을 CloudFormation에서 읽습니다. 이 값들은 config.env에 넣을 필요가 없습니다.
+- **`SANDBOX_ALLOWED_SUBJECTS`**: `extensions/agent_sandbox.sh pool`은 기본값이 다릅니다(`grpo-trainer`, `sandbox-probe`, `sandbox-episode`).
+- **`KATA_CPU_REPLICAS`**: 시나리오 C 실습에서는 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가합니다(c8i 한 대에 풀 4개).
+
+스크립트가 직접 계산하는 값도 있습니다. 이 값들은 config.env에 넣을 필요가 없습니다.
+
+- **`06_deploy_sandboxes.sh`**: `OIDC_ISSUER`를 `aws eks describe-cluster`에서 읽습니다.
+- **`hyperpod/create.sh`**: `EKS_CLUSTER_ARN`, `HYPERPOD_SECURITY_GROUP_ID`, `HYPERPOD_SUBNET_ID`, `HYPERPOD_EXECUTION_ROLE_ARN`을 만듭니다.
+- **`cdk/tunnel.sh`**: 스택 출력(`ClusterEndpoint`, `AccessInstanceId`)을 CloudFormation에서 읽습니다.
 
 ??? info "Production 템플릿과 veRL 스크립트가 쓰는 값"
     | 변수 | 쓰는 곳 | 뜻 |
@@ -138,9 +168,27 @@ flowchart LR
 | `POD_NAME` | 호스트 이름 | downward API `metadata.name` | 응답과 재활용에 쓰는 pod 이름 |
 | `NODE_NAME` | 빈 값 | downward API `spec.nodeName` | 응답에 넣는 노드 이름 |
 | `NODE_IP` | 서버는 읽지 않음 | downward API `status.hostIP` | 아래 egress 대상의 `$(NODE_IP)`와 샌드박스 검증(`ops/verify.sh`)의 차단 점검에 쓰임 |
-| `SANDBOX_EGRESS_PROBE_TARGETS` | 빈 값(자기 점검 꺼짐) | `169.254.169.254:80,apiserver,$(NODE_IP):10250` | 쉼표로 구분한 `host:port`. 모든 대상에 연결할 수 없어야 Ready. `apiserver`는 `KUBERNETES_SERVICE_HOST:KUBERNETES_SERVICE_PORT`(포트 기본 443)로 바뀜 |
+| `SANDBOX_EGRESS_PROBE_TARGETS` | 빈 값(자기 점검 꺼짐) | `169.254.169.254:80,apiserver,$(NODE_IP):10250` | 쉼표로 구분한 `host:port`. 모든 대상에 연결할 수 없어야 Ready |
 
-코드의 readiness 규칙에 따라 `/readyz`는 GPU probe 성공, egress 차단 확인, draining 아님, 치명적 오류 없음이 모두 참일 때만 200을 반환합니다. GPU probe는 새 프로세스에서 실행하며 120초 안에 끝나야 합니다. CUDA 풀(`SANDBOX_DEVICE=cuda`)은 GPU에서 `torch.ones(1, device='cuda').add_(1)`과 `torch.cuda.synchronize()`가 성공해야 통과하고, CPU 풀은 GPU가 없어도 통과합니다. `SANDBOX_EGRESS_PROBE_TARGETS`가 비어 있으면 egress 점검은 건너뛰고 차단된 것으로 봅니다. egress 점검은 대상마다 2초 timeout으로 연결을 시도하고, 연결 성공과 connection refused를 둘 다 "도달 가능"으로 셉니다. egress가 차단된 상태면 30초마다, 열린 상태면 5초마다 다시 점검합니다.
+`SANDBOX_EGRESS_PROBE_TARGETS`의 `apiserver`는 `KUBERNETES_SERVICE_HOST:KUBERNETES_SERVICE_PORT`(포트 기본 443)로 바뀝니다.
+
+코드의 readiness 규칙에 따라 `/readyz`는 아래 네 가지가 모두 참일 때만 200을 반환합니다.
+
+- GPU probe 성공
+- egress 차단 확인
+- draining 아님
+- 치명적 오류 없음
+
+GPU probe는 새 프로세스에서 실행하며 120초 안에 끝나야 합니다.
+
+- **CUDA 풀(`SANDBOX_DEVICE=cuda`)**: GPU에서 `torch.ones(1, device='cuda').add_(1)`과 `torch.cuda.synchronize()`가 성공해야 통과합니다.
+- **CPU 풀**: GPU가 없어도 통과합니다.
+
+egress 점검은 다음과 같이 동작합니다.
+
+- **`SANDBOX_EGRESS_PROBE_TARGETS`가 비어 있을 때**: 점검을 건너뛰고 차단된 것으로 봅니다.
+- **연결 시도**: 대상마다 2초 timeout으로 연결을 시도하고, 연결 성공과 connection refused를 둘 다 "도달 가능"으로 셉니다.
+- **다시 점검하는 간격**: egress가 차단된 상태면 30초마다, 열린 상태면 5초마다 다시 점검합니다.
 
 | 경로 | 인증 | 응답 |
 |---|---|---|
@@ -163,7 +211,11 @@ flowchart LR
 아래 명령은 설치한 가상 환경에서 CPU 설정과 인증 우회를 켠 상태로 서버를 포그라운드에서 실행합니다. 기본 bind가 `127.0.0.1`이라 같은 PC에서만 접근할 수 있고, `SANDBOX_WORK_ROOT` 디렉터리는 서버가 시작할 때 만듭니다.
 
 !!! warning "Linux 호스트에서는 평가 요청을 보내지 마세요"
-    서버는 평가가 끝날 때마다 `/proc`에 보이는 프로세스 중 자신과 상위 프로세스를 뺀 모든 프로세스에 SIGKILL을 보냅니다. Linux 호스트에서 직접 실행한 서버에 평가 요청을 보내면 같은 사용자의 편집기나 다른 서버도 종료됩니다. 가상 환경과 loopback bind는 프로세스를 격리하지 않습니다. 아래 `/readyz` 확인까지는 괜찮습니다. 평가 요청까지 보내려면 별도 PID namespace를 가진 컨테이너에서 서버를 실행하세요. 기본 bind가 `127.0.0.1`이므로 호스트에서 요청을 보내려면 호스트 네트워크를 함께 쓰는 컨테이너(예: `docker run --network host`)로 띄웁니다([시작하기](../getting_started.md)의 경고). macOS에는 `/proc`가 없어서 이 동작이 실행되지 않습니다.
+    서버는 평가가 끝날 때마다 `/proc`에 보이는 프로세스 중 자신과 상위 프로세스를 뺀 모든 프로세스에 SIGKILL을 보냅니다. Linux 호스트에서 직접 실행한 서버에 평가 요청을 보내면 같은 사용자의 편집기나 다른 서버도 종료됩니다. 가상 환경과 loopback bind는 프로세스를 격리하지 않습니다.
+
+    - **`/readyz` 확인**: 아래 `/readyz` 확인까지는 괜찮습니다.
+    - **평가 요청까지 보낼 때**: 별도 PID namespace를 가진 컨테이너에서 서버를 실행하세요. 기본 bind가 `127.0.0.1`이므로 호스트에서 요청을 보내려면 호스트 네트워크를 함께 쓰는 컨테이너(예: `docker run --network host`)로 띄웁니다([시작하기](../getting_started.md)의 경고).
+    - **macOS**: `/proc`가 없어서 이 동작이 실행되지 않습니다.
 
 ```bash
 # Local smoke test only: loopback bind, CPU shapes, authentication bypassed
@@ -180,7 +232,9 @@ INFO:gpusandbox.server:device probe ok=True info={'torch': '<version>', 'cuda_ru
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 ```
 
-다른 터미널에서 `curl -s http://127.0.0.1:8000/readyz`를 실행하면 `{"status":"ready"}`가 나옵니다. 서버는 Ctrl-C로 멈춥니다. `command not found: gpusandbox-server`가 나오면 가상 환경이 활성화되지 않은 것이니 [시작하기](../getting_started.md)의 설치 단계를 다시 보세요.
+- **확인**: 다른 터미널에서 `curl -s http://127.0.0.1:8000/readyz`를 실행하면 `{"status":"ready"}`가 나옵니다.
+- **멈추기**: 서버는 Ctrl-C로 멈춥니다.
+- **`command not found: gpusandbox-server`가 나올 때**: 가상 환경이 활성화되지 않은 것이니 [시작하기](../getting_started.md)의 설치 단계를 다시 보세요.
 
 ## 3. 인증 (SANDBOX_AUTH_*)
 
@@ -249,19 +303,26 @@ python -I -m gpusandbox.harness.evaluate --task relu_bias \
 python -m json.tool /tmp/gs-eval/result.json
 ```
 
-결과에서 `"status": "ok"`, `"correct": true`, `"custom_kernel": false`(Triton 커널이 없으므로)를 확인하세요. CPU의 `speedup` 값은 의미가 없습니다. `ModuleNotFoundError`가 나면 가상 환경이 활성화되지 않은 경우가 대부분입니다. `-I` 옵션이 현재 디렉터리와 `PYTHONPATH`를 무시하므로, 패키지가 가상 환경에 설치되어 있어야 합니다.
+**확인할 것:**
+
+- 결과에 `"status": "ok"`, `"correct": true`, `"custom_kernel": false`(Triton 커널이 없으므로)가 있는지 확인하세요.
+- CPU의 `speedup` 값은 의미가 없습니다.
+
+**문제가 생기면:** `ModuleNotFoundError`가 나면 가상 환경이 활성화되지 않은 경우가 대부분입니다. `-I` 옵션이 현재 디렉터리와 `PYTHONPATH`를 무시하므로, 패키지가 가상 환경에 설치되어 있어야 합니다.
 
 후보 자식 프로세스에는 `PATH`, `LD_LIBRARY_PATH`, `CUDA_VISIBLE_DEVICES`, `NVIDIA_VISIBLE_DEVICES`, `NVIDIA_DRIVER_CAPABILITIES`, `LANG`, `LC_ALL`, `CC`만 전달됩니다. 여기에 요청마다 새로 만든 `HOME`, `TMPDIR`, `TRITON_CACHE_DIR`, `CUDA_CACHE_PATH`와 `PYTHONDONTWRITEBYTECODE=1`, `PYTHONHASHSEED=0`이 추가됩니다.
 
 | verdict `status` | 뜻 | TRL correctness reward |
 |---|---|---|
-| `ok` | 정답 | 1.0(`custom_kernel`이 참: 정적 검사에서 `@triton.jit` 함수가 있고, 정확성 검사까지 집계한 Triton 호출 횟수가 0이 아니거나 집계할 수 없음), 0.3(Triton 없이 정답이고 `--allow-torch-only`가 없을 때) |
+| `ok` | 정답 | 1.0(`custom_kernel`이 참), 0.3(Triton 없이 정답이고 `--allow-torch-only`가 없을 때) |
 | `wrong_answer` | 출력 불일치. 타이밍 반복의 checksum 불일치 포함 | 0.2 |
 | `runtime_error` | 실행 중 오류, Triton 컴파일 오류, 상태 파일 없이 종료 | 0.05 |
 | `compile_error` | 후보 모듈 로드 실패 | 0.0 |
 | `timeout` | 제한 시간 초과 | 0.0 |
 | `policy_violation` | 정적 정책 위반 | 0.0 |
 | `sandbox_error` | 인프라 문제(레퍼런스 실패, 통신 실패, 인증 실패 등) | `None`(학습에서 제외) |
+
+- **`custom_kernel`이 참인 조건**: 정적 검사에서 `@triton.jit` 함수가 있고, 정확성 검사까지 집계한 Triton 호출 횟수가 0이 아니거나 집계할 수 없을 때입니다.
 
 | 플래그 | 뜻 |
 |---|---|
@@ -286,9 +347,13 @@ python -m json.tool /tmp/gs-eval/result.json
 
 우선순위는 `SANDBOX_GATEWAY`, `SANDBOX_ROUTING_FILE`, `SANDBOX_ADDRESS` 순서입니다. 셋 다 없으면 `set SANDBOX_ROUTING_FILE or SANDBOX_ADDRESS` 오류로 시작하지 못합니다.
 
-주소 형식은 세 가지입니다. `host:port`는 headless Service DNS 이름으로 해석해 10초마다 다시 조회하고, 조회에 실패하면 마지막 결과를 씁니다. 쉼표로 구분한 목록이나 `static:` 접두사가 붙은 값은 그대로 씁니다(로컬 테스트용).
+주소 형식은 세 가지입니다.
 
-아래 표는 샌드박스 pod를 부르는 풀 클라이언트의 동작이며, direct 모드의 trainer와 gateway가 이 클라이언트를 씁니다. gateway 모드의 trainer는 배치를 `POST /v1/evaluate_batch` 한 번으로 보내고 재시도하지 않습니다. 이 요청의 timeout은 1,200초(300초의 4배)이고, 실패하면 배치의 모든 항목이 `sandbox_error`가 됩니다.
+- **`host:port`**: headless Service DNS 이름으로 해석해 10초마다 다시 조회하고, 조회에 실패하면 마지막 결과를 씁니다.
+- **쉼표로 구분한 목록**: 그대로 씁니다(로컬 테스트용).
+- **`static:` 접두사가 붙은 값**: 그대로 씁니다(로컬 테스트용).
+
+아래 표는 샌드박스 pod를 부르는 풀 클라이언트의 동작이며, direct 모드의 trainer와 gateway가 이 클라이언트를 씁니다.
 
 | 동작 | 코드 값 |
 |---|---|
@@ -300,6 +365,8 @@ python -m json.tool /tmp/gs-eval/result.json
 | 503 | cooldown 후 다른 pod로 재시도 |
 | 그 밖의 4xx(401, 403, 422 등) | 재시도 없이 `sandbox_error`, 메시지 `HTTP <code>: <본문 앞부분>` |
 | 연결 오류, 5xx | cooldown 후 재시도 |
+
+gateway 모드의 trainer는 이 표와 달리 배치를 `POST /v1/evaluate_batch` 한 번으로 보내고 재시도하지 않습니다. 이 요청의 timeout은 1,200초(300초의 4배)이고, 실패하면 배치의 모든 항목이 `sandbox_error`가 됩니다.
 
 ## 6. Gateway
 
@@ -327,7 +394,9 @@ gateway는 audience나 허용 목록이 비어 있으면 보호된 경로를 모
 | `GET /v1/routing` | 필요 | 현재 `{runtime, version, revision}` |
 | `GET /metrics` | 필요 | `gateway_evaluations_total{runtime,version,status}`, `gateway_evaluation_seconds`, `gateway_recycled_pods_total` |
 | `GET /healthz` | 없음 | 200 |
-| `GET /readyz` | 없음 | 쓸 수 있는 routing 표가 없으면 503(첫 읽기부터 실패했거나 활성 런타임과 버전의 풀 주소가 없을 때). 다시 읽기에 실패해도 마지막 정상 표가 있으면 200 |
+| `GET /readyz` | 없음 | 쓸 수 있는 routing 표가 없으면 503, 있으면 200 |
+
+- **gateway `/readyz`가 503인 경우**: 첫 읽기부터 실패했거나 활성 런타임과 버전의 풀 주소가 없을 때입니다. 다시 읽기에 실패해도 마지막 정상 표가 있으면 200입니다.
 
 고정 정보(pin)는 gateway 프로세스 메모리에만 저장되고, 10만 개를 넘으면 만료된 항목을 지웁니다. 그래서 매니페스트는 replica를 1로 둡니다.
 
@@ -359,9 +428,15 @@ gateway는 audience나 허용 목록이 비어 있으면 보호된 경로를 모
 
 코드에 고정된 값은 `use_vllm=True`, `vllm_mode="colocate"`, `vllm_enable_sleep_mode=True`, `logging_steps=1`, `save_total_limit=2`, `report_to="none"`, LoRA `target_modules="all-linear"`입니다. `--dry-run`은 이 가운데 `max_completion_length=32`, `save_steps=1000`, `max_steps=2`, `use_vllm=False`, `bf16=False`, `gradient_checkpointing=False`, `use_cpu=True`로 바꿉니다.
 
-기본값으로 한 번에 생성하는 completion 수는 `--per-device-batch` x `--grad-accum` = 16개(prompt 2개 x 8개 생성)이고, 생성 배치 하나로 optimizer step을 한 번만 실행합니다(strictly on-policy). 메모리를 줄이려고 `--per-device-batch`를 바꿀 때는 곱이 `--num-generations`의 배수가 되도록 `--grad-accum`도 함께 조정하세요. 배수가 아니면 TRL이 설정을 거부합니다(TRL 동작).
+기본값으로 한 번에 생성하는 completion 수는 `--per-device-batch` x `--grad-accum` = 16개(prompt 2개 x 8개 생성)이고, 생성 배치 하나로 optimizer step을 한 번만 실행합니다(strictly on-policy).
 
-Job 템플릿(`k8s/trainer/job-grpo.yaml.tpl`, `hyperpod-job-grpo.yaml.tpl`)은 `--output-dir`, `--max-steps`, `--model`, `--metrics-file`만 전달합니다. 다른 플래그를 바꾸려면 템플릿의 `args`(HyperPod는 `command`)에 추가하세요. 템플릿이 넣는 env는 `SANDBOX_ROUTING_FILE`, `SANDBOX_TOKEN_FILE`, `HF_HOME=/cache/hf`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`이고, 리소스는 CPU 7, 메모리 28Gi, GPU 1입니다.
+- **메모리를 줄이려고 `--per-device-batch`를 바꿀 때**: 곱이 `--num-generations`의 배수가 되도록 `--grad-accum`도 함께 조정하세요. 배수가 아니면 TRL이 설정을 거부합니다(TRL 동작).
+
+Job 템플릿(`k8s/trainer/job-grpo.yaml.tpl`, `hyperpod-job-grpo.yaml.tpl`)은 다음과 같습니다.
+
+- **전달하는 플래그**: `--output-dir`, `--max-steps`, `--model`, `--metrics-file`만 전달합니다. 다른 플래그를 바꾸려면 템플릿의 `args`(HyperPod는 `command`)에 추가하세요.
+- **넣는 env**: `SANDBOX_ROUTING_FILE`, `SANDBOX_TOKEN_FILE`, `HF_HOME=/cache/hf`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+- **리소스**: CPU 7, 메모리 28Gi, GPU 1
 
 ## 8. 런타임 profile (k8s/sandbox/profiles)
 
@@ -397,9 +472,19 @@ Deployment 템플릿이 모든 풀에 넣는 고정 값도 있습니다.
 | `SANDBOX_MAX_EVALS` | `0`(재활용 안 함) | `200` |
 
 !!! warning "v2의 SANDBOX_MAX_EVALS=200"
-    v2 pod는 200번 평가한 뒤 draining 상태가 되어 NotReady로 남습니다. 이런 pod를 자동으로 지워 Deployment가 새 pod를 만들게 하는 기능은 Production gateway의 재활용 기능(`GATEWAY_RECYCLE_PODS=1`)뿐입니다. 핸즈온처럼 trainer가 풀을 직접 호출하는 direct 모드에서는 pod를 직접 지우거나, 핸즈온용 버전 파일에서 이 값을 `0`으로 두세요. 자세한 증상은 [문제 해결](troubleshooting.md)에 있습니다.
+    v2 pod는 200번 평가한 뒤 draining 상태가 되어 NotReady로 남습니다.
 
-새 버전(예: `v3`)을 만들 때는 두 곳을 고칩니다. `k8s/sandbox/versions/v3.env`에 네 값을 `export` 하고, `k8s/base/routing.json.tpl`의 `pools`에 `v3` 주소를 추가하세요. 버전 교체 스크립트(`ops/rollout.sh`)는 전환할 때 이 템플릿을 다시 렌더링하므로, 템플릿에 없는 버전으로 전환하면 trainer가 `no pool for runtime=... version=...` 오류를 냅니다.
+    - **Production gateway를 쓸 때**: 이런 pod를 자동으로 지워 Deployment가 새 pod를 만들게 하는 기능은 Production gateway의 재활용 기능(`GATEWAY_RECYCLE_PODS=1`)뿐입니다.
+    - **direct 모드일 때**(핸즈온처럼 trainer가 풀을 직접 호출): pod를 직접 지우거나, 핸즈온용 버전 파일에서 이 값을 `0`으로 두세요.
+
+    자세한 증상은 [문제 해결](troubleshooting.md)에 있습니다.
+
+새 버전(예: `v3`)을 만들 때는 두 곳을 고칩니다.
+
+1. `k8s/sandbox/versions/v3.env`에 네 값을 `export` 하세요.
+2. `k8s/base/routing.json.tpl`의 `pools`에 `v3` 주소를 추가하세요.
+
+버전 교체 스크립트(`ops/rollout.sh`)는 전환할 때 이 템플릿을 다시 렌더링하므로, 템플릿에 없는 버전으로 전환하면 trainer가 `no pool for runtime=... version=...` 오류를 냅니다.
 
 ## 10. routing.json
 
@@ -420,9 +505,20 @@ Deployment 템플릿이 모든 풀에 넣는 고정 값도 있습니다.
 | `active.version` | 버전. runtime을 바꿔도 버전은 이 값을 씀 |
 | `pools.<runtime>.<version>` | 그 풀의 주소(`host:port`, headless Service DNS). 로컬에서는 쉼표 목록이나 `static:` 값도 가능 |
 
-`k8s/base/routing.json.tpl`이 원본이고, `05_setup_namespaces_auth.sh`가 `rl-trainer`에, 버전 교체 스크립트(`ops/rollout.sh`)가 `rl-trainer`와(있으면) `sandbox-gateway`에 ConfigMap `sandbox-routing`(키 `routing.json`)으로 배포합니다. 템플릿에는 GPU 런타임 4개(`gvisor`, `kata-qemu`, `kata-clh`, `gvisor-hyperpod`)와 CPU 런타임 3개(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)의 `v1`, `v2` 주소가 모두 들어 있습니다. 주소가 표에 있어도 그 버전의 풀을 배포해야 요청을 받습니다.
+`k8s/base/routing.json.tpl`이 원본이고, ConfigMap `sandbox-routing`(키 `routing.json`)으로 배포됩니다.
 
-읽는 쪽에서는 내용이 바뀔 때마다(키 순서를 정규화한 JSON 기준) `revision`이 1씩 증가하고, 파일은 최소 2초 간격으로 다시 읽습니다. 읽기나 JSON 파싱에 실패하면 마지막 정상 표를 계속 쓰고, 첫 읽기부터 실패하면 `RoutingError`가 납니다(trainer는 시작하지 못하고, gateway는 Ready가 되지 않음). ConfigMap은 디렉터리로 마운트해야 합니다. `subPath`로 마운트하면 ConfigMap을 갱신해도 pod 안의 파일이 바뀌지 않습니다.
+- **`05_setup_namespaces_auth.sh`**: `rl-trainer`에 배포합니다.
+- **버전 교체 스크립트(`ops/rollout.sh`)**: `rl-trainer`와(있으면) `sandbox-gateway`에 배포합니다.
+
+템플릿에는 GPU 런타임 4개(`gvisor`, `kata-qemu`, `kata-clh`, `gvisor-hyperpod`)와 CPU 런타임 3개(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)의 `v1`, `v2` 주소가 모두 들어 있습니다. 주소가 표에 있어도 그 버전의 풀을 배포해야 요청을 받습니다.
+
+읽는 쪽은 다음과 같이 동작합니다.
+
+- **내용이 바뀔 때**: `revision`이 1씩 증가합니다(키 순서를 정규화한 JSON 기준).
+- **다시 읽는 간격**: 파일은 최소 2초 간격으로 다시 읽습니다.
+- **읽기나 JSON 파싱에 실패할 때**: 마지막 정상 표를 계속 씁니다.
+- **첫 읽기부터 실패할 때**: `RoutingError`가 납니다(trainer는 시작하지 못하고, gateway는 Ready가 되지 않음).
+- **마운트 방식**: ConfigMap은 디렉터리로 마운트해야 합니다. `subPath`로 마운트하면 ConfigMap을 갱신해도 pod 안의 파일이 바뀌지 않습니다.
 
 로컬에서 두 서버를 버전 두 개처럼 쓰려면 이렇게 적습니다.
 

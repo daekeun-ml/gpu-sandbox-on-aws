@@ -5,7 +5,10 @@
 
 ## Pain point
 
-A `g4dn.metal` left running after the hands-on costs 7.824 USD per hour, or 375.552 USD over a 48-hour weekend. A pool fixed at a generous size keeps billing for sandbox GPUs that are busy only during the reward phase and idle during generation and updates. Billing is per node, so using 4 of the 8 T4s on a metal node doubles the price per T4 used, and for a gVisor pool, which uses one node per pod, two blue/green pools that overlap for long bill sandbox GPUs twice for that whole time.
+- **A `g4dn.metal` left running after the hands-on**: it costs 7.824 USD per hour, or 375.552 USD over a 48-hour weekend.
+- **A pool fixed at a generous size**: it keeps billing for sandbox GPUs that are busy only during the reward phase and idle during generation and updates.
+- **Using 4 of the 8 T4s on a metal node**: billing is per node, so this doubles the price per T4 used.
+- **Two blue/green gVisor pools that overlap for long**: a gVisor pool uses one node per pod, so sandbox GPUs bill twice for that whole time.
 
 ![a: through the trainer's generation, reward and update phases the sandbox GPU is busy only during reward but bills per node throughout, and a pool kept after the run leaves g4dn.metal billing 7.824 USD per hour (375.552 USD over a 48-hour weekend). Using only 4 of the 8 T4s costs 1.956 USD/hour per T4 used. b: with the pool sized to the reward phase and replicas 0 after the run, the empty node becomes eligible for release after consolidateAfter 30 min, about 3.912 USD per empty period and billed until the node ends, and with all 8 T4s in use one T4 costs 0.978 USD/hour](../images/figures/production-08_cost.svg)
 
@@ -72,9 +75,18 @@ step_time_s(P)   ≈ t_generate + t_update + ceil(N / P) × t_eval        (secon
 cost_per_step(P) ≈ (C_trainer + C_sandbox(P) + C_fixed) × step_time_s(P) / 3600
 ```
 
-The `C_*` terms are USD per hour and the `t_*` terms are seconds (so are `eval_p50_s` and `eval_p95_s` from `scripts/ops/bench.sh`), hence the division by 3600. `C_sandbox(P)` is the hourly price of the nodes that `P` pods occupy: `P × C_node` for gVisor (one pod per node). For Kata GPU (up to 8 pods per `g4dn.metal`) the minimum is `ceil(P / 8) × C_metal`, but the template's topology spread prefers to place pods on separate nodes, and the placeholder and empty nodes are billed too, so add up the run time of every metal node that actually ran, multiplied by its price.
+The `C_*` terms are USD per hour and the `t_*` terms are seconds (so are `eval_p50_s` and `eval_p95_s` from `scripts/ops/bench.sh`), hence the division by 3600. `C_sandbox(P)` is the hourly price of the nodes that `P` pods occupy.
 
-Increase `P` only while `cost_per_step` keeps going down. Measure `t_eval` with `scripts/ops/bench.sh`, the step time from the trainer log, and the share of time a pod spends on evaluations with `avg_over_time(sandbox_busy[1h])`. `sandbox_busy` is 1 while an evaluation runs (CPU work and waiting on child processes included), so it is not the utilization of the GPU itself. For example, adding one more `g5.xlarge` to the hands-on minimal path (EC2 subtotal 3.416 USD/hour) raises the hourly cost to 4.422 USD, so the step time must drop by more than about 23% for the cost per step to fall (3.416 ÷ 4.422 ≈ 0.773); fixed costs such as the control plane lower that threshold slightly.
+- **gVisor (one pod per node)**: `P × C_node`.
+- **Kata GPU (up to 8 pods per `g4dn.metal`)**: the minimum is `ceil(P / 8) × C_metal`. But the template's topology spread prefers to place pods on separate nodes, and the placeholder and empty nodes are billed too, so add up the run time of every metal node that actually ran, multiplied by its price.
+
+Increase `P` only while `cost_per_step` keeps going down. Measure the inputs as follows.
+
+- **`t_eval`**: measure it with `scripts/ops/bench.sh`.
+- **Step time**: measure it from the trainer log.
+- **Share of time a pod spends on evaluations**: measure it with `avg_over_time(sandbox_busy[1h])`. `sandbox_busy` is 1 while an evaluation runs (CPU work and waiting on child processes included), so it is not the utilization of the GPU itself.
+
+For example, adding one more `g5.xlarge` to the hands-on minimal path (EC2 subtotal 3.416 USD/hour) raises the hourly cost to 4.422 USD, so the step time must drop by more than about 23% for the cost per step to fall (3.416 ÷ 4.422 ≈ 0.773); fixed costs such as the control plane lower that threshold slightly.
 
 ### Return empty nodes quickly
 
@@ -85,13 +97,25 @@ Increase `P` only while `cost_per_step` keeps going down. Measure `t_eval` with 
 | `sandbox-kata-cpu` | `WhenEmptyOrUnderutilized`, 5 minutes | `c8i.2xlarge` 0.0312 USD |
 | `trainer` | `WhenEmpty`, 15 minutes | For example `g6e.48xlarge` 7.5328 USD |
 
-`consolidateAfter` is the wait before Karpenter considers the node for removal, so billing continues until the node actually terminates. `WhenEmpty` only considers nodes without workload pods (karpenter.sh docs). The hands-on EKS managed node groups (CDK stack) have no consolidation and bill until you scale them down or delete them, so scale them down yourself (for example `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`).
+`consolidateAfter` is the wait before Karpenter considers the node for removal, so billing continues until the node actually terminates. `WhenEmpty` only considers nodes without workload pods (karpenter.sh docs).
+
+The hands-on EKS managed node groups (CDK stack) have no consolidation and bill until you scale them down or delete them, so scale them down yourself (for example `aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu --scaling-config minSize=0,maxSize=1,desiredSize=0`).
 
 ### The 30-minute metal wait and the warm placeholder
 
-A metal node takes minutes to join the cluster and kata-deploy more minutes to install, so a node that stays empty for the full 30 minutes costs about 3.912 USD (1.304 USD if it is used again after 10 minutes), and billing continues past 30 minutes until the node terminates. In return the wait avoids a cold start when the pool comes back within 30 minutes (blue/green, a rollback window). When a run ends and no pool is coming back, shrink the node group or `consolidateAfter`.
+A metal node takes minutes to join the cluster and kata-deploy more minutes to install.
 
-The placeholder in `k8s/production/warm-capacity.yaml` is a low-priority pause pod (60 CPUs, 200 GiB of memory) that keeps one spare metal node. When a sandbox pod needs room, the placeholder is preempted within seconds and Karpenter starts a new spare in the background, When the placeholder sits on a node without sandbox pods, that spare node adds 7.824 USD per hour or 187.776 USD per day. The placeholder asks only for CPU and memory, so it can share a node that has room left beside a few sandbox pods; for that time count the node price once. Use it only for runs whose pool spans several metal nodes or where a node failure must not stall rewards, and otherwise turn it off with `kubectl -n sandbox scale deployment/kata-metal-warm-placeholder --replicas=0`. Two Kata pools of 4 (blue/green) fit on one metal node (208 GiB of memory for 8 pods on a 384 GiB node), so that switch works without the placeholder.
+- **Cost**: a node that stays empty for the full 30 minutes costs about 3.912 USD (1.304 USD if it is used again after 10 minutes), and billing continues past 30 minutes until the node terminates.
+- **What you get**: the wait avoids a cold start when the pool comes back within 30 minutes (blue/green, a rollback window).
+- **When a run ends and no pool is coming back**: shrink the node group or `consolidateAfter`.
+
+The placeholder in `k8s/production/warm-capacity.yaml` is a low-priority pause pod (60 CPUs, 200 GiB of memory) that keeps one spare metal node. When a sandbox pod needs room, the placeholder is preempted within seconds and Karpenter starts a new spare in the background.
+
+- **When the placeholder sits on a node without sandbox pods**: that spare node adds 7.824 USD per hour or 187.776 USD per day.
+- **When it shares a node with sandbox pods**: the placeholder asks only for CPU and memory, so it can share a node that has room left beside a few sandbox pods; for that time count the node price once.
+- **When to use it**: only for runs whose pool spans several metal nodes or where a node failure must not stall rewards.
+- **Otherwise**: turn it off with `kubectl -n sandbox scale deployment/kata-metal-warm-placeholder --replicas=0`.
+- **Blue/green switch of Kata pools**: two Kata pools of 4 (blue/green) fit on one metal node (208 GiB of memory for 8 pods on a 384 GiB node), so that switch works without the placeholder.
 
 ### Runtime and GPU choice
 
@@ -104,13 +128,25 @@ The placeholder in `k8s/production/warm-capacity.yaml` is a low-priority pause p
 | Kata, `g4dn.metal`, 4 used | 7.824 | 1.956 (per T4 used) | `KATA_QEMU_REPLICAS` default of 4 |
 | Kata, Seoul `g4dn.metal`, 8 used | 9.624 | 1.203 (T4) | |
 
-Do not choose by price per GPU alone. A10G and T4 speedups cannot be compared, and the isolation levels differ. gVisor nvproxy filters driver ioctls through an allowlist, but it is less effective than a VM boundary against vulnerabilities in the driver itself, while Kata hands the whole GPU to a VM. Decide the runtime from your isolation requirement first, and for Kata size the pool to fill the 8 T4s of a metal node.
+Do not choose by price per GPU alone. A10G and T4 speedups cannot be compared, and the isolation levels differ.
+
+- **gVisor nvproxy**: it filters driver ioctls through an allowlist, but it is less effective than a VM boundary against vulnerabilities in the driver itself.
+- **Kata**: it hands the whole GPU to a VM.
+
+Decide the runtime from your isolation requirement first, and for Kata size the pool to fill the 8 T4s of a metal node.
 
 ### CPU tier and Spot
 
 - **Kata CPU tier (c8i)**: nested virtualization runs Kata without `.metal`. In the hands-on it is a cheap way to practice Kata before turning on `g4dn.metal`; in production it can filter work that needs no GPU (static checks, nvcc compilation) in front of the GPU tier. The CPU pools (`gvisor-cpu`, `kata-*-cpu`) are in the routing table and the reward loop of scenario C ([10 CPU-only path on c8i](../handson/10_cpu_only.md)) uses them, but this two-stage setup is not wired.
-- **Savings already built in**: the three reward functions of `KernelRewards` share one sandbox result. Completions already in the cache, and completions without code or rejected by the static policy, are not sent to a sandbox. Identical completions in one call are sent once. If the whole batch is in the cache of one pool, nothing is sent even after a version switch. If the results span several pools they are sent again to this batch's pool, and if the pool changes again during scoring the third call carries the whole batch, so the number sent can rise for a while.
-- **Spot only for the CPU tier**: in `infra/karpenter/nodepools.yaml` the only NodePool that allows Spot is `sandbox-kata-cpu`. On the CPU tier an interruption ends in a retry on another pod, and on the GPU tier too, when a reclaimed node drops a connection mid-evaluation, the gateway retries on another Ready pod. A request that still cannot be served becomes `sandbox_error` (excluded in TRL, format score only in veRL), and throughput drops for the minutes it takes to get GPU capacity back. If you want Spot on GPU tiers, put `sandbox_error` alarms and checkpoints on shared storage in place first.
+- **Savings already built in**: the three reward functions of `KernelRewards` share one sandbox result.
+    - **Not sent**: completions already in the cache, and completions without code or rejected by the static policy, are not sent to a sandbox.
+    - **Identical completions in one call**: they are sent once.
+    - **If the whole batch is in the cache of one pool**: nothing is sent even after a version switch.
+    - **If the results span several pools**: they are sent again to this batch's pool, and if the pool changes again during scoring the third call carries the whole batch, so the number sent can rise for a while.
+- **Spot only for the CPU tier**: in `infra/karpenter/nodepools.yaml` the only NodePool that allows Spot is `sandbox-kata-cpu`.
+    - **On an interruption on the CPU tier**: it ends in a retry on another pod.
+    - **When a reclaimed GPU node drops a connection mid-evaluation**: the gateway retries on another Ready pod. A request that still cannot be served becomes `sandbox_error` (excluded in TRL, format score only in veRL), and throughput drops for the minutes it takes to get GPU capacity back.
+    - **If you want Spot on GPU tiers**: put `sandbox_error` alarms and checkpoints on shared storage in place first.
 
 ### Trainer: HyperPod `ml.*` versus EC2
 
@@ -133,11 +169,19 @@ Also check that HyperPod uses "ml.<type> for cluster usage" quotas separate from
     With all 8 T4s in use, one T4 costs 0.978 USD per hour, not far from the A10G of a `g5.xlarge` (1.006 USD per hour). What raises the cost is per-node billing (1.956 USD per T4 used with only 4 in use), plus the empty 30 minutes and the placeholder on top.
 
 !!! question "❓ Misconception: HyperPod adds a premium to the whole cluster"
-    The `ml.*` price applies only to HyperPod instance groups. In B1 only the trainer is on HyperPod, and the sandboxes are EC2 nodes in the same EKS cluster that bill at EC2 prices. In B2 the sandboxes also run in a HyperPod instance group (2x `ml.g5.xlarge` by default) and bill at `ml.*` prices. System nodes bill at EC2 prices in both. The control plane follows EKS pricing, and the NAT and storage follow their own prices.
+    The `ml.*` price applies only to HyperPod instance groups.
+
+    - **B1**: only the trainer is on HyperPod, and the sandboxes are EC2 nodes in the same EKS cluster that bill at EC2 prices.
+    - **B2**: the sandboxes also run in a HyperPod instance group (2x `ml.g5.xlarge` by default) and bill at `ml.*` prices.
+    - **System nodes**: they bill at EC2 prices in both.
+    - **Other items**: the control plane follows EKS pricing, and the NAT and storage follow their own prices.
 
 ## Hourly estimate: hands-on paths
 
-The minimal path is what `scripts/02_create_cluster.sh` creates (scenario A, gVisor only); the full path adds the Kata CPU node (`WITH_KATA_CPU=1`, `scripts/kata/cpu_nodes.sh`) and the Kata GPU node (`WITH_KATA_GPU=1`, `scripts/kata/gpu_nodes.sh`). The Kata CPU node group joins the CDK stack when you set `WITH_KATA_CPU=1` and run `02_create_cluster.sh` again. For the Kata GPU node group, bake the IOMMU AMI first (`scripts/kata/gpu_nodes.sh`), set `KATA_IOMMU_AMI_ID` and `WITH_KATA_GPU=1`, then run it again; `WITH_KATA_GPU=1` without an AMI ID stops at the CDK settings check.
+The minimal path is what `scripts/02_create_cluster.sh` creates (scenario A, gVisor only); the full path adds the Kata CPU node (`WITH_KATA_CPU=1`, `scripts/kata/cpu_nodes.sh`) and the Kata GPU node (`WITH_KATA_GPU=1`, `scripts/kata/gpu_nodes.sh`).
+
+- **Kata CPU node group**: it joins the CDK stack when you set `WITH_KATA_CPU=1` and run `02_create_cluster.sh` again.
+- **Kata GPU node group**: bake the IOMMU AMI first (`scripts/kata/gpu_nodes.sh`), set `KATA_IOMMU_AMI_ID` and `WITH_KATA_GPU=1`, then run it again. `WITH_KATA_GPU=1` without an AMI ID stops at the CDK settings check.
 
 | Item | Count | Price (USD/hour) | USD per hour |
 |---|---|---|---|

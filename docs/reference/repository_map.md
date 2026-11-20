@@ -5,7 +5,12 @@
 
 ## 기존 Pain Point
 
-샌드박스 풀 하나를 배포하면 `scripts/config.env`, 런타임 profile, 버전 파일, Deployment 템플릿의 값이 합쳐지므로, 어떤 값이 어느 파일에서 왔는지 역으로 추적하기 어렵습니다. 템플릿도 그대로 적용할 수 없습니다. `.tpl` 파일은 `scripts/render.py`로 렌더링해야 하고, Karpenter EC2NodeClass 템플릿에는 `@@include@@`로 셸 스크립트가 삽입됩니다. 노드 그룹의 user data는 `infra/eks/userdata.py`가 따로 만듭니다. 이미지 이름도 디렉터리 이름과 다릅니다. `gateway/Dockerfile`이 만드는 이미지는 ECR에서 `control`이고, gateway뿐 아니라 probe, parity, bench, JWKS 동기화도 이 이미지로 실행됩니다.
+저장소에서 값과 파일을 따라가기 어려운 지점은 다음과 같습니다.
+
+- **값이 여러 파일에서 합쳐짐**: 샌드박스 풀 하나를 배포하면 `scripts/config.env`, 런타임 profile, 버전 파일, Deployment 템플릿의 값이 합쳐지므로, 어떤 값이 어느 파일에서 왔는지 역으로 추적하기 어렵습니다.
+- **템플릿은 그대로 적용할 수 없음**: `.tpl` 파일은 `scripts/render.py`로 렌더링해야 하고, Karpenter EC2NodeClass 템플릿에는 `@@include@@`로 셸 스크립트가 삽입됩니다.
+- **노드 그룹의 user data**: `infra/eks/userdata.py`가 따로 만듭니다.
+- **이미지 이름이 디렉터리 이름과 다름**: `gateway/Dockerfile`이 만드는 이미지는 ECR에서 `control`이고, gateway뿐 아니라 probe, parity, bench, JWKS 동기화도 이 이미지로 실행됩니다.
 
 ## Why
 
@@ -45,11 +50,26 @@ gpu-sandbox-on-aws/
 ```
 
 !!! note "커밋하지 않아야 하는 로컬 파일"
-    `scripts/config.env`(직접 만드는 설정), `bench-<timestamp>.jsonl`(`ops/bench.sh` 결과), `.venv/`, `.pytest_cache/`, `site/`(문서 빌드 결과), `cdk/cdk.out/`(synth 결과), `cdk/cdk.context.json`(계정 ID가 든 CDK context)은 로컬에서만 생기는 파일입니다. `.routing.json`은 `05_setup_namespaces_auth.sh`와 `ops/rollout.sh`가 잠깐 만들었다가 바로 지웁니다. 특히 `scripts/config.env`에는 계정 ID가 포함된 이미지 URI와 IAM ARN(설정했다면 작업 PC의 공인 IP도)이 들어 있으니 공유하지 마세요.
+    다음은 로컬에서만 생기는 파일입니다.
+
+    - `scripts/config.env`(직접 만드는 설정)
+    - `bench-<timestamp>.jsonl`(`ops/bench.sh` 결과)
+    - `.venv/`, `.pytest_cache/`
+    - `site/`(문서 빌드 결과)
+    - `cdk/cdk.out/`(synth 결과)
+    - `cdk/cdk.context.json`(계정 ID가 든 CDK context)
+
+    `.routing.json`은 `05_setup_namespaces_auth.sh`와 `ops/rollout.sh`가 잠깐 만들었다가 바로 지웁니다. 특히 `scripts/config.env`에는 계정 ID가 포함된 이미지 URI와 IAM ARN(설정했다면 작업 PC의 공인 IP도)이 들어 있으니 공유하지 마세요.
 
 ## 값과 템플릿이 합쳐지는 흐름
 
-모든 스크립트는 `scripts/lib.sh`를 source 해서 `scripts/config.env`를 읽습니다. 그다음 `render <템플릿> KEY=VALUE ...`로 템플릿을 채워 `kubectl apply`에 전달합니다. 인프라(VPC, 클러스터, 노드 그룹)는 템플릿이 아니라 CDK 앱이 만들고, `cdk/deploy.sh`가 같은 `config.env` 값을 export해 CDK 앱에 전달합니다. `render.py`는 envsubst와 달리 정의되지 않은 변수를 만나면 오류로 멈추고(`KEY=`처럼 빈 값으로 정의한 변수는 빈 문자열로 치환), `$$`를 `$` 한 글자로 바꿉니다. 그래서 Deployment 템플릿의 `$$(NODE_IP)`는 렌더링 뒤 `$(NODE_IP)`가 되고, 이 값은 Kubernetes가 pod를 만들 때 실제 값으로 치환합니다.
+모든 스크립트는 `scripts/lib.sh`를 source 해서 `scripts/config.env`를 읽습니다. 그다음 `render <템플릿> KEY=VALUE ...`로 템플릿을 채워 `kubectl apply`에 전달합니다. 인프라(VPC, 클러스터, 노드 그룹)는 템플릿이 아니라 CDK 앱이 만들고, `cdk/deploy.sh`가 같은 `config.env` 값을 export해 CDK 앱에 전달합니다.
+
+`render.py`의 치환 규칙은 다음과 같습니다.
+
+- **정의되지 않은 변수**: envsubst와 달리 오류로 멈춥니다.
+- **`KEY=`처럼 빈 값으로 정의한 변수**: 빈 문자열로 치환합니다.
+- **`$$`**: `$` 한 글자로 바꿉니다. 그래서 Deployment 템플릿의 `$$(NODE_IP)`는 렌더링 뒤 `$(NODE_IP)`가 되고, 이 값은 Kubernetes가 pod를 만들 때 실제 값으로 치환합니다.
 
 ```mermaid
 flowchart LR
@@ -78,11 +98,11 @@ flowchart TB
 
 | 파일 | 하는 일 | 호출하는 곳 |
 |---|---|---|
-| `server/app.py` | 샌드박스 HTTP 서버(FastAPI). `POST /v1/evaluate`, `GET /info`, `GET /metrics`(이상 인증 필요), `GET /healthz`, `GET /readyz`. 평가마다 새 프로세스 트리를 시작하고, 한 번에 하나만 평가합니다(나머지는 503). readiness는 GPU probe 성공, egress 차단 확인, draining 아님이 모두 참일 때만 통과합니다. | sandbox 이미지의 `gpusandbox-server` |
+| `server/app.py` | 샌드박스 HTTP 서버(FastAPI). `POST /v1/evaluate`, `GET /info`, `GET /metrics`(이상 인증 필요), `GET /healthz`, `GET /readyz`. | sandbox 이미지의 `gpusandbox-server` |
 | `server/procs.py` | 평가가 끝날 때마다 서버와 그 조상(PID 1의 tini)을 뺀 모든 프로세스를 SIGKILL 합니다. | `server/app.py` |
-| `auth.py` | audience가 지정된 projected ServiceAccount 토큰을 JWKS 파일로 오프라인 검증합니다. 설정이 하나라도 비면 보호된 경로를 모두 거부합니다(fail closed). `read_token`은 요청마다 토큰 파일을 다시 읽습니다. | 서버, 클라이언트, tools |
+| `auth.py` | audience가 지정된 projected ServiceAccount 토큰을 JWKS 파일로 오프라인 검증합니다. 설정이 하나라도 비면 보호된 경로를 모두 거부합니다(fail closed). | 서버, 클라이언트, tools |
 | `harness/evaluate.py` | 신뢰하는 부모 프로세스. 정적 정책 검사, 후보 자식 실행, 레퍼런스 정확성 비교와 타이밍, verdict JSON 작성. | 서버 |
-| `harness/runner.py` | 신뢰하지 않는 자식 프로세스. 후보 코드를 import 하고 출력과 타이밍을 작업 디렉터리에 씁니다. GPU 평가에서 카운터를 설치할 수 있으면, 정확성 검사가 끝날 때까지(타이밍 측정 전) Triton 실행 함수가 호출된 횟수를 기록합니다. | `evaluate.py` |
+| `harness/runner.py` | 신뢰하지 않는 자식 프로세스. 후보 코드를 import 하고 출력과 타이밍을 작업 디렉터리에 씁니다. | `evaluate.py` |
 | `harness/policy.py` | AST 기반 정적 정책(허용 import, 금지 builtin, private와 dunder 접근(`__init__`, `__name__`만 허용), stream, graph, `torch.compile`, `cpp_extension`). 보안 경계가 아니라 reward 무결성을 위한 검사입니다. 소스 최대 32 KiB. | `evaluate.py`, `rewards.py`, `rl/verl/reward_fn.py` |
 | `harness/timing.py` | 레퍼런스와 후보를 같은 절차로 측정하는 타이밍 코드. `torch.cuda.synchronize()`를 감싼 호스트 시계, 반복마다 다른 입력, 출력 checksum, 정확히 `torch.Tensor` 타입만 허용. | `evaluate.py`, `runner.py` |
 | `harness/__init__.py` | `HARNESS_VERSION`. 측정 계약(seed, 허용 오차, 타이밍 방법)이 바뀌면 올립니다. | 서버 응답, verdict |
@@ -91,12 +111,19 @@ flowchart TB
 | `rewards.py` | TRL reward 함수 3개(format, correctness, speedup)와 배치 로그(`reward_batch`, `sandbox_version_switch` 이벤트). 인프라 오류(`sandbox_error`)는 `None`. | `train_grpo.py`, `rl/verl/reward_fn.py` |
 | `client/routing.py` | routing.json을 읽어 (runtime, version, address, revision) snapshot을 만듭니다. 최소 2초 간격으로 다시 읽고, 읽기에 실패하면 마지막 정상 표를 유지합니다. | 클라이언트, gateway |
 | `client/pool.py` | headless Service의 Ready pod IP를 DNS로 찾고, pod마다 한 건씩만 보내며, 503이나 연결 오류면 다른 pod로 재시도합니다. | 클라이언트, gateway, tools |
-| `client/__init__.py` | `SandboxClient`. direct 모드(routing 파일)는 `evaluate_batch` 호출 한 번에 routing snapshot 하나를 쓰고, gateway 모드는 gateway에 배치나 `group_key`를 보냅니다. TRL reward batch 하나는 캐시만 쓰면 이 호출이 없고, 다시 채점할 결과가 있으면 최대 세 번 호출해 한 풀의 결과로 맞춥니다(`rewards.py`). | `rewards.py`, `rl/verl/reward_fn.py` |
+| `client/__init__.py` | `SandboxClient`. direct 모드(routing 파일)는 `evaluate_batch` 호출 한 번에 routing snapshot 하나를 쓰고, gateway 모드는 gateway에 배치나 `group_key`를 보냅니다. | `rewards.py`, `rl/verl/reward_fn.py` |
 | `gateway/app.py` | Production gateway. 하나의 스케줄러, `group_key` 단위 버전 고정(기본 TTL 900초), TokenReview 인증, draining pod 재활용. | control 이미지의 `gpusandbox-gateway` |
 | `golden.py` | verdict를 미리 아는 golden 제출물 6개(Triton 정답 2개, torch 전용 정답, 오답, 벤치마크 치팅, 호스트 파일 읽기). GPU 전용 항목은 CPU 풀에서 제외됩니다. | `tools.py` |
 | `tools.py` | 운영 도구 `probe`, `parity`, `bench`, `simulate`(모델 없는 reward 루프), `record`(데모용 녹화), `sync-jwks`, `multiturn`(모델 없는 multi-turn 에피소드). | `k8s/probe/job-probe.yaml.tpl`, `k8s/production/jwks-sync.yaml.tpl`, `k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl` |
-| `agent_sandbox.py` | Agent Sandbox 확장의 `EpisodeSandbox`. 에피소드마다 warm pool에서 `SandboxClaim`으로 샌드박스 하나를 할당받고, `status.sandbox.serviceFQDN`으로 평가 요청을 보낸 뒤 에피소드가 끝나면 반납합니다. claim에는 안전장치로 `shutdownTime`이 설정됩니다. | `multiturn.py`, `rl/verl/sandbox_tool.py`, 에피소드 단위 trainer 코드(직접 import), `tests/test_agent_sandbox.py` |
-| `multiturn.py` | multi-turn 에피소드 실행기. 에피소드마다 `EpisodeSandbox`로 샌드박스 하나를 claim하고, 코드 제출과 verdict 피드백(240자 이하)을 `max_turns`까지 반복한 뒤 마지막 제출의 `score_verdict`를 episode reward로 씁니다. 모델 없이 golden 제출물을 차례로 내는 `ScriptedPolicy`가 들어 있습니다. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md), [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md) | `tools.py multiturn`, `rl/verl/sandbox_tool.py`(피드백 형식) |
+| `agent_sandbox.py` | Agent Sandbox 확장의 `EpisodeSandbox`. 에피소드마다 warm pool에서 `SandboxClaim`으로 샌드박스 하나를 할당받고, `status.sandbox.serviceFQDN`으로 평가 요청을 보낸 뒤 에피소드가 끝나면 반납합니다. | `multiturn.py`, `rl/verl/sandbox_tool.py`, 에피소드 단위 trainer 코드(직접 import), `tests/test_agent_sandbox.py` |
+| `multiturn.py` | multi-turn 에피소드 실행기. 에피소드마다 `EpisodeSandbox`로 샌드박스 하나를 claim하고, 코드 제출과 verdict 피드백(240자 이하)을 `max_turns`까지 반복한 뒤 마지막 제출의 `score_verdict`를 episode reward로 씁니다. | `tools.py multiturn`, `rl/verl/sandbox_tool.py`(피드백 형식) |
+
+- **`server/app.py`**: 평가마다 새 프로세스 트리를 시작하고, 한 번에 하나만 평가합니다(나머지는 503). readiness는 GPU probe 성공, egress 차단 확인, draining 아님이 모두 참일 때만 통과합니다.
+- **`auth.py`**: `read_token`은 요청마다 토큰 파일을 다시 읽습니다.
+- **`harness/runner.py`**: GPU 평가에서 카운터를 설치할 수 있으면, 정확성 검사가 끝날 때까지(타이밍 측정 전) Triton 실행 함수가 호출된 횟수를 기록합니다.
+- **`client/__init__.py`**: TRL reward batch 하나는 캐시만 쓰면 `evaluate_batch` 호출이 없고, 다시 채점할 결과가 있으면 최대 세 번 호출해 한 풀의 결과로 맞춥니다(`rewards.py`).
+- **`agent_sandbox.py`**: claim에는 안전장치로 `shutdownTime`이 설정됩니다.
+- **`multiturn.py`**: 모델 없이 golden 제출물을 차례로 내는 `ScriptedPolicy`가 들어 있습니다. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md), [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 ## rl
 
@@ -104,13 +131,22 @@ flowchart TB
 |---|---|
 | `rl/trl/train_grpo.py` | TRL `GRPOTrainer`로 on-policy GRPO 학습(LoRA, vLLM colocate). `--dry-run`은 vLLM 없이 CPU에서 2 step만 실행합니다. |
 | `rl/verl/Dockerfile` | veRL 이미지(Production). `scripts/03_build_push_images.sh`는 이 이미지를 만들지 않으니 따로 빌드합니다. |
-| `rl/verl/prepare_data.py` | 과제를 veRL parquet(train, val)로 씁니다. `ground_truth`에는 `task_id`가 들어가고, `prompt`에는 모델이 Triton으로 다시 작성할 PyTorch 레퍼런스 `Model` 소스가 들어갑니다. 정답 비교는 샌드박스 이미지 안의 레퍼런스로 실행합니다. |
+| `rl/verl/prepare_data.py` | 과제를 veRL parquet(train, val)로 씁니다. 정답 비교는 샌드박스 이미지 안의 레퍼런스로 실행합니다. |
 | `rl/verl/reward_fn.py` | veRL용 async `compute_score`. gateway의 `group_key` 고정을 쓰고, 인프라 오류에는 format 점수만 주고 `sandbox_error` 플래그를 기록합니다. |
 | `rl/verl/run_grpo_kernels.sh` | RayCluster에 veRL GRPO job을 제출합니다(veRL 0.9.1 키 이름). |
-| `rl/verl/sandbox_tool.py` | veRL 0.9.1용 multi-turn 도구. `KernelSandboxTool`은 `submit_kernel` 호출을 trajectory마다 claim한 샌드박스 하나에서 평가하고 verdict를 도구 응답으로 돌려줍니다. `SandboxToolAgentLoop`는 trajectory가 끝나면 claim을 삭제합니다. `compute_score`는 마지막 제출의 점수를 reward로 씁니다. veRL이 `sandbox_tool_config.yaml`의 `class_name`으로 이 모듈을 불러옵니다. 로컬 테스트로만 확인했고 veRL로 실행하지는 않았습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md) |
+| `rl/verl/sandbox_tool.py` | veRL 0.9.1용 multi-turn 도구. 로컬 테스트로만 확인했고 veRL로 실행하지는 않았습니다. |
 | `rl/verl/sandbox_tool_config.yaml` | 위 도구의 veRL tool config 예시(`class_name`, `warm_pool`, `max_turns`, `max_feedback_chars` 등). `actor_rollout_ref.rollout.multi_turn.tool_config_path`로 veRL에 넘깁니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md) |
 
+- **`rl/verl/prepare_data.py`**: `ground_truth`에는 `task_id`가 들어가고, `prompt`에는 모델이 Triton으로 다시 작성할 PyTorch 레퍼런스 `Model` 소스가 들어갑니다.
+- **`rl/verl/sandbox_tool.py`**: 구성 요소는 다음과 같습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
+    - `KernelSandboxTool`은 `submit_kernel` 호출을 trajectory마다 claim한 샌드박스 하나에서 평가하고 verdict를 도구 응답으로 돌려줍니다.
+    - `SandboxToolAgentLoop`는 trajectory가 끝나면 claim을 삭제합니다.
+    - `compute_score`는 마지막 제출의 점수를 reward로 씁니다.
+    - veRL이 `sandbox_tool_config.yaml`의 `class_name`으로 이 모듈을 불러옵니다.
+
 ## scripts
+
+사용법, 다시 실행할 때의 동작, 성공 신호는 [스크립트 레퍼런스](scripts.md)에 있습니다.
 
 ### 기본 경로
 
@@ -119,13 +155,19 @@ flowchart TB
 | 파일 | 하는 일 | 과금과 주의 |
 |---|---|---|
 | `01_check_prereqs.sh` | 도구(aws, cdk, node, kubectl, helm, docker, python3, jq, session-manager-plugin), AWS 신원, "Running On-Demand G and VT instances" quota, nested virtualization 지원, GPU 인스턴스의 AZ별 offering 확인. 읽기 전용. | 없음 |
-| `02_create_cluster.sh [--hyperpod]`, `[--hyperpod-b2]`, `[--cpu-only]` | `SCENARIO`(기본 A, 옵션에 따라 B1, B2, C)를 정하고 `cdk/deploy.sh`를 호출하는 간단한 wrapper. CDK 스택이 VPC, private API endpoint의 EKS, add-on, 시나리오별 노드 그룹, SSM access instance를 만듭니다. `WITH_KATA_CPU`, `WITH_KATA_GPU`를 바꾸고 다시 실행하면 CDK가 변경된 노드 그룹만 갱신합니다. 실습 계정에서 약 20분. | EKS, NAT gateway, m6i.large 2대, access instance(t4g.nano), g5.xlarge 2대(A, B1), g5.2xlarge(A) |
-| `03_build_push_images.sh` | sandbox, trainer, control 이미지를 linux/amd64로 빌드해 private ECR에 push. `HYPERPOD=1`이면 trainer 이미지에 hyperpodrun을 설치합니다. 끝에 `*_IMAGE_URI` 세 줄을 출력합니다. `--no-trainer`(시나리오 C)는 trainer 이미지를 건너뜁니다. | ECR 저장 비용. 태그는 IMMUTABLE |
-| `04_install_gpu_stack.sh` | NVIDIA device plugin(CDI 모드)을 `gpusandbox/device-plugin=cdi` 노드에 설치하고, DaemonSet에 `CDI_DISABLE_HOOKS=disable-device-node-modification`을 설정한 뒤 rollout을 기다림(runsc에서 실패하는 CDI hook을 끔, chart에 해당 값이 없음). 이어서 `gvisor` RuntimeClass 등록, smoke pod로 gVisor 커널과 GPU 사용 확인. | 없음 |
-| `05_setup_namespaces_auth.sh` | namespace, ServiceAccount, NetworkPolicy, JWKS ConfigMap, routing ConfigMap. 다시 실행할 수 있지만, 실행할 때마다 `rl-trainer`의 routing 표를 `ACTIVE_RUNTIME`, `ACTIVE_VERSION`(기본 `gvisor`, `v1`)으로 새로 쓰고 `k8s/base/networkpolicies.yaml`을 다시 적용합니다. Production gateway가 교체한 `allow-clients-to-sandbox-api`도 핸즈온 규칙으로 돌아갑니다. 운영 중이면 현재 활성 버전과 접근 정책을 먼저 확인하세요. | 없음 |
+| `02_create_cluster.sh [--hyperpod]`, `[--hyperpod-b2]`, `[--cpu-only]` | `SCENARIO`(기본 A, 옵션에 따라 B1, B2, C)를 정하고 `cdk/deploy.sh`를 호출하는 간단한 wrapper. 실습 계정에서 약 20분. | EKS, NAT gateway, m6i.large 2대, access instance(t4g.nano), g5.xlarge 2대(A, B1), g5.2xlarge(A) |
+| `03_build_push_images.sh` | sandbox, trainer, control 이미지를 linux/amd64로 빌드해 private ECR에 push. 끝에 `*_IMAGE_URI` 세 줄을 출력합니다. | ECR 저장 비용. 태그는 IMMUTABLE |
+| `04_install_gpu_stack.sh` | NVIDIA device plugin(CDI 모드)을 `gpusandbox/device-plugin=cdi` 노드에 설치하고, DaemonSet에 CDI hook 설정을 적용한 뒤 rollout을 기다립니다(표 아래 참고). 이어서 `gvisor` RuntimeClass 등록, smoke pod로 gVisor 커널과 GPU 사용 확인. | 없음 |
+| `05_setup_namespaces_auth.sh` | namespace, ServiceAccount, NetworkPolicy, JWKS ConfigMap, routing ConfigMap. 다시 실행할 수 있지만, 실행할 때마다 활성 routing 표와 NetworkPolicy를 다시 씁니다(표 아래 참고). 운영 중이면 현재 활성 버전과 접근 정책을 먼저 확인하세요. | 없음 |
 | `06_deploy_sandboxes.sh <runtime> [version] [replicas]` | profile과 버전 파일로 풀 하나(Deployment + headless Service)를 배포하고 rollout을 기다립니다. | GPU 노드 사용 |
 | `07_run_grpo.sh [max_steps]` | 시나리오 A trainer Job을 제출하고 로그를 계속 출력합니다. | trainer GPU |
-| `08_cleanup.sh [--images]` | 클러스터 이름을 확인한 뒤 `cdk/destroy.sh --yes`(터널이 열려 있으면 풀과 Job 먼저, 스택 전체, 남은 Lambda 로그 그룹), IOMMU AMI와 B2 AMI(각각 확인 후), `--images`면 ECR 저장소까지 삭제. secrets KMS 키는 7일 삭제 대기에 들어가고 bootstrap 스택 `CDKToolkit`은 남습니다. | 과금 중지 |
+| `08_cleanup.sh [--images]` | 클러스터 이름을 확인한 뒤 `cdk/destroy.sh --yes`, IOMMU AMI와 B2 AMI(각각 확인 후), `--images`면 ECR 저장소까지 삭제. | 과금 중지 |
+
+- **`02_create_cluster.sh`**: CDK 스택이 VPC, private API endpoint의 EKS, add-on, 시나리오별 노드 그룹, SSM access instance를 만듭니다. `WITH_KATA_CPU`, `WITH_KATA_GPU`를 바꾸고 다시 실행하면 CDK가 변경된 노드 그룹만 갱신합니다.
+- **`03_build_push_images.sh`**: `HYPERPOD=1`이면 trainer 이미지에 hyperpodrun을 설치합니다. `--no-trainer`(시나리오 C)는 trainer 이미지를 건너뜁니다.
+- **`04_install_gpu_stack.sh`**: DaemonSet에 `CDI_DISABLE_HOOKS=disable-device-node-modification`을 설정한 뒤 rollout을 기다립니다(runsc에서 실패하는 CDI hook을 끔, chart에 해당 값이 없음).
+- **`05_setup_namespaces_auth.sh`를 다시 실행할 때**: 실행할 때마다 `rl-trainer`의 routing 표를 `ACTIVE_RUNTIME`, `ACTIVE_VERSION`(기본 `gvisor`, `v1`)으로 새로 쓰고 `k8s/base/networkpolicies.yaml`을 다시 적용합니다. Production gateway가 교체한 `allow-clients-to-sandbox-api`도 핸즈온 규칙으로 돌아갑니다. 운영 중이면 현재 활성 버전과 접근 정책을 먼저 확인하세요.
+- **`08_cleanup.sh`**: `cdk/destroy.sh --yes`는 터널이 열려 있으면 풀과 Job을 먼저 지웁니다. 터널 여부와 관계없이 스택 전체와 남은 Lambda 로그 그룹을 지웁니다. secrets KMS 키는 7일 삭제 대기에 들어가고 bootstrap 스택 `CDKToolkit`은 남습니다.
 
 ### 선택 기능과 운영
 
@@ -133,19 +175,31 @@ flowchart TB
 
 | 파일 | 하는 일 | 과금과 주의 |
 |---|---|---|
-| `kata/cpu_nodes.sh` | `sandbox-kata-cpu` 노드 그룹이 있는지 확인(없으면 `WITH_KATA_CPU=1`로 `02_create_cluster.sh`를 다시 실행하라는 메시지로 멈춤)한 뒤 kata-deploy 설치, `gvisor-cpu` RuntimeClass, `gvisor-cpu`, `kata-clh`, `kata-qemu` smoke. 한 번만 실행하면 됩니다. | c8i.2xlarge 1대(노드 그룹은 `02_create_cluster.sh`가 만듦) |
-| `kata/gpu_nodes.sh` | `KATA_IOMMU_AMI_ID`가 비어 있으면 IOMMU AMI를 빌드하고 멈춥니다(`KATA_IOMMU_AMI_ID`와 `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh`를 다시 실행한 뒤 이 스크립트를 다시 실행). 그다음 `sandbox-kata-gpu` 노드 그룹을 확인하고 GPU Operator(VM passthrough)와 kata-deploy를 설치합니다. `metal` 입력은 `02_create_cluster.sh`(`cdk/deploy.sh`)가 받습니다. | g4dn.metal 약 7.8 USD/시간(노드 그룹은 `02_create_cluster.sh`가 만듦) |
+| `kata/cpu_nodes.sh` | `sandbox-kata-cpu` 노드 그룹이 있는지 확인한 뒤 kata-deploy 설치, `gvisor-cpu` RuntimeClass, `gvisor-cpu`, `kata-clh`, `kata-qemu` smoke. 한 번만 실행하면 됩니다. | c8i.2xlarge 1대(노드 그룹은 `02_create_cluster.sh`가 만듦) |
+| `kata/gpu_nodes.sh` | `KATA_IOMMU_AMI_ID`가 비어 있으면 IOMMU AMI를 빌드하고 멈춥니다. 그다음 `sandbox-kata-gpu` 노드 그룹을 확인하고 GPU Operator(VM passthrough)와 kata-deploy를 설치합니다. | g4dn.metal 약 7.8 USD/시간(노드 그룹은 `02_create_cluster.sh`가 만듦) |
 | `ops/verify.sh <runtime> [version]` | 커널 비교, egress 차단 점검, golden verdict(probe Job), 다른 namespace에서 접근 차단 확인. | 없음 |
 | `ops/simulate.sh [steps] [interval_s]` | 시나리오 C의 모델 없는 reward 루프. `tools.py simulate`를 Job으로 실행해 golden 제출물을 배치마다 채점하고 `reward_batch`, `sandbox_version_switch` 이벤트를 출력합니다. 실제 학습은 하지 않습니다. | 없음 |
-| `ops/rollout.sh <runtime> <from> <to> [--finish]` | blue/green 교체: 배포, 검증, parity, routing 전환. `--finish`를 붙이면 앞의 단계 없이 이전 버전만 replica 0으로 줄이고 끝나므로, 전환을 확인한 뒤 같은 명령에 붙여 다시 실행합니다. | 두 풀이 잠시 함께 GPU 사용 |
-| `ops/bench.sh [requests]` | 배포된 v1 풀마다 cold start, 평가 지연 p50/p95, throughput, speedup을 측정합니다. cold start는 터미널에만 출력되고, 나머지는 `bench` Job의 출력으로 `bench-<timestamp>.jsonl`에도 저장됩니다. | 없음 |
+| `ops/rollout.sh <runtime> <from> <to> [--finish]` | blue/green 교체: 배포, 검증, parity, routing 전환. | 두 풀이 잠시 함께 GPU 사용 |
+| `ops/bench.sh [requests]` | 배포된 v1 풀마다 cold start, 평가 지연 p50/p95, throughput, speedup을 측정합니다. | 없음 |
 | `ops/sync_jwks.sh` | 클러스터 ServiceAccount issuer 공개키(JWKS)와 issuer URL을 `sandbox/sandbox-auth-jwks` ConfigMap으로 복사. 공개키이며 비밀이 아닙니다. | |
-| `extensions/agent_sandbox.sh install`, `pool <runtime> [n]`, `claim <runtime>`, `episodes <runtime> [episodes] [max_turns]` | Agent Sandbox 확장. `install`은 controller, CRD(v1.0.11 고정), claim RBAC, `k8s/base/trainer-rbac.yaml`(ServiceAccount `sandbox-episode`) 설치. `pool`은 런타임 profile로 SandboxTemplate과 SandboxWarmPool 생성(기본 allowlist에 `sandbox-episode` 포함). `claim`은 claim 하나를 만들어 주소를 출력한 뒤 삭제. `episodes`는 모델 없이 multi-turn 에피소드를 실행하는 Job(`job-multiturn.yaml.tpl`)을 제출합니다(기본 에피소드 2개, 최대 3 turn, `max_turns` 1은 single-turn 기준선). 제출 전에 CRD, ServiceAccount와 claim 권한, Ready 상태의 warm 샌드박스, warm 샌드박스의 allowlist를 확인하고, 끝나면 남은 claim을 지운 뒤 Job의 결과를 종료 코드로 반환합니다. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md) | warm GPU 샌드박스는 요청이 없는 동안에도 GPU를 점유함 |
-| `hyperpod/create.sh [--b2]` | HyperPod dependency Helm chart, lifecycle 버킷(Block Public Access), 실행 역할, CreateCluster, training operator add-on. `--b2`는 custom AMI로 부팅하는 `sandbox` 인스턴스 그룹과 `gvisor-hyperpod` RuntimeClass를 추가합니다. CDK가 `kubernetes.io/role/internal-elb` 태그를 붙인 private subnet을 쓰고, helm 단계에는 터널이 필요합니다. | ml.g5.2xlarge, B2는 ml.g5.xlarge 2대 추가 |
+| `extensions/agent_sandbox.sh install`, `pool <runtime> [n]`, `claim <runtime>`, `episodes <runtime> [episodes] [max_turns]` | Agent Sandbox 확장. 하위 명령별 동작은 표 아래에 있습니다. | warm GPU 샌드박스는 요청이 없는 동안에도 GPU를 점유함 |
+| `hyperpod/create.sh [--b2]` | HyperPod dependency Helm chart, lifecycle 버킷(Block Public Access), 실행 역할, CreateCluster, training operator add-on. `--b2`는 custom AMI로 부팅하는 `sandbox` 인스턴스 그룹과 `gvisor-hyperpod` RuntimeClass를 추가합니다. | ml.g5.2xlarge, B2는 ml.g5.xlarge 2대 추가 |
 | `hyperpod/build_b2_ami.sh` | 시나리오 B2의 custom AMI 빌드(`infra/hyperpod/ami/build-b2-ami.sh`). HyperPod EKS base AMI에서 드라이버를 `B2_NVIDIA_DRIVER_VERSION`으로 바꾸고 gVisor를 설치한 뒤 `HYPERPOD_B2_AMI_ID`를 출력합니다. | builder m6i.large(빌드 중), AMI 스냅샷 |
 | `hyperpod/run_grpo.sh [max_steps]` | HyperPodPyTorchJob 제출. | 없음 |
-| `hyperpod/check_gvisor.sh` | 시나리오 B2 노드 점검. HyperPod 노드 드라이버가 고정한 gVisor 릴리스의 nvproxy 지원 목록에 있는지 출력합니다. 노드마다 디버그 pod를 만들고, 끝나면 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제합니다. | 없음 |
+| `hyperpod/check_gvisor.sh` | 시나리오 B2 노드 점검. HyperPod 노드 드라이버가 고정한 gVisor 릴리스의 nvproxy 지원 목록에 있는지 출력합니다. | 없음 |
 | `hyperpod/delete.sh` | HyperPod 클러스터, 실행 역할, lifecycle 버킷 삭제. `08_cleanup.sh`보다 먼저 실행합니다. | 과금 중지 |
+
+- **`kata/cpu_nodes.sh`**: 노드 그룹이 없으면 `WITH_KATA_CPU=1`로 `02_create_cluster.sh`를 다시 실행하라는 메시지로 멈춥니다.
+- **`kata/gpu_nodes.sh`**: IOMMU AMI를 빌드하고 멈췄다면 `KATA_IOMMU_AMI_ID`와 `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh`를 다시 실행한 뒤 이 스크립트를 다시 실행합니다. `metal` 입력은 `02_create_cluster.sh`(`cdk/deploy.sh`)가 받습니다.
+- **`ops/rollout.sh`의 `--finish`**: 붙이면 앞의 단계 없이 이전 버전만 replica 0으로 줄이고 끝나므로, 전환을 확인한 뒤 같은 명령에 붙여 다시 실행합니다.
+- **`ops/bench.sh`의 출력**: cold start는 터미널에만 출력되고, 나머지는 `bench` Job의 출력으로 `bench-<timestamp>.jsonl`에도 저장됩니다.
+- **`extensions/agent_sandbox.sh`**: 하위 명령은 다음과 같습니다. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)
+    - `install`은 controller, CRD(v1.0.11 고정), claim RBAC, `k8s/base/trainer-rbac.yaml`(ServiceAccount `sandbox-episode`) 설치.
+    - `pool`은 런타임 profile로 SandboxTemplate과 SandboxWarmPool 생성(기본 allowlist에 `sandbox-episode` 포함).
+    - `claim`은 claim 하나를 만들어 주소를 출력한 뒤 삭제.
+    - `episodes`는 모델 없이 multi-turn 에피소드를 실행하는 Job(`job-multiturn.yaml.tpl`)을 제출합니다(기본 에피소드 2개, 최대 3 turn, `max_turns` 1은 single-turn 기준선). 제출 전에 CRD, ServiceAccount와 claim 권한, Ready 상태의 warm 샌드박스, warm 샌드박스의 allowlist를 확인하고, 끝나면 남은 claim을 지운 뒤 Job의 결과를 종료 코드로 반환합니다.
+- **`hyperpod/create.sh`**: CDK가 `kubernetes.io/role/internal-elb` 태그를 붙인 private subnet을 쓰고, helm 단계에는 터널이 필요합니다.
+- **`hyperpod/check_gvisor.sh`**: 노드마다 디버그 pod를 만들고, 끝나면 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제합니다.
 
 ### 공통 라이브러리와 설정
 
@@ -154,17 +208,20 @@ flowchart TB
 | 파일 | 하는 일 | 과금과 주의 |
 |---|---|---|
 | `lib.sh` | `config.env` 로드, `require_vars`, `require_tools`, `render`, `confirm`, `oidc_issuer`, `wait_for_pods`. `log`, `warn`, `die`는 터미널일 때만 색을 쓰고 `NO_COLOR`가 있으면 색을 끕니다. | |
-| `lib_jobs.sh` | `run_tool_job`: control 이미지로 `gpusandbox.tools`를 `rl-trainer`의 one-shot Job으로 실행하고 로그를 보여 줍니다. `run_job_template`은 같은 방식으로 다른 Job 템플릿(`job-multiturn.yaml.tpl`)을 실행합니다. 로그는 `logview.py`를 거쳐 보여 줍니다. | |
-| `logview.py` | JSON 이벤트 줄(`reward_batch`, `sandbox_version_switch`, `parity`, 에피소드 이벤트 등)을 터미널에서 색을 입힌 한 줄 요약으로 보여 줍니다. 출력이 파이프나 파일이거나 `GPUSANDBOX_LOG=json`이면 원본을 그대로 넘깁니다. 표준 라이브러리만 써서 가상 환경 밖의 `python3`로도 실행됩니다. | |
+| `lib_jobs.sh` | `run_tool_job`: control 이미지로 `gpusandbox.tools`를 `rl-trainer`의 one-shot Job으로 실행하고 로그를 보여 줍니다. | |
+| `logview.py` | JSON 이벤트 줄(`reward_batch`, `sandbox_version_switch`, `parity`, 에피소드 이벤트 등)을 터미널에서 색을 입힌 한 줄 요약으로 보여 줍니다. | |
 | `render.py` | `${VAR}` 템플릿 렌더링(정의되지 않은 변수는 오류, 빈 값은 빈 문자열, `$$`는 `$`)과 `@@include path@@` 삽입. | |
 | `config.env.example` | `scripts/config.env`의 원본. 값 설명은 [설정 값](configuration.md)에 있습니다. | |
+
+- **`lib_jobs.sh`**: `run_job_template`은 같은 방식으로 다른 Job 템플릿(`job-multiturn.yaml.tpl`)을 실행합니다. 로그는 `logview.py`를 거쳐 보여 줍니다.
+- **`logview.py`**: 출력이 파이프나 파일이거나 `GPUSANDBOX_LOG=json`이면 원본을 그대로 넘깁니다. 표준 라이브러리만 써서 가상 환경 밖의 `python3`로도 실행됩니다.
 
 ## infra
 
 | 경로 | 하는 일 |
 |---|---|
 | `eks/node-guard.sh` | 샌드박스 노드에서 pod가 노드로 여는 새 연결을 iptables(`GPUSANDBOX-GUARD` chain)로 차단합니다. 부팅할 때마다 kubelet보다 먼저 실행되는 systemd unit입니다. |
-| `eks/userdata.py` | 샌드박스 노드 그룹의 MIME user data를 만드는 모듈(Python 표준 라이브러리만 사용). gVisor GPU 노드(NodeConfig의 `runsc` handler, nvproxy를 켠 gVisor 설치, node guard), c8i 노드(kata-deploy용 containerd drop-in `imports`, nvproxy 없는 gVisor, node guard), Kata GPU 노드(IOMMU AMI라서 클러스터 필드를 모두 담은 NodeConfig, kubelet `runtimeRequestTimeout: 20m`, node guard). CDK 스택이 launch template에 넣고, `tests/test_manifests.py`가 확인합니다. |
+| `eks/userdata.py` | 샌드박스 노드 그룹의 MIME user data를 만드는 모듈(Python 표준 라이브러리만 사용). CDK 스택이 launch template에 넣고, `tests/test_manifests.py`가 확인합니다. |
 | `gpu/nvidia-device-plugin-values.yaml` | NVIDIA device plugin 값. `deviceListStrategy: cdi-cri`, `gpusandbox/device-plugin=cdi` 노드만. plugin의 `--cdi-disable-hooks`는 chart v0.20.1에 값이 없어 `04_install_gpu_stack.sh`가 env로 설정. |
 | `gvisor/install-gvisor.sh` | 고정 gVisor 릴리스 tarball 설치(sha512 검사), `/etc/containerd/runsc.toml`(nvproxy), 드라이버 미지원 경고. |
 | `kata/kata-deploy-values.yaml` | kata-deploy 4.3.1 값(DaemonSet 모드). `kata-qemu-nvidia-gpu`, `kata-qemu`, `kata-clh` RuntimeClass. |
@@ -178,6 +235,12 @@ flowchart TB
 | `hyperpod/lifecycle/on_create.sh`, `on_create_sandbox.sh`, `register_runsc.sh` | lifecycle 스크립트. trainer 그룹은 아무것도 설치하지 않고, B2의 sandbox 그룹은 드라이버 지원 여부를 확인한 뒤 containerd 설정 schema에 맞춰 `runsc`를 등록하고 node guard를 설치합니다(조건이 맞지 않으면 실패). |
 | `karpenter/nodeclasses.yaml.tpl`, `karpenter/nodepools.yaml` | Production용 EC2NodeClass 4개와 NodePool 4개(sandbox-gvisor, sandbox-kata-gpu, sandbox-kata-cpu, trainer). |
 
+`eks/userdata.py`가 노드 종류별로 넣는 내용은 다음과 같습니다.
+
+- **gVisor GPU 노드**: NodeConfig의 `runsc` handler, nvproxy를 켠 gVisor 설치, node guard
+- **c8i 노드**: kata-deploy용 containerd drop-in `imports`, nvproxy 없는 gVisor, node guard
+- **Kata GPU 노드**: IOMMU AMI라서 클러스터 필드를 모두 담은 NodeConfig, kubelet `runtimeRequestTimeout: 20m`, node guard
+
 ## cdk
 
 인프라(VPC, 클러스터, 노드 그룹)를 만드는 Python CDK 앱입니다. 핸즈온의 `scripts/02_create_cluster.sh`와 `scripts/08_cleanup.sh`가 이 폴더의 스크립트를 호출합니다. 자세한 설명은 [09 CDK로 프로비저닝](../production/09_cdk.md)에 있습니다.
@@ -189,9 +252,17 @@ flowchart TB
 | `destroy.sh [--yes]` | 터널이 열려 있으면 풀과 Job을 먼저 지우고 `cdk destroy`, 남은 `/aws/lambda/<CLUSTER_NAME>-cdk-...` 로그 그룹 삭제, 태그가 붙은 남은 인스턴스를 출력합니다. |
 | `app.py`, `cdk.json` | CDK 진입점. synth할 때마다 cdk-nag(AwsSolutions)를 실행하고, 이유를 적어 예외 처리하지 않은 지적이 하나라도 있으면 배포하지 않습니다. |
 | `gpusandbox_cdk/config.py` | 환경 변수를 읽어 검사합니다(`SCENARIO`, `ADMIN_PRINCIPAL_ARN` 형식, `EKS_PUBLIC_ACCESS_CIDR`는 /32만, `KATA_IOMMU_AMI_ID` 형식, c8i의 CPU 토폴로지 표). |
-| `gpusandbox_cdk/stack.py` | 스택 본체. EKS 클러스터, access entry, add-on, launch template, 노드 그룹은 L1(`Cfn*`)으로, VPC, 보안 그룹, IAM 역할, access instance, KMS 키, 로그 그룹은 L2 construct로 정의합니다. VPC(2 AZ, NAT 1개, private subnet에 `kubernetes.io/role/internal-elb`와 `karpenter.sh/discovery` 태그), EKS 1.36(private endpoint, `API_AND_CONFIG_MAP`, KMS secrets 암호화, 로그 5종, service CIDR `172.20.0.0/16`), add-on 4개, 시나리오별 노드 그룹(launch template마다 IMDSv2 hop limit 1, 암호화된 gp3), SSM access instance. |
+| `gpusandbox_cdk/stack.py` | 스택 본체. EKS 클러스터, access entry, add-on, launch template, 노드 그룹은 L1(`Cfn*`)으로, VPC, 보안 그룹, IAM 역할, access instance, KMS 키, 로그 그룹은 L2 construct로 정의합니다. |
 | `requirements.txt` | 고정한 CDK 라이브러리(`aws-cdk-lib`, `constructs`, `cdk-nag`). |
 | `tests/test_stack.py` | 오프라인 synth로 보안 기본값과 시나리오별 노드 그룹, cdk-nag 통과를 확인하는 18개 테스트. `cd cdk && python -m pytest -q tests`로 따로 실행합니다. |
+
+`gpusandbox_cdk/stack.py`가 만드는 리소스는 다음과 같습니다.
+
+- VPC(2 AZ, NAT 1개, private subnet에 `kubernetes.io/role/internal-elb`와 `karpenter.sh/discovery` 태그)
+- EKS 1.36(private endpoint, `API_AND_CONFIG_MAP`, KMS secrets 암호화, 로그 5종, service CIDR `172.20.0.0/16`)
+- add-on 4개
+- 시나리오별 노드 그룹(launch template마다 IMDSv2 hop limit 1, 암호화된 gp3)
+- SSM access instance
 
 ## k8s
 
@@ -199,7 +270,7 @@ flowchart TB
 |---|---|
 | `base/namespaces.yaml` | `sandbox`(Pod Security `restricted`), `rl-trainer`(`baseline`). |
 | `base/networkpolicies.yaml` | `sandbox` namespace default deny(ingress, egress) + `rl-trainer`의 `gpusandbox/client: "true"` pod만 TCP 8000 허용. |
-| `base/trainer-rbac.yaml` | ServiceAccount `grpo-trainer`, `sandbox-probe`, `sandbox-episode`(`rl-trainer`), `gpu-sandbox`(`sandbox`). 모두 API 토큰 자동 마운트를 끕니다. `sandbox-episode`는 multi-turn 에피소드 Job이 쓰는 계정입니다. 이 파일은 `05_setup_namespaces_auth.sh`와 `extensions/agent_sandbox.sh install`이 적용합니다. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md) |
+| `base/trainer-rbac.yaml` | ServiceAccount `grpo-trainer`, `sandbox-probe`, `sandbox-episode`(`rl-trainer`), `gpu-sandbox`(`sandbox`). 모두 API 토큰 자동 마운트를 끕니다. |
 | `base/routing.json.tpl` | routing 표 템플릿(풀 주소 목록 + `ACTIVE_RUNTIME`, `ACTIVE_VERSION`). |
 | `runtimes/runtimeclass-gvisor.yaml` | `gvisor` RuntimeClass(handler `runsc`, gVisor 노드로만 스케줄). |
 | `runtimes/runtimeclass-gvisor-hyperpod.yaml` | `gvisor-hyperpod` RuntimeClass(handler `runsc`, B2 sandbox 인스턴스 그룹으로만 스케줄). |
@@ -217,16 +288,22 @@ flowchart TB
 | `production/raycluster-verl.yaml.tpl` | veRL용 RayCluster(KubeRay `ray.io/v1`). |
 | `extensions/agent-sandbox/template.yaml.tpl` | Agent Sandbox용 SandboxTemplate과 SandboxWarmPool(`kernel-eval-<runtime>`). ingress는 `rl-trainer`에서 8000번만, egress는 없음(`[]`), `dnsPolicy: None`, 환경 변수 주입 차단. |
 | `extensions/agent-sandbox/trainer-claims-rbac.yaml` | `rl-trainer/grpo-trainer`와 `rl-trainer/sandbox-episode`가 `sandbox` namespace의 `sandboxclaims`를 만들고 지울 수 있게 하는 Role과 RoleBinding. |
-| `extensions/agent-sandbox/job-multiturn.yaml.tpl` | multi-turn 에피소드 one-shot Job(`rl-trainer`, ServiceAccount `sandbox-episode`). control 이미지로 `python -m gpusandbox.tools multiturn`을 실행합니다. SandboxClaim을 만들고 삭제해야 하므로 probe Job과 달리 Kubernetes API 토큰을 마운트합니다. 샌드박스 audience 토큰과 `gpusandbox/client: "true"` 라벨도 붙어 있습니다. `scripts/extensions/agent_sandbox.sh episodes`가 렌더링해 실행합니다. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md) |
+| `extensions/agent-sandbox/job-multiturn.yaml.tpl` | multi-turn 에피소드 one-shot Job(`rl-trainer`, ServiceAccount `sandbox-episode`). control 이미지로 `python -m gpusandbox.tools multiturn`을 실행합니다. |
+
+- **`base/trainer-rbac.yaml`**: `sandbox-episode`는 multi-turn 에피소드 Job이 쓰는 계정입니다. 이 파일은 `05_setup_namespaces_auth.sh`와 `extensions/agent_sandbox.sh install`이 적용합니다. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)
+- **`extensions/agent-sandbox/job-multiturn.yaml.tpl`**: SandboxClaim을 만들고 삭제해야 하므로 probe Job과 달리 Kubernetes API 토큰을 마운트합니다. 샌드박스 audience 토큰과 `gpusandbox/client: "true"` 라벨도 붙어 있습니다. `scripts/extensions/agent_sandbox.sh episodes`가 렌더링해 실행합니다. 자세히: [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)
 
 ## demo
 
 | 경로 | 하는 일 |
 |---|---|
 | `site/` | 정적 리플레이 사이트(`index.html`, `app.js`, `style.css`)와 녹화 파일 `data/recording.json`. 외부 스크립트를 불러오지 않고, 녹화 내용을 HTML이 아닌 텍스트로만 표시합니다. |
-| `record_local.py` | AWS 없이 노트북 CPU에서 loopback 샌드박스 서버 두 개(v1, v2)를 띄워 실제로 채점하고 예시 녹화를 만듭니다. 서버가 평가마다 같은 사용자의 다른 프로세스를 종료하므로, Linux에서는 별도 PID namespace를 쓰는 컨테이너 안에서 실행합니다. GPU 클러스터의 녹화는 `python -m gpusandbox.tools record`로 만들어 교체합니다. |
+| `record_local.py` | AWS 없이 노트북 CPU에서 loopback 샌드박스 서버 두 개(v1, v2)를 띄워 실제로 채점하고 예시 녹화를 만듭니다. |
 | `infra/site.yaml` | CloudFormation 템플릿. 비공개 S3 bucket, Origin Access Control을 쓰는 CloudFront 배포, 보안 응답 헤더를 만듭니다. |
 | `deploy.sh`, `teardown.sh` | 스택 배포와 사이트 업로드, bucket 비우기와 스택 삭제. |
+
+- **`record_local.py`를 Linux에서 실행할 때**: 서버가 평가마다 같은 사용자의 다른 프로세스를 종료하므로, 별도 PID namespace를 쓰는 컨테이너 안에서 실행합니다.
+- **GPU 클러스터의 녹화**: `python -m gpusandbox.tools record`로 만들어 교체합니다.
 
 ## 이미지
 

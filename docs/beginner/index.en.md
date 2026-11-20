@@ -47,7 +47,6 @@ flowchart LR
 - **Terms box:** Expand the "Terms" box near the top of each chapter for that chapter's words, one line each. More words are in the [Glossary](../reference/glossary.md).
 - **❓ Misconception box:** Corrects points that new learners often mix up.
 - **In one line:** At the end of the concept chapters (1 to 4 and 6), one or two sentences to remember.
-- **Analogies are a starting point.** We note separately where the analogy and reality differ.
 
 ## After you finish
 

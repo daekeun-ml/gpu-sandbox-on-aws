@@ -56,16 +56,21 @@ Part 1 of the AWS tech blog tried the same attacks on EKS against a regular cont
 |---|---|---|
 | 1. pod security settings | Runs as a non-root user, drops privileges, uses a read-only file system, turns off automatic token mounting | Defaults of the sandbox pod (`uid 10001`, `capabilities: drop ALL`, `readOnlyRootFilesystem`) |
 | 2. Isolation runtime | Intercepts system calls (gVisor) or runs in a separate VM altogether (Kata) | Chosen per pod with `RuntimeClass`. Details in [chapter 02](02_container_vs_sandbox.md) |
-| 3. Network rules | Allows inbound connections only from whoever asked for grading, and blocks outbound connections by default. The EKS VPC CNI always allows traffic between a pod and its own node. The node guard in layer 4 drops new connections that a pod opens to its own node, and allows the node's health checks on the pod and their replies | Default deny in the `sandbox` namespace |
+| 3. Network rules | Allows inbound connections only from whoever asked for grading, and blocks outbound connections by default | Default deny in the `sandbox` namespace |
 | 4. Node settings | Keeps pods from reaching the node's credentials (IMDS) and the node's own services | IMDSv2 required, hop limit 1, node guard |
 | 5. No credentials | Mounts no AWS keys and no service account token of its own into the sandbox pod | `automountServiceAccountToken: false`, no secrets. The server uses the caller's token, sent with each grading request, to verify the caller |
 | 6. Resource and time limits | Caps CPU, memory, and execution time | The pod's requests and limits, a time limit per evaluation |
+
+- **The exception in layer 3**: the EKS VPC CNI always allows traffic between a pod and its own node.
+- **The node guard in layer 4**: it drops new connections a pod opens to its own node. It allows the node's health checks on the pod and their replies.
 
 !!! question "❓ Misconception: I created NetworkPolicy rules, so traffic is already blocked"
     On EKS, the rules only take effect after you turn on the network policy feature of the VPC CNI (`enableNetworkPolicy`). In the part 2 experiment of the blog, IMDS and the Kubernetes API were reachable until the feature was on. This repository creates its cluster with it turned on.
 
 !!! question "❓ Misconception: With the default policy, outbound traffic is blocked too"
-    The default policy of Agent Sandbox, which the blog series uses, blocks only the paths to private addresses and IMDS, and leaves traffic to the internet open, so data leaks need a separate block. This repository blocks all outbound traffic from the sandbox (`egress: []`), and before reporting ready, the sandbox checks for itself that the paths to IMDS, the Kubernetes API, and the node are blocked.
+    The default policy of Agent Sandbox, which the blog series uses, blocks only the paths to private addresses and IMDS, and leaves traffic to the internet open, so data leaks need a separate block.
+
+    This repository blocks all outbound traffic from the sandbox (`egress: []`). Before reporting ready, the sandbox checks for itself that the paths to IMDS, the Kubernetes API, and the node are blocked.
 
 ## What still remains
 

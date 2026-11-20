@@ -5,7 +5,12 @@
 
 ## Pain points
 
-Scenario A needs GPU nodes, and many accounts have a `Running On-Demand G and VT instances` quota of 0, so you cannot even start while the quota request is pending. Even the minimal path costs about 3.42 USD per hour for compute alone, and adding Kata GPU takes it past 11 USD. gVisor runs on `g5.xlarge` (A10G) and Kata GPU on `g4dn.metal` (T4), so it is also hard to isolate the runtime's effect. Many people postpone Kata because it supposedly needs bare metal, but only Kata + GPU passthrough needs `.metal`.
+Scenario A needs GPU nodes.
+
+- **GPU quota**: many accounts have a `Running On-Demand G and VT instances` quota of 0, so you cannot even start while the quota request is pending.
+- **Cost**: even the minimal path costs about 3.42 USD per hour for compute alone, and adding Kata GPU takes it past 11 USD.
+- **Comparison conditions**: gVisor runs on `g5.xlarge` (A10G) and Kata GPU on `g4dn.metal` (T4), so it is hard to isolate the runtime's effect.
+- **The bare metal misconception**: many people postpone Kata because it supposedly needs bare metal, but only Kata + GPU passthrough needs `.metal`.
 
 ![Two panels. a: with a G and VT quota of 0 you wait for approval and cannot start; once approved, scenario A (about 3.42 USD per hour, over 11 USD with Kata GPU) puts the gVisor pool on g5.xlarge, A10G and the Kata GPU pool on g4dn.metal, T4, so with different nodes and GPUs the runtime effect is hard to isolate. b: scenario C needs only the Standard quota (about 0.57 USD per hour, a sixth of A, estimate) and puts the gVisor, Kata CLH and Kata QEMU pools on one c8i.2xlarge, so with the same CPU, memory and kernel the differences are easier to pin on the runtime.](../images/figures/handson-10_cpu_only.svg)
 
@@ -69,7 +74,9 @@ flowchart LR
 
 ## Preparation
 
-1. Create `scripts/config.env` as in "Preparation 1" of [01 Cluster and images](01_cluster_and_images.md), and do the one-time CDK preparation (Node.js, CDK CLI, Session Manager plugin, `cdk/requirements.txt`, `cdk bootstrap`) as in "Preparation 2" of 01. It needs `AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`, `GVISOR_RELEASE`, `KATA_VERSION`, `KATA_CPU_INSTANCE_TYPE` (default `c8i.2xlarge`) and `SANDBOX_AUDIENCE`; GPU-related values can stay as they are. With `export SCENARIO="C"`, rerunning cluster creation (`02_create_cluster.sh`) without an option still deploys scenario C.
+1. Create `scripts/config.env` as in "Preparation 1" of [01 Cluster and images](01_cluster_and_images.md), and do the one-time CDK preparation (Node.js, CDK CLI, Session Manager plugin, `cdk/requirements.txt`, `cdk bootstrap`) as in "Preparation 2" of 01.
+    - **Values needed**: `AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`, `GVISOR_RELEASE`, `KATA_VERSION`, `KATA_CPU_INSTANCE_TYPE` (default `c8i.2xlarge`) and `SANDBOX_AUDIENCE`. GPU-related values can stay as they are.
+    - **With `export SCENARIO="C"`**: rerunning cluster creation (`02_create_cluster.sh`) without an option still deploys scenario C.
 2. Add this line to `scripts/config.env`. With one replica per pool, the v2 pool fits on the same node too.
 
     ```bash
@@ -92,7 +99,10 @@ Read-only checks of tools, AWS identity, quotas and nested virtualization suppor
 scripts/01_check_prereqs.sh
 ```
 
-**What to look for:** the Standard quota is 14 or more, and the feature list of `c8i.2xlarge` contains `nested-virtualization`. Ignore the G and VT quota and the AZ list of the GPU types.
+**What to look for:**
+
+- The Standard quota is 14 or more, and the feature list of `c8i.2xlarge` contains `nested-virtualization`.
+- Ignore the G and VT quota and the AZ list of the GPU types.
 
 **If it fails:** this command queries only the configured instance type (`KATA_CPU_INSTANCE_TYPE`, default `c8i.2xlarge`). If `nested-virtualization` is missing, that type does not support it in the current Region; switch to `us-east-1` or `us-west-2`, or see the "Kata" section of [Troubleshooting](../reference/troubleshooting.md).
 
@@ -104,7 +114,12 @@ One CDK stack creates the VPC, the EKS control plane (private API endpoint only)
 scripts/02_create_cluster.sh --cpu-only
 ```
 
-**What to look for:** check that the IAM and security group changes have no `0.0.0.0/0` inbound rule and answer `y` to `Do you wish to deploy these changes (y/n)?`. It took about 20 minutes in the practice account and ends with `Outputs` (including `EndpointPublicAccess = false`) and the `Next:` guidance. What each part means is in the cluster creation (`02_create_cluster.sh`) section of [01 Cluster and images](01_cluster_and_images.md).
+**What to look for:**
+
+- Check that the IAM and security group changes have no `0.0.0.0/0` inbound rule and answer `y` to `Do you wish to deploy these changes (y/n)?`.
+- It took about 20 minutes in the practice account and ends with `Outputs` (including `EndpointPublicAccess = false`) and the `Next:` guidance.
+
+What each part means is in the cluster creation (`02_create_cluster.sh`) section of [01 Cluster and images](01_cluster_and_images.md).
 
 Keep the tunnel running in a second terminal. From the Kata CPU node add (`kata/cpu_nodes.sh`) in step 4 on, kubectl and helm all go through it.
 
@@ -122,11 +137,18 @@ Check the nodes from the first terminal.
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 ```
 
-**What to look for:** two `system` nodes (`m6i.large`) and one `sandbox-kata` node (`c8i.2xlarge`) are `Ready`. The cluster page of the EKS console shows 3 nodes, 2 node groups and 4 add-ons.
+**What to look for:**
+
+- Two `system` nodes (`m6i.large`) and one `sandbox-kata` node (`c8i.2xlarge`) are `Ready`.
+- The cluster page of the EKS console shows 3 nodes, 2 node groups and 4 add-ons.
 
 ![EKS cluster overview: Kubernetes 1.36, standard support until August 2, 2027, 3 nodes, 2 node groups, 4 add-ons, 4 access entries](../images/console/eks-cluster.png)
 
-**If it fails:** if it stops with `set ... in scripts/config.env`, fill in that value. Deploy errors are under "If it fails" of cluster creation (`02_create_cluster.sh`) in [01](01_cluster_and_images.md) and under "Cluster and nodes" in [Troubleshooting](../reference/troubleshooting.md); tunnel errors are in the "Open the tunnel" section of 01.
+**If it fails:**
+
+- **If it stops with `set ... in scripts/config.env`**: fill in that value.
+- **Deploy errors**: see "If it fails" of cluster creation (`02_create_cluster.sh`) in [01](01_cluster_and_images.md) and "Cluster and nodes" in [Troubleshooting](../reference/troubleshooting.md).
+- **Tunnel errors**: see the "Open the tunnel" section of 01.
 
 ## Step 3: Build only two images (`03_build_push_images.sh`)
 
@@ -175,9 +197,16 @@ kata-qemu: kernel seen inside: 6.18.56 #1 SMP Fri Oct 16 18:41:32 UTC 2026
 [23:10:36] host kernel for comparison: 6.18.56-125.164.amzn2023.x86_64
 ```
 
-All three kernels must differ from the host kernel on the last line (a plain runc container would show the host kernel). Under gVisor the user-space kernel Sentry, which answers system calls, reports a version of its own choosing; under Kata you see the guest kernel inside the VM.
+All three kernels must differ from the host kernel on the last line.
 
-**If it fails:** on `no sandbox-kata-cpu node group: ...`, check that you ran cluster creation (`02_create_cluster.sh`) with `--cpu-only`. The same message appears without the `eks:DescribeNodegroup` permission or with a different `CLUSTER_NAME` or `AWS_REGION`, so run `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-cpu` yourself and read the error; on `kata runtime classes missing` or a smoke pod that does not finish, see the "Kata" section of [Troubleshooting](../reference/troubleshooting.md). If only the `gvisor-cpu` smoke pod fails, check the gVisor install step in the node's user data log (`/var/log/cloud-init-output.log`).
+??? note "Why the kernel versions differ from the host"
+    A plain runc container would show the host kernel. Under gVisor the user-space kernel Sentry, which answers system calls, reports a version of its own choosing; under Kata you see the guest kernel inside the VM.
+
+**If it fails:**
+
+- **On `no sandbox-kata-cpu node group: ...`**: check that you ran cluster creation (`02_create_cluster.sh`) with `--cpu-only`. The same message appears without the `eks:DescribeNodegroup` permission or with a different `CLUSTER_NAME` or `AWS_REGION`, so run `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-cpu` yourself and read the error.
+- **On `kata runtime classes missing` or a smoke pod that does not finish**: see the "Kata" section of [Troubleshooting](../reference/troubleshooting.md).
+- **If only the `gvisor-cpu` smoke pod fails**: check the gVisor install step in the node's user data log (`/var/log/cloud-init-output.log`).
 
 ## Step 5: Namespaces and the routing table (`05_setup_namespaces_auth.sh`)
 
@@ -200,11 +229,17 @@ for rt in gvisor-cpu kata-clh-cpu kata-qemu-cpu; do
 done
 ```
 
-**What to look for:** each pool ends with `pool sandbox-<runtime>-v1 verified`. All four CPU golden verdicts must be `PASS` (the correct answer is `ok`, the wrong answer and the benchmark cheat are `wrong_answer`, reading a host file is `policy_violation`).
+**What to look for:**
+
+- Each pool ends with `pool sandbox-<runtime>-v1 verified`.
+- All four CPU golden verdicts must be `PASS` (the correct answer is `ok`, the wrong answer and the benchmark cheat are `wrong_answer`, reading a host file is `policy_violation`).
 
 ![verify.sh on the kata-clh-cpu v1 pool: the sandbox kernel 6.18.56 differs from the node kernel 6.18.62, IMDS, the Kubernetes API, the kubelet and S3 are all blocked, the four prepared submissions PASS, the connection from the default namespace is blocked, and the last line is pool sandbox-kata-clh-cpu-v1 verified](../images/terminal/verify-kata-clh-cpu.png)
 
-**If it fails:** if a pod is `Pending`, look for `Insufficient cpu` or `Insufficient memory` in `kubectl -n sandbox describe pod <pod>` and check that `KATA_CPU_REPLICAS=1` is in effect. Everything else is under "Sandbox pools and readiness" in [Troubleshooting](../reference/troubleshooting.md).
+**If it fails:**
+
+- **If a pod is `Pending`**: look for `Insufficient cpu` or `Insufficient memory` in `kubectl -n sandbox describe pod <pod>` and check that `KATA_CPU_REPLICAS=1` is in effect.
+- **Everything else**: see "Sandbox pools and readiness" in [Troubleshooting](../reference/troubleshooting.md).
 
 ## Step 7: A reward loop without a model, and a version swap (`ops/simulate.sh`, `ops/rollout.sh`)
 
@@ -215,7 +250,12 @@ Keep the terminal with the SSM tunnel from step 2 open, and use two more work te
 scripts/ops/simulate.sh 30 20
 ```
 
-A few batches in, swap `kata-clh-cpu` from v1 to v2 in the second work terminal. `ops/rollout.sh` starts the v2 pool next to v1 (1), verifies it (2), checks with parity that it gives the same verdicts as v1 (3) and switches the routing table to v2 (4).
+A few batches in, swap `kata-clh-cpu` from v1 to v2 in the second work terminal. `ops/rollout.sh` runs these in order.
+
+1. Starts the v2 pool next to v1
+2. Verifies it
+3. Checks with parity that it gives the same verdicts as v1
+4. Switches the routing table to v2
 
 ```bash
 # work terminal 2
@@ -224,7 +264,11 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 
 ![rollout.sh kata-clh-cpu v1 v2: 1) deploy v2, 2) verify v2 (kernel comparison, blocked egress, four PASS, verified), 3) parity with four PASS and PARITY PASS, 4) the routing switch, and at the end the hint to watch for the SWITCH line](../images/terminal/rollout-kata-clh-cpu.png)
 
-**What to look for:** lines like these in the first work terminal (the switch part of a `simulate.sh 16 15` run in the practice account). On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes. If no switch event appears after a minute, check the pool on the `batch` lines (`kata-clh-cpu/v1` or `v2`). For the raw JSON with every field, start the next run as `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`; for a simulation that is already running, use `kubectl -n rl-trainer logs -f job/simulate-<number>`.
+**What to look for:** lines like these in the first work terminal (the switch part of a `simulate.sh 16 15` run in the practice account).
+
+- **The switch can show up late.** On a cluster the ConfigMap reaches the pod through the kubelet sync and cache propagation, and the script gives this as about a minute. The client also rereads the routing file at most once every 2 seconds. So the switch can appear a few batches after `ops/rollout.sh` finishes.
+- **If no switch event appears after a minute**: check the pool on the `batch` lines (`kata-clh-cpu/v1` or `v2`).
+- **To see the raw JSON**: for the raw JSON with every field, start the next run as `GPUSANDBOX_LOG=json scripts/ops/simulate.sh 30 20`; for a simulation that is already running, use `kubectl -n rl-trainer logs -f job/simulate-<number>`.
 
 ```text
 [05:37:05] batch   6  kata-clh-cpu/v1  ok 1  wrong_answer 2  pass 33%  speedup 0.91  17.3s
@@ -233,8 +277,11 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 ```
 
 - **The `SWITCH` line appears once, at a batch boundary.** Batches up to 6 ran on v1, batches from 7 on v2.
-- **No `batch` line shows `MIXED VERSIONS`.** The verdicts of one batch did not mix v1 and v2 (in the raw JSON, `served_versions` holds a single version). In training, a batch whose needed results are all cached from the same pool calls no sandbox and prints no `reward_batch` line; if the cache mixes pools, the batch is scored again on one pool and logs that line. On-policy training needs this to compute one batch's advantages against one standard.
+- **No `batch` line shows `MIXED VERSIONS`.** The verdicts of one batch did not mix v1 and v2 (in the raw JSON, `served_versions` holds a single version).
 - **The results are the same before and after.** Both batches have 1 `ok`, 2 `wrong_answer` and pass 33%. Whether each submission got the same verdict on both versions shows in the `PASS` lines of the `ops/rollout.sh` parity output.
+
+??? note "Why one batch must not mix verdicts from different versions"
+    In training, a batch whose needed results are all cached from the same pool calls no sandbox and prints no `reward_batch` line; if the cache mixes pools, the batch is scored again on one pool and logs that line. On-policy training needs this to compute one batch's advantages against one standard.
 
 The whole run looks like this.
 
@@ -242,17 +289,27 @@ The whole run looks like this.
 
 There are 4 submissions but only 3 are scored, because the trainer-side AST check rejects the one that reads a host file before it reaches a sandbox (`n` is 3 in the raw JSON). The speedup (`mean_speedup`) moves from batch to batch with CPU timing noise (between 0.66 and 1.65 in the local run), so do not compare runtimes with it.
 
-Once v2 is active, scale v1 to zero. The v1 Deployment stays, but with 0 replicas it cannot take requests. To go back, `scripts/ops/rollout.sh kata-clh-cpu v2 v1` brings the v1 pods back, runs the verification and parity, and then switches the routing. To compare the three runtimes in step 8, run this command after the benchmark.
+Once v2 is active, scale v1 to zero with the command below. The v1 Deployment stays, but with 0 replicas it cannot take requests.
+
+- **To compare the three runtimes in step 8**: run the `v1 v2 --finish` command below after the benchmark.
 
 ```bash
 scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 ```
 
-**If it fails:** if `ops/simulate.sh` stops with `no routing table`, run `05_setup_namespaces_auth.sh` from step 5 again. If `ops/rollout.sh` stops at parity, v2 receives no traffic and v1 stays active (more in [06 Updating the sandbox during training](06_sandbox_update.md)). CPU pools measure with a lot of noise, so when the speedup of the correct submission swings far, parity can fail like `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365` (2026-11-20 run). If the verdicts (`status`) match, run the same command again.
+To go back, `scripts/ops/rollout.sh kata-clh-cpu v2 v1` brings the v1 pods back, runs the verification and parity, and then switches the routing.
+
+**If it fails:**
+
+- **If `ops/simulate.sh` stops with `no routing table`**: run `05_setup_namespaces_auth.sh` from step 5 again.
+- **If `ops/rollout.sh` stops at parity**: v2 receives no traffic and v1 stays active (more in [06 Updating the sandbox during training](06_sandbox_update.md)).
+- **If parity fails on a speedup difference**: CPU pools measure with a lot of noise, so when the speedup of the correct submission swings far, parity can fail like `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365` (2026-11-20 run). If the verdicts (`status`) match, run the same command again.
 
 ## Step 8 (optional): Compare the three runtimes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU) (`ops/bench.sh`)
 
-Send the same correct code to the three pools from step 6 (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) and compare them. The three pools share one node, one CPU type and one kernel, so differences in the measurements are easy to read as runtime differences. Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool. `ops/bench.sh` skips pools with no v1 pod. If `--finish` in step 7 scaled `kata-clh-cpu` v1 to zero, that pool is missing from the results, so run it while all three v1 pools are Ready.
+Send the same correct code to the three pools from step 6 (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) and compare them. The three pools share one node, one CPU type and one kernel, so differences in the measurements are easy to read as runtime differences. Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool.
+
+`ops/bench.sh` skips pools with no v1 pod. If `--finish` in step 7 scaled `kata-clh-cpu` v1 to zero, that pool is missing from the results, so run it while all three v1 pools are Ready.
 
 ```bash
 scripts/ops/bench.sh 16
@@ -262,7 +319,9 @@ scripts/ops/bench.sh 16
 
 ## Step 9 (optional): Use Agent Sandbox to borrow one sandbox per episode
 
-The pools in steps 1 to 8 pick any free pod for each request, score once, and are done. In multi-turn training the model submits code, reads the feedback, fixes it and submits again, so it must keep the same sandbox until the episode ends. This step checks only the basic mechanics of that approach: sandboxes are started ahead of time (warm pool), one is borrowed (claim), and it is given back when the work is done.
+The pools in steps 1 to 8 pick any free pod for each request, score once, and are done. In multi-turn training the model submits code, reads the feedback, fixes it and submits again, so it must keep the same sandbox until the episode ends.
+
+This step checks only the basic mechanics of that approach: sandboxes are started ahead of time (warm pool), one is borrowed (claim), and it is given back when the work is done.
 
 ```bash
 scripts/extensions/agent_sandbox.sh install                # once: Agent Sandbox controller and CRDs
@@ -270,7 +329,11 @@ scripts/extensions/agent_sandbox.sh pool kata-clh-cpu 1    # keep one kata-clh-c
 scripts/extensions/agent_sandbox.sh claim kata-clh-cpu     # borrow it, print its address, give it back
 ```
 
-**What to look for:** `claim` prints the name and address of the borrowed sandbox (`sandbox: ...  address: ...`) and deletes the claim. A returned sandbox is not reused but deleted, and the warm pool starts a new one to get back to one waiting sandbox. In the last command of the screen below (`kubectl -n sandbox get sandboxwarmpool,sandbox`), a new sandbox (`...-qnwbh`) waits in place of the borrowed one (`...-6bdp7`).
+**What to look for:**
+
+- `claim` prints the name and address of the borrowed sandbox (`sandbox: ...  address: ...`) and deletes the claim.
+- A returned sandbox is not reused but deleted, and the warm pool starts a new one to get back to one waiting sandbox.
+- In the last command of the screen below (`kubectl -n sandbox get sandboxwarmpool,sandbox`), a new sandbox (`...-qnwbh`) waits in place of the borrowed one (`...-6bdp7`).
 
 ![agent_sandbox.sh output: install creates the controller, four CRDs and the claim permissions, pool kata-clh-cpu 1 creates the SandboxTemplate and SandboxWarmPool, claim prints the address of sandbox kernel-eval-kata-clh-cpu-6bdp7 and deletes the claim, and the final kubectl get shows the warm pool READY 1 and a new sandbox kernel-eval-kata-clh-cpu-qnwbh True](../images/terminal/agent-sandbox-claim.png)
 

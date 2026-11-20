@@ -5,7 +5,12 @@
 
 ## Pain point
 
-Once you choose HyperPod it seems natural to put the sandboxes on HyperPod nodes too, but with the default HyperPod AMI, driver and `.metal` constraints make that impossible. The instance criteria are unclear as well. T4 (`g4dn`) looks cheap but is unverified in this asset's gVisor setup, and the `.metal` type that Kata GPU needs has a high hourly price. In new accounts the GPU On-Demand quotas can be 0, so cluster creation can stop at the node stage.
+Once you choose HyperPod it seems natural to put the sandboxes on HyperPod nodes too, but with the default HyperPod AMI, driver and `.metal` constraints make that impossible. The instance criteria are unclear as well.
+
+- **T4 (`g4dn`)**: it looks cheap but is unverified in this asset's gVisor setup.
+- **The `.metal` type that Kata GPU needs**: it has a high hourly price.
+
+In new accounts the GPU On-Demand quotas can be 0, so cluster creation can stop at the node stage.
 
 ![Two panels. a: putting the trainer (ml.g5.2xlarge) and the sandboxes together in a default-AMI HyperPod instance group of an EKS cluster fails: the gVisor sandbox because driver 595.91.07 is unknown, the Kata sandbox because there is no ml.*.metal and no nested virtualization (red). b B1: in the same EKS cluster only the trainer sits in the HyperPod instance group, and the gVisor sandbox (g5.xlarge) and the Kata sandbox (g4dn.metal for GPU, c8i.2xlarge for CPU) sit in EC2 node groups.](../images/figures/concepts-04_platforms_and_instances.svg)
 
@@ -46,7 +51,12 @@ Once you choose HyperPod it seems natural to put the sandboxes on HyperPod nodes
 
 - **Node recovery:** the cluster is created with `NodeRecovery: Automatic` (`infra/hyperpod/cluster.json.tpl`). Node health shows up as the `sagemaker.amazonaws.com/node-health-status` label (`Schedulable`, `Unschedulable` and others), and the trainer job is placed only on `Schedulable` nodes.
 - **Deep health checks:** an instance group's `OnStartDeepHealthChecks` can enable `InstanceStress` (GPU/NVLink count, DCGM diagnostics, EFA and others) and `InstanceConnectivity` (NCCL and others). This asset's template does not set this field; if you add it, see the taint constraint below.
-- **Job restarts and hang detection:** the training operator add-on (`amazon-sagemaker-hyperpod-training-operator`) runs `HyperPodPyTorchJob`, with `jobMaxRetryCount: 3` and a `restartPolicy` (`numRestartBeforeFullJobRestart: 1`, `evalPeriodSeconds: 3600`, `maxFullJobRestarts: 2`). There are two log-pattern detections: `JobStart` expects a `"event": "routing"` line within 1200 seconds, and `RewardStalled` expects a `"event": "reward_batch"` line every 1800 seconds. The HyperPod trainer image installs `hyperpod-elastic-agent` without a pinned version, and the Job starts the trainer with `hyperpodrun`. The installed version can differ with the build date.
+- **Job restarts and hang detection:** the training operator add-on (`amazon-sagemaker-hyperpod-training-operator`) runs `HyperPodPyTorchJob`, with `jobMaxRetryCount: 3` and a `restartPolicy` (`numRestartBeforeFullJobRestart: 1`, `evalPeriodSeconds: 3600`, `maxFullJobRestarts: 2`). There are two log-pattern detections.
+    - **`JobStart`**: it expects a `"event": "routing"` line within 1200 seconds.
+    - **`RewardStalled`**: it expects a `"event": "reward_batch"` line every 1800 seconds.
+
+    The HyperPod trainer image installs `hyperpod-elastic-agent` without a pinned version, and the Job starts the trainer with `hyperpodrun`. The installed version can differ with the build date.
+
 - **Checkpoint resume:** after a restart, `train_grpo.py` resumes from the latest checkpoint in its output directory. The hands-on keeps `/outputs` on an emptyDir (a scratch volume that disappears with the pod), so resuming after a node replacement needs shared storage (an FSx for Lustre PVC, for example).
 - **Other features:** the `hyp` CLI (`pip install sagemaker-hyperpod`), the task governance and observability add-ons, and Karpenter-based autoscaling (`AutoScalerType: Karpenter`, `NodeProvisioningMode: Continuous`).
 
@@ -59,10 +69,15 @@ Once you choose HyperPod it seems natural to put the sandboxes on HyperPod nodes
       --kubernetes-version 1.36
     ```
 
-    **What to look for:** if the `addons[0].addonVersions` list in the JSON has at least one version, a 1.36-compatible add-on exists. If the list is empty, consider a lower `K8S_VERSION`.
+    **What to look for:**
+
+    - **If the `addons[0].addonVersions` list in the JSON has at least one version**: a 1.36-compatible add-on exists.
+    - **If the list is empty**: consider a lower `K8S_VERSION`.
 
 ??? info "HyperPod (EKS) prerequisites in short"
-    You need EKS authentication mode `API` or `API_AND_CONFIG_MAP`, VPC CNI 1.18.3 or later, and private subnets. When creating through the API, first install the HyperPod dependency Helm chart (`helm_chart/HyperPodHelmChart` in `sagemaker-hyperpod-cli`), which installs the health monitoring agent, deep health check RBAC, job auto-restart, the MPI operator, nvidia-device-plugin, the Neuron and EFA plugins, and Kueue. HyperPod nodes and EKS nodes use different IAM roles, and the execution role gets `AmazonSageMakerClusterInstanceRolePolicy` plus an EC2 ENI and ECR inline policy.
+    - You need EKS authentication mode `API` or `API_AND_CONFIG_MAP`, VPC CNI 1.18.3 or later, and private subnets.
+    - **When creating through the API**: first install the HyperPod dependency Helm chart (`helm_chart/HyperPodHelmChart` in `sagemaker-hyperpod-cli`), which installs the health monitoring agent, deep health check RBAC, job auto-restart, the MPI operator, nvidia-device-plugin, the Neuron and EFA plugins, and Kueue.
+    - **IAM roles**: HyperPod nodes and EKS nodes use different IAM roles, and the execution role gets `AmazonSageMakerClusterInstanceRolePolicy` plus an EC2 ENI and ECR inline policy.
 
 ## What HyperPod does not give the sandbox tier
 
@@ -79,19 +94,32 @@ On HyperPod nodes, by default only hostNetwork pods can reach IMDS. That default
 
 ## EC2 sandboxes in B1 and the custom AMI in B2
 
-gVisor needs an exact driver version match, and an unknown version does not work even with the override flag, so B2 bakes its own custom AMI with the driver replaced by 580.178.04 ([B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)). The script below checks a node's driver (needs a HyperPod cluster). It runs a debug pod on each node and, when it ends, deletes every pod in the `default` namespace whose name starts with `node-debugger-`, which can include other people's debugging sessions.
+gVisor needs an exact driver version match, and an unknown version does not work even with the override flag, so B2 bakes its own custom AMI with the driver replaced by 580.178.04 ([B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)).
+
+The script below checks a node's driver (needs a HyperPod cluster). It runs a debug pod on each node and, when it ends, deletes every pod in the `default` namespace whose name starts with `node-debugger-`, which can include other people's debugging sessions.
 
 ```bash
 scripts/hyperpod/check_gvisor.sh
 ```
 
-**What to look for:** a default-AMI node (the trainer) prints the line below, and a B2 custom-AMI node (sandbox) prints `driver 580.178.04: SUPPORTED ...`.
+**What to look for:**
 
-```text
-  driver 595.91.07: NOT supported by gVisor 20261109.0: keep sandboxes on EC2 (mode B1)
-```
+- **A default-AMI node (the trainer)**: it prints the line below.
 
-The pod limit above still applies to B2, and a taint can only be added to an instance group without deep health checks, so B2's sandbox group is created without them. B1 stays the default because it needs no custom AMI to maintain. B1 and B2 on `ml.g5` were not run on AWS and are not verified. In B2, `scripts/04_install_gpu_stack.sh` does not create a smoke pod. Check which module flavor loaded on the sandbox node (`/proc/driver/nvidia/version`) and confirm with `scripts/hyperpod/check_gvisor.sh` above that the driver is on the support list. Then deploy the pool with `scripts/06_deploy_sandboxes.sh gvisor-hyperpod v1` and verify it with `scripts/ops/verify.sh gvisor-hyperpod v1`.
+    ```text
+      driver 595.91.07: NOT supported by gVisor 20261109.0: keep sandboxes on EC2 (mode B1)
+    ```
+
+- **A B2 custom-AMI node (sandbox)**: it prints `driver 580.178.04: SUPPORTED ...`.
+
+The pod limit above still applies to B2, and a taint can only be added to an instance group without deep health checks, so B2's sandbox group is created without them. B1 stays the default because it needs no custom AMI to maintain. B1 and B2 on `ml.g5` were not run on AWS and are not verified.
+
+In B2, `scripts/04_install_gpu_stack.sh` does not create a smoke pod. Check and deploy in this order.
+
+1. Check which module flavor loaded on the sandbox node (`/proc/driver/nvidia/version`).
+2. Confirm with `scripts/hyperpod/check_gvisor.sh` above that the driver is on the support list.
+3. Deploy the pool with `scripts/06_deploy_sandboxes.sh gvisor-hyperpod v1`.
+4. Verify it with `scripts/ops/verify.sh gvisor-hyperpod v1`.
 
 **If it fails:** `no HyperPod nodes found` means no HyperPod node has joined the cluster yet; see [07 HyperPod scenario](../handson/07_hyperpod.md) and the "HyperPod" section of [Troubleshooting](../reference/troubleshooting.md).
 
@@ -109,7 +137,12 @@ The pod limit above still applies to B2, and a taint can only be added to an ins
 Prices are On-Demand list prices in us-east-1 and us-west-2.
 
 !!! note "Driver and verification scope of `g5`"
-    On a `g5.xlarge` node deployed on 2026-11-18, the EKS AL2023 NVIDIA AMI loaded the proprietary kernel module 580.178.04 with GSP off (`/proc/driver/nvidia/version`, and `EnableGpuFirmware: 0` in `/proc/driver/nvidia/params`). gVisor documents nvproxy against NVIDIA's open driver and does not mention the proprietary driver. Still, 580.178.04 is on the support list of runsc `release-20261109.0` (`runsc nvproxy list-supported-drivers`). In the practice account, the gVisor smoke test (`cuda ok: NVIDIA A10G 2048.0`) and `scripts/ops/verify.sh gvisor v1` passed on `g5.xlarge`, and a 5-step GRPO run finished with the trainer on `g5.2xlarge`. So this combination is verified by this repository, not documented by gVisor. Check again after changing the driver, AMI or gVisor version. The `04_install_gpu_stack.sh` smoke test creates its own pod that uses one GPU, so run it while a gVisor node has a free GPU; check a pool that is already deployed with `scripts/ops/verify.sh gvisor v1`.
+    On a `g5.xlarge` node deployed on 2026-11-18, the EKS AL2023 NVIDIA AMI loaded the proprietary kernel module 580.178.04 with GSP off (`/proc/driver/nvidia/version`, and `EnableGpuFirmware: 0` in `/proc/driver/nvidia/params`). gVisor documents nvproxy against NVIDIA's open driver and does not mention the proprietary driver.
+
+    - **What this repository verified**: 580.178.04 is on the support list of runsc `release-20261109.0` (`runsc nvproxy list-supported-drivers`). In the practice account, the gVisor smoke test (`cuda ok: NVIDIA A10G 2048.0`) and `scripts/ops/verify.sh gvisor v1` passed on `g5.xlarge`, and a 5-step GRPO run finished with the trainer on `g5.2xlarge`. So this combination is verified by this repository, not documented by gVisor.
+    - **After changing the driver, AMI or gVisor version**: check again.
+    - **The `04_install_gpu_stack.sh` smoke test**: it creates its own pod that uses one GPU, so run it while a gVisor node has a free GPU.
+    - **A pool that is already deployed**: check it with `scripts/ops/verify.sh gvisor v1`.
 
     `g6` (L4) is a supported alternative. The AMI loads the open module 580.178.04 there, which matches the gVisor documentation, and it is cheaper (`g6.xlarge` 0.8048, `g6.2xlarge` 0.9776). To use it, set `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` (`HYPERPOD_*` for HyperPod) in `scripts/config.env`.
 
@@ -146,9 +179,14 @@ Prices are On-Demand list prices in us-east-1 and us-west-2.
 | Quota (vCPU-based) | Needed for the hands-on | Notes |
 |---|---|---|
 | Running On-Demand G and VT instances | A: 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2), B1: 8 (`g5.xlarge` 4 x 2), B2: 0. Kata GPU adds `g4dn.metal` 96 | documented default can be 0 |
-| Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 6 (`m6i.large` 2 x 2 + the SSM access `t4g.nano` 2). Kata CPU adds `c8i.2xlarge` 8 (14 in total). While the B2 or Kata GPU AMI is being built, the builder `m6i.large` needs 2 more (8, or 16 with the Kata CPU node) | documented default is 5 |
+| Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 6 (`m6i.large` 2 x 2 + the SSM access `t4g.nano` 2). Additional needs are in the list below the table | documented default is 5 |
 | `ml.g5.2xlarge for cluster usage` | 1 (B) | HyperPod uses `ml.<type> for cluster usage` quotas |
 | `ml.g5.xlarge for cluster usage` | 2 (B2) | the B2 `sandbox` instance group (`HYPERPOD_SANDBOX_COUNT`) |
+
+The Standard quota needs more in these cases.
+
+- **If you practice Kata CPU**: it adds `c8i.2xlarge` 8 (14 in total).
+- **While the B2 or Kata GPU AMI is being built**: the builder `m6i.large` needs 2 more (8, or 16 with the Kata CPU node).
 
 `scripts/01_check_prereqs.sh` prints, read-only, the G and VT quota, nested virtualization support for `c8i.2xlarge` and which AZs offer each GPU type. How to run it and what to check are in section 5 of [Getting started](../getting_started.md).
 
@@ -171,7 +209,10 @@ The table is an estimate from list prices and leaves out the EKS control plane, 
       --scaling-config minSize=0,maxSize=1,desiredSize=0
     ```
 
-    **What to look for:** after a few minutes, `kubectl get nodes -l gpusandbox/kata-gpu=true` (with `cdk/tunnel.sh` running) lists no nodes. If `CLUSTER_NAME` is not set in your shell, run `source scripts/config.env` first.
+    **What to look for:**
+
+    - After a few minutes, `kubectl get nodes -l gpusandbox/kata-gpu=true` (with `cdk/tunnel.sh` running) lists no nodes.
+    - **If `CLUSTER_NAME` is not set in your shell**: run `source scripts/config.env` first.
 
 !!! question "❓ Misconception: with HyperPod, HyperPod manages the sandboxes too"
     HyperPod's node recovery, deep health checks and job restarts are resiliency features for nodes and jobs. Node recovery is a cluster setting, so it also covers B2's `sandbox` group, but HyperPod does not install sandbox runtimes, verify isolation or pin versions.

@@ -58,12 +58,20 @@ If an import error or a missing setting shows up only after the GPU nodes are ru
 
 | Quota (vCPU-based) | Needed for the hands-on | Notes |
 |---|---|---|
-| Running On-Demand G and VT instances | scenario A 16 (trainer `g5.2xlarge` 8 + gVisor `g5.xlarge` 4 x 2), B1 8, B2 and C 0. Kata GPU adds `g4dn.metal` 96 | the default can be 0 for new accounts |
-| Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 6 (system `m6i.large` 2 x 2 + the SSM access instance `t4g.nano` 2). Scenario C or Kata CPU adds `c8i.2xlarge` 8, for 14. B2 and Kata GPU need 2 more for the `m6i.large` builder while the custom AMI builds: 8, or 16 together with c8i | documented default is 5 |
+| Running On-Demand G and VT instances | scenario A 16, B1 8, B2 and C 0 | the default can be 0 for new accounts |
+| Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 6 (system `m6i.large` 2 x 2 + the SSM access instance `t4g.nano` 2) | documented default is 5 |
 | `ml.g5.2xlarge for cluster usage` (SageMaker) | 1 (Scenario B) | HyperPod-specific quota |
 | `ml.g5.xlarge for cluster usage` (SageMaker) | 2 (Scenario B2) | the B2 `sandbox` instance group (`HYPERPOD_SANDBOX_COUNT`) |
 
-In B1 the trainer moves to HyperPod, so the G and VT requirement drops to 8 (the gVisor nodes). B2 and C have no EC2 GPU nodes and need no G and VT quota. For B1 and B2, check the SageMaker quotas above separately. Quota increases can take time, so request them before creating the cluster.
+- **G and VT, scenario A**: the 16 is trainer `g5.2xlarge` 8 + gVisor `g5.xlarge` 4 x 2.
+- **G and VT, B1**: the trainer moves to HyperPod, so the requirement drops to 8 (the gVisor nodes).
+- **G and VT, B2 and C**: they have no EC2 GPU nodes and need no G and VT quota.
+- **With Kata GPU**: add `g4dn.metal` 96 to G and VT.
+- **Standard, scenario C or with Kata CPU**: add `c8i.2xlarge` 8, for 14.
+- **Standard, B2 and Kata GPU**: they need 2 more for the `m6i.large` builder while the custom AMI builds: 8, or 16 together with c8i.
+- **B1 and B2**: check the SageMaker quotas above separately.
+
+Quota increases can take time, so request them before creating the cluster.
 
 ## 1. Clone the repository
 
@@ -120,14 +128,25 @@ python -m pytest -q
 
 **What to look for:** the last line starts with `109 passed` (the duration after it depends on your machine).
 
-The 109 tests are 68 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbox.md) and [multi-turn episode](handson/11_multi_turn.md) and 11 [demo site](handson/09_demo_site.md) tests. They cover the AST policy, the two-process harness on CPU (correct, wrong, crash, timeout, benchmark cheat, monkeypatch), fail-closed authentication, readiness after egress denial is verified, the client, the gateway's per-group version pinning, the operator tools, rendering of the manifest, node user data (`infra/eks/userdata.py`) and Karpenter templates, and the demo site's security properties. Per-file coverage is in [Repository map](reference/repository_map.md#tests). The 18 CDK stack tests live separately in `cdk/tests`; after the CDK preparation in section 5, run them with `cd cdk && python -m pytest -q tests`.
+- **Breakdown**: the 109 tests are 68 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbox.md) and [multi-turn episode](handson/11_multi_turn.md) and 11 [demo site](handson/09_demo_site.md) tests.
+- **Coverage**: the AST policy, the two-process harness on CPU (correct, wrong, crash, timeout, benchmark cheat, monkeypatch), fail-closed authentication, readiness after egress denial is verified, the client, the gateway's per-group version pinning, the operator tools, rendering of the manifest, node user data (`infra/eks/userdata.py`) and Karpenter templates, and the demo site's security properties. Per-file coverage is in [Repository map](reference/repository_map.md#tests).
+- **CDK stack tests**: the 18 CDK stack tests live separately in `cdk/tests`; after the CDK preparation in section 5, run them with `cd cdk && python -m pytest -q tests`.
 
 **If it fails:** a `ModuleNotFoundError` usually means the virtual environment is not active or section 2 was skipped; run `source .venv/bin/activate` again and repeat section 2.
 
 !!! warning "Steps that start servers on a Linux host"
-    After every evaluation the sandbox server sends SIGKILL to every process in `/proc` except itself and its ancestors ([`procs.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py)). Inside a pod the scope is limited to the container's PID namespace, but run directly on a Linux host it also hits your other processes (editor, the other server, the trainer), and system processes too when run as root. macOS has no `/proc`, so the behavior is off there.
+    After every evaluation the sandbox server sends SIGKILL to every process in `/proc` except itself and its ancestors ([`procs.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/procs.py)).
 
-    An autouse fixture in `tests/conftest.py` turns this behavior off under pytest, so `python -m pytest -q` above is safe on a Linux host as it is. Run the steps that start servers directly, such as section 4, in a separate container (separate PID namespace) per server rather than on a Linux host. The server binds to `127.0.0.1` by default (`SANDBOX_HOST`), so if the container has its own network namespace, the requests in 4.2 and 4.3 sent from the host do not reach it. A container that shares the host network (for example `docker run --network host`, which still keeps its own PID namespace) can be reached with the default bind.
+    - **Inside a pod**: the scope is limited to the container's PID namespace.
+    - **Run directly on a Linux host**: it also hits your other processes (editor, the other server, the trainer), and system processes too when run as root.
+    - **On macOS**: there is no `/proc`, so the behavior is off there.
+
+    How to run things safely:
+
+    - **pytest**: an autouse fixture in `tests/conftest.py` turns this behavior off under pytest, so `python -m pytest -q` above is safe on a Linux host as it is.
+    - **Steps that start servers directly, such as section 4**: run them in a separate container (separate PID namespace) per server rather than on a Linux host.
+    - **If the container has its own network namespace**: the server binds to `127.0.0.1` by default (`SANDBOX_HOST`), so the requests in 4.2 and 4.3 sent from the host do not reach it.
+    - **If the container shares the host network**: (for example `docker run --network host`, which still keeps its own PID namespace) it can be reached with the default bind.
 
     To check only the tests that start no servers, skip `slow`.
 
@@ -182,12 +201,19 @@ INFO:gpusandbox.server:device probe ok=True info={'torch': '2.15.0', 'cuda_runti
 INFO:     Uvicorn running on http://127.0.0.1:18001 (Press CTRL+C to quit)
 ```
 
-Both warnings are expected in a local run. By default the server binds to `127.0.0.1` only (`SANDBOX_HOST`). In the cluster the pod manifest sets `SANDBOX_HOST=0.0.0.0`, and a headless ClusterIP Service (pod addresses through DNS, no virtual IP) plus a NetworkPolicy (a firewall rule between pods) admit the trainer namespace only.
+Both warnings are expected in a local run. By default the server binds to `127.0.0.1` only (`SANDBOX_HOST`).
+
+??? note "Bind address and access limits in the cluster"
+    In the cluster the pod manifest sets `SANDBOX_HOST=0.0.0.0`, and a headless ClusterIP Service (pod addresses through DNS, no virtual IP) plus a NetworkPolicy (a firewall rule between pods) admit the trainer namespace only.
 
 **If it fails:** `address already in use` means another process holds that port; switch to another port (for example `18011`) and match the addresses in 4.2 and 4.3.
 
 !!! warning "The test bypass is for loopback only"
-    `SANDBOX_AUTH_TEST_BYPASS=1` turns off token verification for `/v1/evaluate`, `/info` and `/metrics` entirely. The code does not block combining it with `SANDBOX_HOST=0.0.0.0`, so do not set both. The repository's manifests do not set this variable, and sandbox pods in the cluster verify audience-bound ServiceAccount tokens and reject evaluation, server info and metrics requests (`/v1/evaluate`, `/info`, `/metrics`) with 401 when the authentication settings are missing (fail closed). `/healthz` and `/readyz` report server state without authentication, so the `/readyz` response below says nothing about the authentication settings.
+    `SANDBOX_AUTH_TEST_BYPASS=1` turns off token verification for `/v1/evaluate`, `/info` and `/metrics` entirely.
+
+    - **The bypass with `SANDBOX_HOST=0.0.0.0`**: the code does not block combining the two, so do not set both.
+    - **In the cluster**: the repository's manifests do not set this variable. Sandbox pods in the cluster verify audience-bound ServiceAccount tokens and reject evaluation, server info and metrics requests (`/v1/evaluate`, `/info`, `/metrics`) with 401 when the authentication settings are missing (fail closed).
+    - **`/healthz` and `/readyz`**: they report server state without authentication, so the `/readyz` response below says nothing about the authentication settings.
 
 ### 4.2 Check the servers (golden probe)
 
@@ -199,7 +225,11 @@ curl -s http://127.0.0.1:18001/readyz
 python -m gpusandbox.tools probe --address 127.0.0.1:18001,127.0.0.1:18002 --device cpu
 ```
 
-**What to look for:** output similar to the following and exit code 0 (a macOS run). The server accepts requests only after the device probe finishes, so run this after both terminals show `Uvicorn running`. Before that the connection is refused and `curl -s` prints nothing. The `pod`, `kernel_release` and `speedup` values differ per machine and run.
+**What to look for:**
+
+- Output similar to the following and exit code 0 (a macOS run).
+- The server accepts requests only after the device probe finishes, so run this after both terminals show `Uvicorn running`. Before that the connection is refused and `curl -s` prints nothing.
+- The `pod`, `kernel_release` and `speedup` values differ per machine and run.
 
 ```text
 {"status":"ready"}
@@ -222,7 +252,10 @@ On CPU the goldens that need a Triton kernel are skipped and only these four run
 
 `egress_blocked` is `true` because the self-test target list (`SANDBOX_EGRESS_PROBE_TARGETS`) is empty. In the cluster a pod turns Ready only after verifying that IMDS (the EC2 instance metadata service that hands out node credentials), the API server and the node's kubelet are unreachable.
 
-**If it fails:** if there is a `FAIL` line or a connection error, first check that both startup logs contain `device probe ok=True`. If it fails in the cluster, see the "sandbox pools and readiness" section of [Troubleshooting](reference/troubleshooting.md).
+**If it fails:**
+
+- **If there is a `FAIL` line or a connection error**: first check that both startup logs contain `device probe ok=True`.
+- **If it fails in the cluster**: see the "sandbox pools and readiness" section of [Troubleshooting](reference/troubleshooting.md).
 
 ### 4.3 TRL GRPO dry run
 
@@ -251,7 +284,10 @@ python rl/trl/train_grpo.py --dry-run \
 - Two steps of TRL logs, with values per reward function (`rewards/format_reward` and so on).
 - At the end, `{"event": "done", "output": "/tmp/grpo-dry-run/final", "reward_batches": ...}`.
 
-**If it fails:** a model download error is a network or Hugging Face Hub access problem; errors from training in the cluster are in the "training" section of [Troubleshooting](reference/troubleshooting.md).
+**If it fails:**
+
+- **A model download error**: it is a network or Hugging Face Hub access problem.
+- **Errors from training in the cluster**: see the "training" section of [Troubleshooting](reference/troubleshooting.md).
 
 !!! note "`reward_batches` can be 0"
     If the 135M model does not close a code block within 32 tokens, the trainer scores the sample as `no_code` and never calls a sandbox. This step checks the wiring between TRL and the reward functions (routing, function signatures, LoRA, saving); the probe in 4.2 and pytest check the sandbox path.
@@ -270,14 +306,19 @@ cp scripts/config.env.example scripts/config.env
 |---|---|---|
 | `AWS_REGION` | first | default `us-west-2`. Prices in this guide are for us-east-1 and us-west-2 |
 | `CLUSTER_NAME` | first | default `gpu-sandbox` |
-| `K8S_VERSION` | first | `1.36`, inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes (the HyperPod prerequisites page still says up to 1.35) |
-| `SCENARIO` | first | `A` (default), `B1`, `B2`, `C`. The options of `scripts/02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) override it for that run only. If you deployed with an option, set this value to the deployed scenario, or pass the same option again when you rerun the script to add node groups (`cdk/deploy.sh` stops on a mismatch) |
-| `ADMIN_PRINCIPAL_ARN` | first (optional) | IAM role or user ARNs (comma-separated) that get the cluster admin access entry. If empty, `cdk/deploy.sh` uses your current role. Set it yourself if the role has a path |
+| `K8S_VERSION` | first | `1.36`, inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes |
+| `SCENARIO` | first | `A` (default), `B1`, `B2`, `C`. The options of `scripts/02_create_cluster.sh` override it for that run only (see below the table) |
+| `ADMIN_PRINCIPAL_ARN` | first (optional) | IAM role or user ARNs (comma-separated) that get the cluster admin access entry |
 | `HYPERPOD_LCS_BUCKET` | before Scenario B (required) | a unique name replacing `__SET_ME__`. HyperPod's managed policy expects the `sagemaker-` prefix |
 | `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI`, `CONTROL_IMAGE_URI` | after `scripts/03_build_push_images.sh` | paste the `export` lines the script prints |
 | `WITH_KATA_CPU` | before adding Kata CPU nodes (`scripts/kata/cpu_nodes.sh`) | set it to `1` and run `02_create_cluster.sh` again to get the `sandbox-kata-cpu` (`c8i.2xlarge`) node group. Scenario C has it from the start |
 | `KATA_IOMMU_AMI_ID`, `WITH_KATA_GPU` | after the first run of the Kata GPU node script (`scripts/kata/gpu_nodes.sh`) | the AMI ID is printed by `infra/kata/build-iommu-ami.sh`. Add it with `WITH_KATA_GPU=1` and run `02_create_cluster.sh` again to get the `sandbox-kata-gpu` (`g4dn.metal`) node group |
 | Instance types, pinned versions | usually unchanged | `GVISOR_RELEASE=20261109.0`, `KATA_VERSION=4.3.1`, `GPU_OPERATOR_VERSION=v26.7.2`, `NVIDIA_DEVICE_PLUGIN_VERSION=0.20.1` |
+
+- **`K8S_VERSION` and the HyperPod prerequisites page**: that page still says up to 1.35.
+- **Options that override `SCENARIO`**: `--hyperpod`, `--hyperpod-b2` and `--cpu-only`. If you deployed with an option, set this value to the deployed scenario, or pass the same option again when you rerun the script to add node groups (`cdk/deploy.sh` stops on a mismatch).
+- **If `ADMIN_PRINCIPAL_ARN` is empty**: `cdk/deploy.sh` uses your current role.
+- **If the role has a path**: set `ADMIN_PRINCIPAL_ARN` yourself.
 
 !!! note "Good to know"
     - The ECR repositories are created with immutable tags. Change `IMAGE_TAG` when you rebuild images.
@@ -303,12 +344,15 @@ scripts/01_check_prereqs.sh
 
 **What to look for:** the AWS identity table, tool versions, the G and VT quota, nested virtualization support for `c8i.2xlarge`, and the AZs that offer each GPU instance type, in that order. The script queries every candidate instance type, so check only the nodes your scenario creates:
 
-- the `Running On-Demand G and VT instances` value is at least 16 for scenario A and 8 for B1 (0 for B2 and C). Kata GPU adds 96 in any scenario, and switching the gVisor pool from v1 to v2 needs 8 more for two extra `g5.xlarge` nodes while both versions run
-- the Standard quota value is at least 6 (at least 14 for scenario C or with Kata CPU; B2 and Kata GPU build a custom AMI and need 2 more, 8, or 16 together with c8i)
-- if you use c8i (scenario C, Kata CPU), the nested virtualization line contains `nested-virtualization`
-- the AZ list next to each GPU instance type you create (`g5.2xlarge` and `g5.xlarge` for A, `g5.xlarge` for B1, `g4dn.metal` for Kata GPU) includes at least one of the two AZs the CDK stack uses (the first two of the region AZ list CDK looks up). The script queries the whole region, so other AZ names alone do not mean the node can be created
+- **G and VT quota**: the `Running On-Demand G and VT instances` value is at least 16 for scenario A and 8 for B1 (0 for B2 and C). Kata GPU adds 96 in any scenario, and switching the gVisor pool from v1 to v2 needs 8 more for two extra `g5.xlarge` nodes while both versions run
+- **Standard quota**: the value is at least 6 (at least 14 for scenario C or with Kata CPU; B2 and Kata GPU build a custom AMI and need 2 more, 8, or 16 together with c8i)
+- **If you use c8i (scenario C, Kata CPU)**: the nested virtualization line contains `nested-virtualization`
+- **GPU node AZs**: the AZ list next to each GPU instance type you create (`g5.2xlarge` and `g5.xlarge` for A, `g5.xlarge` for B1, `g4dn.metal` for Kata GPU) includes at least one of the two AZs the CDK stack uses (the first two of the region AZ list CDK looks up). The script queries the whole region, so other AZ names alone do not mean the node can be created
 
-**If it fails:** if it stops with a message such as `[error] set CLUSTER_NAME in scripts/config.env`, fill in that value and run it again. For messages such as `missing tool`, see the "config and scripts" section of [Troubleshooting](reference/troubleshooting.md).
+**If it fails:**
+
+- **If it stops with a message such as `[error] set CLUSTER_NAME in scripts/config.env`**: fill in that value and run it again.
+- **Messages such as `missing tool`**: see the "config and scripts" section of [Troubleshooting](reference/troubleshooting.md).
 
 ## 6. Choose your path
 
@@ -327,13 +371,19 @@ If you have not chosen a runtime and instance types yet, read [05 Decision guide
 ## Scope and limits
 
 - The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 109); server tests on a Linux host were not run.
-- The author did not run `scripts/01_check_prereqs.sh` in section 5. Of the later steps, the gVisor path of scenario A (`02` to `08`), scenario C, Kata GPU (`g4dn.metal`) and the runtime benchmark ran in a practice account; `ops/rollout.sh` during training in scenario A and HyperPod B1 and B2 were not run. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record). Verify the steps that were not run with the checks on each hands-on page.
+- The author did not run `scripts/01_check_prereqs.sh` in section 5.
+- Of the later steps, the gVisor path of scenario A (`02` to `08`), scenario C, Kata GPU (`g4dn.metal`) and the runtime benchmark ran in a practice account. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record).
+- `ops/rollout.sh` during training in scenario A and HyperPod B1 and B2 were not run. Verify the steps that were not run with the checks on each hands-on page.
 - The dry run shows no training effect; real training runs on a GPU in [05 On-policy GRPO training](handson/05_grpo_training.md).
 
 ## Time and cost
 
 - **Local steps (sections 1 to 4):** no AWS cost, and roughly 15 to 30 minutes depending on the PyTorch wheel and model downloads (an estimate, not a measurement).
-- **AWS steps:** the CDK deploy of `02_create_cluster.sh` took about 20 minutes in the practice account (scenario C). When a GPU node group cannot launch (`InsufficientInstanceCapacity`), CloudFormation waits about 30 minutes, then rolls back the whole initial create; the workaround order is in the cluster creation section of [01 Cluster and images](handson/01_cluster_and_images.md). The 5-step GRPO Job run in the practice account on 2026-11-18 (`g5.2xlarge`) took about 12 minutes, including the image pull and model download. GPU instances bill while they run, and the scenario A gVisor minimal path costs about 3.42 USD per hour for compute alone (estimate). Hourly estimates per configuration are in [04 Platforms and instances](concepts/04_platforms_and_instances.md).
+- **AWS steps:**
+    - **Cluster creation**: the CDK deploy of `02_create_cluster.sh` took about 20 minutes in the practice account (scenario C).
+    - **When a GPU node group cannot launch (`InsufficientInstanceCapacity`)**: CloudFormation waits about 30 minutes, then rolls back the whole initial create. The workaround order is in the cluster creation section of [01 Cluster and images](handson/01_cluster_and_images.md).
+    - **GRPO Job**: the 5-step GRPO Job run in the practice account on 2026-11-18 (`g5.2xlarge`) took about 12 minutes, including the image pull and model download.
+    - **Cost**: GPU instances bill while they run, and the scenario A gVisor minimal path costs about 3.42 USD per hour for compute alone (estimate). Hourly estimates per configuration are in [04 Platforms and instances](concepts/04_platforms_and_instances.md).
 
 ## Cleanup
 
@@ -344,7 +394,10 @@ Stop both servers with Ctrl-C in their terminals, then remove the local work dir
 rm -rf /tmp/gpusandbox /tmp/grpo-dry-run
 ```
 
-**What to look for:** no output. `train_grpo.py` resumes from the latest `checkpoint-*` in its output directory, so delete `/tmp/grpo-dry-run` before a fresh dry run. For AWS resources, follow [99 Cleanup](handson/99_cleanup.md).
+**What to look for:** no output.
+
+- **For a fresh dry run**: `train_grpo.py` resumes from the latest `checkpoint-*` in its output directory, so delete `/tmp/grpo-dry-run` first.
+- **AWS resources**: follow [99 Cleanup](handson/99_cleanup.md).
 
 ??? note "References"
     | Topic | Link |

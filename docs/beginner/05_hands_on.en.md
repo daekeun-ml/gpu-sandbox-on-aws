@@ -56,9 +56,13 @@ python -m pytest -q
 
 ![Local terminal: result of python -m pytest -q, 74 passed](../images/learning/local-pytest.png)
 
-**What is happening now:** You check that the mechanisms from chapters 01 and 04 work (the check that blocks dangerous code before it runs, the split between the grader and the submitted code, the authentication that rejects requests without a token, and the version switch at batch boundaries).
+**What is happening now:** You check that the mechanisms from chapters 01 and 04 work (the check that blocks dangerous code before it runs, the split between the grader and the submitted code, the authentication that rejects requests without a token, and the version switch at batch boundaries). The step 2 test `test_golden_probe_and_parity_on_cpu_pools` starts two local servers, grades the same four test answers as step 4, and checks the results.
 
-**If you get stuck:** If you see `ModuleNotFoundError`, check that you ran `source .venv/bin/activate` in the cloned repository folder (`gpu-sandbox-on-aws`). If it still appears, run only the two `uv pip install` lines of step 1 again. On a Linux host, starting servers directly as in step 3 below can terminate other processes of the same user (the reason is in section 3 of [Getting started](../getting_started.md)). On Linux, skip steps 3 and 4. The step 2 test `test_golden_probe_and_parity_on_cpu_pools` starts two local servers, grades the same four test answers as step 4, and checks the results. On macOS, run the same grading yourself in steps 3 and 4.
+**If you get stuck:**
+
+- **If you see `ModuleNotFoundError`**: check that you ran `source .venv/bin/activate` in the cloned repository folder (`gpu-sandbox-on-aws`). If it still appears, run only the two `uv pip install` lines of step 1 again.
+- **On a Linux host**: starting servers directly as in step 3 below can terminate other processes of the same user (the reason is in section 3 of [Getting started](../getting_started.md)). On Linux, skip steps 3 and 4.
+- **On macOS**: run the same grading yourself in steps 3 and 4.
 
 ### 3. Start two sandbox servers (macOS)
 
@@ -117,7 +121,16 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 ## Part 2: Compare three runtimes on AWS (optional, billed)
 
-**What you need:** An AWS account for practice (avoid production accounts), the AWS CLI and credentials, Node.js 22 or 24, the AWS CDK CLI (`npm install -g aws-cdk`), the Session Manager plugin for the AWS CLI, `kubectl`, and `helm`. The account's `Running On-Demand Standard` vCPU quota must be 14 or more. The steps assume the `us-west-2` Region.
+**What you need:**
+
+- An AWS account for practice (avoid production accounts)
+- The AWS CLI and credentials
+- Node.js 22 or 24
+- The AWS CDK CLI (`npm install -g aws-cdk`)
+- The Session Manager plugin for the AWS CLI
+- `kubectl` and `helm`
+
+The account's `Running On-Demand Standard` vCPU quota must be 14 or more. The steps assume the `us-west-2` Region.
 
 **Cost:** The three cluster nodes (2 `m6i.large` + 1 `c8i.2xlarge`) cost about 0.57 USD per hour, plus 0.10 USD for EKS and NAT gateway charges (On-Demand list prices). The access instance (`t4g.nano`), the KMS key, logs and EBS volumes add a little more. For 1 to 2 hours, expect a few dollars (estimate).
 
@@ -145,7 +158,9 @@ uv pip install -r cdk/requirements.txt
 source scripts/config.env
 ```
 
-The first line copies the example only when the file does not exist yet, so a file you already made is kept. You can keep the defaults (`us-west-2`, `gpu-sandbox`) for `AWS_REGION` and `CLUSTER_NAME` in `scripts/config.env`. The last line loads these values into the current terminal, for `$AWS_REGION` and `$CLUSTER_NAME` in step 6 and in the troubleshooting commands. If you edit the file or open a new terminal, run `source scripts/config.env` again.
+- **The first line**: it copies the example only when the file does not exist yet, so a file you already made is kept.
+- **`AWS_REGION`, `CLUSTER_NAME`**: you can keep the defaults (`us-west-2`, `gpu-sandbox`) for these two values in `scripts/config.env`.
+- **The last line**: it loads these values into the current terminal, for `$AWS_REGION` and `$CLUSTER_NAME` in step 6 and in the troubleshooting commands. If you edit the file or open a new terminal, run `source scripts/config.env` again.
 
 **What is happening now:** All scripts and the CDK app read their settings from this one file, which can contain account information and is therefore kept out of the repository.
 
@@ -164,7 +179,12 @@ During deployment, a list of IAM role and security group changes appears, and it
 
 ![Outputs tab of the CloudFormation stack gpu-sandbox-cdk: EndpointPublicAccess false](../images/console/cfn-outputs.png)
 
-**What is happening now:** It creates a private network (VPC), an EKS cluster, two kinds of nodes (2 system nodes, 1 `c8i.2xlarge`), and an access instance all at once, and applies the node and cluster side of the defenses from chapter 01. The API is not open to the internet, the nodes use IMDSv2 and hop limit 1, the disks are encrypted, and the `c8i.2xlarge` gets nested virtualization, gVisor and the node guard. The network policy feature of the VPC CNI is turned on too, but the blocking rules of the `sandbox` namespace are installed separately when you deploy sandbox pools (step 5 of [chapter 10](../handson/10_cpu_only.md)), so they do not apply to the test pods of this chapter (`default` namespace).
+**What is happening now:** It creates a private network (VPC), an EKS cluster, two kinds of nodes (2 system nodes, 1 `c8i.2xlarge`), and an access instance all at once, and applies the node and cluster side of the defenses from chapter 01.
+
+- **EKS API**: it is not open to the internet.
+- **Nodes and disks**: the nodes use IMDSv2 and hop limit 1, and the disks are encrypted.
+- **`c8i.2xlarge`**: it gets nested virtualization, gVisor and the node guard.
+- **Network policy**: the network policy feature of the VPC CNI is turned on too, but the blocking rules of the `sandbox` namespace are installed separately when you deploy sandbox pools (step 5 of [chapter 10](../handson/10_cpu_only.md)). So they do not apply to the test pods of this chapter (`default` namespace).
 
 **If you get stuck:** See "If it fails" in [Production 09 CDK](../production/09_cdk.md).
 
@@ -182,7 +202,10 @@ In the first terminal, look at the nodes.
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 ```
 
-**What to check:** Three nodes are `Ready`, and one of them has ROLE `sandbox-kata` and INSTANCE-TYPE `c8i.2xlarge`.
+**What to check:**
+
+- Three nodes are `Ready`.
+- One of them has ROLE `sandbox-kata` and INSTANCE-TYPE `c8i.2xlarge`.
 
 **What is happening now:** `127.0.0.1:8443` on your PC goes through the SSM tunnel and connects to the EKS API inside the VPC.
 
@@ -232,10 +255,21 @@ kubectl logs runc-smoke
 kubectl delete pod runc-smoke
 ```
 
-**If you get stuck:** The script only checks whether each pod finished in time; it does not tell you why one failed. The script prints a warning, reads the logs, and then deletes that pod, so write down the pod name from the warning. If the pod is still there, check `kubectl describe pod <name>`; if it is already gone, check `kubectl get events -n default --field-selector involvedObject.name=<name>`. If a Kata pod shows a KVM error, check that `NestedVirtualization` is `enabled` with the `describe-instances` command in step 2 of [Production 09 CDK](../production/09_cdk.md). If a gVisor pod shows a runtime error, see the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md) and check the gVisor install on the node.
+**If you get stuck:** The script only checks whether each pod finished in time; it does not tell you why one failed.
+
+- **When a warning appears**: the script prints a warning, reads the logs, and then deletes that pod, so write down the pod name from the warning.
+- **If the pod is still there**: check `kubectl describe pod <name>`.
+- **If the pod is already gone**: check `kubectl get events -n default --field-selector involvedObject.name=<name>`.
+- **If a Kata pod shows a KVM error**: check that `NestedVirtualization` is `enabled` with the `describe-instances` command in step 2 of [Production 09 CDK](../production/09_cdk.md).
+- **If a gVisor pod shows a runtime error**: see the "gVisor" section of [Troubleshooting](../reference/troubleshooting.md) and check the gVisor install on the node.
 
 !!! tip "To continue with chapter 10 on the same cluster"
-    [10 CPU-only path on c8i](../handson/10_cpu_only.md) starts sandbox pools on the same setup as this cluster and checks a version switch by grading test answers, without a model. To continue, skip step 9, check "Preparation" and step 1 of chapter 10, and go on from step 3. Step 2 (cluster creation) and step 4 (runtime install) were done in steps 6 and 8 of this chapter. Delete the cluster with the cleanup in chapter 10.
+    [10 CPU-only path on c8i](../handson/10_cpu_only.md) starts sandbox pools on the same setup as this cluster and checks a version switch by grading test answers, without a model. To continue, follow these steps.
+
+    1. Skip step 9 of this chapter.
+    2. Check "Preparation" and step 1 of chapter 10.
+    3. Go on from step 3 of chapter 10. Step 2 (cluster creation) and step 4 (runtime install) were done in steps 6 and 8 of this chapter.
+    4. Delete the cluster with the cleanup in chapter 10.
 
 ### 9. Delete
 
@@ -245,7 +279,12 @@ In the tunnel terminal, close the tunnel with `Ctrl-C`, then delete the cluster.
 cdk/destroy.sh
 ```
 
-**What to check:** `gpu-sandbox-cdk: destroyed` appears, and the final instance table is empty. The KMS key for secrets is scheduled for deletion after 7 days, and the CDK bootstrap stack (`CDKToolkit`) is kept for your next lab.
+**What to check:**
+
+- `gpu-sandbox-cdk: destroyed` appears.
+- The final instance table is empty.
+
+The KMS key for secrets is scheduled for deletion after 7 days, and the CDK bootstrap stack (`CDKToolkit`) is kept for your next lab.
 
 **What is happening now:** The one stack's resources are deleted at once, so you do not need to find and delete them one by one.
 

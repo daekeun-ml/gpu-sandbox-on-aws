@@ -37,7 +37,10 @@ gVisor releases, nvproxy driver lists, the drivers shipped in AMIs, prices and q
 
 ## What this repository verified
 
-The first command below runs the whole local test suite without AWS or a GPU, and the second runs the CDK stack tests separately in a virtual environment with the CDK libraries. Set up the environment as described in [Getting started](../getting_started.md). The tests run with the server's process reaper turned off, so they are safe on a Linux host. Starting a server directly on a Linux host can still terminate other processes of the same user, so read the warning on that page before you do.
+The first command below runs the whole local test suite without AWS or a GPU, and the second runs the CDK stack tests separately in a virtual environment with the CDK libraries. Set up the environment as described in [Getting started](../getting_started.md).
+
+- **When you run the tests**: the tests run with the server's process reaper turned off, so they are safe on a Linux host.
+- **When you start a server directly on a Linux host**: it can still terminate other processes of the same user, so read the warning on that page before you do.
 
 ```bash
 # Full local test suite on CPU (no AWS, no GPU)
@@ -46,7 +49,13 @@ python -m pytest -q
 (cd cdk && python -m pytest -q tests)
 ```
 
-**What to look for:** it ends with `passed` and no failures. While this page was written (2026-11-13), the whole suite passed on macOS (CPU only). The number of tests changes as the repository changes, so it is not fixed here. To count the tests in your checkout, run `python -m pytest --collect-only -q` from the repository root (the CDK stack tests are separate). **If it fails:** [Troubleshooting](troubleshooting.md)
+**What to look for:**
+
+- It ends with `passed` and no failures.
+- While this page was written (2026-11-13), the whole suite passed on macOS (CPU only).
+- The number of tests changes as the repository changes, so it is not fixed here. To count the tests in your checkout, run `python -m pytest --collect-only -q` from the repository root (the CDK stack tests are separate).
+
+**If it fails:** [Troubleshooting](troubleshooting.md)
 
 | Test file | Locally verified by these tests |
 |---|---|
@@ -58,7 +67,12 @@ python -m pytest -q
 | `tests/test_agent_sandbox.py` | With a fake API: the SandboxClaim body, waiting for Ready and preferring `serviceFQDN`, claiming and releasing, releasing when the claim never becomes Ready |
 | `tests/test_multiturn.py` | With a fake API and loopback CPU sandbox servers: one claim per episode, stopping when solved, deleting the claim on errors, the events and the episode reward, and the veRL tool logic without veRL installed |
 | `tests/test_demo.py` | The demo CloudFormation template (private bucket, CloudFront access with an `AWS:SourceArn` condition, non-TLS requests denied, HTTPS redirect and security headers), a static site with no external resources or HTML injection, the recording schema and reward consistency |
-| `cdk/tests/test_stack.py` | The synthesized CDK template: private endpoint (public only as a /32 opt-in), no `0.0.0.0/0` inbound rule, IMDSv2 required in every launch template of scenario A synthesized with Kata CPU added (hop limit 1 and EBS encryption are checked only where the template sets them), the node groups per scenario, nested virtualization on c8i, the IOMMU AMI and user data on the Kata GPU node group (IMDSv2 is not checked for that configuration), cdk-nag passing for each scenario |
+| `cdk/tests/test_stack.py` | The synthesized CDK template: private endpoint (public only as a /32 opt-in), no `0.0.0.0/0` inbound rule, the node groups per scenario, cdk-nag passing for each scenario. The rest is in the list below the table |
+
+`cdk/tests/test_stack.py` also checks the following.
+
+- **IMDSv2**: IMDSv2 required in every launch template of scenario A synthesized with Kata CPU added (hop limit 1 and EBS encryption are checked only where the template sets them)
+- **Node group settings**: nested virtualization on c8i, the IOMMU AMI and user data on the Kata GPU node group (IMDSv2 is not checked for that configuration)
 
 A TRL 1.18.0 GRPO dry run (SmolLM2-135M, CPU, no vLLM) completed 2 steps, and the shell scripts pass shellcheck (author's record, 2026-11).
 
@@ -82,12 +96,10 @@ On 2026-11-14 the author also captured the Service Quotas screens and the HyperP
 
 **Not executed on AWS:**
 
-- `01_check_prereqs.sh`
 - `ops/rollout.sh` in scenario A during training, and `ops/rollout.sh --finish` (not run in any scenario)
-- The 60-step default training run
 - The HyperPod steps (from `hyperpod/create.sh` on) and B1 and B2 on `ml.g5`. The B1 and B2 CDK stacks were deployed only as intermediate steps while creating the scenario A cluster on 2026-11-18
 - `hyperpod/delete.sh` and `demo/teardown.sh` (shellcheck only)
-- The procedure in [11 Multi-turn episodes](../handson/11_multi_turn.md) (local tests only)
+- The `gvisor-cpu` warm pool and the GPU section of [11 Multi-turn episodes](../handson/11_multi_turn.md) (it ran with the `kata-clh-cpu` warm pool)
 - What the production guide adds to the hands-on: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity
 
 Verify the rest yourself with the checks on each hands-on page.
@@ -96,8 +108,16 @@ Verify the rest yourself with the checks on each hands-on page.
 
 The values below are as of 2026-11. Check them one by one before deploying or sharing.
 
-- [ ] **Pinned versions:** gVisor `GVISOR_RELEASE=20261109.0`, Kata `KATA_VERSION=4.3.1`, GPU Operator `v26.7.2`, NVIDIA device plugin `0.20.1`, Karpenter v1.15.2 (LTS v1.14.3), AWS CDK CLI 2.1148.1 or later with `aws-cdk-lib` 2.276.0, cdk-nag 3.0.2, Agent Sandbox v1.0.11, TRL 1.18.0 (vLLM 0.33.0 in the trainer image), veRL 0.9.1 (vLLM 0.24.0 in the veRL image), KubeRay v1.7.2. Check each project's release page for new versions and changes.
-- [ ] **Node drivers and the nvproxy list:** the default driver of the EKS AL2023 NVIDIA AMI v20261107 is 580.178.04 (the proprietary module with GSP off on g5, the open module on g6); the HyperPod EKS AMIs 1.34 to 1.36 (2026-10-16) ship 595.91.07 and 1.33 ships 580.178.04. Check that `B2_NVIDIA_DRIVER_VERSION` of the B2 custom AMI and the node drivers are on the supported list of the pinned gVisor release.
+- [ ] **Pinned versions:** check each project's release page for new versions and changes.
+    - gVisor `GVISOR_RELEASE=20261109.0`, Kata `KATA_VERSION=4.3.1`
+    - GPU Operator `v26.7.2`, NVIDIA device plugin `0.20.1`
+    - Karpenter v1.15.2 (LTS v1.14.3)
+    - AWS CDK CLI 2.1148.1 or later with `aws-cdk-lib` 2.276.0, cdk-nag 3.0.2
+    - Agent Sandbox v1.0.11
+    - TRL 1.18.0 (vLLM 0.33.0 in the trainer image), veRL 0.9.1 (vLLM 0.24.0 in the veRL image), KubeRay v1.7.2
+- [ ] **Node drivers and the nvproxy list:** check that `B2_NVIDIA_DRIVER_VERSION` of the B2 custom AMI and the node drivers are on the supported list of the pinned gVisor release.
+    - **EKS AL2023 NVIDIA AMI v20261107**: the default driver is 580.178.04 (the proprietary module with GSP off on g5, the open module on g6).
+    - **HyperPod EKS AMIs**: 1.34 to 1.36 (2026-10-16) ship 595.91.07 and 1.33 ships 580.178.04.
 - [ ] **Prices:** EC2 On-Demand and SageMaker AI (HyperPod `ml.*`) pricing. The values in this guide (such as 0.37484 USD/hour for `c8i.2xlarge`) are as of 2026-11.
 - [ ] **Quotas:** Running On-Demand G and VT instances (vCPU based, can be 0 for new accounts), Running On-Demand Standard instances, and HyperPod's `ml.<type> for cluster usage`.
 - [ ] **Kubernetes versions supported by HyperPod:** the prerequisites page lists 1.30 through 1.35, and the AMI release notes go up to 1.36. This guide uses 1.36.
@@ -115,7 +135,11 @@ driver="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
 /usr/local/bin/runsc nvproxy list-supported-drivers | grep -wF "$driver"
 ```
 
-**What to look for:** if the second command prints one line with that driver version, it is on the supported list. If it prints nothing, gVisor GPU sandboxes on that node will not become Ready. For HyperPod nodes, `scripts/hyperpod/check_gvisor.sh` runs the same check.
+**What to look for:**
+
+- **If the second command prints one line with that driver version**: it is on the supported list.
+- **If it prints nothing**: gVisor GPU sandboxes on that node will not become Ready.
+- **HyperPod nodes**: `scripts/hyperpod/check_gvisor.sh` runs the same check.
 
 The following command prints the quotas and nested virtualization support at once (read-only).
 
@@ -157,9 +181,12 @@ scripts/01_check_prereqs.sh
 |---|---|
 | [AWS Containers blog (2024): workload isolation with Kata Containers](https://aws.amazon.com/blogs/containers/enhancing-kubernetes-workload-isolation-and-security-using-kata-containers/) | Kata + Firecracker on i3.metal |
 | [AWS China blog (2026-07)](https://aws.amazon.com/cn/blogs/china/amazon-eks-build-security-ai-agent/) | c5.metal, Kata 3.31.0 + Cloud Hypervisor, OpenSandbox, Karpenter 1.12.1. Blog measurements: cold start about 3 s, pool claim about 230 ms. "CLH about 130 MB, QEMU about 160 MB" equals the Kata 3.31.0 `podFixed` defaults, so it is probably not a measurement |
-| [AWS Korea tech blog "AWS에서 AI 에이전트 실행 환경 격리하기" (Isolating AI agent execution environments on AWS), part 1](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-1/) | Agent Sandbox v1.0.5 + gVisor release-20260928.0 on EKS 1.36, four isolation layers (Pod security settings, gVisor, NetworkPolicy, IMDS settings of a dedicated node group), runsc registered through NodeConfig, IMDSv2 required with hop limit 1, EKS Auto Mode cannot register runsc, RuntimeClass scheduling does not stop other pods that tolerate the same taint |
-| [Same series, part 2](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/) | Internet egress allowed by the default SandboxTemplate policy and DNS injection with public resolvers, IMDS and API reachable before NetworkPolicy was enabled, sandbox-router authorization (allow-all by default, TokenReview proves only validity, Tunnel mode bypasses NetworkPolicy). Blog measurements (EKS 1.36, m7i.xlarge): SandboxClaim to Ready about 2 s cold and about 55 ms from a warm pool, gVisor syscall cost from about 0.18 us to 2.2 us |
+| [AWS Korea tech blog "AWS에서 AI 에이전트 실행 환경 격리하기" (Isolating AI agent execution environments on AWS), part 1](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-1/) | Agent Sandbox v1.0.5 + gVisor release-20260928.0 on EKS 1.36, four isolation layers (Pod security settings, gVisor, NetworkPolicy, IMDS settings of a dedicated node group). The rest is in the list below the table |
+| [Same series, part 2](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/) | Internet egress allowed by the default SandboxTemplate policy and DNS injection with public resolvers, IMDS and API reachable before NetworkPolicy was enabled, sandbox-router authorization (allow-all by default, TokenReview proves only validity, Tunnel mode bypasses NetworkPolicy). Measurements are in the list below the table |
 | [Same series, part 3](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-3/) | Ably's operations case: one Sandbox per project, a dedicated on-demand Karpenter NodePool with `karpenter.sh/do-not-disrupt`, Kyverno and ExternalDNS, v1.0.8 `SandboxClaim.spec.env` starts fresh without a warm pool, runc today with a plan to evaluate Kata while keeping the API |
+
+- **Rest of part 1**: runsc registered through NodeConfig, IMDSv2 required with hop limit 1, EKS Auto Mode cannot register runsc, RuntimeClass scheduling does not stop other pods that tolerate the same taint
+- **Blog measurements in part 2 (EKS 1.36, m7i.xlarge)**: SandboxClaim to Ready about 2 s cold and about 55 ms from a warm pool, gVisor syscall cost from about 0.18 us to 2.2 us
 
 ### GitHub repositories and project documentation
 
@@ -167,7 +194,7 @@ scripts/01_check_prereqs.sh
 |---|---|
 | [gVisor installation](https://gvisor.dev/docs/user_guide/install/) | Latest release-20261109.0. Tarball-only since release-20260831 (`runsc`, `containerd-shim-runsc-v1`, and `gvisor-bin/`, which must stay next to `runsc`) |
 | [gVisor release tarball (pinned URL)](https://storage.googleapis.com/gvisor/releases/release/20261109.0/x86_64/gvisor.tar.bz2) | A pinned release can be downloaded by URL (verify it with the `.sha512`) |
-| [gVisor GPU support](https://gvisor.dev/docs/user_guide/gpu/) | `nvproxy = "true"`, default capabilities `compute,utility`, driver policy (supported, unsupported, unknown), described against NVIDIA's open driver (the proprietary driver is not mentioned), 580.178.04 supported since release-20260831.0, documented GPUs (T4, A100/A10G, L4, H100), CDI compatibility, security scope ("much less effective ...", no validation of DMA buffers), the systrap platform on VMs |
+| [gVisor GPU support](https://gvisor.dev/docs/user_guide/gpu/) | `nvproxy = "true"`, default capabilities `compute,utility`, driver policy (supported, unsupported, unknown), 580.178.04 supported since release-20260831.0. The rest is in the list below the table |
 | [gVisor nvproxy driver table (release-20261109.0)](https://github.com/google/gvisor/blob/release-20261109.0/pkg/sentry/devices/nvproxy/version.go) | 580.159.04 and 580.178.04 are `addDriverABI` (supported), 595.71.05 is `addUnsupportedDriverABI`, 595.91.07 is absent (unknown). the development branch lacks 595.91.07 too (2026-11-14) |
 | [NVIDIA 580.178.04 .run installer](https://download.nvidia.com/XFree86/Linux-x86_64/580.178.04/), [CUDA repo (Amazon Linux 2023)](https://developer.download.nvidia.com/compute/cuda/repos/amzn2023/x86_64/) | sha256 of the `.run` is `5975a86e...6d6f9` (NVIDIA's `.sha256sum`, same as the gVisor table). The repo has `kmod-nvidia-open-dkms-580.178.04`, `nvidia-driver-580.178.04` and more |
 | [google/gvisor](https://github.com/google/gvisor) | gVisor source repository |
@@ -195,9 +222,13 @@ scripts/01_check_prereqs.sh
 | [Qwen2.5-Coder-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct) | qwen-research (non-commercial) license, not used in this asset |
 | [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) | v1.0.11 (2026-11-12), CRDs v1beta1 (Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim), isolation delegated to the runtime through RuntimeClass, Kata examples and a GKE gVisor + L4 GPU example, SDKs (Python `k8s-agent-sandbox`, Go, TypeScript), sandbox-router |
 | [agent-sandbox v1.0.11 install manifest](https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.11/sandbox-with-extensions.yaml) | One manifest that installs the controller and the extensions |
-| [AI on EKS: Agent Sandbox on EKS](https://awslabs.github.io/ai-on-eks/docs/infra/agents/agent-sandbox), [awslabs/ai-on-eks](https://github.com/awslabs/ai-on-eks) | gVisor kernel isolation, lifecycle management with the agent-sandbox CRDs (Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim, v1beta1), FQDN-based egress control (Cilium on Standard EKS, `ApplicationNetworkPolicy` on EKS Auto Mode), the KRO `AgentSandbox` resource, Karpenter with a gVisor NodePool (`runsc` installed through AL2023 user data), runtime tiers `standard` (runc), `gvisor` (not on Auto Mode), `isolated-sandbox` (Nitro Sandboxes, on EKS Auto Mode with Kubernetes 1.36 or later or on Standard EKS with a custom AMI), Kata + Firecracker as a future tier (not included), no mention of GPUs (checked 2026-11) |
+| [AI on EKS: Agent Sandbox on EKS](https://awslabs.github.io/ai-on-eks/docs/infra/agents/agent-sandbox), [awslabs/ai-on-eks](https://github.com/awslabs/ai-on-eks) | gVisor kernel isolation, lifecycle management with the agent-sandbox CRDs (Sandbox, SandboxTemplate, SandboxWarmPool, SandboxClaim, v1beta1), no mention of GPUs (checked 2026-11). The rest is in the list below the table |
 | [opensandbox-group/OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) | release-1.2.1, Pool and BatchSandbox (v1alpha1) |
 | [bytedance/SandboxFusion](https://github.com/bytedance/SandboxFusion) | `POST /run_code`, GPU execution serialized |
+
+- **Rest of gVisor GPU support**: described against NVIDIA's open driver (the proprietary driver is not mentioned), documented GPUs (T4, A100/A10G, L4, H100), CDI compatibility, security scope ("much less effective ...", no validation of DMA buffers), the systrap platform on VMs
+- **AI on EKS egress and node setup**: FQDN-based egress control (Cilium on Standard EKS, `ApplicationNetworkPolicy` on EKS Auto Mode), the KRO `AgentSandbox` resource, Karpenter with a gVisor NodePool (`runsc` installed through AL2023 user data)
+- **AI on EKS runtime tiers**: `standard` (runc), `gvisor` (not on Auto Mode), `isolated-sandbox` (Nitro Sandboxes, on EKS Auto Mode with Kubernetes 1.36 or later or on Standard EKS with a custom AMI), Kata + Firecracker as a future tier (not included)
 
 ### Papers, blogs and reward hacking reports
 

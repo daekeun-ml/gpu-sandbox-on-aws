@@ -25,7 +25,12 @@
 
 ## 기존 Pain Point
 
-코드를 실행해 채점하는 RL(RLVR)은 대부분 CPU 샌드박스로 충분하지만, **reward 자체를 GPU에서 측정하는 과제**(CUDA나 Triton 커널이 얼마나 빨라졌는지를 보상으로 삼는 경우)는 샌드박스 안에 GPU가 필요합니다. 이 경우 policy(학습 중인 모델)가 쓴 신뢰할 수 없는 코드가 GPU 드라이버를 호출하는데, 일반 컨테이너(runc)는 호스트 커널과 드라이버를 그대로 공유합니다. Firecracker 기반 샌드박스(E2B 등)에는 GPU를 VM에 연결할 장치가 없고, gVisor와 Kata는 GPU를 연결하는 방식이 서로 달라서 쓸 수 있는 AWS 인스턴스부터 확인해야 합니다. 며칠씩 진행되는 on-policy 학습 도중 샌드박스 이미지나 채점 harness를 고치다가 같은 GRPO group 안에 버전이 섞이면 advantage가 잘못 계산됩니다.
+코드를 실행해 채점하는 RL(RLVR)은 대부분 CPU 샌드박스로 충분하지만, **reward 자체를 GPU에서 측정하는 과제**(CUDA나 Triton 커널이 얼마나 빨라졌는지를 보상으로 삼는 경우)는 샌드박스 안에 GPU가 필요합니다. 이 경우 policy(학습 중인 모델)가 쓴 신뢰할 수 없는 코드가 GPU 드라이버를 호출합니다.
+
+- **일반 컨테이너(runc)**: 호스트 커널과 드라이버를 그대로 공유합니다.
+- **Firecracker 기반 샌드박스(E2B 등)**: GPU를 VM에 연결할 장치가 없습니다.
+- **gVisor와 Kata**: GPU를 연결하는 방식이 서로 달라서 쓸 수 있는 AWS 인스턴스부터 확인해야 합니다.
+- **학습 도중 버전을 고칠 때**: 며칠씩 진행되는 on-policy 학습 도중 샌드박스 이미지나 채점 harness를 고치다가 같은 GRPO group 안에 버전이 섞이면 advantage가 잘못 계산됩니다.
 
 ![a: 서로 다른 두 문제입니다. 위 줄에서는 policy가 쓴 커널 코드가 runc 컨테이너에서 실행되어 host 커널과 GPU 드라이버를 그대로 공유합니다. 아래 줄에서는 학습 중에 이미지나 harness를 바꾸면, 런타임과 관계없이 한 GRPO group 안에 v1과 v2의 reward가 섞여 advantage가 잘못 계산됩니다. b: 위 줄은 RuntimeClass로 선택한 gVisor 또는 Kata가 코드와 host 커널 사이에 들어갑니다. 아래 줄은 배치(또는 group) 단위로 한 버전만 채점하므로 reward가 일관되게 유지됩니다.](images/figures/index.svg)
 
@@ -83,7 +88,10 @@
 
 ### 요청 경로
 
-- trainer는 샌드박스에 요청을 보낼 때마다 routing ConfigMap(`sandbox-routing`)의 snapshot으로 런타임과 버전을 정하고, 한 reward batch의 결과는 한 풀에서 받습니다. 학습 중에 v2로 바꾸면 같은 batch에 든 이전 풀의 캐시 결과도 v2 풀에서 다시 채점합니다. batch 전체가 한 풀의 캐시로 채워지면 샌드박스를 부르지 않고 그 결과를 씁니다. 한 batch 안에서 전환이 거듭되면 세 번째 요청에서 batch 전체를 한 풀에 보내므로, 한 batch는 항상 한 버전으로 채점됩니다.
+- trainer는 샌드박스에 요청을 보낼 때마다 routing ConfigMap(`sandbox-routing`)의 snapshot으로 런타임과 버전을 정하고, 한 reward batch의 결과는 한 풀에서 받습니다.
+    - **학습 중에 v2로 바꾸면**: batch에 새로 채점할 답안이 있으면, 같은 batch에 든 이전 풀의 캐시 결과도 v2 풀에서 다시 채점합니다.
+    - **batch 전체가 한 풀의 캐시로 채워지면**: 전환 뒤에도 샌드박스를 부르지 않고 그 결과를 씁니다.
+    - **한 batch 안에서 전환이 거듭되면**: 세 번째 요청에서 batch 전체를 한 풀에 보내므로, 한 batch는 항상 한 버전으로 채점됩니다.
 - trainer는 headless Service를 CoreDNS로 풀어 Ready 상태인 pod에 `POST /v1/evaluate`를 직접 보냅니다. 바쁜 pod는 `503`을 돌려주고, trainer는 다른 pod로 다시 시도합니다.
 - 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있습니다.
 
@@ -109,7 +117,10 @@
 ## 검증 상태
 
 !!! warning "직접 확인해야 하는 범위"
-    실습 계정에서 시나리오 A(gVisor GPU, `g5`), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 풀의 런타임 벤치마크([08 런타임 벤치마크](handson/08_benchmark.md)), 공개 데모 사이트를 실행했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았고, 학습 중의 `ops/rollout.sh`, `rollout.sh --finish`, HyperPod B1과 B2는 아직 실행하지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다. 실행하지 않은 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요. 가격과 버전 같은 수치는 직접 측정한 값이 아니라 공식 문서와 공개 자료에서 가져온 값입니다. 로컬 테스트의 확인 범위는 [시작하기](getting_started.md)에 있습니다.
+    - **실행한 것**: 실습 계정에서 시나리오 A(gVisor GPU, `g5`), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 풀의 런타임 벤치마크([08 런타임 벤치마크](handson/08_benchmark.md)), 공개 데모 사이트를 실행했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다.
+    - **실행하지 않은 것**: 학습 중의 `ops/rollout.sh`, `rollout.sh --finish`, HyperPod B1과 B2는 아직 실행하지 않았습니다. 실행하지 않은 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
+    - **수치의 출처**: 가격과 버전 같은 수치는 직접 측정한 값이 아니라 공식 문서와 공개 자료에서 가져온 값입니다.
+    - **로컬 테스트**: 확인 범위는 [시작하기](getting_started.md)에 있습니다.
 
 !!! warning "비용"
     GPU 인스턴스는 실행되는 동안 과금되고, `g4dn.metal`은 시간당 약 7.8 USD입니다(us-east-1과 us-west-2 온디맨드 요금). 쉬는 동안에는 GPU 노드 수를 0으로 줄이고, 실습을 마치면 [99 정리](handson/99_cleanup.md)를 반드시 실행하세요.

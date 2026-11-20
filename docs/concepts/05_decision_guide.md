@@ -58,10 +58,12 @@ GPU 종류, 격리 강도, 운영 부담, 비용은 서로 영향을 주므로 �
 | 고객 상황 | 조합 | 이유 |
 |---|---|---|
 | 사내 연구팀이 자체 모델로 L4 서빙용 Triton 커널을 학습 | `g6.xlarge`의 gVisor (이 에셋이 지원하는 대안. 기본값은 `g5.xlarge`) | 한 팀만 쓰는 풀이라 VM 경계까지는 요구하지 않고, 측정 GPU를 배포 GPU(L4)에 맞출 수 있음 |
-| 여러 고객의 학습 작업이 같은 GPU 노드를 쓰고, T4 기준 순위로 충분 | `g4dn.metal`의 Kata + QEMU, 고객별 풀 | Kata는 pod마다 VM을 만들지만 풀은 요청마다 빈 pod를 고르므로, 하나의 공유 풀에서는 여러 고객의 요청이 같은 VM을 차례로 씀. 고객별로 풀을 나누고 요청도 그 풀로 보내야 고객 간 작업이 VM 경계로 나뉨. T4에서 측정하는 조건을 수용 |
+| 여러 고객의 학습 작업이 같은 GPU 노드를 쓰고, T4 기준 순위로 충분 | `g4dn.metal`의 Kata + QEMU, 고객별 풀 | 고객별로 풀을 나누고 요청도 그 풀로 보내야 고객 간 작업이 VM 경계로 나뉨(표 아래 목록). T4에서 측정하는 조건을 수용 |
 | 여러 고객이 공유하는 풀에서 H100 서빙용 커널을 학습 | `p5`의 gVisor + 보완 통제, 고객별 노드 분리 검토, 위험 수용 기록 | EC2에 VM 경계 + H100 조합이 없음 |
 | 단위 테스트로 채점하는 code RL | `c8i`의 Kata + CLH 또는 관리형 CPU 샌드박스 | reward 계산에 GPU가 필요 없음 |
 | nvcc 컴파일 단계와 측정 단계를 나누고 싶음 | CPU 계층(`c8i`의 Kata + CLH) + GPU 계층(gVisor 또는 Kata + QEMU) | 컴파일과 정적 검사에 GPU 시간을 쓰지 않음 |
+
+- **두 번째 예시에서 고객별 풀이 필요한 이유**: Kata는 pod마다 VM을 만들지만 풀은 요청마다 빈 pod를 고르므로, 하나의 공유 풀에서는 여러 고객의 요청이 같은 VM을 차례로 씁니다.
 
 두 번째와 세 번째 예시는 둘 다 멀티테넌트 상황이고 측정 GPU 요구만 다릅니다. T4에서 측정해도 되면 Kata로 VM 경계를 쓸 수 있고, H100에서 측정해야 하면 VM 경계를 쓸 수 없습니다.
 
@@ -71,25 +73,35 @@ GPU 종류, 격리 강도, 운영 부담, 비용은 서로 영향을 주므로 �
 |---|---|---|---|---|---|
 | 격리 경계 | 사용자 공간 커널. GPU는 ioctl allowlist라 VM보다 약함 | VM + IOMMU | VM | VM + IOMMU (upstream 미검증) | AWS 관리형 (세부는 문서 확인) |
 | AWS에서 쓸 수 있는 GPU | G/P 계열 VM. 이 에셋은 A10G (`g5`, 기본)와 L4 (`g6`, 대안) | T4 (`g4dn.metal`)만 | 없음 | T4 (`g4dn.metal`) | 없음 (출시 시점) |
-| 설치 난이도 | 중간: user data로 runsc 설치, containerd handler, RuntimeClass, device plugin `cdi-cri` | 높음: IOMMU AMI 빌드, GPU Operator, kata-deploy, `.metal` 노드 | 중간: nested virtualization launch template, kata-deploy | 높음: QEMU 구성 외에 실험용 values 적용. 4.3.1용 values에는 guest 커널과 이미지 경로가 들어 있고, 다른 버전에서는 경로를 확인. 이 저장소의 실습에서는 VM이 시작되지 않음 | 낮음: Kubernetes 1.36 이상 |
+| 설치 난이도 | 중간: user data로 runsc 설치, containerd handler, RuntimeClass, device plugin `cdi-cri` | 높음: IOMMU AMI 빌드, GPU Operator, kata-deploy, `.metal` 노드 | 중간: nested virtualization launch template, kata-deploy | 높음: QEMU 구성 외에 실험용 values 적용. 이 저장소의 실습에서는 VM이 시작되지 않음 | 낮음: Kubernetes 1.36 이상 |
 | 밀도 (이 에셋 구성) | `g5.xlarge` 노드당 1개 | `g4dn.metal`당 VM 최대 8개, guest RAM 전체 pin | pod당 CPU 1.25개(요청 1 + overhead 250m)와 메모리 2 GiB + 130Mi. 노드의 할당 가능 CPU와 메모리 중 먼저 소진되는 쪽이 상한 | `kata-qemu`와 노드 공유 | 문서 확인 |
 | upstream 지원 | 지원 (nvproxy 문서) | 지원 (NVIDIA CI는 A100, H100) | 지원 | 미지원 | AWS 지원 (2026-11-09 출시) |
 | 드라이버 의존성 | host 드라이버 버전이 nvproxy 지원 목록과 정확히 일치해야 함 | guest 드라이버 (kata-deploy, open 615.71.09). host에는 드라이버를 설치하지 않음 | 없음 | guest 드라이버 | 없음 |
 | GPU 1개의 온디맨드 요금 (시간당) | 1.006 (A10G, `g5.xlarge`) | 약 0.978 (7.824 / 8, 8개를 모두 쓸 때) | 해당 없음 | 약 0.978 | 해당 없음 |
 
+- **Kata + CLH (GPU, 실험)의 values**: 4.3.1용 values에는 guest 커널과 이미지 경로가 들어 있고, 다른 버전에서는 경로를 확인하세요.
+
 가격은 us-east-1과 us-west-2의 온디맨드 요금으로 계산한 값입니다. `g4dn.metal`의 T4를 일부만 쓰면 GPU 1개당 비용이 올라갑니다.
 
 ## 선택 후 바로 확인할 것
 
-실행 방법과 출력 예시는 해당 핸즈온 페이지에 있습니다. gVisor 조합(`04_install_gpu_stack.sh`, `scripts/ops/verify.sh gvisor v1`)은 실습 계정에서 `g5.xlarge`로 실행했습니다. Kata + QEMU(GPU)도 `g4dn.metal`에서 `scripts/ops/verify.sh kata-qemu v1`으로 T4 인식과 golden verdict를 확인했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). NVIDIA upstream CI의 검증 대상은 A100과 H100입니다. 기대 결과와 비교해 직접 검증하세요.
+실행 방법과 출력 예시는 해당 핸즈온 페이지에 있습니다.
+
+- **gVisor 조합**: `04_install_gpu_stack.sh`, `scripts/ops/verify.sh gvisor v1`을 실습 계정에서 `g5.xlarge`로 실행했습니다.
+- **Kata + QEMU(GPU)**: `g4dn.metal`에서 `scripts/ops/verify.sh kata-qemu v1`으로 T4 인식과 golden verdict를 확인했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). NVIDIA upstream CI의 검증 대상은 A100과 H100입니다.
+
+기대 결과와 비교해 직접 검증하세요.
 
 | 조합 | 확인 스크립트 | 기대 결과 | 핸즈온 |
 |---|---|---|---|
-| gVisor | `scripts/04_install_gpu_stack.sh` | smoke pod 안의 `dmesg` 출력에 host kernel 대신 gVisor Sentry 메시지가 나오고, torch가 GPU를 인식해 커널을 실행함(`cuda ok:` 뒤에 GPU 이름과 `2048.0`. 기본 `g5.xlarge`에서는 `cuda ok: NVIDIA A10G 2048.0`). 노드 드라이버가 nvproxy 지원 목록에 없으면 노드 부팅 로그에 `install-gvisor.sh`의 경고가 기록됨 | [02 gVisor](../handson/02_gvisor.md) |
+| gVisor | `scripts/04_install_gpu_stack.sh` | smoke pod 안의 `dmesg` 출력에 host kernel 대신 gVisor Sentry 메시지가 나오고, torch가 GPU를 인식해 커널을 실행함(`cuda ok:` 뒤에 GPU 이름과 `2048.0`. 기본 `g5.xlarge`에서는 `cuda ok: NVIDIA A10G 2048.0`) | [02 gVisor](../handson/02_gvisor.md) |
 | Kata CPU (`kata-clh`, `kata-qemu`) | `scripts/kata/cpu_nodes.sh` | runtime class 두 개가 있고, smoke pod가 출력한 guest kernel 버전이 스크립트가 출력한 host kernel 버전과 다름 | [03 Kata](../handson/03_kata.md) |
 | Kata + QEMU (GPU) | `scripts/kata/gpu_nodes.sh` | 노드의 allocatable `nvidia.com/pgpu`가 0보다 크고 `kata-qemu-nvidia-gpu` runtime class가 있음 | [03 Kata](../handson/03_kata.md) |
 | Deployment 풀 | `scripts/ops/verify.sh <runtime> [version]` | pod별 격리 증거, IMDS, API server, kubelet, 인터넷 접근 차단, golden verdict, 다른 namespace의 접근 거부 | [04 샌드박스 풀](../handson/04_sandbox_pools.md) |
-| Agent Sandbox warm pool | claim을 하나 만든 뒤 `status.sandbox.serviceFQDN` 주소로 probe Job 실행. warm pod에는 `gpusandbox/version` 라벨이 없어 `verify.sh`가 찾지 못하고, 같은 런타임의 Deployment 풀이 있으면 그 풀을 검사함 | 할당받은 샌드박스의 golden verdict | [06 Agent Sandbox](06_agent_sandbox.md)의 "평가까지 확인하기" |
+| Agent Sandbox warm pool | claim을 하나 만든 뒤 `status.sandbox.serviceFQDN` 주소로 probe Job 실행 | 할당받은 샌드박스의 golden verdict | [06 Agent Sandbox](06_agent_sandbox.md)의 "평가까지 확인하기" |
+
+- **gVisor 노드 드라이버가 nvproxy 지원 목록에 없으면**: 노드 부팅 로그에 `install-gvisor.sh`의 경고가 기록됩니다.
+- **Agent Sandbox warm pool에서 `verify.sh`를 쓰지 않는 이유**: warm pod에는 `gpusandbox/version` 라벨이 없어 `verify.sh`가 찾지 못하고, 같은 런타임의 Deployment 풀이 있으면 그 풀을 검사합니다.
 
 **문제가 생기면:** 기대 결과와 다르면 [문제 해결](../reference/troubleshooting.md)에서 런타임 이름(gVisor, Kata)이나 "샌드박스 풀과 readiness" 항목을 먼저 보세요.
 
@@ -100,12 +112,16 @@ GPU 종류, 격리 강도, 운영 부담, 비용은 서로 영향을 주므로 �
 | 바뀌는 사실 | 영향 | 확인 방법 |
 |---|---|---|
 | gVisor 새 릴리스가 HyperPod 기본 AMI의 드라이버를 지원 | B2에서 드라이버 교체를 생략할 수 있음. 기본 AMI를 그대로 쓰려면 lifecycle script에 gVisor 설치 단계도 넣어야 함(`on_create_sandbox.sh`는 `runsc`가 없으면 실패) | `GVISOR_RELEASE`를 새 릴리스로 바꾼 뒤 `scripts/hyperpod/check_gvisor.sh` |
-| EKS NVIDIA AMI, NVIDIA 드라이버, gVisor 버전이 바뀜 | 기본값 `g5`(GSP를 끈 proprietary 모듈)의 gVisor는 gVisor 문서가 아니라 이 저장소의 검증에 근거하므로 다시 확인해야 함 | 노드의 `/proc/driver/nvidia/version`과 `runsc nvproxy list-supported-drivers`, 이어서 빈 GPU가 있을 때 `04_install_gpu_stack.sh` smoke test(GPU 1개를 쓰는 pod를 따로 만듦), 배포한 풀은 `scripts/ops/verify.sh gvisor v1` |
+| EKS NVIDIA AMI, NVIDIA 드라이버, gVisor 버전이 바뀜 | 기본값 `g5`(GSP를 끈 proprietary 모듈)의 gVisor는 gVisor 문서가 아니라 이 저장소의 검증에 근거하므로 다시 확인해야 함 | 표 아래 목록의 순서 |
 | 사용할 가용 영역에서 `g6` On-Demand 용량을 확보할 수 있음 | open 드라이버를 써서 gVisor 문서와 맞고 요금도 낮은 `g6`를 선택할 수 있음 | 인스턴스를 시작했다가 바로 종료해 확인한 뒤 `scripts/config.env`의 `GVISOR_INSTANCE_TYPE`, `TRAINER_INSTANCE_TYPE` 변경 |
 | nested virtualization 지원 목록에 G나 P 계열이 추가 | `.metal` 없는 Kata + GPU 배치를 검토할 수 있음 (VFIO 지원은 따로 확인) | nested virtualization User Guide, `describe-instance-types` 필터 |
 | NVIDIA GPU를 탑재한 새 x86 `.metal` 타입 출시 | VM 경계 + 최신 GPU 조합 가능 | EC2 가속 컴퓨팅 인스턴스 사양 |
 | Nitro Sandboxes가 GPU passthrough를 지원 | 관리형 GPU 계층 검토 가능 | Nitro Sandboxes 문서, EKS sandboxing 제한 사항 |
 | NVIDIA CI가 T4를 테스트하거나 Kata가 CLH GPU를 지원 | `g4dn.metal`의 검증 상태나 CLH GPU 지원 여부가 바뀜 | Kata 릴리스 노트, upstream `docs/hypervisors.md` |
+
+- **EKS NVIDIA AMI, NVIDIA 드라이버, gVisor 버전이 바뀌었을 때**: 먼저 노드의 `/proc/driver/nvidia/version`과 `runsc nvproxy list-supported-drivers`를 확인합니다. 이어서 다음을 확인합니다.
+    - **빈 GPU가 있을 때**: `04_install_gpu_stack.sh` smoke test를 실행합니다(GPU 1개를 쓰는 pod를 따로 만듦).
+    - **배포한 풀은**: `scripts/ops/verify.sh gvisor v1`로 확인합니다.
 
 !!! question "❓ 오해: gVisor를 쓰면 GPU 코드도 VM만큼 격리된다"
     gVisor는 syscall을 사용자 공간 커널(Sentry)에서 처리하지만, GPU 요청은 ioctl allowlist를 거쳐 host 드라이버로 전달됩니다. gVisor 문서도 nvproxy가 "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves"이며 "no validation of things like DMA buffers"라고 설명합니다. 서로 다른 고객의 적대적 코드를 실행한다면 VM 경계(Kata + VFIO)를 먼저 검토하세요. 최신 GPU 때문에 gVisor를 쓴다면 보완 통제와 잔여 위험을 문서로 기록하세요.

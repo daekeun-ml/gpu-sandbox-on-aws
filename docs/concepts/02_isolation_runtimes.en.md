@@ -5,7 +5,12 @@
 
 ## Pain point
 
-gVisor and Kata pass the GPU in different ways. gVisor forwards only allowed ioctls to the host driver, while Kata hands the whole GPU to a VM and uses the guest driver. "Kata needs `.metal`" now holds only for GPU passthrough. CPU sandboxes run on EC2 nested virtualization since 2026-02, and unlike QEMU, Cloud Hypervisor is listed upstream as not supporting GPUs.
+gVisor and Kata pass the GPU in different ways.
+
+- **gVisor**: it forwards only allowed ioctls to the host driver.
+- **Kata**: it hands the whole GPU to a VM and uses the guest driver.
+
+"Kata needs `.metal`" now holds only for GPU passthrough. CPU sandboxes run on EC2 nested virtualization since 2026-02, and unlike QEMU, Cloud Hypervisor is listed upstream as not supporting GPUs.
 
 ![Three columns. gVisor + GPU forwards only allowed ioctls to the host driver and needs no /dev/kvm, so it runs on regular GPU VMs such as g5.xlarge. Kata + GPU passes the whole GPU into the VM (VFIO) and uses the guest driver; it needs /dev/kvm, an IOMMU and a host that owns the GPU, so it runs only on g4dn.metal, and upstream supports only QEMU there, not Cloud Hypervisor (both cells in red). Kata CPU only has no GPU; nested virtualization provides /dev/kvm, so since 2026-02 it runs on VMs such as c8i.2xlarge with both Cloud Hypervisor and QEMU.](../images/figures/concepts-02_isolation_runtimes.svg)
 
@@ -62,15 +67,31 @@ The sandbox image is the same for all three runtimes and contains no NVIDIA kern
 ### gVisor + nvproxy
 
 - **Configuration:** set `nvproxy = "true"` under `[runsc_config]` in `runsc.toml`. The default capabilities are `compute,utility`, and the shim reads only the file in the runtime option `ConfigPath`. GPU support turns on automatically when NVIDIA devices are in the OCI spec.
-- **Driver policy:** versions must match exactly. There are three states: supported, unsupported (works only with `--nvproxy-allow-unsupported-driver`) and unknown (fails regardless of flags). Check with `runsc nvproxy list-supported-drivers`. 580.178.04 is supported since release-20260831.0, and 595.91.07 is unknown as of release-20261109.0.
+- **Driver policy:** versions must match exactly. Check with `runsc nvproxy list-supported-drivers`. There are three states.
+    - supported
+    - unsupported: works only with `--nvproxy-allow-unsupported-driver`.
+    - unknown: fails regardless of flags.
+
+    580.178.04 is supported since release-20260831.0, and 595.91.07 is unknown as of release-20261109.0.
+
 - **Documented GPUs:** T4, A100/A10G, L4 and H100. Other GPUs of the same architecture "will likely work".
 - **Device injection:** "runsc is fully CDI-compatible", and the documented path is `deviceListStrategy: cdi-cri` in the NVIDIA k8s-device-plugin. The host still needs nvidia-container-toolkit, but runsc configures the devices itself, so no prestart hook is needed.
 - **containerd registration:** with containerd 2.x (the AMI ships 2.3.7) and config v3, put `runtime_type = 'io.containerd.runsc.v1'` and the `TypeUrl` and `ConfigPath` options under `[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]`. Placed in NodeConfig `spec.containerd.config`, nodeadm merges this block on every boot. The RuntimeClass `handler` must equal the `runtimes.<name>` key (`runsc`).
 
 !!! warning "Driver condition of gVisor nodes"
-    The EKS AL2023 NVIDIA AMI loads the proprietary kernel module with GSP off on `g4dn`, `g5` and `g5g`, and the open module on `g6` (driver 580.178.04 on both `g5` and `g6`). gVisor documents nvproxy against NVIDIA's open driver and does not mention the proprietary driver. Still, 580.178.04 is on the support list of runsc `release-20261109.0`, and in the practice account the smoke test (`cuda ok: NVIDIA A10G 2048.0`) and `scripts/ops/verify.sh gvisor v1` passed on `g5.xlarge` (A10G). This asset's default is `g5.xlarge`. This combination is verified by this repository, not documented by gVisor, so check again after changing the driver, AMI or gVisor version. The smoke test creates its own pod that requests one GPU, so run it while a gVisor node has a free GPU; check a pool that is already deployed with `scripts/ops/verify.sh gvisor v1`.
+    The EKS AL2023 NVIDIA AMI loads the proprietary kernel module with GSP off on `g4dn`, `g5` and `g5g`, and the open module on `g6` (driver 580.178.04 on both `g5` and `g6`). gVisor documents nvproxy against NVIDIA's open driver and does not mention the proprietary driver.
 
-    `g6.xlarge` (L4) is a supported alternative; it loads the open module, which the gVisor documentation covers. T4 (`g4dn`) has the same driver condition as `g5` but is not tested in this asset, so it is unverified. Details are in [04 Platforms and instances](04_platforms_and_instances.md).
+    - **What this repository verified**: 580.178.04 is on the support list of runsc `release-20261109.0`, and in the practice account the smoke test (`cuda ok: NVIDIA A10G 2048.0`) and `scripts/ops/verify.sh gvisor v1` passed on `g5.xlarge` (A10G). This asset's default is `g5.xlarge`.
+    - **After changing the driver, AMI or gVisor version**: this combination is verified by this repository, not documented by gVisor, so check again.
+    - **When you run the smoke test**: it creates its own pod that requests one GPU, so run it while a gVisor node has a free GPU.
+    - **A pool that is already deployed**: check it with `scripts/ops/verify.sh gvisor v1`.
+
+    The other GPU instances stand as follows.
+
+    - **`g6.xlarge` (L4)**: a supported alternative; it loads the open module, which the gVisor documentation covers.
+    - **T4 (`g4dn`)**: it has the same driver condition as `g5` but is not tested in this asset, so it is unverified.
+
+    Details are in [04 Platforms and instances](04_platforms_and_instances.md).
 
 ### Kata + VFIO passthrough
 
@@ -78,7 +99,14 @@ The sandbox image is the same for all three runtimes and contains no NVIDIA kern
 - **Supported mode:** the upstream documentation states "Cold-plug is by design the only supported mode for NVIDIA GPU passthrough".
 - **Guest stack:** kata-deploy ships the NVIDIA guest kernel, rootfs, NVRC and the open kernel modules 615.71.09 (whose README lists Tesla T4). The host must not load the NVIDIA driver.
 - **Shim choice:** GPU cold-plug in runtime-rs, the default since Kata 4.0.0, needs iommufd, and AL2023 kernels have `CONFIG_IOMMUFD` unset, so this asset uses the Go shim based `kata-qemu-nvidia-gpu`. The Go runtime is deprecated but still supported (as of Kata 4.3.1).
-- **GPU Operator v26.7.2:** `sandboxWorkloads.enabled=true`, `sandboxWorkloads.mode=kata`, `ccManager.defaultMode=off` (with `on`, cc-manager exits on T4), the node label `nvidia.com/gpu.workload.config=vm-passthrough` and the resource name `nvidia.com/pgpu`. The official documentation states "A node can only run one container runtime at a time", so container GPU workloads and VM passthrough do not share a node.
+- **GPU Operator v26.7.2:** it uses these values.
+    - `sandboxWorkloads.enabled=true`
+    - `sandboxWorkloads.mode=kata`
+    - `ccManager.defaultMode=off` (with `on`, cc-manager exits on T4)
+    - the node label `nvidia.com/gpu.workload.config=vm-passthrough`
+    - the resource name `nvidia.com/pgpu`
+
+    The official documentation states "A node can only run one container runtime at a time", so container GPU workloads and VM passthrough do not share a node.
 
 ??? info "Third-party reports (for reference)"
     One report says that on Ubuntu 24.04 on `g4dn.metal`, `intel_iommu=on iommu=pt` bound all eight T4s to vfio-pci with IOMMU groups suitable for passthrough. Another reports a warm reboot that did not come back.
@@ -94,10 +122,19 @@ The sandbox image is the same for all three runtimes and contains no NVIDIA kern
 
 `overhead.podFixed` is a RuntimeClass setting, not a measurement, that tells the scheduler to add the memory and CPU of the VM itself to the pod's requests.
 
-Upstream `docs/hypervisors.md` marks GPU support for Cloud Hypervisor as not supported, and in 2025-08 a maintainer answered "You should use the QEMU GPU runtime class. I haven't done any work on CLH to enable proper GPU support." The Go `kata-clh` shim has VFIO cold-plug code since 3.29.0, but it is untested upstream and disabled in the shipped configuration, and the runtime-rs CLH configuration has no VFIO keys. So QEMU is the only GPU path in Kata that upstream supports, and this asset keeps CLH + GPU in `infra/kata/experimental-clh-gpu/` for evaluation only (no CI). CLH is supported as a CPU sandbox, and the CPU tier (`kata-clh-cpu` profile) is this combination.
+GPU support for Cloud Hypervisor stands as follows.
+
+- **Upstream documentation**: `docs/hypervisors.md` marks GPU support for Cloud Hypervisor as not supported.
+- **Maintainer answer**: in 2025-08 a maintainer answered "You should use the QEMU GPU runtime class. I haven't done any work on CLH to enable proper GPU support."
+- **Go `kata-clh` shim**: it has VFIO cold-plug code since 3.29.0, but it is untested upstream and disabled in the shipped configuration.
+- **runtime-rs**: its CLH configuration has no VFIO keys.
+
+So QEMU is the only GPU path in Kata that upstream supports, and this asset keeps CLH + GPU in `infra/kata/experimental-clh-gpu/` for evaluation only (no CI). CLH is supported as a CPU sandbox, and the CPU tier (`kata-clh-cpu` profile) is this combination.
 
 !!! warning "How to read the overhead numbers"
-    The boot times above come from the Kata metrics CI (3.28.0), measured on different machines with a wide tolerance; they are not AWS measurements. The AWS China blog's "CLH about 130 MB, QEMU about 160 MB" equals the Kata 3.31.0 `podFixed` defaults, so it is probably not a measurement (inference). What the post did measure is a cold start of about 3 s and about 230 ms to take a sandbox from a pre-started pool. Values measured in the AWS practice account are in [08 Runtime benchmark](../handson/08_benchmark.md). Its cold start runs from pod creation to Ready, a different interval from boot to workload in the table above; four pods started with the GPU profile `kata-qemu` (RuntimeClass `kata-qemu-nvidia-gpu`) on `g4dn.metal` had a median of 30.5 s.
+    - **The boot times above**: they come from the Kata metrics CI (3.28.0), measured on different machines with a wide tolerance; they are not AWS measurements.
+    - **The AWS China blog's "CLH about 130 MB, QEMU about 160 MB"**: it equals the Kata 3.31.0 `podFixed` defaults, so it is probably not a measurement (inference). What the post did measure is a cold start of about 3 s and about 230 ms to take a sandbox from a pre-started pool.
+    - **Values measured in the AWS practice account**: they are in [08 Runtime benchmark](../handson/08_benchmark.md). Its cold start runs from pod creation to Ready, a different interval from boot to workload in the table above. Four pods started with the GPU profile `kata-qemu` (RuntimeClass `kata-qemu-nvidia-gpu`) on `g4dn.metal` had a median of 30.5 s.
 
 The VM size of `kata-qemu-nvidia-gpu` is `default_memory` 8192 MiB plus the container limits. VFIO type1 pins all guest RAM, so memory cannot be overcommitted. This asset's profile gives each T4 pod 8 CPUs and 16 GiB, and 8 x (16 + 10) GiB = 208 GiB fits in the 384 GiB of `g4dn.metal`.
 
@@ -106,9 +143,15 @@ The VM size of `kata-qemu-nvidia-gpu` is `default_memory` 8192 MiB plus the cont
 | Runtime | Between untrusted code and the host | Residual risk | What this asset adds |
 |---|---|---|---|
 | runc | shares the host kernel and driver | kernel or driver vulnerabilities are exposed directly | not used for sandboxes |
-| gVisor + nvproxy | syscalls go to the Sentry, the GPU goes through an ioctl allowlist | per the gVisor documentation nvproxy is "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves" and has "no validation of things like DMA buffers". Weaker than a VM boundary | one GPU per pod (no time-sharing), one sandbox per node, Ready only after egress denial is verified, node guard iptables |
-| Kata + VFIO | VM boundary + IOMMU | the hypervisor and the GPU device itself. The IOMMU confines DMA to the VM (the unsafe noiommu mode stays off). vfio-pci resets the function (or the bus) on release, and T4 reports `reset_method=bus` (third-party report, not an NVIDIA guarantee). T4 has no confidential computing | v2 marks a pod as draining after 200 evaluations, and the production gateway's recycler deletes it so that a new pod (a new VM with Kata) replaces it |
+| gVisor + nvproxy | syscalls go to the Sentry, the GPU goes through an ioctl allowlist | weaker than a VM boundary (list below the table) | one GPU per pod (no time-sharing), one sandbox per node, Ready only after egress denial is verified, node guard iptables |
+| Kata + VFIO | VM boundary + IOMMU | the hypervisor and the GPU device itself (list below the table) | v2 marks a pod as draining after 200 evaluations, and the production gateway's recycler deletes it so that a new pod (a new VM with Kata) replaces it |
 | Kata (CPU only) | VM boundary | the hypervisor | the same network controls |
+
+- **Residual risk of gVisor + nvproxy**: per the gVisor documentation nvproxy is "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves" and has "no validation of things like DMA buffers".
+- **Residual risk of Kata + VFIO**:
+    - The IOMMU confines DMA to the VM (the unsafe noiommu mode stays off).
+    - vfio-pci resets the function (or the bus) on release, and T4 reports `reset_method=bus` (third-party report, not an NVIDIA guarantee).
+    - T4 has no confidential computing.
 
 The GKE Sandbox documentation also advises "Don't use GPU time-sharing in sandboxed Pods". The full security boundary and threat model are in [Production 02 Security](../production/02_security.md).
 
@@ -124,10 +167,20 @@ The GKE Sandbox documentation also advises "Don't use GPU time-sharing in sandbo
 The table rests on three facts.
 
 1. **Kata needs `/dev/kvm`.** Both QEMU and Cloud Hypervisor use KVM. GPU passthrough also needs an IOMMU and a host that owns the physical GPU and can bind it to vfio-pci.
-2. **EC2 nested virtualization gives a regular VM a `/dev/kvm`.** It launched on 2026-02-16 on C8i, M8i and R8i. The User Guide now lists M7i, M7i-flex, M8i, M8id, M8i-flex, C7i, C7i-flex, C8i, C8id, C8i-flex, R7i, R7iz, R8i, R8id, R8i-flex, X8i, I7i and I7ie. Supported L1 hypervisors are KVM and Hyper-V, and no G or P family is listed. AWS recommends bare metal for performance-sensitive virtualization workloads.
+2. **EC2 nested virtualization gives a regular VM a `/dev/kvm`.**
+    - **Launch**: it launched on 2026-02-16 on C8i, M8i and R8i.
+    - **Supported types now**: the User Guide now lists M7i, M7i-flex, M8i, M8id, M8i-flex, C7i, C7i-flex, C8i, C8id, C8i-flex, R7i, R7iz, R8i, R8id, R8i-flex, X8i, I7i and I7ie. No G or P family is in this list.
+    - **L1 hypervisors**: supported L1 hypervisors are KVM and Hyper-V.
+    - **Recommendation**: AWS recommends bare metal for performance-sensitive virtualization workloads.
 3. **The only x86 NVIDIA GPU `.metal` is `g4dn.metal`.** EC2's NVIDIA GPU bare metal types are this one (8x T4, 96 vCPU, 384 GiB) and the arm64 `g5g.metal` (2x T4G). HyperPod has no `ml.*.metal`, CreateCluster has no nested-virtualization CPU option, and the G and P families do not support nested virtualization.
 
-Nested virtualization is enabled with `--cpu-options "NestedVirtualization=enabled"` on `run-instances`, `NestedVirtualization` in launch template `CpuOptions`, or `spec.cpuOptions.nestedVirtualization` in the Karpenter v1.15.2 EC2NodeClass. This asset's CDK stack ([`cdk/gpusandbox_cdk/stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py)) puts `NestedVirtualization: enabled` together with `CoreCount` and `ThreadsPerCore` into the `CpuOptions` of the c8i node group's launch template. No document says that EKS managed node groups pass this option to the nodes, but they did in the practice-account deployment (2026-11-14; the node had `/dev/kvm`).
+Nested virtualization is enabled with one of these.
+
+- `--cpu-options "NestedVirtualization=enabled"` on `run-instances`
+- `NestedVirtualization` in launch template `CpuOptions`
+- `spec.cpuOptions.nestedVirtualization` in the Karpenter v1.15.2 EC2NodeClass
+
+This asset's CDK stack ([`cdk/gpusandbox_cdk/stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py)) puts `NestedVirtualization: enabled` together with `CoreCount` and `ThreadsPerCore` into the `CpuOptions` of the c8i node group's launch template. No document says that EKS managed node groups pass this option to the nodes, but they did in the practice-account deployment (2026-11-14; the node had `/dev/kvm`).
 
 A read-only check:
 
@@ -138,7 +191,11 @@ aws ec2 describe-instance-types \
   --query 'InstanceTypes[].InstanceType' --output text
 ```
 
-**What to look for:** instance type names separated by spaces. Check that `c8i.2xlarge`, used in the hands-on, is among them. Empty output means the Region offers no supported type, so try another Region with `--region`.
+**What to look for:**
+
+- Instance type names separated by spaces.
+- Check that `c8i.2xlarge`, used in the hands-on, is among them.
+- **If the output is empty**: the Region offers no supported type, so try another Region with `--region`.
 
 **If it fails:** the "Kata" section of [Troubleshooting](../reference/troubleshooting.md) has commands that check nested virtualization.
 
