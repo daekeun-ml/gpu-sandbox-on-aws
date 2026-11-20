@@ -9,20 +9,54 @@
 
 **Amazon EKS**는 Kubernetes 클러스터를 운영하는 서비스입니다. **EC2** 인스턴스는 그 클러스터에 연결하는 실행 노드로 쓸 수 있습니다. 이 가이드에서 **HyperPod**는 학습용 노드를 관리하며, B1에서는 그 노드가 기존 EKS 클러스터에 합류합니다. trainer와 샌드박스는 같은 클러스터에서 통신하면서 서로 다른 종류의 노드에서 실행됩니다.
 
-## 시나리오 A, B1, B2 비교
+## 시나리오 A, B1, B2, C 비교
 
-| 시나리오 | trainer | GPU 샌드박스 | 언제 보나요? |
+| 시나리오 | 학습 | 샌드박스 | 사용 목적 |
 |---|---|---|---|
-| A | EC2 | EC2 | EKS에서 학습과 채점을 처음 연결할 때 |
-| B1 | HyperPod | EC2 | trainer에 노드 복구와 Job 재시작 기능을 붙일 때 |
-| B2 | HyperPod | 별도 HyperPod 그룹 | 지원 드라이버를 담은 custom AMI로 gVisor를 올리는 실험을 할 때 |
+| A | EC2 GPU trainer | EC2 GPU | EKS에서 학습과 GPU 채점 연결 |
+| B1 | HyperPod trainer | EC2 GPU | trainer 노드 복구와 Job 재시작 |
+| B2 | HyperPod trainer | 별도 HyperPod GPU 그룹 | custom AMI를 사용하는 gVisor 배치 실험 |
+| C | 모델 없이 시뮬레이터 실행 | EC2 `c8i.2xlarge`의 CPU 풀 | GPU 없이 런타임 비교, 채점, 버전 교체 |
 
-A는 실습 계정에서 실행했습니다. B1과 B2는 이 저장소에서 AWS 실행을 확인하지 않았습니다. GPU 없이 흐름만 익히려면 [시나리오 C](../handson/10_cpu_only.md)가 있습니다.
+A와 C는 실습 계정에서 실행했습니다. B1과 B2는 AWS에서 검증하지 않았습니다.
 
 B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타임 조건을 따로 맞추기 위해서입니다. HyperPod trainer가 Job 재시작 기능을 쓰는 동안, EC2 샌드박스는 gVisor가 지원하는 드라이버나 Kata에 필요한 가상화 환경을 그대로 사용할 수 있습니다. B2에서는 gVisor의 드라이버 조건을 맞추기 위해 노드 시작에 쓰는 이미지인 **AMI**를 별도로 준비합니다.
 
-??? note "B1의 trainer와 샌드박스 위치"
-    ![HyperPod의 trainer와 EC2의 샌드박스가 같은 EKS 클러스터에 연결된 구성](../images/architecture/scenario-b1.drawio.png)
+## 시나리오별 아키텍처
+
+아래 탭에서 시나리오를 선택하세요.
+
+=== "A: EC2 GPU"
+
+    ![같은 EKS 클러스터에서 trainer와 GPU 샌드박스가 별도의 EC2 노드 그룹에 배치됩니다.](../images/architecture/scenario-a.drawio.png)
+
+    **그림 설명**　운영 PC에서 `kubectl tunnel`을 따라가면 SSM을 거쳐 private EKS API에 연결됩니다. 학습 중에는 `GRPO trainer Job`이 `kernel code` 화살표를 따라 gVisor 풀로 제출 코드를 보냅니다. 풀은 GPU에서 정확도와 속도를 확인하고 판정을 돌려줍니다. trainer는 그 결과를 reward로 사용합니다.
+
+    **차이점**　학습과 채점 모두 EC2에서 직접 운영하는 기본 GPU 구성입니다. [시나리오 A 실습](../handson/01_cluster_and_images.md)
+
+=== "B1: HyperPod 학습"
+
+    ![HyperPod trainer와 EC2 GPU 샌드박스가 같은 EKS 클러스터에 연결됩니다.](../images/architecture/scenario-b1.drawio.png)
+
+    **그림 설명**　EKS에 제출한 `HyperPodPyTorchJob`을 training operator가 HyperPod trainer 노드에 배치합니다. 그 뒤 `kernel code` 화살표는 A와 마찬가지로 같은 클러스터의 EC2 풀을 향합니다. 샌드박스는 같은 방식으로 코드를 실행해 판정을 돌려줍니다.
+
+    **차이점**　A에서 trainer만 HyperPod로 옮겨 노드 복구와 Job 재시작 기능을 사용합니다. [시나리오 B1 실습](../handson/07_hyperpod.md)
+
+=== "B2: HyperPod 학습과 샌드박스"
+
+    ![trainer와 gVisor 샌드박스가 별도의 HyperPod 인스턴스 그룹에 배치됩니다.](../images/architecture/scenario-b2.drawio.png)
+
+    **그림 설명**　그림의 `AMI builder`에서 만든 custom AMI로 sandbox 인스턴스 그룹을 시작합니다. 샌드박스 노드는 부팅 중 드라이버를 확인하고 gVisor를 등록합니다. 학습이 시작되면 HyperPod trainer가 `gvisor-hyperpod pool v1`에 코드를 보내고 평가 결과를 받습니다.
+
+    **차이점**　B1과 달리 샌드박스도 HyperPod에서 실행합니다. 지원 드라이버가 포함된 custom AMI가 필요한 실험 구성입니다. [시나리오 B2 실습](../handson/07_hyperpod.md#b2)
+
+=== "C: CPU 전용"
+
+    ![시스템 노드의 시뮬레이터가 c8i 노드의 CPU 샌드박스 풀에 평가를 요청합니다.](../images/architecture/scenario-c.drawio.png)
+
+    **그림 설명**　시스템 노드의 `simulate and probe Jobs`에서 `golden code` 화살표를 따라가면 c8i 노드의 Kata CPU v1 풀에 닿습니다. 시뮬레이터는 모델이 만든 답 대신 예상 판정을 아는 답을 보내고, 라우팅을 바꾼 뒤에는 v2 결과를 로그에 남깁니다. 같은 노드의 gVisor와 Kata + QEMU CPU 풀은 검증과 벤치마크에 쓰입니다.
+
+    **차이점**　모델 학습과 GPU 없이 gVisor와 Kata의 채점 및 버전 교체를 실습합니다. [시나리오 C 실습](../handson/10_cpu_only.md)
 
 ## 복구 기능과 체크포인트는 각각 필요합니다
 

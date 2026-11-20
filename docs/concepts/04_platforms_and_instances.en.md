@@ -7,20 +7,54 @@
 
 The trainer generates answers and updates the model. The sandbox executes submissions, so its node must match the isolation and measurement requirements. Amazon EKS manages the Kubernetes cluster. EC2 provides worker instances, and HyperPod can manage training nodes that join the same cluster.
 
-## Compare scenarios A, B1, and B2
+## Compare scenarios A, B1, B2, and C
 
-| Scenario | Trainer | GPU sandbox | Typical use |
+| Scenario | Training | Sandbox | Typical use |
 |---|---|---|---|
 | A | EC2 | EC2 | Connect training and scoring in EKS |
 | B1 | HyperPod | EC2 | Add node recovery and job restart for training |
 | B2 | HyperPod | Separate HyperPod group | Try gVisor on a custom AMI with a supported driver |
+| C | Simulator without a model | CPU pools on EC2 `c8i.2xlarge` | Compare runtimes, score submissions, and switch versions without GPUs |
 
-A ran in the AWS exercise account. B1 and B2 were not run on AWS. [Scenario C](../handson/10_cpu_only.md) covers the scoring flow without GPUs.
+A and C ran in the AWS exercise account. B1 and B2 were not verified on AWS.
 
 B1 keeps the runtime requirements independent from trainer recovery. Its EC2 sandbox nodes can use a driver supported by gVisor or the virtualization setup required by Kata. B2 needs a custom **AMI**, the image from which its sandbox instances boot, to match the gVisor driver requirement.
 
-??? note "B1 placement"
-    ![The HyperPod trainer and EC2 sandboxes join the same EKS cluster](../images/architecture/scenario-b1.drawio.png)
+## Architecture by scenario
+
+Select a tab to view the scenario.
+
+=== "A: EC2 GPU"
+
+    ![The trainer and GPU sandboxes run in separate EC2 node groups in the same EKS cluster.](../images/architecture/scenario-a.drawio.png)
+
+    **Diagram** Follow `kubectl tunnel` from the workstation through SSM to the private EKS API. During training, the `GRPO trainer Job` sends submissions to the gVisor pool along the `kernel code` arrow. The pool checks correctness and speed on the GPU and returns a verdict, which the trainer uses to compute rewards.
+
+    **Difference** This is the baseline GPU configuration. Both training and scoring run on EC2. [Scenario A exercise](../handson/01_cluster_and_images.md)
+
+=== "B1: HyperPod training"
+
+    ![The HyperPod trainer and EC2 GPU sandboxes join the same EKS cluster.](../images/architecture/scenario-b1.drawio.png)
+
+    **Diagram** The training operator places the `HyperPodPyTorchJob` on a HyperPod trainer node. The `kernel code` arrow still leads to the EC2 pool in the same cluster, as in A. The sandbox executes the submission and returns the verdict over the same evaluation path.
+
+    **Difference** The trainer moves from EC2 to HyperPod for node recovery and Job restart. The scoring pool stays on EC2. [Scenario B1 exercise](../handson/07_hyperpod.md)
+
+=== "B2: HyperPod training and sandboxes"
+
+    ![The trainer and gVisor sandboxes run in separate HyperPod instance groups.](../images/architecture/scenario-b2.drawio.png)
+
+    **Diagram** The `AMI builder` prepares the custom image for the sandbox instance group. At boot, each sandbox node checks its driver and registers gVisor. The trainer then sends code to `gvisor-hyperpod pool v1` and receives the evaluation result.
+
+    **Difference** B2 also moves the sandboxes to HyperPod. This experimental setup requires a custom AMI with a supported driver. [Scenario B2 exercise](../handson/07_hyperpod.md#b2)
+
+=== "C: CPU only"
+
+    ![The simulator on the system nodes sends evaluations to CPU sandbox pools on a c8i node.](../images/architecture/scenario-c.drawio.png)
+
+    **Diagram** Follow `golden code` from `simulate and probe Jobs` on the system nodes to the Kata CPU v1 pool on the c8i node. The simulator sends examples with known verdicts and logs v2 results after routing changes. The gVisor and Kata with QEMU CPU pools on the same node also receive verification and benchmark requests.
+
+    **Difference** Use gVisor and Kata to practice scoring and version switches without GPUs or model training. [Scenario C exercise](../handson/10_cpu_only.md)
 
 ## Job recovery and checkpoints
 
