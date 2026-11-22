@@ -236,7 +236,7 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
 ??? note "적용 범위와 한계"
     - 시나리오 A의 `g5` 구성은 실습 계정에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). gVisor 샌드박스(1 replica)와 `scripts/ops/verify.sh gvisor v1`이 통과했고, trainer 설정(1.5B + LoRA + vLLM colocate on A10G 하나)으로 GRPO 5 step을 마쳤습니다.
     - 다른 클러스터 구성에서는 `g4dn.metal`의 Kata + QEMU(`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`)를 실행했고, `scripts/ops/bench.sh 32`로 GPU 풀 2개와 CPU 풀 3개를 측정했습니다.
-    - HyperPod B2(`ml.g5`), 시나리오 A 학습 중의 `scripts/ops/rollout.sh` 버전 교체는 AWS에서 실행하지 않았습니다. 각 핸즈온 페이지의 확인 단계로 검증하세요.
+    - 시나리오 A에서 학습 중 gVisor 버전을 전환했습니다. HyperPod B2(`ml.g5`)는 실험 경로입니다. [전환 기록](../handson/06_sandbox_update.md#switch-batches)
     - `c8i.2xlarge`는 us-east-1과 us-west-2에서 시간당 0.37484 USD, 서울 리전에서 0.42336 USD입니다. GPU 없이 이 노드만 쓰는 시나리오 C는 [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)에 있습니다.
 
     ??? note "참고 자료"

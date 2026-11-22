@@ -372,7 +372,7 @@ scripts/01_check_prereqs.sh
 - 1~4장의 로컬 단계는 테스트가 94개였을 때 macOS(CPU 전용)에서 확인했습니다. 2026-11-22에는 Linux에서 로컬 테스트 110개와 CDK 테스트 19개가 통과했습니다.
 - 5장의 `scripts/01_check_prereqs.sh`는 저자가 실행하지 않았습니다.
 - 그 뒤 단계 가운데 시나리오 A의 gVisor 경로(`02`부터 `08`까지), 시나리오 C, Kata GPU(`g4dn.metal`), 런타임 벤치마크는 실습 계정에서 실행했습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다.
-- 시나리오 A의 학습 중 `ops/rollout.sh`와 HyperPod B2는 실행하지 않았습니다. 실행하지 않은 단계는 각 핸즈온 페이지의 확인 단계로 검증하세요.
+- 시나리오 A의 [학습 중 gVisor 버전 전환](handson/06_sandbox_update.md#switch-batches)을 실행했습니다. HyperPod B2는 실험 경로입니다.
 - dry run은 학습 효과를 보여 주지 않으며, 실제 학습은 [05 On-policy GRPO 학습](handson/05_grpo_training.md)에서 GPU로 실행합니다.
 
 ## 소요 시간과 비용

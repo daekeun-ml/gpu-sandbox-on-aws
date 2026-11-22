@@ -232,7 +232,7 @@ HyperPod can recover a faulty node and the training operator can restart a Job. 
 ??? note "Scope and limits"
     - Scenario A's `g5` setup ran in the practice account ([run record](../reference/sources.md#aws-run-record)). The gVisor sandbox (1 replica) and `scripts/ops/verify.sh gvisor v1` passed, and a 5-step GRPO run finished with the trainer configuration (1.5B + LoRA + vLLM colocate on one A10G).
     - On a different cluster setup, Kata + QEMU ran on `g4dn.metal` (`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`), and `scripts/ops/bench.sh 32` measured two GPU pools and three CPU pools.
-    - HyperPod B2 (`ml.g5`) and a `scripts/ops/rollout.sh` version switch during scenario A training were not run on AWS. Verify them with the checks on each hands-on page.
+    - Scenario A switched gVisor versions during training. HyperPod B2 (`ml.g5`) remains experimental. [Switch record](../handson/06_sandbox_update.md#switch-batches)
     - `c8i.2xlarge` is 0.37484 USD per hour in us-east-1 and us-west-2 and 0.42336 USD in the Seoul Region. Scenario C, which uses only this node and no GPU, is in [10 CPU-only path on c8i](../handson/10_cpu_only.md).
 
     ??? note "References"

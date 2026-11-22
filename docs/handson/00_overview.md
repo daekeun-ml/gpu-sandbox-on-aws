@@ -318,7 +318,7 @@ kubectl이나 helm을 쓰는 단계(`04_install_gpu_stack.sh` 이후, HyperPod �
 - **`ops/verify.sh`의 1번**: 커널 비교는 스크립트가 판정하지 않으니 출력된 두 값이 다른지 직접 확인하세요.
 
 !!! warning "검증 상태"
-    시나리오 A의 필수 경로, 시나리오 C, Kata GPU와 Kata CPU는 실습 계정에서 실행했습니다. 학습 중의 `ops/rollout.sh`(시나리오 A)와 HyperPod B2는 실행하지 않았고, 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
+    시나리오 A의 필수 경로, 시나리오 C, Kata GPU와 Kata CPU는 실습 계정에서 실행했습니다. 시나리오 A에서 [학습 중 버전 전환](06_sandbox_update.md#switch-batches)도 확인했습니다. HyperPod B2는 실험 경로이고, 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 다음 단계
 

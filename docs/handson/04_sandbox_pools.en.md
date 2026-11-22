@@ -5,6 +5,8 @@
 
     **Completion check** Run `ops/verify.sh` to check access controls and verdicts for reference submissions before training.
 
+**Screenshots from November 22, 2026** · [Five v1 pools and their Services](#ready-pools) · [Verification on both GPU pools](#gpu-verdicts)
+
 **Before you start:** finish [02 gVisor GPU sandboxes](02_gvisor.md) (or [03 Kata sandboxes](03_kata.md) for the Kata pools). The concepts behind sandbox versions and routing are in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and unfamiliar terms in the "Terms" box below and the [Glossary](../reference/glossary.md).
 
 ??? note "Terms (expand if a word is new to you)"
@@ -182,6 +184,12 @@ sandbox-gvisor-v1-xxxxxxxxxx-xxxxx   1/1     Running   0          3m    10.0.x.x
 
 - **If `rollout status` times out or pods stay at `0/1`**: see the "sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md).
 - **Common causes**: most cases are a failed GPU probe or a failed egress self-test (see "Why readiness is tied to verified egress denial" below).
+
+### Five v1 pools and their Services { #ready-pools }
+
+On November 22 in `us-west-2`, all nine replicas were Ready: two gVisor GPU pods, four Kata QEMU GPU pods and one pod per CPU runtime. Each pool has a headless Service on port 8000.
+
+![Ready replica counts and headless Services for the five v1 Deployments](../images/terminal/pools-v1-replay.png)
 
 ### Profiles and versions
 
@@ -363,6 +371,12 @@ PASS read_host_file               status=policy_violation  speedup=None
 - **On `NetworkPolicy did not block an outside caller`**:
     - **If check 4 printed `connect from default ns: REACHABLE`**: the connection succeeded. Read "NetworkPolicy".
     - **Without that line**: the temporary pod did not start or the check command failed. Read the errors from the `kubectl run` and the check command just above (image pull and so on).
+
+### Verification on both GPU pools { #gpu-verdicts }
+
+We ran `scripts/ops/verify.sh` on `gvisor v1` and `kata-qemu v1`. Each PASS means the verdict matched the expected result, including `wrong_answer` for intentionally incorrect submissions.
+
+![Golden checks and verification completion from both GPU pools](../images/terminal/pools-verify-replay.png)
 
 ## Scope and limits
 

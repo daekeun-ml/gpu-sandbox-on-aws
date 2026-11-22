@@ -17,7 +17,7 @@
 | Blog measurement | A value someone else measured in a different environment | About 55 ms for a warm pool claim in part 2 of the AWS Korea tech blog series, about 3 s cold start in the AWS China blog |
 | Inference | A judgment derived from the evidence, unverified | The effect of NodeConfig `imports` on keeping kata-deploy drop-ins |
 | Executed on AWS by the author | Actually run in a practice account, with the output checked | The gVisor path of scenario A, Kata GPU (`g4dn.metal`), the three CPU runtimes of scenario C, the runtime benchmark, the demo site. The dated record is in [AWS run record](#aws-run-record) |
-| Not executed on AWS by the author | Designed, with templates written, but not run | `ops/rollout.sh` in scenario A during training, HyperPod B2 on `ml.g5`. The full list is in [AWS run record](#aws-run-record) |
+| Not executed on AWS by the author | Designed, with templates written, but not run | HyperPod B2 on `ml.g5`. The full list is in [AWS run record](#aws-run-record) |
 
 ## What this repository verified
 
@@ -77,12 +77,12 @@ All of these ran in the author's practice account.
 | 2026-11-20 | us-west-2 | Scenario A (gVisor) | `01_check_prereqs.sh`, `02_create_cluster.sh` (first creation with the GPU node groups, CDK deploy about 15 min), `03_build_push_images.sh`, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`, `ops/verify.sh gvisor v1`, `07_run_grpo.sh` (default 60 steps) | Success. This time the first creation finished without a capacity error. The access instance lost its SSM connection right after registering (`ConnectionLost`), and the tunnel connected after a reboot. All six verification submissions passed. Training printed 60 `reward_batch` lines with no `sandbox_error` and no batch mixing versions, `train_runtime` 2697 s, and the Job was Complete in about 50 min. The `ok` share was 5.3% over the first 20 steps and 6.0% over the last 20 |
 | 2026-11-22 | us-west-2 | HyperPod B1 on EKS 1.36 | `ml.g5.2xlarge` trainer, two EC2 `g5.xlarge` sandboxes, training operator `v1.3.0-eksbuild.1`, `hyperpod/run_grpo.sh 1` | `Completed=True`, 6/6 probe checks passed, 12 submissions evaluated, 1 correct. The HyperPod and EKS clusters, test GPU nodes, lifecycle bucket and test trainer repository were deleted. The EKS KMS key entered its seven-day deletion window. [Console and trainer screenshots](../handson/07_hyperpod.md#how-to-verify) |
 | 2026-11-22 | us-west-2 | HyperPod B1 benchmark | `relu_bias_triton`, gVisor v1, two EC2 `g5.xlarge` sandbox nodes | EKS system and HyperPod trainer clients each passed 32/32. The HyperPod run reached 0.199 eval/s. [Measurements and screenshot](../handson/08_benchmark.md#hyperpod-b1) |
+| 2026-11-22 | us-west-2 | Scenario A, Kata CPU/GPU, EKS 1.36 | 16 GRPO steps on `g5.2xlarge`, v1→v2 switch and rollback, `ops/bench.sh 32` on five v1 pools | Training switched at batch 5, with 207 submissions and zero mixed-version batches. All 160 benchmark evaluations passed. [Training log](../handson/06_sandbox_update.md#switch-batches) · [Measurements and raw JSONL](../handson/08_benchmark.md#runtime-results) |
 
 On 2026-11-14 the author also captured the Service Quotas screens and the HyperPod AMI search in the EC2 AMI Catalog from the ap-south-1 console. These were read-only views, and no script ran there.
 
 **Not executed on AWS:**
 
-- `ops/rollout.sh` in scenario A during training, and `ops/rollout.sh --finish` (not run in any scenario)
 - HyperPod B2 with its custom sandbox AMI, automatic node replacement and checkpoint recovery.
 - `demo/teardown.sh` (shellcheck only)
 - The `gvisor-cpu` warm pool and the GPU section of [11 Multi-turn episodes](../handson/11_multi_turn.md) (it ran with the `kata-clh-cpu` warm pool)

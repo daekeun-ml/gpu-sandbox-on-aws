@@ -5,6 +5,24 @@
 
     **완료 기준** pod가 Ready가 되기까지 걸린 시간과 준비된 pod가 채점에 쓴 시간을 구분하세요. 채점 시간의 p50은 일반적인 요청을, p95는 느린 요청을 보여 줍니다.
 
+## 2026-11-22 런타임 벤치마크 실측 { #runtime-results }
+
+`us-west-2`, EKS 1.36, 이미지 `a20261120b`. 시나리오 A의 학습과 롤백이 끝난 뒤 `scripts/ops/bench.sh 32`를 실행했습니다. 다섯 풀에 32건씩 보낸 **160건 모두 성공**했습니다. GPU 풀은 `relu_bias_triton`, CPU 풀은 `relu_bias_torch_only`를 사용했습니다.
+
+| v1 풀 | 노드 | Ready pod | 성공 / 요청 | 채점 p50 (초) | 채점 p95 (초) | 풀 처리량 (건/초) |
+|---|---|---:|---:|---:|---:|---:|
+| `gvisor` | `g5.xlarge` | 2 | 32/32 | 9.984 | 10.151 | 0.198 |
+| `kata-qemu` | `g4dn.metal` | 4 | 32/32 | 10.789 | 11.863 | 0.349 |
+| `gvisor-cpu` | `c8i.2xlarge` | 1 | 32/32 | 3.576 | 3.618 | 0.277 |
+| `kata-clh-cpu` | `c8i.2xlarge` | 1 | 32/32 | 4.043 | 4.120 | 0.244 |
+| `kata-qemu-cpu` | `c8i.2xlarge` | 1 | 32/32 | 3.819 | 3.958 | 0.258 |
+
+p50과 p95는 서버가 성공한 요청 한 건을 채점하는 데 걸린 시간입니다. 처리량은 클라이언트가 빈 pod를 기다린 시간까지 포함한 풀 전체 값입니다. GPU 두 행은 A10G와 T4를 서로 다른 pod 수로 쓴 결과입니다.
+
+![실행 JSONL에서 읽은 다섯 풀의 성공 수, 지연, 처리량과 커널 측정값](../images/terminal/bench-results-replay.png)
+
+[이번 벤치마크 원본 JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [11월 18일 측정 결과](#results-20261118) · [HyperPod B1 측정 결과](#hyperpod-b1)
+
 **시작 전에**
 
 - 비교할 풀이 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)으로 배포되어 있어야 합니다. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다.
@@ -23,9 +41,6 @@
     - **`overhead.podFixed`**: RuntimeClass에 지정하는 값으로, 스케줄러가 pod마다 런타임용으로 추가 예약하는 CPU와 메모리입니다.
     - **pool claim**: 미리 띄워 둔 샌드박스 풀(warm pool)에서 샌드박스 하나를 할당받는 작업입니다.
     - **JSONL**: 한 줄에 JSON 객체 하나씩 기록하는 파일 형식입니다.
-
-!!! warning "결과 표는 실습 계정에서 한 번 실행한 측정값입니다"
-    아래 "결과 기록 양식"의 값은 저자가 2026-11-18 실습 계정(us-west-2, EKS 1.36)에서 이 벤치마크를 실행해 얻은 값입니다. 노드 구성, 버전, 이미지 캐시 상태가 다르면 값도 달라지니 측정 조건과 함께 읽으세요. "공개된 참고 수치"는 다른 머신, 다른 버전, 다른 측정 구간에서 나온 공개 자료이므로 이 환경의 예측치로 쓰지 마세요.
 
 ## 시작 전 확인
 
@@ -148,6 +163,14 @@ scripts/ops/bench.sh 64     # more requests per pool
 !!! question "❓ 오해: gVisor와 Kata의 숫자를 나란히 놓으면 런타임 비교가 된다"
     이 핸즈온의 gVisor 풀(`g5.xlarge`, A10G)과 Kata GPU 풀(`g4dn.metal`, T4)은 GPU, 인스턴스, replica 수가 모두 달라서, 두 풀의 측정값 차이 중 런타임 때문에 생긴 부분만 따로 구할 수 없습니다. 런타임을 비교할 때는 같은 노드의 Kata CLH CPU와 Kata QEMU CPU처럼 런타임 외의 조건이 모두 같은 두 풀을 쓰세요.
 
+### 같은 실행에서 pod가 Ready가 되기까지 { #ready-times }
+
+벤치마크가 각 v1 pod의 생성 시각과 마지막 Ready 전환 시각을 읽어 출력한 값입니다. 이미지 pull과 캐시 상태도 이 시간에 영향을 줍니다.
+
+`gvisor` 15, 15 s · `kata-qemu` 141, 145, 146, 141 s · `gvisor-cpu` 116 s · `kata-clh-cpu` 20 s · `kata-qemu-cpu` 20 s
+
+![벤치마크가 출력한 각 v1 pod의 생성부터 Ready까지의 초 단위 시간](../images/terminal/bench-ready-replay.png)
+
 ## cold start를 다시 측정하는 방법
 
 스크립트가 출력하는 cold start(pod 생성부터 마지막으로 Ready가 된 시각까지)에는 정의상 다음 시간이 모두 포함됩니다. pod가 노드보다 먼저 만들어졌다면 노드가 준비되기를 기다린 시간까지 들어갑니다.
@@ -177,23 +200,24 @@ scripts/ops/bench.sh
 
 **문제가 생기면:** 둘째 명령이 timeout으로 끝나면 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목과, Kata라면 "Kata" 항목을 보세요.
 
-## 결과 기록 양식
+## 2026-11-18 런타임 측정 결과 { #results-20261118 }
 
-아래 표는 2026-11-18 실습 계정에서 측정한 값(2차 측정, 이미지 캐시 상태)입니다. 직접 측정할 때도 같은 열과 측정 조건을 기록하면 나중에 비교할 수 있습니다.
+당시 이미지를 캐시한 뒤 다시 시작한 v1 풀에서 측정한 두 번째 실행입니다. GPU 종류와 replica 수는 아래 표와 같습니다.
 
-??? note "상세 설명"
-    | runtime | 인스턴스 (GPU) | Ready pod | cold start (s, pod 중앙값) | eval p50 (s) | eval p95 (s) | 처리량 (eval/s) | pod당 처리량 | speedup 중앙값 | ref_ms 중앙값 |
-    |---|---|---|---|---|---|---|---|---|---|
-    | `gvisor` | `g5.2xlarge` (A10G) | 1 | 16 | 9.416 | 9.546 | 0.106 | 0.106 | 1.752 | 0.5797 |
-    | `kata-qemu` | `g4dn.metal` (T4) | 4 | 30.5 (30, 30, 31, 36) | 12.17 | 13.412 | 0.317 | 0.079 | 1.788 | 1.1533 |
-    | `kata-clh` (실험) | `g4dn.metal` (T4) | 0 | 측정 안 됨: VM이 시작되지 않음(`create container timeout`) | | | | | | |
-    | `gvisor-cpu` | `c8i.2xlarge` (CPU, systrap) | 1 | 11 | 3.76 | 3.851 | 0.263 | 0.263 | n/a | 0.0062 |
-    | `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.225 | 4.317 | 0.234 | 0.234 | n/a | 0.0062 |
-    | `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.058 | 4.139 | 0.244 | 0.244 | n/a | 0.0061 |
+| runtime | 인스턴스 (GPU) | Ready pod | cold start (s, pod 중앙값) | eval p50 (s) | eval p95 (s) | 처리량 (eval/s) | pod당 처리량 | speedup 중앙값 | ref_ms 중앙값 |
+|---|---|---|---|---|---|---|---|---|---|
+| `gvisor` | `g5.2xlarge` (A10G) | 1 | 16 | 9.416 | 9.546 | 0.106 | 0.106 | 1.752 | 0.5797 |
+| `kata-qemu` | `g4dn.metal` (T4) | 4 | 30.5 (30, 30, 31, 36) | 12.17 | 13.412 | 0.317 | 0.079 | 1.788 | 1.1533 |
+| `kata-clh` (실험) | `g4dn.metal` (T4) | 0 | 측정 안 됨: VM이 시작되지 않음(`create container timeout`) | | | | | | |
+| `gvisor-cpu` | `c8i.2xlarge` (CPU, systrap) | 1 | 11 | 3.76 | 3.851 | 0.263 | 0.263 | n/a | 0.0062 |
+| `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.225 | 4.317 | 0.234 | 0.234 | n/a | 0.0062 |
+| `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.058 | 4.139 | 0.244 | 0.244 | n/a | 0.0061 |
+
+??? note "당시 측정 환경과 1차 실행"
 
     - **gVisor 행은 `g5.2xlarge`에서 측정했습니다.** 기본값 `g5.xlarge`에 그때 On-Demand 용량이 없어서, 같은 A10G에 vCPU와 메모리가 더 많은 `g5.2xlarge`를 썼습니다.
     - **pod당 처리량**은 처리량을 Ready pod 수로 나눈 값입니다(`kata-qemu`: 0.317 / 4 = 0.079).
-    - **CPU 풀의 speedup**은 JSONL에 측정값(0.86에서 0.92)이 있지만, 양식대로 n/a로 둡니다.
+    - **CPU 풀의 speedup**은 JSONL에 측정값(0.86에서 0.92)이 있습니다. 이 열은 GPU 커널을 비교하므로 CPU 행은 n/a입니다.
     - 측정한 다섯 풀은 1차와 2차 모두 32개 요청 중 32개를 `ok`로 반환했습니다. `kata-clh`는 두 측정 모두에서 빠졌습니다.
 
     측정 조건 (직접 측정할 때도 같은 항목을 기록하세요):
@@ -293,7 +317,7 @@ scripts/ops/bench.sh
 
 ## 적용 범위와 한계
 
-- **결과 표는 한 번의 배포에서 얻은 값입니다.** 2026-11-18 실습 계정에서 배포 직후(1차)와 풀 재시작 뒤(2차) 두 번 측정했고, 표는 2차입니다. replica 수도 기본값과 달랐습니다(`gvisor` 1, CPU 풀 각 1).
+- **11월 18일 표의 측정 조건.** 2026-11-18 실습 계정에서 배포 직후(1차)와 풀 재시작 뒤(2차) 두 번 측정했고, 표는 2차입니다. replica 수도 기본값과 달랐습니다(`gvisor` 1, CPU 풀 각 1).
 - **runc 기준선이 없습니다.** 그래서 gVisor의 오버헤드를 직접 계산할 수 없습니다.
 - **Kata CLH GPU는 upstream에서 지원하지 않습니다.** 2026-11-18 실행에서는 artifact 경로를 채운 뒤에도 실험용 `kata-clh` 풀의 VM이 시작되지 않아(`create container timeout`) 측정하지 못했습니다([03 Kata 샌드박스](03_kata.md)의 3단계).
 - **nested virtualization 결과는 상대 비교용입니다.**

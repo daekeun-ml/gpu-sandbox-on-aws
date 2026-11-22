@@ -1,0 +1,283 @@
+{
+  "date_utc": "2026-11-22",
+  "region": "us-west-2",
+  "scenario": "A",
+  "model": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+  "max_steps": 16,
+  "switches": [
+    {
+      "from": "gvisor/v1",
+      "to": "gvisor/v2",
+      "global_step": 4,
+      "routing_revision": 2
+    }
+  ],
+  "batches": [
+    {
+      "batch": 1,
+      "global_step": 0,
+      "runtime": "gvisor",
+      "version": "v1",
+      "served_versions": {
+        "v1": 14
+      },
+      "n": 14,
+      "status": {
+        "runtime_error": 9,
+        "wrong_answer": 2,
+        "compile_error": 3
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 28.815
+    },
+    {
+      "batch": 2,
+      "global_step": 1,
+      "runtime": "gvisor",
+      "version": "v1",
+      "served_versions": {
+        "v1": 9
+      },
+      "n": 9,
+      "status": {
+        "runtime_error": 6,
+        "ok": 2,
+        "compile_error": 1
+      },
+      "pass_rate": 0.2222,
+      "batch_wall_s": 24.491
+    },
+    {
+      "batch": 3,
+      "global_step": 2,
+      "runtime": "gvisor",
+      "version": "v1",
+      "served_versions": {
+        "v1": 15
+      },
+      "n": 15,
+      "status": {
+        "wrong_answer": 4,
+        "compile_error": 4,
+        "ok": 2,
+        "runtime_error": 5
+      },
+      "pass_rate": 0.1333,
+      "batch_wall_s": 43.599
+    },
+    {
+      "batch": 4,
+      "global_step": 3,
+      "runtime": "gvisor",
+      "version": "v1",
+      "served_versions": {
+        "v1": 15
+      },
+      "n": 15,
+      "status": {
+        "runtime_error": 7,
+        "wrong_answer": 6,
+        "compile_error": 2
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 51.862
+    },
+    {
+      "batch": 5,
+      "global_step": 4,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 14
+      },
+      "n": 14,
+      "status": {
+        "compile_error": 6,
+        "runtime_error": 8
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 23.146
+    },
+    {
+      "batch": 6,
+      "global_step": 5,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 13
+      },
+      "n": 13,
+      "status": {
+        "runtime_error": 12,
+        "compile_error": 1
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 26.827
+    },
+    {
+      "batch": 7,
+      "global_step": 6,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 15
+      },
+      "n": 15,
+      "status": {
+        "runtime_error": 10,
+        "ok": 1,
+        "wrong_answer": 4
+      },
+      "pass_rate": 0.0667,
+      "batch_wall_s": 45.08
+    },
+    {
+      "batch": 8,
+      "global_step": 7,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 13
+      },
+      "n": 13,
+      "status": {
+        "runtime_error": 8,
+        "compile_error": 2,
+        "ok": 3
+      },
+      "pass_rate": 0.2308,
+      "batch_wall_s": 36.287
+    },
+    {
+      "batch": 9,
+      "global_step": 8,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 12
+      },
+      "n": 12,
+      "status": {
+        "wrong_answer": 5,
+        "runtime_error": 7
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 33.964
+    },
+    {
+      "batch": 10,
+      "global_step": 9,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 11
+      },
+      "n": 11,
+      "status": {
+        "wrong_answer": 5,
+        "runtime_error": 6
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 32.557
+    },
+    {
+      "batch": 11,
+      "global_step": 10,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 12
+      },
+      "n": 12,
+      "status": {
+        "runtime_error": 7,
+        "ok": 3,
+        "wrong_answer": 2
+      },
+      "pass_rate": 0.25,
+      "batch_wall_s": 39.903
+    },
+    {
+      "batch": 12,
+      "global_step": 11,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 14
+      },
+      "n": 14,
+      "status": {
+        "runtime_error": 9,
+        "wrong_answer": 5
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 39.131
+    },
+    {
+      "batch": 13,
+      "global_step": 12,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 13
+      },
+      "n": 13,
+      "status": {
+        "wrong_answer": 5,
+        "runtime_error": 6,
+        "compile_error": 2
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 40.88
+    },
+    {
+      "batch": 14,
+      "global_step": 13,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 13
+      },
+      "n": 13,
+      "status": {
+        "runtime_error": 8,
+        "compile_error": 1,
+        "ok": 4
+      },
+      "pass_rate": 0.3077,
+      "batch_wall_s": 40.832
+    },
+    {
+      "batch": 15,
+      "global_step": 14,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 14
+      },
+      "n": 14,
+      "status": {
+        "runtime_error": 12,
+        "compile_error": 2
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 28.967
+    },
+    {
+      "batch": 16,
+      "global_step": 15,
+      "runtime": "gvisor",
+      "version": "v2",
+      "served_versions": {
+        "v2": 10
+      },
+      "n": 10,
+      "status": {
+        "wrong_answer": 4,
+        "runtime_error": 6
+      },
+      "pass_rate": 0.0,
+      "batch_wall_s": 28.287
+    }
+  ]
+}

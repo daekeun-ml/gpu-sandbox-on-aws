@@ -372,7 +372,7 @@ If you have not chosen a runtime and instance types yet, read [05 Decision guide
 - The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 110). On November 22, 2026, the full pytest suite and the CDK tests passed on Linux.
 - The author did not run `scripts/01_check_prereqs.sh` in section 5.
 - Of the later steps, the gVisor path of scenario A (`02` to `08`), scenario C, Kata GPU (`g4dn.metal`) and the runtime benchmark ran in a practice account. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record).
-- `ops/rollout.sh` during training in scenario A and HyperPod B2 were not run. Verify the steps that were not run with the checks on each hands-on page.
+- Scenario A completed a [gVisor version switch during training](handson/06_sandbox_update.md#switch-batches). HyperPod B2 remains experimental.
 - The dry run shows no training effect; real training runs on a GPU in [05 On-policy GRPO training](handson/05_grpo_training.md).
 
 ## Time and cost

@@ -5,6 +5,8 @@
 
     **완료 기준** 전환 후 v2가 실제로 평가를 처리했는지 `reward_batch`에서 확인하세요. 확인이 끝나면 v1을 정리합니다.
 
+**2026-11-22 실행 화면** · [전환을 허용한 parity 검사](#rollout-parity) · [trainer가 v2를 사용한 배치](#switch-batches) · [v1 복구와 v2 축소](#rollback-run)
+
 **시작 전에** [05 On-policy GRPO 학습](05_grpo_training.md)의 학습이 실행 중이어야 합니다. 버전을 group 단위로 고정하는 이유는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -16,7 +18,7 @@
     - **rollback**: 문제가 생겼을 때 이전 버전으로 되돌리는 작업입니다.
 
 !!! warning "검증 상태"
-    시나리오 A에서는 이 절차를 실행하지 않았습니다. 같은 절차(`--finish` 제외)는 시나리오 C의 CPU 풀(`kata-clh-cpu`)에서 실행해 통과했습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
+    11월 22일 시나리오 A의 GRPO 학습 중 gVisor 풀을 v1에서 v2로 전환했습니다. 첫 v2 채점은 배치 5였습니다. v1을 `--finish`로 축소하고, 학습이 끝난 뒤 v1으로 롤백했습니다.
 
 ## v1과 v2의 차이
 
@@ -167,6 +169,12 @@ speedup은 같은 GPU 종류에서도 pod마다 달라지므로, 이 검사는 �
     - **그래도 실패하면**: `expected ok, got sandbox_error: <pod-ip>:8000 busy/draining` 같은 줄이 나옵니다. 이 실패는 v1 풀의 용량이 부족해서 생기므로 스크립트를 다시 실행하세요.
     - **재실행하면**: 1, 2단계는 같은 manifest를 다시 적용하고 검증만 반복합니다.
 
+### 전환을 허용한 parity 검사 { #rollout-parity }
+
+A10G 샌드박스 노드를 네 대로 늘려 v1과 v2에 두 대씩 배정했습니다. 두 풀의 golden 판정이 일치한 뒤 `sandbox-routing`의 active 버전이 `v2`로 바뀌었습니다.
+
+![v1과 v2 golden parity, 전환된 ConfigMap과 양쪽 풀의 Ready 상태](../images/terminal/rollout-parity-replay.png)
+
 ## Trainer가 전환을 받는 과정
 
 trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용합니다. 전환 후에는 로그의 버전과 실제 평가 상태를 함께 확인하세요. [On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 배치 단위로 버전을 고정하는 이유를 설명합니다.
@@ -217,6 +225,12 @@ trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용�
     ```
 
     그 뒤 `batch` 줄의 풀이 `gvisor/v2`가 됩니다. 원래 JSON에서는 `reward_batch`의 `version`이 `v2`, `served_versions`가 `{"v2": <int>}`입니다. 요약 줄에 `MIXED VERSIONS`가 붙으면 한 batch를 두 버전이 채점한 것입니다. `global_step`(요약의 `step`)으로 학습 곡선에 전환 시점을 표시하세요.
+
+### trainer가 v2를 사용한 배치 { #switch-batches }
+
+배치 1~4은 v1, 5~16은 v2가 채점했습니다. 각 `reward_batch`의 `served_versions`를 확인했을 때 두 버전이 섞인 배치는 0개였습니다. [배치별 채점 기록](data/grpo-rollout-2026-11-22.json)
+
+![trainer가 기록한 버전 전환 이벤트와 버전별 배치·제출 건수](../images/terminal/rollout-batches-replay.png)
 
 ## v2 pod 재활용 (SANDBOX_MAX_EVALS=200)
 
@@ -298,6 +312,12 @@ ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v1 scripts/05_setup_namespaces_auth.sh
     - **rollback**: rollback할 때도 rolling update를 한 번 더 해야 합니다.
 
     두 버전이 섞여 채점되면 `reward_batch`의 `served_versions`에 key가 두 개 나타납니다.
+
+### v1 복구와 v2 축소 { #rollback-run }
+
+v2 배치의 채점이 성공한 뒤 v1 replica를 0으로 줄였습니다. 학습 종료 뒤 반대 방향의 parity를 통과시켜 v1을 복원했고, 마지막에 v2를 0으로 줄였습니다.
+
+![v1 축소, 역방향 parity, v1 라우팅 복구와 최종 replica 수](../images/terminal/rollout-rollback-replay.png)
 
 ## 소요 시간과 비용
 

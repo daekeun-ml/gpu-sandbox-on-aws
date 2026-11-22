@@ -5,6 +5,8 @@
 
     **Completion check** The CPU smoke test checks VM startup. The GPU smoke test also checks device access. Stop after stage 1 for CPU only.
 
+**Screenshots from November 22, 2026** · [Three kernels on the CPU node](#cpu-run) · [A T4 inside the Kata VM](#gpu-run)
+
 **Before you start:** finish [01 Cluster and images](01_cluster_and_images.md). How Kata handles GPUs is in the "Kata + VFIO passthrough" section of [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and unfamiliar terms in the "Terms" box below and the [Glossary](../reference/glossary.md).
 
 ??? note "Terms (expand if a word is new to you)"
@@ -155,6 +157,12 @@ pod "kata-qemu-smoke-34567" deleted
 
 !!! question "❓ Misconception: a `hypervisor` flag in the pod's `/proc/cpuinfo` means it ran inside a Kata VM"
     `c8i.2xlarge` is itself a virtual instance, so even a plain runc container usually sees the `hypervisor` flag; on this node the proof of Kata is a guest kernel version that differs from the host's, not the flag. A bare-metal host such as `g4dn.metal` does not have the flag, so there the flag is evidence too.
+
+### Three kernels on the CPU node { #cpu-run }
+
+On November 22, EC2 reported nested virtualization enabled on the `c8i.2xlarge`. The smoke test ran `uname -r` in three pods and printed the host kernel for comparison.
+
+![Nested virtualization and the kernel reported by each of the three smoke pods](../images/terminal/kata-cpu-replay.png)
 
 ## Stage 2: GPU passthrough on g4dn.metal (`kata/gpu_nodes.sh`)
 
@@ -356,6 +364,12 @@ The actual GPU VMs are started with `scripts/06_deploy_sandboxes.sh kata-qemu` a
 ### Common blocker
 
 If the GPU pod stays in `ContainerCreating` and the node reports `No available IOMMU models`, see the [Kata diagnostics](../reference/troubleshooting.md#kata).
+
+### A T4 inside the Kata VM { #gpu-run }
+
+We added a `g4dn.metal` with IOMMU enabled to the same cluster. The terminal shows the node’s `nvidia.com/pgpu` count, four Ready QEMU replicas and the GPU that PyTorch found inside a guest.
+
+![Passthrough resources on g4dn.metal and the kernel and T4 inside a Kata QEMU guest](../images/terminal/kata-gpu-replay.png)
 
 ## Stage 3 (optional, experimental): Kata + Cloud Hypervisor GPU
 

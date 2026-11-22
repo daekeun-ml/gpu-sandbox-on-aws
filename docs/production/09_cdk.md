@@ -38,7 +38,7 @@ CDK 스택은 VPC, EKS, 관리형 노드 그룹, SSM 접속 인스턴스를 함�
     - **실습 계정에서 실행한 것**: 시나리오 C의 배포, 확인, 삭제와 시나리오 A(gVisor 경로), Kata GPU 노드 그룹(`scripts/kata/gpu_nodes.sh`)입니다.
     - **시나리오 C에서 확인한 것**: 클러스터와 노드 상태, private endpoint, c8i 노드의 nested virtualization과 `/dev/kvm`, 노드의 gVisor와 node guard, SSM 터널을 통한 kubectl 접속(터널은 `127.0.0.1`에서만 열림), Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)의 kata-deploy, `gvisor-cpu` RuntimeClass, 세 런타임의 smoke pod, 삭제 후 남은 리소스입니다.
     - **중간 단계로만 배포한 것**: B2 스택은 시나리오 A 클러스터를 만드는 중간 단계로만 배포했습니다.
-    - **AWS에서 실행하지 않은 것**: HyperPod B2 custom AMI 경로와 시나리오 A의 학습 중 `ops/rollout.sh`입니다.
+    - **AWS에서 실행하지 않은 것**. HyperPod B2 custom AMI 경로입니다.
     - **로컬에서 확인하는 것**: synth로 보안 기본값(`cdk/tests`, 19개)과 cdk-nag를 확인합니다.
 
     날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
@@ -68,7 +68,7 @@ flowchart LR
 | 항목 | CDK 스택 (`02_create_cluster.sh`) | `scripts/`의 스크립트 (클러스터 안쪽) |
 |---|---|---|
 | 담당 범위 | 스택 하나: VPC, 클러스터, add-on, 시나리오별 노드 그룹, access instance | device plugin, RuntimeClass, kata-deploy, GPU Operator, namespace, 샌드박스 풀, 학습 Job |
-| 시작 명령 | `scripts/02_create_cluster.sh`(옵션 `--hyperpod`, `--hyperpod-b2`, `--cpu-only`)가 `cdk/deploy.sh A`, `B1`, `B2`, `C`를 호출 | 필수 단계: `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh`, `07_run_grpo.sh`. 선택과 운영: `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh`, `ops/verify.sh`, `ops/rollout.sh` |
+    - **AWS에서 실행하지 않은 것**. HyperPod B2 custom AMI 경로입니다.
 | EKS API endpoint | private 전용 (public은 `EKS_PUBLIC_ACCESS_CIDR`에 /32 하나로만 opt-in) | 스택의 private endpoint를 그대로 씀 |
 | 접속 | 필요 없음 (CloudFormation이 배포) | `cdk/tunnel.sh` (SSM 포트 포워딩)를 두 번째 터미널에서 실행해 둠 |
 | 노드 그룹 추가 | `WITH_KATA_CPU=1`, `WITH_KATA_GPU=1`(`KATA_IOMMU_AMI_ID` 필요)을 설정하고 `02_create_cluster.sh`를 다시 실행하면 CDK가 변경된 부분만 반영 | `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh`는 노드 그룹이 있는지 확인한 뒤 설치만 함 |

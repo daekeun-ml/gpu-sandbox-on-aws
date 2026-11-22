@@ -38,7 +38,7 @@ The CDK stack creates and removes the VPC, EKS cluster, managed node groups, and
     - **Run in a practice account**: deploying, checking and deleting scenario C, the gVisor path of scenario A and the Kata GPU node group (`scripts/kata/gpu_nodes.sh`).
     - **Checked for scenario C**: cluster and node status, the private endpoint, nested virtualization and `/dev/kvm` on the c8i node, gVisor and the node guard on the node, kubectl through the SSM tunnel (the tunnel listened on `127.0.0.1` only), the Kata CPU node script `scripts/kata/cpu_nodes.sh` (kata-deploy, the `gvisor-cpu` RuntimeClass, the smoke pods of the three runtimes), and the resources left after deletion.
     - **Deployed only as intermediate steps**: the B2 stack, while creating the scenario A cluster.
-    - **Not run on AWS**: the B2 custom AMI path and `ops/rollout.sh` during scenario A training.
+    - **Not run on AWS**. The HyperPod B2 custom AMI path.
     - **Checked locally**: synth checks the security defaults (`cdk/tests`, 19 tests) and cdk-nag.
 
     The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
@@ -68,7 +68,7 @@ This CDK stack owns the infrastructure, and the scripts in `scripts/` own what r
 | Item | CDK stack (`02_create_cluster.sh`) | Scripts in `scripts/` (in-cluster) |
 |---|---|---|
 | What it owns | one stack: VPC, cluster, add-ons, the node groups of the scenario, access instance | device plugin, RuntimeClasses, kata-deploy, GPU Operator, namespaces, sandbox pools, training Jobs |
-| Start command | `scripts/02_create_cluster.sh` (options `--hyperpod`, `--hyperpod-b2`, `--cpu-only`) calls `cdk/deploy.sh A`, `B1`, `B2` or `C` | Main path: `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh`, `07_run_grpo.sh`. Optional and operations: `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh`, `ops/verify.sh`, `ops/rollout.sh` |
+    - **Not run on AWS**. The HyperPod B2 custom AMI path.
 | EKS API endpoint | private only (public is an opt-in for a single /32 in `EKS_PUBLIC_ACCESS_CIDR`) | use the stack's private endpoint |
 | Access | not needed (CloudFormation deploys) | `cdk/tunnel.sh` (SSM port forwarding) running in a second terminal |
 | Adding node groups | set `WITH_KATA_CPU=1` or `WITH_KATA_GPU=1` (needs `KATA_IOMMU_AMI_ID`) and run `02_create_cluster.sh` again; CDK changes only what differs | `kata/cpu_nodes.sh` and `kata/gpu_nodes.sh` check that their node group exists, then only install |

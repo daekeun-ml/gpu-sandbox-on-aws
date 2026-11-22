@@ -5,6 +5,8 @@
 
     **완료 기준** `ops/verify.sh`로 pod 상태뿐 아니라 접근 제어와 기준 입력의 채점 결과를 확인합니다. 검증을 통과하면 학습을 시작하세요.
 
+**2026-11-22 실행 화면** · [다섯 v1 풀과 Service](#ready-pools) · [두 GPU 풀의 검증 결과](#gpu-verdicts)
+
 **시작 전에** [02 gVisor GPU 샌드박스](02_gvisor.md)(또는 Kata 풀이라면 [03 Kata 샌드박스](03_kata.md))를 먼저 마쳐야 합니다. 샌드박스 버전과 routing의 개념은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -182,6 +184,12 @@ sandbox-gvisor-v1-xxxxxxxxxx-xxxxx   1/1     Running   0          3m    10.0.x.x
 
 - **`rollout status`가 timeout으로 끝나거나 pod가 `0/1`에 머물면**: [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
 - **흔한 원인**: 대부분 GPU probe 실패나 egress 자가 점검 실패(아래 "readiness에 egress 차단 확인을 포함하는 이유")입니다.
+
+### 다섯 v1 풀과 Service { #ready-pools }
+
+11월 22일 `us-west-2`에서 gVisor GPU 2개, Kata QEMU GPU 4개, CPU 런타임별 1개씩 총 9개 replica가 Ready였습니다. 각 풀에는 `ClusterIP`가 `None`이고 포트가 8000인 Service가 하나씩 있습니다.
+
+![다섯 v1 Deployment의 Ready replica와 해당 headless Service](../images/terminal/pools-v1-replay.png)
 
 ### 프로필과 버전
 
@@ -365,6 +373,12 @@ PASS read_host_file               status=policy_violation  speedup=None
 - **`NetworkPolicy did not block an outside caller`가 나왔을 때**:
     - **4번에서 `connect from default ns: REACHABLE`이 나왔으면**: 연결에 성공한 것입니다. "NetworkPolicy" 항목을 보세요.
     - **그 줄이 없으면**: 임시 pod가 시작되지 못했거나 검사 명령이 실패한 것입니다. 바로 위 `kubectl run`과 검사 명령의 오류(이미지 pull 등)를 보세요.
+
+### 두 GPU 풀의 검증 결과 { #gpu-verdicts }
+
+`scripts/ops/verify.sh`를 `gvisor v1`과 `kata-qemu v1`에 각각 실행했습니다. `PASS`는 제출물의 판정이 기대값과 일치했다는 뜻입니다. 오답으로 준비한 제출물은 `wrong_answer`여야 통과합니다.
+
+![gVisor와 Kata QEMU에서 각각 통과한 golden 검사와 검증 완료 로그](../images/terminal/pools-verify-replay.png)
 
 ## 적용 범위와 한계
 

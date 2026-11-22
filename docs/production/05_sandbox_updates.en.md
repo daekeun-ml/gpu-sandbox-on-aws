@@ -287,7 +287,7 @@ The hands-on procedure is in [06 Updating the sandbox during training](../handso
 
 - **Verified by local tests:** `pytest` (CPU, no AWS) confirms the routing file re-read with a revision bump, the error when choosing a missing pool, gateway group pins kept across a routing switch, and probe and parity between two CPU pools.
 - **Executed on AWS:** on a scenario C cluster in the practice account, the author ran `scripts/ops/rollout.sh kata-clh-cpu v1 v2` on a CPU pool. All four steps (deploy, verify, parity, switch) passed, and the model-free reward loop running alongside (`scripts/ops/simulate.sh`) logged `sandbox_version_switch` at its 8th batch. The output is in the demo site data (`demo/site/data/extras.json`), and the dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
-- **Not executed on AWS:** `--finish` (scaling down the old pool) and a switch on GPU pools during training (`gvisor` and Kata GPU in scenario A) were not run; verify them with "How to verify" above.
+- Scenario A verified the [gVisor switch during training and `--finish`](../handson/06_sandbox_update.md#switch-batches). Switching a Kata GPU pool during training still needs a separate run.
 - **Not in the repository:** canary switching and re-baseline automation are not implemented.
 - **Based on documentation:** Karpenter drift behavior and the time a ConfigMap takes to reach pods (kubelet sync) come from the official documentation of each project.
 

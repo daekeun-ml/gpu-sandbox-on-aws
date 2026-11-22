@@ -287,7 +287,7 @@ GRPO advantage는 group 안에서 상대적으로 계산되므로, group 전체 
 
 - **로컬 테스트로 확인한 것:** `pytest`(CPU, AWS 없음)로 routing 파일 재읽기와 revision 증가, 없는 풀을 고를 때의 오류, routing 전환 뒤 gateway의 group pin 유지, CPU 풀 두 개 사이의 probe와 parity를 확인했습니다.
 - **AWS에서 실행한 것:** 실습 계정의 시나리오 C 클러스터에서 CPU 풀로 `scripts/ops/rollout.sh kata-clh-cpu v1 v2`를 실행했습니다. 배포, 검증, parity, 전환 네 단계가 모두 통과했고, 함께 실행한 모델 없는 reward 루프(`scripts/ops/simulate.sh`)의 8번째 batch에서 `sandbox_version_switch`가 기록됐습니다. 출력은 데모 사이트 데이터(`demo/site/data/extras.json`)에 있고, 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
-- **AWS에서 실행하지 않은 것:** `--finish`(구버전 풀 축소)와, 학습 중인 GPU 풀(시나리오 A의 `gvisor`, Kata GPU)에서의 전환은 실행하지 않았으니 위 "확인 방법"으로 검증하세요.
+- 시나리오 A에서는 [gVisor 학습 중 전환과 `--finish`](../handson/06_sandbox_update.md#switch-batches)를 확인했습니다. 학습 중 Kata GPU 풀 전환은 별도로 확인해야 합니다.
 - **저장소에 없는 것:** canary 전환과 re-baseline 자동화는 구현되어 있지 않습니다.
 - **문서 기준인 것:** Karpenter drift 동작과 ConfigMap이 pod에 반영되는 시간(kubelet 동기화)은 각 공식 문서 기준입니다.
 

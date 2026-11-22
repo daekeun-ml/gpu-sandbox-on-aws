@@ -5,6 +5,8 @@
 
     **완료 기준** CPU smoke test와 GPU smoke test는 각각 VM 부팅과 GPU 연결을 확인합니다. CPU 실습만 하려면 1단계까지 진행하세요.
 
+**2026-11-22 실행 화면** · [CPU 노드에서 확인한 세 커널](#cpu-run) · [Kata VM 안에서 확인한 T4](#gpu-run)
+
 **시작 전에** [01 클러스터와 이미지](01_cluster_and_images.md)를 먼저 마쳐야 합니다. Kata가 GPU를 다루는 방식은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)의 "Kata + VFIO passthrough" 절에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -157,6 +159,12 @@ pod "kata-qemu-smoke-34567" deleted
 
 !!! question "❓ 오해: pod 안 `/proc/cpuinfo`에 `hypervisor` flag가 보이면 Kata VM 안에서 실행된 것이다"
     `c8i.2xlarge`는 그 자체가 가상 인스턴스라 일반 runc 컨테이너에서도 보통 `hypervisor` flag가 보입니다. 그래서 이 노드에서는 flag 대신, guest 커널 버전이 호스트 커널과 다른지로 Kata VM 안에서 실행됐는지 확인합니다. `g4dn.metal` 같은 bare metal 호스트에는 이 flag가 없으므로, bare metal에서는 flag로도 확인할 수 있습니다.
+
+### CPU 노드에서 확인한 세 커널 { #cpu-run }
+
+11월 22일 `c8i.2xlarge`에서 nested virtualization이 `enabled`인 것을 확인하고 세 smoke pod 안에서 `uname -r`를 실행했습니다. 화면 마지막 줄에는 비교할 호스트 커널이 나옵니다.
+
+![EC2 nested virtualization 설정과 gVisor, Kata CLH, Kata QEMU의 실제 커널 출력](../images/terminal/kata-cpu-replay.png)
 
 ## 2단계: g4dn.metal GPU passthrough (`kata/gpu_nodes.sh`)
 
@@ -360,6 +368,12 @@ grep vfio_iommu_type1 /proc/modules    # expect one line: QEMU needs this VFIO I
 ### 자주 막히는 지점
 
 GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `create container timeout`과 함께 노드 로그에 `No available IOMMU models`가 나오면 [`vfio_iommu_type1` 진단 절차](../reference/troubleshooting.md#kata)를 따라가세요.
+
+### Kata VM 안에서 확인한 T4 { #gpu-run }
+
+같은 클러스터에 IOMMU를 켠 `g4dn.metal`을 추가했습니다. 노드가 광고한 `nvidia.com/pgpu` 개수, QEMU 풀의 Ready replica 4개, guest 안에서 PyTorch가 읽은 GPU 이름을 순서대로 확인할 수 있습니다.
+
+![g4dn.metal의 passthrough GPU와 Kata QEMU guest의 커널 및 T4](../images/terminal/kata-gpu-replay.png)
 
 ## 3단계 (선택, 실험): Kata + Cloud Hypervisor GPU
 

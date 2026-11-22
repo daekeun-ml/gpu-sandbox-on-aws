@@ -5,6 +5,24 @@
 
     **Completion check** Read cold and warm measurements separately. The warm p50 describes typical latency, and p95 gives a view of slower requests.
 
+## Runtime benchmark measured on 2026-11-22 { #runtime-results }
+
+In `us-west-2` on EKS 1.36, we ran `scripts/ops/bench.sh 32` with image `a20261120b` after scenario A training and rollback finished. **All 160 evaluations passed**, 32 per pool. GPU pools evaluated `relu_bias_triton` and CPU pools evaluated `relu_bias_torch_only`.
+
+| v1 pool | Node | Ready pods | OK / requests | Eval p50 (s) | Eval p95 (s) | Pool throughput (eval/s) |
+|---|---|---:|---:|---:|---:|---:|
+| `gvisor` | `g5.xlarge` | 2 | 32/32 | 9.984 | 10.151 | 0.198 |
+| `kata-qemu` | `g4dn.metal` | 4 | 32/32 | 10.789 | 11.863 | 0.349 |
+| `gvisor-cpu` | `c8i.2xlarge` | 1 | 32/32 | 3.576 | 3.618 | 0.277 |
+| `kata-clh-cpu` | `c8i.2xlarge` | 1 | 32/32 | 4.043 | 4.120 | 0.244 |
+| `kata-qemu-cpu` | `c8i.2xlarge` | 1 | 32/32 | 3.819 | 3.958 | 0.258 |
+
+The p50 and p95 measure server time per successful evaluation. Throughput includes the client waiting for a free pod and covers the whole pool. The GPU rows use different replica counts and different GPUs (A10G and T4).
+
+![Success counts, latency, throughput and kernel timings from the benchmark JSONL](../images/terminal/bench-results-replay.png)
+
+[Download the raw benchmark JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [November 18 results](#results-20261118) · [HyperPod B1 results](#hyperpod-b1)
+
 **Before you start:**
 
 - The pools you want to compare must be deployed with [04 Deploy and verify sandbox pools](04_sandbox_pools.md). `bench.sh` skips any runtime without v1 pods.
@@ -23,9 +41,6 @@
     - **`overhead.podFixed`**: a RuntimeClass value: the CPU and memory the scheduler reserves on top of each pod for the runtime.
     - **Pool claim**: taking one sandbox from a pool of sandboxes started in advance (a warm pool).
     - **JSONL**: a file format with one JSON object per line.
-
-!!! warning "The results table is one run in a practice account"
-    The values in "Results template" below come from the author's run of this benchmark in a practice account (us-west-2, EKS 1.36) on 2026-11-18. Other node layouts, versions or image cache states give other values, so read them together with the measurement conditions. The "Published reference numbers" are public sources from other machines, other versions and other measurement windows, so do not use them as predictions for this environment.
 
 ## Before you begin
 
@@ -148,6 +163,14 @@ Keep the following in mind as well when you read the results.
 !!! question "❓ Misconception: putting the gVisor and Kata numbers side by side compares the runtimes"
     In this hands-on the gVisor pool (`g5.xlarge`, A10G) and the Kata GPU pool (`g4dn.metal`, T4) differ in GPU, instance and replica count, so you cannot isolate the runtime's share of the difference. To compare runtimes, use a pair with every other condition fixed, such as Kata CLH CPU and Kata QEMU CPU on the same node.
 
+### Pod readiness in the same run { #ready-times }
+
+The benchmark reads each v1 pod’s creation time and last Ready transition. Image pulls and cache state can affect this interval.
+
+`gvisor` 15, 15 s · `kata-qemu` 141, 145, 146, 141 s · `gvisor-cpu` 116 s · `kata-clh-cpu` 20 s · `kata-qemu-cpu` 20 s
+
+![Per-pod creation-to-Ready times printed by the benchmark](../images/terminal/bench-ready-replay.png)
+
 ## Measuring cold start again
 
 The script's cold start (pod creation to the last time it became Ready) includes, by definition, all of the following, plus the wait for the node if the pod was created before its node existed:
@@ -177,23 +200,24 @@ With `maxSurge: 0`, pods are replaced one at a time, and in a pool with one pod 
 
 **If it fails:** if the second command times out, see the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md), and for Kata also the "Kata" section.
 
-## Results template
+## Runtime measurements from 2026-11-18 { #results-20261118 }
 
-??? note "Details"
-    The table below holds the values measured in the practice account on 2026-11-18 (pass 2, images cached). When you measure yourself, record the same columns and measurement conditions so the results can be compared later.
+This was the second pass on v1 pools restarted with images cached on the nodes. The table gives the hardware and replica counts for that run.
 
-    | runtime | Instance (GPU) | Ready pods | cold start (s, median over pods) | eval p50 (s) | eval p95 (s) | throughput (eval/s) | throughput per pod | median speedup | median ref_ms |
-    |---|---|---|---|---|---|---|---|---|---|
-    | `gvisor` | `g5.2xlarge` (A10G) | 1 | 16 | 9.416 | 9.546 | 0.106 | 0.106 | 1.752 | 0.5797 |
-    | `kata-qemu` | `g4dn.metal` (T4) | 4 | 30.5 (30, 30, 31, 36) | 12.17 | 13.412 | 0.317 | 0.079 | 1.788 | 1.1533 |
-    | `kata-clh` (experimental) | `g4dn.metal` (T4) | 0 | not measured: the VM never started (`create container timeout`) | | | | | | |
-    | `gvisor-cpu` | `c8i.2xlarge` (CPU, systrap) | 1 | 11 | 3.76 | 3.851 | 0.263 | 0.263 | n/a | 0.0062 |
-    | `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.225 | 4.317 | 0.234 | 0.234 | n/a | 0.0062 |
-    | `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.058 | 4.139 | 0.244 | 0.244 | n/a | 0.0061 |
+| runtime | Instance (GPU) | Ready pods | cold start (s, median over pods) | eval p50 (s) | eval p95 (s) | throughput (eval/s) | throughput per pod | median speedup | median ref_ms |
+|---|---|---|---|---|---|---|---|---|---|
+| `gvisor` | `g5.2xlarge` (A10G) | 1 | 16 | 9.416 | 9.546 | 0.106 | 0.106 | 1.752 | 0.5797 |
+| `kata-qemu` | `g4dn.metal` (T4) | 4 | 30.5 (30, 30, 31, 36) | 12.17 | 13.412 | 0.317 | 0.079 | 1.788 | 1.1533 |
+| `kata-clh` (experimental) | `g4dn.metal` (T4) | 0 | not measured: the VM never started (`create container timeout`) | | | | | | |
+| `gvisor-cpu` | `c8i.2xlarge` (CPU, systrap) | 1 | 11 | 3.76 | 3.851 | 0.263 | 0.263 | n/a | 0.0062 |
+| `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.225 | 4.317 | 0.234 | 0.234 | n/a | 0.0062 |
+| `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.058 | 4.139 | 0.244 | 0.244 | n/a | 0.0061 |
+
+??? note "Environment and first pass from November 18"
 
     - **The gVisor row ran on `g5.2xlarge`.** The default `g5.xlarge` had no On-Demand capacity at the time, so `g5.2xlarge` was used: the same A10G with more vCPU and memory.
     - **Throughput per pod** is the throughput divided by the number of Ready pods (`kata-qemu`: 0.317 / 4 = 0.079).
-    - **The CPU pools' speedup** has measured values in the JSONL (0.86 to 0.92), but stays n/a, as the template marks it.
+    - **The CPU pools' speedup** has measured values in the JSONL (0.86 to 0.92), and the table reserves this column for GPU kernel comparisons.
     - In both passes, each of the five measured pools returned `ok` for 32 of 32 requests. `kata-clh` was left out of both passes.
 
     Measurement conditions (record the same items when you measure):
@@ -293,7 +317,7 @@ The sandbox pods reached Ready in 15, 120 seconds respectively. The p50 and p95 
 
 ## Scope and limits
 
-- **The results table comes from one deployment.** It was measured twice in the practice account on 2026-11-18, right after deploy (pass 1) and after restarting the pools (pass 2), and the table shows pass 2. The replica counts also differed from the defaults (`gvisor` 1, each CPU pool 1).
+- **Conditions for the November 18 table.** It was measured twice in the practice account on 2026-11-18, right after deploy (pass 1) and after restarting the pools (pass 2), and the table shows pass 2. The replica counts also differed from the defaults (`gvisor` 1, each CPU pool 1).
 - **No runc baseline.** So gVisor's overhead cannot be computed directly.
 - **Kata CLH GPU is not supported upstream.** On 2026-11-18 the VM of the experimental `kata-clh` pool never started (`create container timeout`), even with the artifact paths filled in, so it was not measured (stage 3 of [03 Kata sandboxes](03_kata.md)).
 - **Nested virtualization results are for relative comparison.**

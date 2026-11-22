@@ -21,7 +21,7 @@ If the symptom is unclear, start with the events from `kubectl describe pod`.
     - **Ran in a practice account**: scenario C, scenario A (`g5`), Kata GPU (`g4dn.metal`), the runtime benchmark and the demo site.
     - **Scenario A cluster**: created without GPU node groups, which were added with updates (see "When there is no GPU capacity" below).
     - **Rows from the Kata GPU run**: the Kata GPU `vfio_iommu_type1` row and the AMI builder row below.
-    - **Not run**: `ops/rollout.sh` during training in scenario A, and HyperPod B2.
+    - **Not run**. HyperPod B2.
     - **Experimental CLH GPU**: the pool was deployed, but the VM did not start.
     - **Dated run record**: in [Verified facts and sources](sources.md#aws-run-record).
     - **Where symptoms and causes come from**: the scripts' error messages, the code's behavior and official documentation. The wording can differ by tool version.

@@ -5,6 +5,8 @@
 
     **Completion check** Verify that v2 has graded a submission before scaling down v1.
 
+**Screenshots from November 22, 2026** · [Parity before switching](#rollout-parity) · [The batch where training switched](#switch-batches) · [Rollback to v1 and scale-down](#rollback-run)
+
 **Before you start:** the training from [05 On-policy GRPO training](05_grpo_training.md) should be running. Why versions are pinned per group is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and terms are in the [Glossary](../reference/glossary.md).
 
 ??? note "Terms (expand if a word is new to you)"
@@ -16,7 +18,7 @@
     - **Rollback**: going back to the previous version when something goes wrong.
 
 !!! warning "Validation status"
-    This procedure was not run in scenario A. The same procedure (without `--finish`) ran and passed on the CPU pool of scenario C (`kata-clh-cpu`). The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
+    On November 22 we switched gVisor from v1 to v2 during scenario A GRPO training. Batch 5 was the first scored on v2. We scaled down v1 with `--finish` and rolled back to v1 after training.
 
 ## How v1 and v2 differ
 
@@ -169,6 +171,12 @@ Speedups wobble between pods even on the same GPU type, so this check leaves roo
     - **If that still fails**: you see a line like `expected ok, got sandbox_error: <pod-ip>:8000 busy/draining`. That is capacity, not a version difference, so rerun the script.
     - **On a rerun**: steps 1 and 2 reapply the same manifest and only repeat the verification.
 
+### Parity before switching { #rollout-parity }
+
+We scaled to four A10G sandbox nodes, two per version. Once the golden verdicts matched, `sandbox-routing` changed its active version to `v2`.
+
+![Golden parity, the switched routing ConfigMap and both Ready pools](../images/terminal/rollout-parity-replay.png)
+
 ## How the trainer picks up the switch
 
 The trainer pins routing for a batch. Check the version and verdicts after the switch.
@@ -219,6 +227,12 @@ The trainer pins routing for a batch. Check the version and verdicts after the s
     ```
 
     After that, the pool on the `batch` lines becomes `gvisor/v2`. In the raw JSON, `version` in `reward_batch` is `v2` and `served_versions` is `{"v2": <int>}`. `MIXED VERSIONS` on a summary line means two versions scored one batch. Use `global_step` (`step` in the summary) to mark the switch point on the learning curve.
+
+### The batch where training switched { #switch-batches }
+
+Batches 1–4 used v1 and batches 5–16 used v2. Every `reward_batch` had only one entry in `served_versions`. [Per-batch record](data/grpo-rollout-2026-11-22.json)
+
+![The trainer’s switch event and per-version counts from its reward batches](../images/terminal/rollout-batches-replay.png)
 
 ## Recycling v2 pods (SANDBOX_MAX_EVALS=200)
 
@@ -298,6 +312,12 @@ ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v1 scripts/05_setup_namespaces_auth.sh
     - **Rollback**: rollback becomes another rolling update.
 
     If mixing happens, `served_versions` in `reward_batch` shows two keys.
+
+### Rollback to v1 and scale-down { #rollback-run }
+
+After a batch was scored successfully on v2 we scaled v1 to zero. After training ended we ran parity in the reverse direction, restored v1 and scaled v2 to zero.
+
+![v1 scale-down, reverse parity, restored v1 route and final replica counts](../images/terminal/rollout-rollback-replay.png)
 
 ## Time and cost
 

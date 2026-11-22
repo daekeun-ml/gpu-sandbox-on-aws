@@ -17,7 +17,7 @@
 | 블로그의 측정값 | 다른 사람이 다른 환경에서 측정한 값 | AWS 기술 블로그 2부의 warm pool claim 약 55 ms, AWS China 블로그의 cold start 약 3 s |
 | 추론 | 근거에서 이끌어 낸 판단, 미검증 | NodeConfig `imports`가 kata-deploy drop-in을 유지하는 효과 |
 | AWS에서 저자가 실행 | 실습 계정에서 실제로 실행하고 출력을 확인 | 시나리오 A의 gVisor 경로, Kata GPU(`g4dn.metal`), 시나리오 C의 CPU 런타임 세 개, 런타임 벤치마크, 데모 사이트. 날짜별 기록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
-| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 학습 중의 시나리오 A `ops/rollout.sh`, `ml.g5`의 HyperPod B2. 전체 목록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
+| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | `ml.g5`의 HyperPod B2. 전체 목록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
 
 ## 이 저장소에서 확인한 것
 
@@ -77,12 +77,12 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 | 2026-11-20 | us-west-2 | 시나리오 A(gVisor) | `01_check_prereqs.sh`, `02_create_cluster.sh`(GPU 노드 그룹 포함 첫 생성, CDK 배포 약 15분), `03_build_push_images.sh`, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`, `ops/verify.sh gvisor v1`, `07_run_grpo.sh`(기본 60 step) | 성공. 이번에는 용량 부족 없이 첫 생성이 끝남. 접속 인스턴스의 SSM 연결이 등록 직후 끊겨(`ConnectionLost`) 재부팅 뒤 터널이 연결됨. 검증 6개 제출물 모두 PASS. 학습은 `reward_batch` 60개, `sandbox_error` 0건, 한 batch의 버전 혼합 0건, `train_runtime` 2697초, Job 약 50분 Complete. `ok` 비율은 처음 20 step 5.3%, 마지막 20 step 6.0% |
 | 2026-11-22 | us-west-2 | HyperPod B1, EKS 1.36 | `ml.g5.2xlarge` trainer, EC2 `g5.xlarge` 샌드박스 2대, training operator `v1.3.0-eksbuild.1`, `hyperpod/run_grpo.sh 1` | `Completed=True`. probe 검사 6/6 통과, 제출 코드 12개 채점, 정답 1개. HyperPod·EKS 클러스터, 테스트 GPU 노드, lifecycle 버킷, 테스트용 trainer 저장소를 삭제했습니다. EKS용 KMS 키는 7일 후 삭제 예약 상태를 확인했습니다. [콘솔과 trainer 실행 화면](../handson/07_hyperpod.md#확인-방법) |
 | 2026-11-22 | us-west-2 | HyperPod B1 벤치마크 | `relu_bias_triton`, gVisor v1, EC2 `g5.xlarge` 샌드박스 2대 | EKS 시스템 노드와 HyperPod 학습 노드에서 각각 32/32 성공. HyperPod에서 요청했을 때 풀 처리량은 0.199 eval/s. [측정값과 실행 화면](../handson/08_benchmark.md#hyperpod-b1) |
+| 2026-11-22 | us-west-2 | 시나리오 A, Kata CPU/GPU, EKS 1.36 | `g5.2xlarge`에서 GRPO 16스텝, v1→v2 전환 및 롤백, 5개 v1 풀에서 `ops/bench.sh 32` | 학습 중 5번째 배치부터 v2로 전환, 207개 제출물, 버전이 섞인 배치 0개. 벤치마크 160/160 성공. [학습 로그](../handson/06_sandbox_update.md#switch-batches) · [측정 표와 원본 JSONL](../handson/08_benchmark.md#runtime-results) |
 
 2026-11-14에는 ap-south-1 콘솔에서 Service Quotas 화면과 EC2 AMI Catalog의 HyperPod AMI 검색 결과도 캡처했습니다. 조회만 했고 스크립트는 실행하지 않았습니다.
 
 **AWS에서 실행하지 않은 것:**
 
-- 학습 중의 시나리오 A `ops/rollout.sh`와 `ops/rollout.sh --finish`(어느 시나리오에서도 실행하지 않음)
 - Sandbox용 custom AMI를 쓰는 HyperPod B2, 자동 노드 교체와 체크포인트 복구.
 - `demo/teardown.sh`(shellcheck만 통과)
 - [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)의 `gvisor-cpu` warm pool과 GPU 절(`kata-clh-cpu` warm pool로는 실행함)
