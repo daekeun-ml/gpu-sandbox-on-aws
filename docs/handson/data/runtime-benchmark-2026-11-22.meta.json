@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-22",
+  "region": "us-west-2",
+  "eks": "1.36",
+  "image": "a20261120b",
+  "jsonl": "runtime-benchmark-2026-11-22.jsonl",
+  "pools": {
+    "gvisor": {"instance": "g5.xlarge", "gpu": "A10G", "ready": 2},
+    "kata-qemu": {"instance": "g4dn.metal", "gpu": "T4", "ready": 4},
+    "gvisor-cpu": {"instance": "c8i.2xlarge", "ready": 1},
+    "kata-clh-cpu": {"instance": "c8i.2xlarge", "ready": 1},
+    "kata-qemu-cpu": {"instance": "c8i.2xlarge", "ready": 1}
+  }
+}

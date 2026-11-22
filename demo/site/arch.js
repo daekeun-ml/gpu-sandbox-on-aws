@@ -14,10 +14,10 @@ const TRIM = 6;
 
 const UI = {
   ko: {
-    back: "← 데모로 돌아가기", navPatterns: "패턴별 아키텍처",
-    eyebrow: "패턴별 아키텍처",
-    title: "trainer와 샌드박스를 두는 네 가지 방법",
-    lede: "네 패턴 모두 같은 CDK 스택을 쓰고, trainer와 샌드박스가 올라가는 위치만 다릅니다.",
+    back: "← 데모로 돌아가기", navPatterns: "배포 구성도",
+    eyebrow: "Amazon EKS · SageMaker HyperPod",
+    title: "학습 노드와 샌드박스 배치",
+    lede: "시나리오를 고르면 학습 노드와 채점 풀의 위치를 볼 수 있습니다. 재생 버튼으로 배포 순서와 채점 요청의 경로를 따라가 보세요.",
     flows: "흐름", prev: "◀ 이전", next: "다음 ▶", play: "▶ 재생", pause: "❚❚ 일시정지", replay: "↻ 처음부터",
     train: "trainer 위치", sandbox: "샌드박스 위치", when: "이럴 때 씁니다", status: "AWS 실행",
     legendReq: "채점 요청", legendRes: "채점 결과", legendCtl: "배포, 설정, 이미지",
@@ -28,9 +28,9 @@ const UI = {
   },
   en: {
     back: "← Back to the demo", navPatterns: "Architecture patterns",
-    eyebrow: "Architecture patterns",
+    eyebrow: "Amazon EKS · SageMaker HyperPod",
     title: "Four ways to place the trainer and the sandboxes",
-    lede: "All four patterns use the same CDK stack; only where the trainer and the sandboxes run differs.",
+    lede: "Choose a scenario to see where training and scoring run. Play a sequence to follow deployment, a training step, or a sandbox version change.",
     flows: "Flow", prev: "◀ Back", next: "Next ▶", play: "▶ Play", pause: "❚❚ Pause", replay: "↻ From the start",
     train: "Trainer runs on", sandbox: "Sandboxes run on", when: "Use it when", status: "On AWS",
     legendReq: "scoring request", legendRes: "scoring result", legendCtl: "deploy, config, images",

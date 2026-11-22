@@ -17,7 +17,7 @@
         <a href="#defense" data-i18n="navDefense"></a>
         <a href="#train" data-i18n="navTrain"></a>
         <a href="#bench" data-i18n="navBench"></a>
-        <a id="nav-patterns" class="nav-pill" href="architecture.html" data-i18n="navPatterns"></a>
+        <a id="nav-patterns" href="architecture.html" data-i18n="navPatterns"></a>
       </div>
       <button id="lang" type="button" aria-label="language">EN</button>
     </div>
@@ -29,32 +29,30 @@
         <p class="eyebrow" data-i18n="eyebrow"></p>
         <h1 data-i18n="title"></h1>
         <p class="lede" data-i18n="lede"></p>
-        <div id="kpis" class="kpis"></div>
         <div class="cta">
-          <a id="hero-patterns" class="btn big patterns" href="architecture.html" data-i18n="ctaPatterns"></a>
           <a class="btn primary" href="#try" data-i18n="ctaTry"></a>
-          <a class="btn ghost" href="#defense" data-i18n="ctaDefense"></a>
+          <a id="hero-bench" class="btn ghost" href="#bench" data-i18n="ctaBench"></a>
+          <a id="hero-patterns" class="hero-link" href="architecture.html" data-i18n="ctaPatterns"></a>
         </div>
-        <p class="source"><span data-i18n="sourceLabel"></span> <span id="source"></span></p>
+        <details class="source">
+          <summary data-i18n="sourceLabel"></summary>
+          <span id="source"></span>
+        </details>
       </div>
       <figure class="video-box">
-        <video id="tour" controls preload="none" playsinline></video>
+        <button id="tour-start" class="tour-preview" type="button">
+          <img id="tour-cover" alt="" width="1280" height="720">
+          <span data-i18n="tourPlay"></span>
+        </button>
+        <video id="tour" controls preload="none" playsinline hidden></video>
+        <a id="tour-file" class="hero-link" data-i18n="tourFile" hidden></a>
         <figcaption data-i18n="videoCaption"></figcaption>
       </figure>
     </div>
+    <div class="wrap"><div id="kpis" class="kpis"></div></div>
   </header>
 
   <main class="wrap">
-    <a id="patterns-banner" class="patterns-banner" href="architecture.html">
-      <span class="pb-icons" aria-hidden="true">
-        <img src="icons/eks.svg" alt=""><img src="icons/sagemaker.svg" alt=""><img src="icons/container.svg" alt=""><img src="icons/ec2.svg" alt="">
-      </span>
-      <span class="pb-text">
-        <span class="pb-title" data-i18n="bannerTitle"></span>
-        <span class="pb-desc" data-i18n="bannerDesc"></span>
-      </span>
-      <span class="pb-go" data-i18n="bannerGo"></span>
-    </a>
     <section id="arch">
       <h2><span class="num">1</span><span data-i18n="sArch"></span></h2>
       <p class="hint" data-i18n="sArchHint"></p>
@@ -65,7 +63,7 @@
           </svg>
           <div class="arch-controls">
             <button id="flow-play" type="button" class="btn primary small" data-i18n="flowPlay"></button>
-            <a id="patterns-link" class="btn patterns" href="architecture.html" data-i18n="patternsLink"></a>
+            <a id="patterns-link" class="btn small" href="architecture.html" data-i18n="patternsLink"></a>
             <span id="flow-caption" class="flow-caption" aria-live="polite"></span>
           </div>
         </div>
@@ -165,6 +163,30 @@
     <section id="bench">
       <h2><span class="num">5</span><span data-i18n="sBench"></span></h2>
       <p class="hint" data-i18n="sBenchHint"></p>
+      <article id="runtime-results" class="panel" aria-labelledby="results-title" hidden>
+        <div class="panel-head">
+          <h3 id="results-title" data-i18n="resultsTitle"></h3>
+          <span id="results-source" class="muted small"></span>
+        </div>
+        <div class="results-scroll" tabindex="0" role="region" aria-labelledby="results-title">
+          <table class="results-table" aria-labelledby="results-title">
+            <thead><tr>
+              <th scope="col" data-i18n="resultsPool"></th>
+              <th scope="col" data-i18n="pods"></th>
+              <th scope="col" data-i18n="b1Success"></th>
+              <th scope="col" data-i18n="resultsP50"></th>
+              <th scope="col" data-i18n="resultsP95"></th>
+              <th scope="col" data-i18n="resultsRate"></th>
+            </tr></thead>
+            <tbody id="results-rows"></tbody>
+          </table>
+        </div>
+        <p class="muted small" data-i18n="resultsNote"></p>
+        <div class="results-links">
+          <a id="results-guide" data-i18n="resultsGuide"></a>
+          <a id="results-jsonl" data-i18n="resultsRaw"></a>
+        </div>
+      </article>
       <article id="hyperpod-b1" class="panel" hidden>
         <div class="panel-head">
           <h3 data-i18n="b1Title"></h3>

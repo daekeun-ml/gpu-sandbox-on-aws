@@ -159,3 +159,18 @@ def test_extras_sections_parse_from_cluster_logs():
     for transcript in extras["transcripts"]:
         times = [line["t"] for line in transcript["lines"]]
         assert times == sorted(times), transcript["id"]
+
+
+def test_runtime_results_match_the_guide_record(tmp_path):
+    data = ROOT / "docs/handson/data"
+    metadata = data / "runtime-benchmark-2026-11-22.meta.json"
+    output = tmp_path / "extras.json"
+    assert _build_extras().main(["--runtime-record", str(metadata), "--out", str(output)]) == 0
+    run = json.loads(output.read_text())["runtime_run"]
+    assert run == json.loads((SITE / "data/extras.json").read_text())["runtime_run"]
+    config = json.loads(metadata.read_text())
+    originals = [json.loads(line) for line in (data / config["jsonl"]).read_text().splitlines()]
+    assert len(run["rows"]) == len(originals) == len(config["pools"])
+    for row, raw in zip(run["rows"], originals, strict=True):
+        raw.pop("address")
+        assert row == {**raw, **config["pools"][raw["runtime"]]}

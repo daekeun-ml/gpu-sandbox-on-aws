@@ -450,13 +450,13 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
 
 ## 소요 시간과 비용
 
-| 단계 | 시간 (실측, 안내값 또는 timeout) | 새로 과금되는 리소스 |
+| 단계 | 소요 시간과 대기 한도 | 새로 과금되는 리소스 |
 |---|---|---|
 | `02_create_cluster.sh` 재실행 (`WITH_KATA_CPU=1`) | 노드 그룹 생성 (측정하지 않음) | `c8i.2xlarge` x1 (0.37484 USD/시간) |
-| `kata/cpu_nodes.sh` | 약 14분 (실측, 대부분 kata-deploy). timeout은 kata-deploy 20분, smoke pod 각 10분 | 없음 |
-| `kata/gpu_nodes.sh` 첫 실행 | 스크립트 안내 약 10분. 2026-11-18 실측은 빌더 stop 약 30초, AMI available 약 2분 | 빌더 `m6i.large`(0.096 USD/시간), 빌더의 EBS 볼륨, AMI 스냅샷 (아래 목록) |
-| `02_create_cluster.sh` 재실행 (`WITH_KATA_GPU=1`) | `g4dn.metal` 노드 합류 약 3분 (2026-11-18 실측) | `g4dn.metal` x1 (7.824 USD/시간) |
-| `kata/gpu_nodes.sh` 두 번째 실행 | 약 1분 (2026-11-18 실측). timeout은 GPU Operator 20분, kata-deploy 20분, pgpu 대기 최대 20분 | 없음 |
+| `kata/cpu_nodes.sh` | 실습에서 약 14분. 대부분 kata-deploy 설치에 걸림. timeout은 kata-deploy 20분, smoke pod 각 10분 | 없음 |
+| `kata/gpu_nodes.sh` 첫 실행 | 스크립트 안내 약 10분. 2026-11-18 실행에서 빌더 정지까지 약 30초, AMI가 `available`이 되기까지 약 2분 | 빌더 `m6i.large`(0.096 USD/시간), 빌더의 EBS 볼륨, AMI 스냅샷 (아래 목록) |
+| `02_create_cluster.sh` 재실행 (`WITH_KATA_GPU=1`) | `g4dn.metal` 노드 합류 약 3분 (2026-11-18 실행) | `g4dn.metal` x1 (7.824 USD/시간) |
+| `kata/gpu_nodes.sh` 두 번째 실행 | 약 1분 (2026-11-18 실행). timeout은 GPU Operator 20분, kata-deploy 20분, pgpu 대기 최대 20분 | 없음 |
 | 3단계 | `check-clh-gpu.sh` 20분 | 없음 |
 
 - **`kata/gpu_nodes.sh` 첫 실행의 과금**: 빌더 `m6i.large`는 빌더가 stopped가 될 때까지 과금되고, 그 뒤 AMI를 만드는 동안 빌더의 EBS 볼륨이 과금됩니다. AMI 스냅샷에는 EBS 스냅샷 요금이 붙습니다.

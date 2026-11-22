@@ -110,6 +110,9 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 ## HyperPod
 
+- **클러스터는 `InService`인데 trainer 인스턴스가 `Pending`입니다.** B1 실습에서는 클러스터가 먼저 준비됐습니다. `source scripts/config.env`를 실행하고 `aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME"`로 인스턴스 상태를 보세요. 이어서 `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status`에서 `Ready`와 `Schedulable`을 확인하세요. [B1 실행 화면](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/#확인-방법)
+- **Worker가 `Pending`이고 이벤트에 `Insufficient cpu` 또는 `Insufficient memory`가 나옵니다.** `kubectl describe node <trainer-node>`에서 이미 할당된 자원을 확인하세요. B1의 `ml.g5.2xlarge`에서는 operator와 시스템 pod도 같은 노드를 사용했습니다. 템플릿이 worker에 요청하는 자원은 CPU 5개와 메모리 24 GiB입니다.
+
 - **pod가 `hyperpodrun`을 찾지 못함**: trainer 이미지를 `HYPERPOD=1` 없이 빌드했습니다. 새 `IMAGE_TAG`로 `HYPERPOD=1 scripts/03_build_push_images.sh`를 실행하고, 출력된 `TRAINER_IMAGE_URI`를 `scripts/config.env`에 넣은 뒤 학습을 다시 시작하세요.
 - **`check_gvisor.sh`가 `NOT supported`를 출력함**:
     - **trainer 노드에서 나오면**: 정상입니다. trainer 노드에서는 샌드박스를 실행하지 않습니다.

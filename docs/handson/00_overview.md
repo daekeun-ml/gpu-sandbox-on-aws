@@ -33,22 +33,22 @@
 
 경로를 고른 뒤에는 클러스터 접속, 풀 검증, 학습 또는 시뮬레이션 순으로 확인합니다. `Ready` 노드는 배치할 곳이 준비됐다는 뜻이고, `verified`는 샌드박스가 기준 답안을 예상대로 채점했다는 뜻입니다. 두 신호를 각각 확인한 뒤 학습을 시작하세요.
 
-예상 시간은 스크립트의 안내값이나 timeout이고, "실측"으로 적은 값만 실습 계정에서 측정한 것입니다(2026-11-14, `07_run_grpo.sh`는 2026-11-18). 번호가 붙은 스크립트(01~08)는 시나리오 A에서 순서대로 실행하는 필수 경로입니다. 선택 기능과 운영용 스크립트는 용도별 폴더(`scripts/kata/`, `scripts/ops/`, `scripts/extensions/`, `scripts/hyperpod/`)에 있습니다. 스크립트마다 사용법, 다시 실행할 때의 동작, 성공 신호는 [스크립트 레퍼런스](../reference/scripts.md)에 있습니다.
+시간 옆의 날짜는 실습 계정에서 스크립트를 실행한 날입니다. 안내값은 스크립트가 제시하는 예상 시간이고, timeout은 스크립트가 기다리는 최대 시간입니다. 번호가 붙은 스크립트(01~08)는 시나리오 A에서 순서대로 실행하는 필수 경로입니다. 선택 기능과 운영용 스크립트는 용도별 폴더(`scripts/kata/`, `scripts/ops/`, `scripts/extensions/`, `scripts/hyperpod/`)에 있습니다. 스크립트마다 사용법, 다시 실행할 때의 동작, 성공 신호는 [스크립트 레퍼런스](../reference/scripts.md)에 있습니다.
 
 ### 필수 경로
 
 | 스크립트 | 하는 일 | 예상 시간 | 이 단계에서 과금이 시작되는 리소스 |
 |---|---|---|---|
 | `scripts/01_check_prereqs.sh` | 도구(CDK CLI, Session Manager plugin 포함), AWS identity, G and VT와 Standard vCPU 쿼터, nested virtualization 지원, GPU 인스턴스의 AZ별 제공 여부 확인 (읽기 전용) | 짧음 (조회만) | 없음 |
-| `scripts/02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) | CDK 스택 하나: VPC, EKS 컨트롤 플레인(private endpoint), add-on, system 노드, 시나리오별 노드 그룹(A: trainer와 gVisor, B1: gVisor, C: Kata CPU), access instance | 20~30분 (안내값), 시나리오 C 약 20분 (실측) | EKS 컨트롤 플레인, NAT gateway, `m6i.large` x2, `t4g.nano`, `g5.xlarge` x2(A, B1), `g5.2xlarge`(A만), `c8i.2xlarge`(C 또는 `WITH_KATA_CPU=1`), `g4dn.metal`(`WITH_KATA_GPU=1`) |
+| `scripts/02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) | CDK 스택 하나: VPC, EKS 컨트롤 플레인(private endpoint), add-on, system 노드, 시나리오별 노드 그룹(A: trainer와 gVisor, B1: gVisor, C: Kata CPU), access instance | 20~30분 (안내값), 시나리오 C 약 20분 (2026-11-14) | EKS 컨트롤 플레인, NAT gateway, `m6i.large` x2, `t4g.nano`, `g5.xlarge` x2(A, B1), `g5.2xlarge`(A만), `c8i.2xlarge`(C 또는 `WITH_KATA_CPU=1`), `g4dn.metal`(`WITH_KATA_GPU=1`) |
 | `scripts/03_build_push_images.sh` (`--no-trainer`) | sandbox, trainer, control 이미지를 `linux/amd64`로 빌드해 ECR에 push. `--no-trainer`는 trainer 이미지를 건너뜀 | 빌드 호스트와 네트워크에 따라 다름 | ECR 저장 용량 |
 | `scripts/04_install_gpu_stack.sh` | NVIDIA device plugin (CDI 모드)을 설치한 뒤 `gvisor` RuntimeClass와 smoke pod | device plugin은 Helm `--wait`, smoke pod timeout 15분 | 없음 |
 | `scripts/05_setup_namespaces_auth.sh` | 네임스페이스, NetworkPolicy, ServiceAccount, JWKS, routing ConfigMap | 짧음 | 없음 |
 | `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]` | 샌드박스 풀 (Deployment + headless Service) | rollout timeout 30분 | 없음 (기존 노드 사용) |
-| `scripts/07_run_grpo.sh [max_steps]` | GRPO 학습 Job (기본 60 step) | [05](05_grpo_training.md) 참고. 기본 60 step은 약 50분, 5 step은 약 12분 (실측) | 없음 |
+| `scripts/07_run_grpo.sh [max_steps]` | GRPO 학습 Job (기본 60 step) | [05](05_grpo_training.md) 참고. 60스텝 약 50분 (2026-11-20), 5스텝 약 12분 (2026-11-18) | 없음 |
 | `scripts/08_cleanup.sh` (`--images`) | 풀, Job, CDK 스택(클러스터, 노드 그룹, VPC, access instance), AMI, (ECR) 삭제 | 기록 없음 (CloudFormation 삭제를 기다림) | CDK 스택의 리소스 해제 (아래 목록) |
 
-- **`07_run_grpo.sh`의 실측값**: 이미지 pull과 모델 다운로드를 포함하고, `g5.2xlarge`에서 측정한 시간입니다.
+- `07_run_grpo.sh`의 실행 시간에는 `g5.2xlarge`에서 이미지와 모델을 내려받는 시간도 들어갑니다.
 - **`08_cleanup.sh`가 지우는 방식**: secrets용 KMS 키는 7일 삭제 대기를 거칩니다. AMI는 `config.env`에 ID가 있을 때 확인 후 삭제하고, ECR은 `--images`를 붙일 때만 삭제합니다. 마지막에 남은 인스턴스를 조회합니다.
 
 `06_deploy_sandboxes.sh`로 풀을 배포한 뒤에는 풀 검증(`scripts/ops/verify.sh`)을 실행하고, `07_run_grpo.sh`로 학습을 시작한 뒤에는 버전 교체(`scripts/ops/rollout.sh`)를 실행합니다. 두 스크립트는 아래 표에 있고, 전체 실행 순서는 "최소 경로와 전체 경로"의 그림에 있습니다.
@@ -57,13 +57,13 @@
 
 | 스크립트 | 하는 일 | 예상 시간 | 이 단계에서 과금이 시작되는 리소스 |
 |---|---|---|---|
-| `scripts/kata/cpu_nodes.sh` | Kata CPU 노드 그룹이 있는지 확인, kata-deploy, `gvisor-cpu` RuntimeClass, `gvisor-cpu`, `kata-clh`, `kata-qemu` smoke pod | 약 14분 (실측, 대부분 kata-deploy), kata-deploy timeout 20분 | 없음 (노드는 `02_create_cluster.sh`에서 생김) |
+| `scripts/kata/cpu_nodes.sh` | Kata CPU 노드 그룹이 있는지 확인, kata-deploy, `gvisor-cpu` RuntimeClass, `gvisor-cpu`, `kata-clh`, `kata-qemu` smoke pod | 약 14분 (2026-11-14, 대부분 kata-deploy 설치), kata-deploy timeout 20분 | 없음 (노드는 `02_create_cluster.sh`에서 생김) |
 | `scripts/kata/gpu_nodes.sh` | `KATA_IOMMU_AMI_ID`가 비어 있으면 IOMMU AMI를 빌드하고 멈춤. `02_create_cluster.sh` 재실행 뒤 GPU Operator, kata-deploy, `nvidia.com/pgpu` 확인 | AMI 약 10분 (안내값), pgpu 대기 최대 20분 | AMI 빌더 `m6i.large`(잠시), AMI 스냅샷 (`g4dn.metal`은 `02_create_cluster.sh` 재실행 때) |
 | `scripts/ops/verify.sh <runtime> [version]` | 격리 증거, egress 차단, golden verdict, NetworkPolicy 확인 | 수 분 (probe Job 포함) | 없음 |
 | `scripts/ops/simulate.sh [steps] [interval_s]` (시나리오 C) | 모델 없이 golden 제출물로 reward 배치를 계속 보내며 버전 교체를 관찰. 학습이 아님 | 기본 30배치, 배치 사이 20초 대기 29회. 2026-11-17 실행(`kata-clh-cpu`)은 약 16분 | 없음 |
 | `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]` | 학습 중 v1 옆에 v2를 배포하고 검증한 뒤 routing을 v2로 전환. `--finish`를 붙이면 v1을 0으로 줄임 | [06](06_sandbox_update.md) 참고 | gVisor는 v2용 `g5.xlarge` 2대. Kata QEMU는 추가 노드 없음 |
 | `scripts/ops/bench.sh [requests]` | 런타임별 cold start, latency, speedup 비교 | [08](08_benchmark.md) 참고 | 없음 |
-| `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 할당받아 multi-turn 에피소드를 실행합니다([11 multi-turn 에피소드 실습](11_multi_turn.md)) | 에피소드 2개, 3 turn에 약 25초 (실측, 시나리오 C의 `kata-clh-cpu`) | 없음 (기존 노드 사용). 대기 중인 warm sandbox도 가속기를 하나씩 점유 |
+| `scripts/extensions/agent_sandbox.sh` (`install`, `pool`, `claim`, `episodes`) | Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 할당받아 multi-turn 에피소드를 실행합니다([11 multi-turn 에피소드 실습](11_multi_turn.md)) | 에피소드 2개, 3 turn에 약 25초 (시나리오 C의 `kata-clh-cpu`, 2026-11-20) | 없음 (기존 노드 사용). 대기 중인 warm sandbox도 가속기를 하나씩 점유 |
 | `scripts/hyperpod/build_b2_ami.sh` (시나리오 B2) | sandbox 인스턴스 그룹용 custom AMI 빌드. `hyperpod/create.sh --b2` 전에 실행 | 20~40분 (추정) | 빌더 `m6i.large`(빌드 중), AMI 스냅샷 |
 | `scripts/hyperpod/create.sh` (`--b2`) | HyperPod 클러스터를 만들어 같은 EKS 클러스터에 연결. `--b2`는 sandbox 인스턴스 그룹을 추가 | InService까지 15~30분 (안내값) | HyperPod `ml.g5.2xlarge` (B2는 `ml.g5.xlarge` x2 추가) |
 | `scripts/hyperpod/check_gvisor.sh` (시나리오 B2) | HyperPod 노드마다 드라이버 버전과 gVisor nvproxy 지원 여부 출력 | [07](07_hyperpod.md) 참고 | 없음 |

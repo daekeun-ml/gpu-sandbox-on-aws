@@ -30,14 +30,18 @@
 
 ## 데모가 보여 주는 것
 
+첫 화면에서 채점 기록을 재생하거나 벤치마크와 배포 구성도를 열 수 있습니다. **둘러보기 재생**을 누르면 같은 화면을 자막과 함께 볼 수 있습니다.
+
+![채점 재생과 벤치마크 버튼, B1 구성도가 보이는 영상 표지, 실행 결과 요약](../images/demo/demo-overview-ko.png)
+
 | 절 | 보여 주는 것 | 데이터 |
 |---|---|---|
-| 맨 위 | 핵심 수치와 둘러보기 영상(한국어 2분 40초, 무음) | `recording.json`, `extras.json`, `media/tour-ko.mp4`와 `tour-en.mp4` |
+| 맨 위 | 핵심 수치와 둘러보기 영상(무음, 한국어 자막) | `recording.json`, `extras.json`, `media/tour-ko.mp4`와 `tour-en.mp4` |
 | 1. 아키텍처 | 구성 요소를 누르면 설명과 측정값이 열리는 구성도와 재생 버튼 | 페이지의 설명과 `extras.json`의 측정값 |
 | 2. 채점 체험 | golden 제출물을 골라 재생하면 진행 막대가 차고 verdict, reward 구성 요소, 판정 이유가 나옵니다 | `recording.json`의 golden 평가 결과와, trainer와 같은 `score_verdict`로 계산한 reward |
 | 3. 공격 차단 | 풀마다 샌드박스 안 커널과 노드 커널, GPU, egress 차단 여부. 격리와 채점 검증 결과 카드 8개와 터미널 출력 재생 | `recording.json`의 `/info`, `extras.json`의 터미널 기록(verify.sh, gVisor 스모크 테스트, rollout.sh) |
 | 4. 학습 | EC2와 HyperPod B1의 GRPO 실행을 고르면 배치별 판정과 점수를 볼 수 있습니다. 아래 차트는 CPU 모의 실행에서의 버전 전환입니다. | `extras.json`의 `training`, `b1.training`, `simulation` |
-| 5. 벤치마크 | B1에서 요청을 보낸 두 노드의 채점 지연과 풀 전체 처리량을 보여 줍니다. 이어지는 런타임별 차트에서는 pod당 처리량과 시작 시간도 볼 수 있습니다. | `extras.json`의 `b1.bench`, `bench` |
+| 5. 벤치마크 | 11월 22일 EKS 다섯 풀의 결과와 B1 클라이언트 비교, 11월 18일 배포 직후와 이미지 캐시 후 비교 | `extras.json`의 `runtime_run`, `b1.bench`, `bench` |
 | 패턴별 아키텍처 (`architecture.html`) | 시나리오 A, B1, B2, C를 AWS 아이콘으로 그린 구성도 | 페이지에 들어 있는 정적 데이터(`arch.js`). 데이터 파일을 읽지 않습니다 |
 
 - **맨 위의 핵심 수치**: GPU 런타임 수, 기대 판정과 일치한 golden 수, 두 풀의 `verify.sh` 기록에서 막힌 연결 수, 벤치마크 정상 응답 수입니다.
@@ -50,12 +54,16 @@
 
 - **공개되는 파일**: HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다.
 - **저장소의 `recording.json` 샘플**: 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요.
-- 공개 데모는 `demo/recordings/2026-11-18-eks-gpu.json`으로 GPU 채점을 재생합니다. EC2 5스텝 학습과 런타임별 비교는 11월 18일, CPU 버전 전환은 11월 17일 기록입니다. 11월 22일에는 B1에서 GRPO 한 스텝과 고정 커널 벤치마크 두 번을 실행했습니다. [B1 측정 결과](08_benchmark.md#hyperpod-b1)
+- 공개 데모는 `demo/recordings/2026-11-18-eks-gpu.json`으로 GPU 채점을 재생합니다. EC2 5스텝 학습과 이미지 캐시 전후 비교는 11월 18일, CPU 버전 전환은 11월 17일 기록입니다. 11월 22일에는 B1에서 GRPO 한 스텝과 고정 커널 벤치마크 두 번을 실행했습니다. [B1 측정 결과](08_benchmark.md#hyperpod-b1)
 - **2절의 진행 막대**: 기록된 전체 평가 시간입니다. 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.
+
+[데모에서 EKS 벤치마크 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results)
+
+![다섯 EKS 풀의 노드 구성, 성공 건수, 채점 p50·p95와 처리량을 보여 주는 데모 화면](../images/demo/runtime-results-ko.png)
 
 [공개 데모에서 B1 벤치마크 열기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1)
 
-![같은 커널을 채점한 EKS와 HyperPod 클라이언트의 실측값을 표시한 CloudFront 데모](../images/demo/hyperpod-b1-benchmark-ko.png)
+![EKS와 HyperPod에서 같은 커널의 채점을 요청했을 때 걸린 시간과 풀 처리량을 보여 주는 데모 화면](../images/demo/hyperpod-b1-benchmark-ko.png)
 
 ```mermaid
 flowchart LR
@@ -93,15 +101,15 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 
 **확인할 것:**
 
-- 맨 위 "기록 출처:" 줄에 `Local CPU smoke run on a laptop (127.0.0.1, no gVisor or Kata, no GPU).`로 시작하는 문구와 기록 시각이 보입니다.
-- 핵심 수치 타일은 세 개입니다. 샘플 기록에는 GPU 풀이 없어서 GPU 격리 방식 타일은 나오지 않습니다.
+- **채점 재생에 사용한 기록**을 펼치면 `Local CPU smoke run on a laptop`으로 시작하는 설명과 기록 시각이 나옵니다.
+- 핵심 수치 타일은 세 개입니다. 샘플 기록에는 GPU 풀이 없어서 GPU 샌드박스 풀 타일은 나오지 않습니다.
     - `8/8`: 예상대로 나온 채점 결과
-    - `10/10`: 타일 이름은 "샌드박스 안에서 막힌 접근 시도"이지만 바깥에서 들어오는 연결 검사도 포함합니다. 두 풀의 `verify.sh` 기록에서 `blocked`가 들어간 줄을 센 값으로, 송신 검사 8줄과 `default` namespace에서 들어오는 연결 검사 2줄입니다. 분모에도 같은 줄 수를 표시합니다.
-    - `160/160`: 성능 측정 요청 중 성공
+    - `10`은 두 풀의 `verify.sh` 로그에 남은 차단 건수입니다. 샌드박스에서 외부로 시도한 연결 8건과 `default` 네임스페이스에서 들어온 연결 2건입니다.
+    - `160/160`은 11월 22일 다섯 EKS 풀이 처리한 벤치마크 요청의 성공 건수입니다. 숫자를 누르면 결과표로 이동합니다.
 - 2절에 제출 코드 카드 네 개(PyTorch만 사용, ReLU 빠뜨린 오답, 속도 측정 속이기, 서버 파일 읽기)가 있고, 재생하면 `local-cpu v1`, `local-cpu v2` 두 줄이 채워집니다. 코드는 문법 색상과 줄 번호로 표시됩니다.
 - 3절에 공격 카드 여덟 개와 터미널 탭 네 개(verify.sh gvisor, verify.sh kata-qemu, gVisor GPU 동작 확인, rollout.sh v1 → v2)가 있습니다.
 - 4절 아래 차트의 요약이 "배치 30개가 하나도 빠지지 않고 채점됐습니다. step 8에서 kata-clh-cpu/v1에서 kata-clh-cpu/v2로 바뀌었고"로 시작합니다.
-- 5절 막대 여섯 개 중 `kata-clh`는 "측정 못 함: VM이 시작되지 않음"으로 나옵니다.
+- 5절 표에서 다섯 EKS 풀의 성공 건수가 각각 32/32인지 확인하세요. 표 아래 링크로 실행 조건과 원본 JSONL을 볼 수 있습니다.
 - 기본 언어는 한국어입니다. 주소에 `?lang=en`을 붙이거나 오른쪽 위 `EN` 버튼을 누르면 영어로 바뀌고, 고른 언어는 주소에 남아 새로고침해도 유지됩니다.
 - 터미널에는 파일마다 200 응답 로그가 출력됩니다.
 
@@ -305,9 +313,10 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 
 | 데이터 | 만드는 방법 | 옵션 |
 |---|---|---|
-| 벤치마크 | `scripts/ops/bench.sh 32`의 출력을 `tee`로 `bench.log`에 저장 | `--bench-log pass1=bench.log --bench-pass pass2`, 노드 정보는 `--node` (아래 예시) |
+| EKS 결과표 | `bench.sh`의 JSONL과 실행 당시 풀별 노드 유형, Ready pod 수 | `--runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json` |
+| 이미지 캐시 전후 비교 | `scripts/ops/bench.sh 32`의 출력을 `tee`로 `bench.log`에 저장 | `--bench-log pass1=bench.log --bench-pass pass2`, 노드 정보는 `--node` (아래 예시) |
 | GRPO 학습 | `kubectl -n rl-trainer logs job/<job> > grpo.log`. reward 함수의 `reward_batch` JSON 줄과 trainer의 metric 줄(`{'loss': ...}`)을 읽습니다 | `--training-log grpo.log --model <model-id>` |
-| HyperPod B1 | 공개용 B1 학습 로그 요약과 고정 커널 벤치마크 실측값 | `--b1-record docs/handson/data/hyperpod-b1.json` |
+| HyperPod B1 | 공개용 B1 학습 로그 요약과 고정 커널 벤치마크 결과 | `--b1-record docs/handson/data/hyperpod-b1.json` |
 | 버전 전환 | `scripts/ops/simulate.sh 30 20`의 출력을 `simulate.log`에 저장하고, 그동안 [06](06_sandbox_update.md)의 `rollout.sh`로 버전을 바꿉니다 | `--simulation-log simulate.log` |
 | 터미널 출력 | `scripts/ops/verify.sh gvisor v1` 같은 명령의 출력을 파일로 저장 | `--transcript verify-gvisor=verify-gvisor.txt` (반복 가능) |
 
@@ -320,9 +329,9 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 python3 demo/build_extras.py --out demo/site/data/extras.json \
   --source "Amazon EKS 1.36, us-west-2, 2026-11-18" \
   --b1-record docs/handson/data/hyperpod-b1.json \
+  --runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json \
   --bench-log pass1=bench.log --bench-pass pass2 \
   --node 'gvisor=g5.2xlarge|NVIDIA A10G' --node 'kata-qemu=g4dn.metal|Tesla T4' \
-  --unmeasured 'kata-clh=g4dn.metal|Tesla T4' \
   --training-log grpo.log --model Qwen/Qwen2.5-Coder-1.5B-Instruct --training-source "..." \
   --simulation-log simulate.log --simulation-source "..." \
   --transcript verify-gvisor=verify-gvisor.txt --transcript verify-kata-qemu=verify-kata-qemu.txt
@@ -346,7 +355,7 @@ python3 demo/build_extras.py --out demo/site/data/extras.json \
 
 ### 2.7 둘러보기 영상 다시 만들기 (선택)
 
-`demo/record_tour.py`는 Chromium으로 페이지를 열어 기능을 차례로 재생하고, 화면을 녹화해 `media/tour-ko.mp4`, `tour-en.mp4`와 썸네일을 만듭니다. 자막과 클릭 위치 표시는 녹화할 때만 겹쳐 그리며, 사이트 파일은 바뀌지 않습니다.
+`demo/record_tour.py`는 Chromium에서 채점 재생, GRPO 학습, EKS 결과표, B1 클라이언트 비교, 배포 구성도를 차례로 녹화합니다. 언어별 MP4 영상에는 자막을 넣고, 표지로는 같은 언어의 B1 구성도를 캡처합니다.
 
 - **페이지 제공**: 페이지는 녹화하는 동안만 `127.0.0.1`에서 제공됩니다.
 - **녹화 전 검사**: `--site`의 데이터 파일에 2.6과 같은 검사를 하고, 문제가 있으면 녹화하지 않습니다.
@@ -401,7 +410,7 @@ python demo/record_local.py
 - `127.0.0.1`에 CPU 샌드박스 서버 두 개(v1, v2)를 띄웁니다. v2 harness는 seed 5개와 speedup 상한 10배를 쓰고, 인증에는 loopback 전용 test bypass를 씁니다.
 - 클러스터와 같은 코드 경로로 golden set(CPU에서는 4개)을 두 서버에 보냅니다.
 - 모델 completion 대신 golden 제출물을 써서 reward 배치 6개를 `KernelRewards`로 계산하고, 3번째 배치 뒤에 routing을 v1에서 v2로 바꿉니다.
-- 결과를 `demo/site/data/recording.json`(기본 `--out`)에 저장합니다. 출처 문구 "Local CPU smoke run on a laptop"으로 노트북에서 만든 기록임을 표시합니다.
+- **채점 재생에 사용한 기록**을 펼치면 `Local CPU smoke run on a laptop`으로 시작하는 설명과 기록 시각이 나옵니다.
 
 **확인할 것:** 배치마다 `{"event": "reward_batch", ...}` 줄이 나오고, 마지막 줄은 다음과 같습니다(로컬 macOS에서 확인).
 

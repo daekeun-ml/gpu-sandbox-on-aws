@@ -1,6 +1,6 @@
 {
  "schema": "extras-1",
- "built_at": "2026-11-22T14:17:31Z",
+ "built_at": "2026-11-22T22:23:52Z",
  "source": "Amazon EKS 1.36, us-west-2, 2026-11-18",
  "bench": {
   "requests": 32,
@@ -180,13 +180,6 @@
       "gpu": null
      }
     ]
-   }
-  ],
-  "unmeasured": [
-   {
-    "runtime": "kata-clh",
-    "instance": "g4dn.metal",
-    "gpu": "Tesla T4"
    }
   ]
  },
@@ -1570,5 +1563,81 @@
     }
    ]
   }
+ },
+ "runtime_run": {
+  "date": "2026-11-22",
+  "region": "us-west-2",
+  "eks": "1.36",
+  "image": "a20261120b",
+  "jsonl": "runtime-benchmark-2026-11-22.jsonl",
+  "rows": [
+   {
+    "golden": "relu_bias_triton",
+    "runtime": "gvisor",
+    "requests": 32,
+    "ok": 32,
+    "throughput_eval_per_s": 0.198,
+    "eval_p50_s": 9.984,
+    "eval_p95_s": 10.151,
+    "speedup_median": 1.743,
+    "ref_ms_median": 0.5833,
+    "instance": "g5.xlarge",
+    "gpu": "A10G",
+    "ready": 2
+   },
+   {
+    "golden": "relu_bias_triton",
+    "runtime": "kata-qemu",
+    "requests": 32,
+    "ok": 32,
+    "throughput_eval_per_s": 0.349,
+    "eval_p50_s": 10.789,
+    "eval_p95_s": 11.863,
+    "speedup_median": 1.793,
+    "ref_ms_median": 1.1518,
+    "instance": "g4dn.metal",
+    "gpu": "T4",
+    "ready": 4
+   },
+   {
+    "golden": "relu_bias_torch_only",
+    "runtime": "gvisor-cpu",
+    "requests": 32,
+    "ok": 32,
+    "throughput_eval_per_s": 0.277,
+    "eval_p50_s": 3.576,
+    "eval_p95_s": 3.618,
+    "speedup_median": 0.872,
+    "ref_ms_median": 0.0061,
+    "instance": "c8i.2xlarge",
+    "ready": 1
+   },
+   {
+    "golden": "relu_bias_torch_only",
+    "runtime": "kata-clh-cpu",
+    "requests": 32,
+    "ok": 32,
+    "throughput_eval_per_s": 0.244,
+    "eval_p50_s": 4.043,
+    "eval_p95_s": 4.12,
+    "speedup_median": 0.907,
+    "ref_ms_median": 0.006,
+    "instance": "c8i.2xlarge",
+    "ready": 1
+   },
+   {
+    "golden": "relu_bias_torch_only",
+    "runtime": "kata-qemu-cpu",
+    "requests": 32,
+    "ok": 32,
+    "throughput_eval_per_s": 0.258,
+    "eval_p50_s": 3.819,
+    "eval_p95_s": 3.958,
+    "speedup_median": 0.916,
+    "ref_ms_median": 0.006,
+    "instance": "c8i.2xlarge",
+    "ready": 1
+   }
+  ]
  }
 }

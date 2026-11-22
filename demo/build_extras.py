@@ -254,6 +254,17 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     }
     if args.b1_record:
         document["b1"] = json.loads(Path(args.b1_record).read_text())
+    if args.runtime_record:
+        metadata = Path(args.runtime_record)
+        run = json.loads(metadata.read_text())
+        pools = run.pop("pools")
+        rows = []
+        for line in (metadata.parent / run["jsonl"]).read_text().splitlines():
+            if line.strip():
+                row = json.loads(line)
+                row.pop("address", None)
+                rows.append({**row, **pools[row["runtime"]]})
+        document["runtime_run"] = {**run, "rows": rows}
     nodes = {}
     for runtime, value in _pairs(args.node, "--node").items():
         instance, _, gpu = value.partition("|")
@@ -294,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out")
     p.add_argument("--source", default="cluster run")
     p.add_argument("--b1-record", help="B1 training and benchmark record, e.g. docs/handson/data/hyperpod-b1.json")
+    p.add_argument("--runtime-record", help="runtime benchmark metadata with the JSONL filename and pool configuration")
     p.add_argument("--bench-log", help="LABEL=path to the stdout of scripts/ops/bench.sh")
     p.add_argument("--bench-pass", action="append", default=[], help="label of a later pass in the same log")
     p.add_argument("--bench-requests", type=int, default=32)
@@ -329,7 +341,7 @@ def main(argv: list[str] | None = None) -> int:
     Path(args.out).write_text(json.dumps(document, indent=1, ensure_ascii=False) + "\n")
     counts = {k: len(v) if isinstance(v, list) else 1 for k, v in document.items() if k in ("transcripts",)}
     print(json.dumps({"event": "extras", "out": args.out, **counts,
-                      "bench": "bench" in document, "training": "training" in document,
+                      "bench": "bench" in document, "runtime_run": "runtime_run" in document, "training": "training" in document,
                       "simulation": "simulation" in document, "b1": "b1" in document}))
     return 0
 

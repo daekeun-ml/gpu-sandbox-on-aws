@@ -33,7 +33,7 @@
 
 Connect to the cluster, verify the pool, then start training or simulation. Node `Ready` confirms capacity is available. `verified` confirms the pool returned the expected verdicts.
 
-Expected durations are the scripts' guidance or timeouts; only values marked "measured" were timed in the practice account (2026-11-14; `07_run_grpo.sh` on 2026-11-18). The numbered scripts (01 to 08) are the main path, run in order in scenario A. Optional and operational scripts live in folders by purpose (`scripts/kata/`, `scripts/ops/`, `scripts/extensions/`, `scripts/hyperpod/`). The usage, behavior on a second run and success signal of each script are in the [Script reference](../reference/scripts.md).
+The runs in the practice account include cluster creation and Kata CPU setup on November 14, five GRPO steps on November 18, and 60 GRPO steps and the agent episodes on November 20, 2026. Other entries give script estimates or timeouts. The numbered scripts (01 to 08) are the main path, run in order in scenario A. Optional and operational scripts live in folders by purpose (`scripts/kata/`, `scripts/ops/`, `scripts/extensions/`, `scripts/hyperpod/`). The usage, behavior on a second run and success signal of each script are in the [Script reference](../reference/scripts.md).
 
 ### Main path
 

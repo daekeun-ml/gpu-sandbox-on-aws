@@ -194,6 +194,8 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Success signal**: One `bench  <runtime>  ok <n>/<requests>  p50 ...` line per pool, and `results: <file>` at the end.
 - **If it fails**: [Troubleshooting: Sandbox pools and readiness](troubleshooting.md#sandbox-pools-and-readiness), [08 Runtime benchmark](../handson/08_benchmark.md)
 
+On November 22, 2026, all five EKS pools completed 32 requests each (160/160). [Results and run conditions](../handson/08_benchmark.md#runtime-results)
+
 ### `scripts/ops/sync_jwks.sh`
 
 - **What it does**: Copies the cluster's ServiceAccount issuer public keys (JWKS) and the issuer into the ConfigMap `sandbox-auth-jwks` in the `sandbox` namespace. These are not secrets.
@@ -254,10 +256,12 @@ The argument is the number of optimizer steps. It defaults to 60. The default mo
 | `routing` | The trainer read the pool route. The template expects this event within 20 minutes. |
 | `reward_batch` and advancing steps | Check the sample verdicts and training progress. Investigate repeated `sandbox_error`. |
 
-The script prints the log command and exits. If previous runs exist, select the pod for this Job before following logs.
+On November 22, 2026, the B1 trainer completed one GRPO step and two EC2 gVisor sandboxes scored 12 submissions. [Job status and logs](../handson/07_hyperpod.md#how-to-verify)
+
+The script prints the Job name. Use it as the `HPJob` label value to find this run’s pod.
 
 ```bash
-kubectl -n rl-trainer get pods -l app=grpo-trainer -o wide
+kubectl -n rl-trainer get pods -l 'HPJob=grpo-<RUN_ID>' -o wide
 kubectl -n rl-trainer logs -f <trainer-pod> -c pytorch
 ```
 

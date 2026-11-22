@@ -21,7 +21,7 @@ The p50 and p95 measure server time per successful evaluation. Throughput includ
 
 ![Success counts, latency, throughput and kernel timings from the benchmark JSONL](../images/terminal/bench-results-replay.png)
 
-[Download the raw benchmark JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [November 18 results](#results-20261118) · [HyperPod B1 results](#hyperpod-b1)
+[View the results in the demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results) · [Download the raw benchmark JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [November 18 results](#results-20261118) · [HyperPod B1 results](#hyperpod-b1)
 
 **Before you start:**
 
@@ -208,7 +208,6 @@ This was the second pass on v1 pools restarted with images cached on the nodes. 
 |---|---|---|---|---|---|---|---|---|---|
 | `gvisor` | `g5.2xlarge` (A10G) | 1 | 16 | 9.416 | 9.546 | 0.106 | 0.106 | 1.752 | 0.5797 |
 | `kata-qemu` | `g4dn.metal` (T4) | 4 | 30.5 (30, 30, 31, 36) | 12.17 | 13.412 | 0.317 | 0.079 | 1.788 | 1.1533 |
-| `kata-clh` (experimental) | `g4dn.metal` (T4) | 0 | not measured: the VM never started (`create container timeout`) | | | | | | |
 | `gvisor-cpu` | `c8i.2xlarge` (CPU, systrap) | 1 | 11 | 3.76 | 3.851 | 0.263 | 0.263 | n/a | 0.0062 |
 | `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.225 | 4.317 | 0.234 | 0.234 | n/a | 0.0062 |
 | `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.058 | 4.139 | 0.244 | 0.244 | n/a | 0.0061 |
@@ -218,7 +217,7 @@ This was the second pass on v1 pools restarted with images cached on the nodes. 
     - **The gVisor row ran on `g5.2xlarge`.** The default `g5.xlarge` had no On-Demand capacity at the time, so `g5.2xlarge` was used: the same A10G with more vCPU and memory.
     - **Throughput per pod** is the throughput divided by the number of Ready pods (`kata-qemu`: 0.317 / 4 = 0.079).
     - **The CPU pools' speedup** has measured values in the JSONL (0.86 to 0.92), and the table reserves this column for GPU kernel comparisons.
-    - In both passes, each of the five measured pools returned `ok` for 32 of 32 requests. `kata-clh` was left out of both passes.
+    - In both passes, each of the five measured pools returned `ok` for 32 of 32 requests.
 
     Measurement conditions (record the same items when you measure):
 

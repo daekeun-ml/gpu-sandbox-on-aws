@@ -18,8 +18,8 @@
 If the symptom is unclear, start with the events from `kubectl describe pod`.
 
 ??? note "Basis of this page"
-    - **Ran in a practice account**: scenario C, scenario A (`g5`), Kata GPU (`g4dn.metal`), the runtime benchmark and the demo site.
-    - **Scenario A cluster**: created without GPU node groups, which were added with updates (see "When there is no GPU capacity" below).
+    - **Ran in a practice account**: scenario C, scenario A (`g5`), Kata GPU (`g4dn.metal`), HyperPod B1 training and scoring, the runtime benchmark and the demo site.
+    - **November 18 scenario A cluster**: created without GPU node groups, which were added with updates (see "When there is no GPU capacity" below).
     - **Rows from the Kata GPU run**: the Kata GPU `vfio_iommu_type1` row and the AMI builder row below.
     - **Not run**. HyperPod B2.
     - **Experimental CLH GPU**: the pool was deployed, but the VM did not start.
@@ -615,6 +615,7 @@ Before it submits the Job, the multi-turn episode run (`scripts/extensions/agent
 | B2 `create-cluster` goes to `Failed`, and the lifecycle log shows `runsc missing` or `NVIDIA driver ... is not supported` | The sandbox group did not boot from the custom AMI, or the AMI was baked with another `B2_NVIDIA_DRIVER_VERSION` or `GVISOR_RELEASE` | Run `scripts/hyperpod/build_b2_ami.sh` again and create the cluster with the new `HYPERPOD_B2_AMI_ID` |
 | The B2 lifecycle log shows `unsupported or missing config version` or `containerd rejected the edited` | containerd's config file location or schema is not what the script expects | On the node, find the `--config` path with `ps -o args= -C containerd`, set `HYPERPOD_CONTAINERD_CONFIG` in `on_create_sandbox.sh` to it, and upload the lifecycle scripts again |
 | `scripts/hyperpod/build_b2_ami.sh` reports `customization failed` | The driver swap or the gVisor check failed on the builder | Read the `GPUSANDBOX-B2-BUILD: FAILED ...` line and the log before it with the printed `get-console-output` command, then delete the stopped builder with `terminate-instances` |
+| Cluster `InService`, trainer instance `Pending` | In the B1 run the cluster became ready before the trainer joined EKS | Check `list-cluster-nodes`, then verify that the Kubernetes node is `Ready` and `Schedulable`. [Commands and screenshots](../handson/07_hyperpod.md#how-to-verify) |
 | The status is `Failed` after CreateCluster | See the `FailureMessage` the script prints. Prerequisites (EKS authentication mode API or API_AND_CONFIG_MAP, VPC CNI 1.18.3 or later, private subnets, a supported Kubernetes version), S3 read permission for the lifecycle scripts | Compare with the [HyperPod EKS prerequisites](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html). Keep the `sagemaker-` prefix in the bucket name |
 | Worker stays `Pending` with `Insufficient cpu` or `Insufficient memory` | On a single `ml.g5.2xlarge`, the controller, per-job pod manager and system pods requested 2.75 vCPUs and 3,272 MiB | Use the B1 worker requests of 5 vCPUs and 24 GiB. Compare requests in `kubectl describe node` with the scheduler event |
 | HyperPodPyTorchJob pods are Pending | The node label `sagemaker.amazonaws.com/node-health-status` is not `Schedulable` (for example during deep health checks), or the instance type does not match | `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status,node.kubernetes.io/instance-type` |

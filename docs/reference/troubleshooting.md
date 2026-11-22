@@ -18,8 +18,8 @@
 증상이 불분명하면 `kubectl describe pod`의 이벤트부터 보세요. 노드에서 확인할 항목과 pod에서 확인할 항목은 [진단 도구](#진단-도구)에 있습니다.
 
 ??? note "이 페이지의 근거"
-    - **실습 계정에서 실행한 것**: 시나리오 C, 시나리오 A(`g5`), Kata GPU(`g4dn.metal`), 런타임 벤치마크, 데모 사이트.
-    - **시나리오 A 클러스터**: GPU 노드 그룹 없이 만든 뒤 update로 추가했습니다(아래 "GPU 용량이 없을 때").
+    - **실습 계정에서 실행한 것**: 시나리오 C, 시나리오 A(`g5`), Kata GPU(`g4dn.metal`), HyperPod B1 학습과 채점, 런타임 벤치마크, 데모 사이트.
+    - **2026-11-18 시나리오 A 클러스터**: GPU 노드 그룹 없이 만든 뒤 update로 추가했습니다(아래 "GPU 용량이 없을 때").
     - **Kata GPU 실행에서 나온 행**: 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행.
     - **실행하지 않은 것**. HyperPod B2.
     - **실험용 CLH GPU**: 풀을 배포했지만 VM이 시작되지 않았습니다.
@@ -168,7 +168,7 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 | `render: <template>: missing variable 'X'` | 템플릿의 `${X}`에 값이 없음. `render.py`는 빈 값으로 대체하지 않음 | config.env나 셸에서 `export X=...` |
 | Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)가 `no sandbox-kata-cpu node group: set WITH_KATA_CPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`로 멈춤 | 노드 그룹 조회가 실패하면 원인과 관계없이 나옴(가능한 원인은 표 아래) | `aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-cpu`를 직접 실행해 오류를 확인(오류별 조치는 표 아래) |
 | Kata GPU 노드 추가(`scripts/kata/gpu_nodes.sh`)가 `add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`로 끝남 | 정상 동작: 첫 실행은 AMI만 빌드(스크립트 안내 기준 약 10분) | 출력된 AMI ID와 `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh` 재실행(`metal` 입력), 그다음 `kata/gpu_nodes.sh` 재실행 |
-| Kata GPU 노드 추가의 첫 실행(`infra/kata/build-iommu-ami.sh`)이 `Waiter InstanceStopped failed ... "pending"`으로 바로 실패 | 이전 스크립트의 `aws ec2 wait instance-stopped`는 `pending` 상태를 terminal failure로 처리함(2026-11-18 실측) | 스크립트에서 고쳤습니다. 이전 버전으로 실패했다면 `<CLUSTER_NAME>-iommu-ami-builder` 인스턴스를 terminate한 뒤 최신 스크립트로 다시 실행 |
+| Kata GPU 노드 추가의 첫 실행(`infra/kata/build-iommu-ami.sh`)이 `Waiter InstanceStopped failed ... "pending"`으로 바로 실패 | 이전 스크립트의 `aws ec2 wait instance-stopped`는 `pending` 상태를 terminal failure로 처리함(2026-11-18 실행에서 확인) | 스크립트에서 고쳤습니다. 이전 버전으로 실패했다면 `<CLUSTER_NAME>-iommu-ami-builder` 인스턴스를 terminate한 뒤 최신 스크립트로 다시 실행 |
 | `scripts/kata/gpu_nodes.sh`가 `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`로 멈춤 | AMI는 있지만 `WITH_KATA_GPU=1`로 `02_create_cluster.sh`를 다시 실행하지 않음 | `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh` 재실행, 그다음 `kata/gpu_nodes.sh` 재실행 |
 | `03_build_push_images.sh`를 다시 실행하자 push가 태그 중복으로 실패 | ECR 저장소를 IMMUTABLE 태그로 만듦 | `IMAGE_TAG`를 새 값(예: `v1-hp`)으로 바꾸고 재실행, 출력된 URI로 config.env 갱신 |
 | `03_build_push_images.sh`의 빌드가 매우 느리거나 디스크가 부족함 | arm64 PC에서 linux/amd64를 에뮬레이션, 큰 베이스 이미지(PyTorch, vLLM) | x86_64 호스트에서 디스크 100 GB 이상으로 빌드(스크립트 주석 기준) |
@@ -336,7 +336,7 @@ kubectl delete -n default pod/<name>
 | Kata GPU pod가 Pending, 이벤트에 node affinity나 selector 불일치 | RuntimeClass `kata-qemu-nvidia-gpu`의 `scheduling.nodeSelector`(`nvidia.com/cc.ready.state=false`)가 pod에 합쳐짐. 노드에 이 라벨이 없음(cc-manager가 설정하지 않았거나 `ccManager.defaultMode`가 `on`) | 노드 라벨 확인. GPU Operator 값 `ccManager.defaultMode: "off"` 확인 후 `kata/gpu_nodes.sh` 재실행 |
 | Kata GPU pod가 Pending, `Insufficient memory` 또는 `Insufficient nvidia.com/pgpu` | RuntimeClass overhead(10240Mi, CPU 1)가 pod 요청에 추가됨: pod당 16Gi + 10Gi | `scripts/06_deploy_sandboxes.sh kata-qemu v1 2`처럼 replica를 줄이거나 `kubectl describe node <node>`의 Allocated resources 확인. 실험용 kata-clh 풀과 같은 노드를 함께 쓴다는 점도 계산에 포함하기 |
 | `kata-clh` 풀의 pod가 만들어지지 않고 ReplicaSet 이벤트에 RuntimeClass `kata-clh-nvidia-gpu`가 없다는 오류 | 실험용 RuntimeClass는 `ENABLE_EXPERIMENTAL_CLH_GPU=1`로 `kata/gpu_nodes.sh`를 실행해야 생김 | `kubectl -n sandbox describe rs -l gpusandbox/runtime=kata-clh`로 확인. 쓰려면 `ENABLE_EXPERIMENTAL_CLH_GPU=1 scripts/kata/gpu_nodes.sh`(이어지는 단계는 표 아래) |
-| Kata GPU pod가 `ContainerCreating`에 머물고 이벤트에 `failed to create shim task: create container timeout`. 노드 로그에 QEMU 오류 `vfio 0000:e7:00.0: failed to setup container for group 87: No available IOMMU models`(PCI 주소와 group 번호는 노드마다 다름) | AL2023 커널은 VFIO type1 IOMMU backend를 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하고, 아무것도 이 모듈을 로드하지 않음(2026-11-18 실측) | AMI를 다시 빌드하거나, 이전 AMI의 노드에서 모듈을 바로 로드(표 아래) |
+| Kata GPU pod가 `ContainerCreating`에 머물고 이벤트에 `failed to create shim task: create container timeout`. 노드 로그에 QEMU 오류 `vfio 0000:e7:00.0: failed to setup container for group 87: No available IOMMU models`(PCI 주소와 group 번호는 노드마다 다름) | AL2023 커널은 VFIO type1 IOMMU backend를 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하고, 아무것도 이 모듈을 로드하지 않음(2026-11-18 실행에서 확인) | AMI를 다시 빌드하거나, 이전 AMI의 노드에서 모듈을 바로 로드(표 아래) |
 | Kata GPU pod 생성이 시간 초과로 실패하고, 노드 로그에 위 `No available IOMMU models`가 없음(추정) | VFIO가 VM을 시작하기 전에 게스트 메모리 전체를 고정하느라 시간이 걸림 | kubelet `runtimeRequestTimeout: 20m`(`infra/eks/userdata.py`의 Kata GPU NodeConfig에 포함) 유지, 메모리 limits를 필요 이상으로 키우지 않기 |
 | `g4dn.metal` 노드가 재부팅 뒤 다시 시작되지 않음(제3자 보고) | metal 인스턴스 warm reboot 문제 보고가 있음 | user data에서 재부팅하지 않도록 커널 인자를 AMI에 포함(`build-iommu-ami.sh`). 다시 시작되지 않으면 인스턴스 교체 |
 
@@ -615,6 +615,7 @@ multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <ru
 | B2 `create-cluster`가 `Failed`, lifecycle 로그에 `runsc missing` 또는 `NVIDIA driver ... is not supported` | sandbox 그룹이 custom AMI로 시작되지 않았거나, AMI를 다른 `B2_NVIDIA_DRIVER_VERSION`이나 `GVISOR_RELEASE`로 빌드함 | `scripts/hyperpod/build_b2_ami.sh`를 다시 실행해 새 `HYPERPOD_B2_AMI_ID`로 클러스터를 만듦 |
 | B2 lifecycle 로그에 `unsupported or missing config version` 또는 `containerd rejected the edited` | containerd 설정 파일 위치나 schema가 예상과 다름 | 노드에서 `ps -o args= -C containerd`로 `--config` 경로를 확인하고, `on_create_sandbox.sh`의 `HYPERPOD_CONTAINERD_CONFIG`를 그 값으로 고친 뒤 lifecycle 스크립트를 다시 업로드 |
 | `scripts/hyperpod/build_b2_ami.sh`가 `customization failed` | 드라이버 교체나 gVisor 확인이 builder에서 실패 | 출력된 `get-console-output` 명령으로 `GPUSANDBOX-B2-BUILD: FAILED ...` 줄과 그 앞 로그를 보고, 정지된 builder를 `terminate-instances`로 종료 |
+| 클러스터는 `InService`인데 trainer 인스턴스는 `Pending` | B1 실습에서는 trainer가 EKS에 합류하기 전에 클러스터가 먼저 준비됨 | `list-cluster-nodes`로 인스턴스 상태를 본 뒤 Kubernetes 노드가 `Ready`이고 `Schedulable`인지 확인. [명령과 실행 화면](../handson/07_hyperpod.md#확인-방법) |
 | CreateCluster 뒤 상태가 `Failed` | 스크립트가 출력하는 `FailureMessage` 참고. 사전 요구사항(EKS 인증 모드 API 또는 API_AND_CONFIG_MAP, VPC CNI 1.18.3 이상, private subnet, 지원 Kubernetes 버전), lifecycle 스크립트 S3 읽기 권한 | [HyperPod EKS 사전 요구사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html)과 비교. 버킷 이름의 `sagemaker-` 접두사 유지 |
 | Worker가 `Pending`이며 `Insufficient cpu` 또는 `Insufficient memory` 이벤트가 나타남 | `ml.g5.2xlarge` 한 대에서 controller, job별 pod manager, 시스템 pod가 CPU 2.75개와 메모리 3,272 MiB를 요청함 | B1 템플릿의 CPU 5개, 24 GiB를 사용하고 `kubectl describe node`의 할당량과 스케줄러 이벤트를 비교 |
 | HyperPodPyTorchJob pod가 Pending | 노드 라벨 `sagemaker.amazonaws.com/node-health-status`가 `Schedulable`이 아님(deep health check 중 등), instance type 불일치 | `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status,node.kubernetes.io/instance-type` |

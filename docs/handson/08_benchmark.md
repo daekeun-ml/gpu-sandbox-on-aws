@@ -5,7 +5,7 @@
 
     **완료 기준** pod가 Ready가 되기까지 걸린 시간과 준비된 pod가 채점에 쓴 시간을 구분하세요. 채점 시간의 p50은 일반적인 요청을, p95는 느린 요청을 보여 줍니다.
 
-## 2026-11-22 런타임 벤치마크 실측 { #runtime-results }
+## 2026-11-22 런타임 벤치마크 결과 { #runtime-results }
 
 `us-west-2`, EKS 1.36, 이미지 `a20261120b`. 시나리오 A의 학습과 롤백이 끝난 뒤 `scripts/ops/bench.sh 32`를 실행했습니다. 다섯 풀에 32건씩 보낸 **160건 모두 성공**했습니다. GPU 풀은 `relu_bias_triton`, CPU 풀은 `relu_bias_torch_only`를 사용했습니다.
 
@@ -21,7 +21,7 @@ p50과 p95는 서버가 성공한 요청 한 건을 채점하는 데 걸린 시�
 
 ![실행 JSONL에서 읽은 다섯 풀의 성공 수, 지연, 처리량과 커널 측정값](../images/terminal/bench-results-replay.png)
 
-[이번 벤치마크 원본 JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [11월 18일 측정 결과](#results-20261118) · [HyperPod B1 측정 결과](#hyperpod-b1)
+[데모에서 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results) · [이번 벤치마크 원본 JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [11월 18일 측정 결과](#results-20261118) · [HyperPod B1 측정 결과](#hyperpod-b1)
 
 **시작 전에**
 
@@ -208,7 +208,6 @@ scripts/ops/bench.sh
 |---|---|---|---|---|---|---|---|---|---|
 | `gvisor` | `g5.2xlarge` (A10G) | 1 | 16 | 9.416 | 9.546 | 0.106 | 0.106 | 1.752 | 0.5797 |
 | `kata-qemu` | `g4dn.metal` (T4) | 4 | 30.5 (30, 30, 31, 36) | 12.17 | 13.412 | 0.317 | 0.079 | 1.788 | 1.1533 |
-| `kata-clh` (실험) | `g4dn.metal` (T4) | 0 | 측정 안 됨: VM이 시작되지 않음(`create container timeout`) | | | | | | |
 | `gvisor-cpu` | `c8i.2xlarge` (CPU, systrap) | 1 | 11 | 3.76 | 3.851 | 0.263 | 0.263 | n/a | 0.0062 |
 | `kata-clh-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.225 | 4.317 | 0.234 | 0.234 | n/a | 0.0062 |
 | `kata-qemu-cpu` | `c8i.2xlarge` (CPU, nested virt) | 1 | 10 | 4.058 | 4.139 | 0.244 | 0.244 | n/a | 0.0061 |
@@ -218,7 +217,7 @@ scripts/ops/bench.sh
     - **gVisor 행은 `g5.2xlarge`에서 측정했습니다.** 기본값 `g5.xlarge`에 그때 On-Demand 용량이 없어서, 같은 A10G에 vCPU와 메모리가 더 많은 `g5.2xlarge`를 썼습니다.
     - **pod당 처리량**은 처리량을 Ready pod 수로 나눈 값입니다(`kata-qemu`: 0.317 / 4 = 0.079).
     - **CPU 풀의 speedup**은 JSONL에 측정값(0.86에서 0.92)이 있습니다. 이 열은 GPU 커널을 비교하므로 CPU 행은 n/a입니다.
-    - 측정한 다섯 풀은 1차와 2차 모두 32개 요청 중 32개를 `ok`로 반환했습니다. `kata-clh`는 두 측정 모두에서 빠졌습니다.
+    - 측정한 다섯 풀은 1차와 2차 모두 32개 요청 중 32개를 `ok`로 반환했습니다.
 
     측정 조건 (직접 측정할 때도 같은 항목을 기록하세요):
 

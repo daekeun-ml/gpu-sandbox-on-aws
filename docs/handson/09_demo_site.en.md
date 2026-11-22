@@ -30,14 +30,18 @@
 
 ## What the demo shows
 
+The first screen opens the scoring replay, benchmarks, or deployment diagrams. Use **Play the tour** for the subtitled walkthrough.
+
+![Replay controls, the B1 diagram video cover, and four run totals](../images/demo/demo-overview-en.png)
+
 | Section | What it shows | Data |
 |---|---|---|
-| Top | Key numbers and a tour video (2 min 39 s in English, silent) | `recording.json`, `extras.json`, `media/tour-ko.mp4` and `tour-en.mp4` |
+| Top | Key numbers and a tour video (silent, subtitled) | `recording.json`, `extras.json`, `media/tour-ko.mp4` and `tour-en.mp4` |
 | 1. Architecture | A diagram whose components open a description and measurements when clicked, and a play button | Text in the page and measurements from `extras.json` |
 | 2. Try scoring | Pick a golden submission and press play: a progress bar fills, then the verdict, reward components and the reason appear | Golden evaluation results in `recording.json`, and rewards computed with the same `score_verdict` as the trainer |
 | 3. Attacks blocked | For each pool, the kernel inside the sandbox and the node kernel, the GPU and egress status. Eight cards of isolation and scoring checks, and a terminal replay | `/info` in `recording.json`, terminal transcripts in `extras.json` (verify.sh, the gVisor smoke test, rollout.sh) |
 | 4. Training | Select the EC2 or HyperPod B1 GRPO run to inspect verdicts and rewards. A second chart replays the CPU version-switch simulation. | `training`, `b1.training`, `simulation` in `extras.json` |
-| 5. Benchmark | B1 client placement and whole-pool throughput, followed by the earlier runtime comparison with cold start, latency and throughput per pod | `b1.bench` and `bench` in `extras.json` |
+| 5. Benchmark | Results for five EKS pools on November 22, the B1 client comparison, and the November 18 cold-start and latency charts | `runtime_run`, `b1.bench`, and `bench` in `extras.json` |
 | Architecture patterns (`architecture.html`) | Scenarios A, B1, B2 and C drawn with AWS icons | Static data in the page (`arch.js`); no data file is read |
 
 - **Key numbers at the top**: GPU runtimes, goldens matching their expected verdict, connections blocked in the two pools' `verify.sh` transcripts, benchmark requests answered ok.
@@ -50,8 +54,12 @@ The published data and recordings are these.
 
 - **Published files**: HTML, CSS, JavaScript, AWS architecture icons (SVG), the tour videos (MP4) with their thumbnails (JPG), and two recording JSON files (`data/recording.json`, `data/extras.json`).
 - **The repository's `recording.json` sample**: a laptop CPU pool recording; replace it with a GPU recording made on your cluster.
-- The published GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. The EC2 five-step chart and runtime comparison come from November 18. The CPU version switch is from November 17. On November 22 we recorded one GRPO step and two fixed-kernel benchmark runs in B1. [B1 measurements](08_benchmark.md#hyperpod-b1)
+- The published GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. The EC2 five-step chart and the image-cache comparison come from November 18. The CPU version switch is from November 17. On November 22 we recorded one GRPO step and two fixed-kernel benchmark runs in B1. [B1 measurements](08_benchmark.md#hyperpod-b1)
 - **Progress bar in section 2**: the recorded total evaluation time. Per-stage times are not recorded, so the stages are filled in from the verdict once the evaluation ends.
+
+[View the EKS benchmark results](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results)
+
+![Five EKS pools with their node types, successful requests, p50, p95 and throughput](../images/demo/runtime-results-en.png)
 
 [Open the public B1 benchmark](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1)
 
@@ -93,15 +101,15 @@ Open http://127.0.0.1:8080 in a browser. Opening the file directly (`file://`) c
 
 **What to look for:**
 
-- At the top, the recording source line shows text starting with `Local CPU smoke run on a laptop (127.0.0.1, no gVisor or Kata, no GPU).` and the recording time.
-- There are three key-number tiles. The sample has no GPU pool, so the GPU runtime tile does not appear.
+- Expand **Scoring replay source** to see the sample recording’s timestamp and its description beginning `Local CPU smoke run on a laptop`.
+- There are three key-number tiles. The sample has no GPU pool, so the GPU sandbox pool count does not appear.
     - `8/8`: goldens matching their expected verdict
-    - `10/10`: the tile label is "access attempts from inside a sandbox, blocked", but it also counts the checks of connections coming in from outside. It counts the lines that contain `blocked` in the two pools' `verify.sh` transcripts: 8 outbound checks and 2 checks of connections coming in from the `default` namespace. The denominator shows the same line count.
-    - `160/160`: benchmark requests answered ok
+    - `10` connection attempts blocked in the two `verify.sh` logs (eight outbound and two inbound from `default`).
+    - `160/160` successful requests across five EKS pools on November 22. Select the number to open the results table.
 - Section 2 has four submission cards (PyTorch only, Missing ReLU, Benchmark cheat, Read a host file), and playing fills two lanes, `local-cpu v1` and `local-cpu v2`. Code is shown with syntax colors and line numbers.
 - Section 3 has eight attack cards and four terminal tabs (verify.sh gvisor, verify.sh kata-qemu, gVisor GPU smoke test, rollout.sh v1 → v2).
 - The summary under the lower chart in section 4 starts with "All 30 batches were scored. At step 8 the pool changed from kata-clh-cpu/v1 to kata-clh-cpu/v2".
-- In section 5, `kata-clh` is one of six bars and shows "not measured".
+- Section 5 shows 32/32 successful requests for each of five EKS pools. The links below the table open the run conditions and the original JSONL.
 - The page opens in Korean; `?lang=en` opens it in English. The `EN` button at the top right switches to English and becomes `KO`, which switches back. The choice stays in the address, so a reload keeps it.
 - The terminal logs a 200 response for each file.
 
@@ -305,7 +313,8 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 
 | Data | How to make it | Options |
 |---|---|---|
-| Benchmark | Save the output of `scripts/ops/bench.sh 32` to `bench.log` with `tee` | `--bench-log pass1=bench.log --bench-pass pass2`, node details with `--node` (see the example) |
+| EKS results table | `bench.sh` JSONL plus the node type and ready pod count recorded for each pool | `--runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json` |
+| Image-cache comparison | Save the output of `scripts/ops/bench.sh 32` to `bench.log` with `tee` | `--bench-log pass1=bench.log --bench-pass pass2`, node details with `--node` (see the example) |
 | GRPO training | `kubectl -n rl-trainer logs job/<job> > grpo.log`. It reads the reward function's `reward_batch` JSON lines and the trainer's metric lines (`{'loss': ...}`) | `--training-log grpo.log --model <model-id>` |
 | HyperPod B1 | The published B1 training log summary and fixed-kernel benchmark | `--b1-record docs/handson/data/hyperpod-b1.json` |
 | Version switch | Save the output of `scripts/ops/simulate.sh 30 20` to `simulate.log`, and switch the version with `rollout.sh` from [06](06_sandbox_update.md) meanwhile | `--simulation-log simulate.log` |
@@ -320,9 +329,9 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 python3 demo/build_extras.py --out demo/site/data/extras.json \
   --source "Amazon EKS 1.36, us-west-2, 2026-11-18" \
   --b1-record docs/handson/data/hyperpod-b1.json \
+  --runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json \
   --bench-log pass1=bench.log --bench-pass pass2 \
   --node 'gvisor=g5.2xlarge|NVIDIA A10G' --node 'kata-qemu=g4dn.metal|Tesla T4' \
-  --unmeasured 'kata-clh=g4dn.metal|Tesla T4' \
   --training-log grpo.log --model Qwen/Qwen2.5-Coder-1.5B-Instruct --training-source "..." \
   --simulation-log simulate.log --simulation-source "..." \
   --transcript verify-gvisor=verify-gvisor.txt --transcript verify-kata-qemu=verify-kata-qemu.txt
@@ -346,7 +355,7 @@ The page shows terminal output verbatim, so read it once more with the same crit
 
 ### 2.7 Re-record the tour video (optional)
 
-`demo/record_tour.py` opens the page in Chromium, plays its features in turn and records the screen into `media/tour-ko.mp4`, `tour-en.mp4` and thumbnails. Captions and a click marker are drawn on top only while recording; the site files do not change.
+`demo/record_tour.py` records the scoring replay, GRPO runs, EKS results table, B1 client comparison and deployment diagrams in Chromium. Each language gets an MP4 with captions and a JPEG poster captured from its B1 diagram.
 
 - **Serving the page**: the page is served on `127.0.0.1` only while recording.
 - **Scan before recording**: it runs the scan from 2.6 on the data files in `--site` and refuses to record on any finding.
@@ -401,7 +410,7 @@ The script does the following.
 - Starts two CPU sandbox servers (v1 and v2) on `127.0.0.1`. The v2 harness uses 5 seeds and a 10x speedup cap, and authentication is the loopback-only test bypass.
 - Sends the golden set (4 goldens on CPU) to both servers through the same code path the cluster uses.
 - Runs six reward batches through `KernelRewards`, with golden submissions standing in for model completions, and switches routing from v1 to v2 after the third batch.
-- Writes the result to `demo/site/data/recording.json` (the default `--out`), with the source text "Local CPU smoke run on a laptop" marking it as a laptop recording.
+- Expand **Scoring replay source** to see the sample recording’s timestamp and its description beginning `Local CPU smoke run on a laptop`.
 
 **What to look for:** a `{"event": "reward_batch", ...}` line appears for each batch, and the last line is the following (checked locally on macOS).
 

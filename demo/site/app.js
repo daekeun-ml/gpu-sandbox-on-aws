@@ -11,30 +11,28 @@ const MAX_REWARD = 0.1 + 1.0 + 0.5 * 1.5;
 
 const TEXT = {
   ko: {
-    navArch: "구조", navTry: "채점해 보기", navDefense: "공격 차단", navTrain: "학습", navBench: "성능 비교",
-    navPatterns: "패턴별 아키텍처", patternsLink: "패턴별 아키텍처 자세히 보기 →",
-    ctaPatterns: "▶ 패턴별 아키텍처 보기",
-    bannerTitle: "패턴별 아키텍처: 움직이는 구성도",
-    bannerDesc: "trainer와 샌드박스를 어디에 두는지 네 가지 패턴(A, B1, B2, C)으로 보여 줍니다. 요청과 결과가 선을 따라 움직입니다.",
-    bannerGo: "구성도 열기 →",
-    eyebrow: "강화학습용 GPU 코드 채점 샌드박스",
-    title: "AI가 쓴 GPU 코드를 안전하게 채점합니다",
-    lede: "강화학습 중 모델이 만든 GPU 코드는 격리된 샌드박스에서 실행하고 채점합니다. 제출 코드의 판정부터 EC2와 SageMaker HyperPod에서 모델이 받은 점수까지, 저장된 실행 기록을 따라가 보세요.",
-    ctaTry: "채점 장면 보기", ctaDefense: "공격 차단 결과 보기",
-    sourceLabel: "채점 재생 기록",
-    videoCaption: "채점, GRPO 학습, HyperPod 벤치마크를 보여 주는 무음 영상입니다.",
-    kpiGpu: "GPU 격리 방식 (gVisor, Kata)", kpiGolden: "예상대로 나온 채점 결과",
-    kpiBlocked: "샌드박스 안에서 막힌 접근 시도", kpiBench: "런타임 비교에서 성공한 요청 (캐시된 이미지)",
-    sArch: "구조: 채점 요청 하나가 지나가는 길",
-    sArchHint: "상자를 누르면 설명이 나옵니다. 재생 버튼을 누르면 채점 요청 하나가 어디를 거치는지 차례로 보여 줍니다.",
+    navArch: "요청 흐름", navTry: "코드 채점", navDefense: "격리 검증", navTrain: "GRPO 학습", navBench: "벤치마크",
+    navPatterns: "배포 구성도", patternsLink: "네 가지 배포 구성 비교",
+    ctaPatterns: "배포 구성도 →",
+    eyebrow: "Amazon EKS · SageMaker HyperPod",
+    title: "모델이 만든 GPU 코드 채점하기",
+    lede: "같은 코드를 gVisor와 Kata에서 실행한 결과를 비교해 보세요. EC2와 HyperPod의 학습 로그에서는 채점 결과가 GRPO 보상으로 어떻게 이어지는지 볼 수 있습니다.",
+    ctaTry: "채점 기록 재생", ctaBench: "벤치마크 결과 보기",
+    sourceLabel: "채점 재생에 사용한 기록",
+    tourPlay: "▶  둘러보기 재생", tourFile: "영상 파일 열기 (MP4)",
+    videoCaption: "영상으로 보는 코드 채점, GRPO 학습, EKS와 HyperPod 벤치마크",
+    kpiGpu: "GPU 샌드박스 풀", kpiGolden: "예상과 일치한 판정",
+    kpiBlocked: "차단된 연결 시도", kpiBench: "런타임 비교에서 성공한 요청 (캐시된 이미지)",
+    sArch: "채점 요청이 지나가는 경로",
+    sArchHint: "상자를 누르면 설명이 나옵니다. 재생 버튼을 누르면 채점 요청 하나가 어디를 거치는지 차례로 볼 수 있습니다.",
     flowPlay: "▶ 요청 흐름 보기", flowStop: "■ 멈춤", evidence: "실제 기록 보기",
     zoneTrainer: "학습 영역 (rl-trainer)", zoneSandbox: "샌드박스 영역 (기본 차단)", zoneOut: "샌드박스에서 접근 불가",
-    sTry: "같은 코드의 채점 결과 비교",
-    sTryHint: "제출 코드를 고르고 재생을 누르면 각 풀의 판정을 볼 수 있습니다. 이 기록의 풀은 {pools}입니다.",
+    sTry: "제출 코드별 채점 결과",
+    sTryHint: "제출 코드를 고르고 재생을 누르면 각 풀의 판정을 볼 수 있습니다. 이 기록에서 사용한 풀은 {pools}입니다.",
     showTask: "문제와 정답 코드 보기", candidate: "제출된 코드",
     run: "▶ 채점 재생", running: "재생 중...",
     speed: "속도", speed1: "실제 속도", speed4: "4배 빠르게", speed0: "결과만 보기",
-    laneNote: "막대가 차는 시간은 실제 채점에 걸린 시간입니다. 단계별 시간은 기록하지 않아서, 단계 표시는 채점이 끝난 뒤 한꺼번에 채워집니다.",
+    laneNote: "막대가 차는 시간은 실제 채점에 걸린 시간입니다. 단계별 시간은 기록하지 않아서 채점이 끝난 뒤 모든 단계를 한꺼번에 표시합니다.",
     stAuth: "요청 확인 (인증 토큰, 네트워크 정책)", stPolicy: "코드 사전 검사 (금지된 기능 사용 여부)",
     stRun: "격리된 프로세스에서 실행", stCorrect: "정답 코드와 결과 비교 (무작위 입력)",
     stBench: "속도 측정, 측정 중에도 결과 확인", stReward: "점수(reward) 계산",
@@ -42,21 +40,21 @@ const TEXT = {
     expected: "예상 결과", speedupL: "속도 향상", msL: "정답/제출 실행 시간 (ms)", violationsL: "금지된 사용", flagsL: "감지된 문제",
     rewardTotal: "점수 합계", rewardMax: "만점", rFormat: "형식 x0.1", rCorrect: "정확도 x1.0", rSpeed: "속도 x0.5",
     excluded: "샌드박스 오류: 이 결과는 점수 비교에서 뺍니다",
-    why_ok_custom: "정답이고, 직접 작성한 GPU 커널입니다. 정답 코드보다 빠른 만큼 속도 점수도 받습니다.",
+    why_ok_custom: "직접 작성한 GPU 커널이 정답을 냈습니다. 정답 코드보다 빠른 만큼 속도 점수도 받습니다.",
     why_ok_plain: "정답이지만 PyTorch 기본 연산만 썼습니다. 직접 만든 커널이 아니라서 정확도 점수는 0.3만 받고 속도 점수는 없습니다.",
     why_policy: "실행하기 전 사전 검사에서 막혀 코드는 한 줄도 실행되지 않았습니다.",
     why_wrong: "결과가 정답과 다릅니다.",
-    why_cheat: "처음 확인할 때는 정답을 냈지만, 속도를 재는 동안 결과가 달라져서 잡혔습니다.",
+    why_cheat: "처음 확인할 때는 정답을 냈지만 속도를 재는 동안 결과가 달라져 검사를 통과하지 못했습니다.",
     why_runtime: "실행 중에 오류가 났습니다.",
     why_infra: "샌드박스 쪽 문제라서 점수를 매기지 않습니다.",
-    sDefense: "공격 차단: 샌드박스 안에서 해 본 시도",
+    sDefense: "샌드박스 격리 검증",
     sDefenseHint: "검증 스크립트(verify.sh)가 샌드박스 안에서 실제로 시도한 결과입니다. 카드를 누르면 아래 터미널 기록에서 해당 줄을 찾아 표시합니다.",
-    attacks: "시도한 공격과 결과",
+    attacks: "검증 항목과 결과",
     termPlay: "▶ 재생", termPause: "❚❚ 일시정지", termAll: "전체 보기",
     runtime: "런타임", version: "샌드박스 버전", kernel: "샌드박스 커널", nodeKernel: "서버 커널",
     gpu: "GPU", egress: "외부 연결 차단", yes: "확인됨", no: "열려 있음", none: "없음 (CPU)",
-    sTrain: "학습: 채점 결과가 점수가 되기까지",
-    sTrainHint: "학습 기록을 고르면 모델이 쓴 코드의 판정과 점수를 볼 수 있습니다. 버전 전환 그래프 옆에는 해당 실행의 출처가 표시됩니다.",
+    sTrain: "GRPO 보상과 샌드박스 버전 전환",
+    sTrainHint: "학습 기록을 고르면 모델이 쓴 코드의 판정과 점수를 볼 수 있습니다. 버전 전환 그래프 옆에서 해당 실행의 출처도 확인할 수 있습니다.",
     grpoTitle: "GRPO 학습 중 모델이 받은 점수", runRecord: "학습 기록",
     stepPlay: "▶ step 순서대로 보기",
     grpoNote: "짧은 학습 실행에서 각 배치의 코드가 받은 점수입니다.",
@@ -69,12 +67,17 @@ const TEXT = {
     rewardMean: "평균 점수", rewardStd: "점수 표준편차", loss: "loss", compLen: "평균 답변 길이 (token)",
     stepTime: "step 시간", sec: "초", model: "모델", sandboxSide: "샌드박스", trainerSide: "trainer",
     switchTitle: "학습 중 샌드박스 버전 바꾸기 (v1 → v2)",
-    switchNote: "모의 실행입니다. 모델 대신 미리 준비한 코드로 채점했고, 실제 학습은 하지 않았습니다. 채점 방식과 버전을 바꾸는 방식은 실제 학습과 같습니다.",
+    switchNote: "모의 실행입니다. 모델 대신 미리 준비한 코드로 채점했고 실제 학습은 하지 않았습니다. 채점과 버전 전환 방식은 실제 학습과 같습니다.",
     showRollout: "버전 전환 터미널 기록 보기",
     simSummary: "배치 {n}개가 하나도 빠지지 않고 채점됐습니다. step {s}에서 {from}에서 {to}로 바뀌었고, 채점 시간 중앙값은 바꾸기 전 {a}초, 바꾼 뒤 {b}초입니다.",
-    sBench: "성능 비교: 런타임별 측정 결과",
+    sBench: "런타임 벤치마크",
     sBenchHint: "기대 결과가 정해진 코드를 반복 채점했습니다. p50과 p95는 샌드박스가 요청을 맡은 뒤 판정까지 걸린 시간입니다. 풀 처리량에는 빈 pod를 기다린 시간도 들어갑니다.",
-    b1Title: "HyperPod B1에서 본 샌드박스 채점 성능", runtimeComparison: "런타임별 벤치마크",
+    b1Title: "HyperPod B1과 EKS에서 요청한 채점 결과", runtimeComparison: "배포 직후와 이미지 캐시 후 비교",
+    resultsTitle: "EKS 런타임 벤치마크 결과", resultsPool: "풀 / 노드",
+    resultsP50: "p50 (초)", resultsP95: "p95 (초)", resultsRate: "풀 처리량 (건/초)",
+    resultsNote: "풀 처리량은 Ready 상태의 pod가 합쳐서 초당 처리한 요청 수입니다. GPU 풀을 비교할 때는 GPU 종류와 pod 수도 함께 보세요.",
+    resultsGuide: "측정 조건과 실행 화면", resultsRaw: "원본 JSONL", resultsImage: "이미지",
+    resultsKpi: "{date} 벤치마크 성공 건수 →",
     b1Setup: "EC2 {instance} {pods}대에서 gVisor v1 샌드박스를 하나씩 띄웠습니다. 사전 채점 {warmup}건 뒤에 아래 두 클라이언트가 차례로 같은 {golden} 커널을 요청했습니다.",
     b1Note: "이 측정에서는 모델 학습을 멈추고 샌드박스 채점만 실행했습니다. 각 클라이언트의 처리량은 샌드박스 풀 전체에서 측정한 값입니다.",
     b1Diagram: "B1에서 요청이 지나가는 경로 보기 →", b1System: "EKS 시스템 노드", b1Trainer: "HyperPod 학습 노드",
@@ -82,35 +85,33 @@ const TEXT = {
     mP50: "채점 시간 중앙값 (초)", mP95: "채점 시간 p95 (초)", mCold: "시작 시간 (초, pod 중앙값)",
     mTput: "pod 하나의 초당 채점 수", mSpeed: "속도 향상 중앙값 (GPU)",
     pass2: "이미지를 받아 둔 뒤 (기준)", pass1: "처음 배포했을 때",
-    notMeasured: "측정 못 함: VM이 시작되지 않음", na: "해당 없음",
+    na: "해당 없음",
     pods: "준비된 pod", requests: "요청", throughput: "처리량", refMs: "정답 코드 실행 시간 (ms)",
-    benchNoteGpu: "GPU 샌드박스 두 개는 GPU 종류가 다릅니다(A10G와 T4). 그래서 이 차이를 gVisor와 Kata의 성능 차이로 보면 안 됩니다. CPU 샌드박스 세 개는 같은 서버(c8i.2xlarge)에서 같은 조건으로 측정했습니다.",
-    benchNotePass1: "처음 배포했을 때의 시작 시간에는 다른 시간이 섞여 있습니다. kata-qemu의 약 1235초에는 설정을 고치기 전 VM 시작에 실패하던 약 20분이 들어 있고, gvisor-cpu의 141초에는 이미지를 처음 내려받은 시간이 들어 있습니다.",
+    benchNoteGpu: "GPU 샌드박스 두 개는 서로 다른 GPU(A10G와 T4)를 씁니다. 그래서 이 차이를 gVisor와 Kata의 성능 차이로 보면 안 됩니다. CPU 샌드박스 세 개는 같은 서버(c8i.2xlarge)에서 같은 조건으로 측정했습니다.",
+    benchNotePass1: "처음 배포했을 때 kata-qemu가 시작되기까지 약 1235초가 걸렸습니다. 설정을 고치기 전 VM 시작에 실패하던 약 20분도 여기에 들어갑니다. gvisor-cpu의 141초에는 이미지를 처음 내려받은 시간이 들어 있습니다.",
     benchNoteSpeed: "CPU 샌드박스는 속도 향상을 비교하지 않아서 표시하지 않습니다.",
     noData: "이 기록에는 이 부분의 데이터가 없습니다.",
     footer: "실제 실행 기록을 다시 보여 주는 데모입니다. 수치는 위에 적힌 환경에서 나온 값이라 다른 환경에서는 달라질 수 있습니다. 로그에 있던 IP 주소와 서버 이름은 가렸습니다.",
     guide: "가이드북", repo: "GitHub 저장소",
   },
   en: {
-    navArch: "Architecture", navTry: "Try scoring", navDefense: "Attacks blocked", navTrain: "Training", navBench: "Benchmark",
-    navPatterns: "Architecture patterns", patternsLink: "See the architecture patterns →",
-    ctaPatterns: "▶ See the architecture patterns",
-    bannerTitle: "Architecture patterns: animated diagrams",
-    bannerDesc: "Four ways (A, B1, B2, C) to place the trainer and the sandboxes. Requests and results move along the lines.",
-    bannerGo: "Open the diagrams →",
-    eyebrow: "GPU reward sandboxes for on-policy RL",
-    title: "Score model-written GPU code in isolated sandboxes",
-    lede: "During reinforcement learning, a model writes GPU code and an isolated sandbox scores it. Replay recorded submissions and follow their verdicts through to the rewards earned in EC2 and SageMaker HyperPod training runs.",
-    ctaTry: "Try scoring", ctaDefense: "See blocked attacks",
+    navArch: "Request flow", navTry: "Scoring", navDefense: "Isolation checks", navTrain: "GRPO training", navBench: "Benchmarks",
+    navPatterns: "Deployment patterns", patternsLink: "Compare deployment patterns",
+    ctaPatterns: "Deployment patterns →",
+    eyebrow: "Amazon EKS · SageMaker HyperPod",
+    title: "Scoring model-generated GPU code",
+    lede: "Compare the verdicts when gVisor and Kata run the same submission. Follow the EC2 and HyperPod training logs to see how those verdicts become GRPO rewards.",
+    ctaTry: "Replay scoring", ctaBench: "View benchmarks",
     sourceLabel: "Scoring replay source",
-    videoCaption: "A silent tour of scoring, GRPO training and the HyperPod benchmark.",
-    kpiGpu: "GPU isolation runtimes (gVisor, Kata)", kpiGolden: "golden verdicts matching the expected one",
-    kpiBlocked: "access attempts from inside a sandbox, blocked", kpiBench: "successful runtime benchmark requests (cached images)",
-    sArch: "Architecture: the path of one reward request",
+    tourPlay: "▶  Play the tour", tourFile: "Open the video file (MP4)",
+    videoCaption: "Watch scoring, GRPO training, and the EKS and HyperPod benchmarks",
+    kpiGpu: "GPU sandbox pools", kpiGolden: "verdicts matching expectations",
+    kpiBlocked: "connection attempts blocked", kpiBench: "successful runtime benchmark requests (cached images)",
+    sArch: "The path of a scoring request",
     sArchHint: "Click a component to open its description. The play button shows the order in which one reward request travels.",
     flowPlay: "▶ Play request flow", flowStop: "■ Stop", evidence: "See evidence",
     zoneTrainer: "rl-trainer namespace", zoneSandbox: "sandbox namespace (default deny)", zoneOut: "Blocked from sandboxes",
-    sTry: "Compare verdicts for the same code",
+    sTry: "Compare scoring by submission",
     sTryHint: "Pick a submission and press play to see its verdict in each pool. This recording covers {pools}.",
     showTask: "Show the task and reference", candidate: "Submitted code",
     run: "▶ Replay scoring in both sandboxes", running: "Replaying...",
@@ -130,13 +131,13 @@ const TEXT = {
     why_cheat: "It passed the correctness check, but its outputs during the benchmark failed the checksum against the reference.",
     why_runtime: "It failed while running.",
     why_infra: "A sandbox-side error, so no reward is given.",
-    sDefense: "Attacks blocked: what was tried inside the sandbox",
+    sDefense: "Sandbox isolation checks",
     sDefenseHint: "These are attempts that verify.sh made from inside sandbox pods. Click a card to find and highlight that line in the real terminal output.",
-    attacks: "Attempts and results",
+    attacks: "Checks and outcomes",
     termPlay: "▶ Play", termPause: "❚❚ Pause", termAll: "Show all",
     runtime: "Runtime", version: "Sandbox version", kernel: "Kernel inside sandbox", nodeKernel: "Node kernel",
     gpu: "GPU", egress: "Egress blocked", yes: "verified", no: "open", none: "none (CPU)",
-    sTrain: "Training: where the reward comes from",
+    sTrain: "GRPO rewards and sandbox version changes",
     sTrainHint: "Choose a training run to see the verdicts and rewards for model-generated code. The version-switch chart names its own data source.",
     grpoTitle: "Rewards during GRPO training", runRecord: "Training run",
     stepPlay: "▶ Play steps",
@@ -153,9 +154,14 @@ const TEXT = {
     switchNote: "A simulation: golden submissions stood in for model outputs and no model was trained. The scoring path and the routing table are the same as in training.",
     showRollout: "Show the rollout terminal output",
     simSummary: "All {n} batches were scored. At step {s} the pool changed from {from} to {to}; the median eval p50 was {a} s before and {b} s after.",
-    sBench: "Benchmark: measurements per runtime",
+    sBench: "Runtime benchmarks",
     sBenchHint: "Each run repeats a submission with a known answer. The p50 and p95 cover time from the sandbox accepting a request to returning its verdict. Pool throughput includes time spent waiting for a free pod.",
-    b1Title: "Sandbox scoring in HyperPod B1", runtimeComparison: "Runtime benchmarks",
+    b1Title: "Scoring from HyperPod B1 and EKS", runtimeComparison: "First deployment and cached images",
+    resultsTitle: "EKS runtime benchmark results", resultsPool: "Pool / node",
+    resultsP50: "p50 (s)", resultsP95: "p95 (s)", resultsRate: "Pool throughput (eval/s)",
+    resultsNote: "Pool throughput counts requests per second across all ready pods. When comparing GPU pools, check the GPU model and the number of pods.",
+    resultsGuide: "Run conditions and screenshots", resultsRaw: "Raw JSONL", resultsImage: "image",
+    resultsKpi: "Successful benchmark requests · {date} →",
     b1Setup: "Each of the {pods} EC2 {instance} nodes hosted one gVisor v1 sandbox. After {warmup} warm-up evaluations, the clients took turns submitting the same {golden} kernel.",
     b1Note: "Training was idle during these runs. Throughput for each client covers the entire sandbox pool.",
     b1Diagram: "Follow a request through B1 →", b1System: "EKS system node", b1Trainer: "HyperPod trainer node",
@@ -163,7 +169,7 @@ const TEXT = {
     mP50: "eval p50 (s)", mP95: "eval p95 (s)", mCold: "cold start (s, pod median)",
     mTput: "throughput per pod (eval/s)", mSpeed: "speedup median (GPU)",
     pass2: "cached images (reference)", pass1: "as deployed",
-    notMeasured: "not measured: the VM never started", na: "n/a",
+    na: "n/a",
     pods: "Ready pods", requests: "requests", throughput: "throughput", refMs: "reference ms",
     benchNoteGpu: "The two GPU pools use different GPUs (A10G, T4), so this is not a runtime overhead comparison. The three CPU pools ran on the same c8i.2xlarge node with the same image and golden.",
     benchNotePass1: "As-deployed cold starts include other factors: about 20 minutes of failed VM starts before the IOMMU fix in kata-qemu's ~1235 s, and the first image pull in gvisor-cpu's 141 s.",
@@ -433,13 +439,21 @@ function renderStatic() {
   });
   document.getElementById("lang").textContent = lang === "ko" ? "EN" : "KO";
   document.getElementById("source").textContent = `${recording.source} (${recording.recorded_at})`;
-  for (const id of ["nav-patterns", "patterns-link", "hero-patterns", "patterns-banner"]) {
+  for (const id of ["nav-patterns", "patterns-link", "hero-patterns"]) {
     document.getElementById(id).setAttribute("href", lang === "en" ? "architecture.html?lang=en" : "architecture.html");
   }
   const video = document.getElementById("tour");
-  if (video.paused) {
-    video.poster = `media/tour-${lang}.jpg`;
+  const cover = document.getElementById("tour-cover");
+  const poster = `media/tour-${lang}.jpg`;
+  if (cover.getAttribute("src") !== poster) {
+    video.pause();
+    video.hidden = true;
+    cover.src = poster;
+    video.poster = poster;
     video.src = `media/tour-${lang}.mp4`;
+    document.getElementById("tour-file").href = video.src;
+    document.getElementById("tour-file").hidden = true;
+    document.getElementById("tour-start").hidden = false;
   }
 }
 
@@ -459,15 +473,20 @@ function renderKpis() {
     if (!tr.id.startsWith("verify-")) continue;
     blocked += tr.lines.filter((l) => /\bblocked\b/.test(l.text)).length;
   }
-  const rows = benchRows("pass2");
+  const run = extras?.runtime_run;
+  const rows = run?.rows?.length ? run.rows : benchRows("pass2");
   const ok = rows.reduce((s, r) => s + (r.ok || 0), 0);
   const req = rows.reduce((s, r) => s + (r.requests || 0), 0);
   const tiles = gpuPools ? [[String(gpuPools), t("kpiGpu")]] : [];
   tiles.push([`${match}/${total}`, t("kpiGolden")]);
-  if (blocked) tiles.push([`${blocked}/${blocked}`, t("kpiBlocked")]);
-  if (req) tiles.push([`${ok}/${req}`, t("kpiBench")]);
+  if (blocked) tiles.push([String(blocked), t("kpiBlocked")]);
+  if (req) {
+    const label = run?.rows?.length ? fill(t("resultsKpi"), { date: run.date }) : t("kpiBench");
+    tiles.push([`${ok}/${req}`, label, run?.rows?.length ? "#runtime-results" : "#runtime-bench"]);
+  }
   document.getElementById("kpis").replaceChildren(
-    ...tiles.map(([v, k]) => el("div", { class: "kpi" }, el("div", { class: "v" }, v), el("div", { class: "k" }, k))),
+    ...tiles.map(([v, k, href]) => el(href ? "a" : "div", href ? { class: "kpi", href } : { class: "kpi" },
+      el("div", { class: "v" }, v), el("div", { class: "k" }, k))),
   );
 }
 
@@ -1176,6 +1195,25 @@ function renderSim() {
 }
 
 // ---------- 5. benchmark ----------
+function renderRuntimeResults() {
+  const run = extras?.runtime_run;
+  const panel = document.getElementById("runtime-results");
+  panel.hidden = !run?.rows?.length;
+  if (panel.hidden) return;
+  document.getElementById("results-source").textContent =
+    `${run.date} · ${run.region} · EKS ${run.eks} · ${t("resultsImage")} ${run.image}`;
+  document.getElementById("results-rows").replaceChildren(...run.rows.map((r) =>
+    el("tr", {},
+      el("th", { scope: "row" }, el("code", {}, r.runtime),
+        el("span", { class: "muted small" }, [r.instance, r.gpu].filter(Boolean).join(" · "))),
+      el("td", {}, r.ready), el("td", {}, `${r.ok}/${r.requests}`),
+      el("td", {}, fmt(r.eval_p50_s) || "—"), el("td", {}, fmt(r.eval_p95_s) || "—"),
+      el("td", {}, fmt(r.throughput_eval_per_s) || "—"))));
+  const guide = "https://daekeun-ml.github.io/gpu-sandbox-on-aws/";
+  document.getElementById("results-guide").href = `${guide}${lang === "en" ? "en/" : ""}handson/08_benchmark/#runtime-results`;
+  document.getElementById("results-jsonl").href = `${guide}handson/data/${encodeURIComponent(run.jsonl)}`;
+}
+
 function renderB1Bench() {
   const run = extras?.b1;
   const bench = run?.bench;
@@ -1220,10 +1258,12 @@ function renderBenchTabs() {
 }
 
 function renderBench() {
+  renderRuntimeResults();
   renderB1Bench();
   const passes = extras?.bench?.passes || [];
   const section = document.getElementById("bench");
-  section.hidden = !passes.length && document.getElementById("hyperpod-b1").hidden;
+  section.hidden = !passes.length && document.getElementById("hyperpod-b1").hidden && document.getElementById("runtime-results").hidden;
+  document.getElementById("hero-bench").hidden = section.hidden;
   for (const node of section.querySelectorAll("#runtime-bench,#runtime-source,.bench-ctl,.bench-ctl + .panel")) {
     node.hidden = !passes.length;
   }
@@ -1231,13 +1271,12 @@ function renderBench() {
   document.getElementById("runtime-source").textContent = extras.source;
   renderBenchTabs();
   const metric = METRICS.find((m) => m.id === ui.benchMetric);
-  const rows = [...benchRows(ui.benchPass)];
-  for (const u of extras.bench.unmeasured || []) rows.splice(2, 0, { ...u, unmeasured: true });
+  const rows = benchRows(ui.benchPass);
   const W = 900, L = 210, R = 90, T = 10, rowH = 40;
   const H = T + rows.length * rowH + 10;
   const svgEl = document.getElementById("bench-chart");
   svgEl.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const values = rows.map((r) => (r.unmeasured ? null : metric.get(r)));
+  const values = rows.map((r) => metric.get(r));
   const maxV = Math.max(...values.filter((v) => typeof v === "number"), 0.001);
   const pw = W - L - R;
   const kids = [];
@@ -1246,11 +1285,6 @@ function renderBench() {
     kids.push(sv("text", { class: "val-label", x: 10, y: y + 17 }, r.runtime));
     kids.push(sv("text", { class: "ax-label", x: 10, y: y + 33 }, [r.instance, r.gpu].filter(Boolean).join(", ") || "CPU"));
     const v = values[i];
-    if (r.unmeasured) {
-      kids.push(sv("rect", { class: "bar-na", x: L, y: y + 8, width: pw * 0.35, height: 22, rx: 3 }));
-      kids.push(sv("text", { class: "ax-label", x: L + 10, y: y + 24 }, t("notMeasured")));
-      return;
-    }
     if (typeof v !== "number") {
       kids.push(sv("text", { class: "ax-label", x: L + 4, y: y + 24 }, t("na")));
       return;
@@ -1300,6 +1334,19 @@ async function main() {
   // Korean is the default; ?lang=en (or the EN button) switches to English. The choice is kept in
   // the address so a reload or a shared link opens in the same language.
   if (new URLSearchParams(window.location.search).get("lang") === "en") lang = "en";
+  const video = document.getElementById("tour");
+  const preview = document.getElementById("tour-start");
+  preview.addEventListener("click", () => {
+    preview.hidden = true;
+    video.hidden = false;
+    video.focus();
+    video.play().catch(() => { document.getElementById("tour-file").hidden = false; });
+  });
+  video.addEventListener("ended", () => {
+    video.hidden = true;
+    preview.hidden = false;
+    preview.focus({ preventScroll: true });
+  });
   document.getElementById("lang").addEventListener("click", () => {
     lang = lang === "ko" ? "en" : "ko";
     const url = new URL(window.location.href);
@@ -1325,6 +1372,10 @@ async function main() {
   }
   document.getElementById("grpo-step").addEventListener("input", (e) => setGrpoStep(Number(e.target.value)));
   renderAll();
+  // Benchmark panels are hidden until their recording loads, after the browser's initial anchor lookup.
+  if (["#bench", "#runtime-results", "#hyperpod-b1", "#runtime-bench"].includes(location.hash)) {
+    document.getElementById(location.hash.slice(1)).scrollIntoView({ behavior: "instant" });
+  }
 }
 
 main().catch((err) => {

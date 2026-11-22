@@ -20,7 +20,7 @@
    그래서 anywhere 를 !important 로 덮어씁니다(표 안 code 는 특히 자주 넘칩니다). */
 /* pre 안의 code는 제외합니다. 코드블록은 Material이 가로 스크롤로 처리하는데,
    여기에 줄바꿈을 강제하면 셸 명령이 중간에서 꺾여 복사와 읽기가 어려워지고, 긴 줄이
-   컨테이너를 밀어내 본문 전체가 오른쪽으로 흐릅니다(실측: 174자 EAGLE3 설정 줄). */
+   컨테이너를 밀어내 본문 전체가 오른쪽으로 흐릅니다(예를 들어 EAGLE3 설정 한 줄은 174자입니다). */
 .md-typeset :not(pre) > code {
   overflow-wrap: anywhere;
   word-break: break-word;
