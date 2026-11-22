@@ -37,9 +37,9 @@ The CDK stack creates and removes the VPC, EKS cluster, managed node groups, and
 !!! warning "Verification status"
     - **Run in a practice account**: deploying, checking and deleting scenario C, the gVisor path of scenario A and the Kata GPU node group (`scripts/kata/gpu_nodes.sh`).
     - **Checked for scenario C**: cluster and node status, the private endpoint, nested virtualization and `/dev/kvm` on the c8i node, gVisor and the node guard on the node, kubectl through the SSM tunnel (the tunnel listened on `127.0.0.1` only), the Kata CPU node script `scripts/kata/cpu_nodes.sh` (kata-deploy, the `gvisor-cpu` RuntimeClass, the smoke pods of the three runtimes), and the resources left after deletion.
-    - **Deployed only as intermediate steps**: the B1 and B2 stacks, while creating the scenario A cluster.
-    - **Not run on AWS**: the HyperPod steps (`scripts/hyperpod/`) and `ops/rollout.sh` during scenario A training.
-    - **Checked locally**: synth checks the security defaults (`cdk/tests`, 18 tests) and cdk-nag.
+    - **Deployed only as intermediate steps**: the B2 stack, while creating the scenario A cluster.
+    - **Not run on AWS**: the B2 custom AMI path and `ops/rollout.sh` during scenario A training.
+    - **Checked locally**: synth checks the security defaults (`cdk/tests`, 19 tests) and cdk-nag.
 
     The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
@@ -73,7 +73,7 @@ This CDK stack owns the infrastructure, and the scripts in `scripts/` own what r
 | Access | not needed (CloudFormation deploys) | `cdk/tunnel.sh` (SSM port forwarding) running in a second terminal |
 | Adding node groups | set `WITH_KATA_CPU=1` or `WITH_KATA_GPU=1` (needs `KATA_IOMMU_AMI_ID`) and run `02_create_cluster.sh` again; CDK changes only what differs | `kata/cpu_nodes.sh` and `kata/gpu_nodes.sh` check that their node group exists, then only install |
 | Deletion | `cdk/destroy.sh` | `scripts/08_cleanup.sh` (after the cluster name check, `cdk/destroy.sh --yes`, then the AMIs and ECR) |
-| Security checks | 18 tests in `cdk/tests` + cdk-nag (blocks the deploy) | user data and manifest rendering tests in `tests/` |
+| Security checks | 19 tests in `cdk/tests` + cdk-nag (blocks the deploy) | user data and manifest rendering tests in `tests/` |
 | Kept outside the stack | the HyperPod cluster, the IOMMU AMI and the B2 AMI, Karpenter, ECR repositories | `scripts/hyperpod/`, `kata/gpu_nodes.sh` (bakes the IOMMU AMI), `03_build_push_images.sh` (ECR) |
 
 ## Security defaults
@@ -241,7 +241,7 @@ The hands-on `scripts/08_cleanup.sh` asks for the cluster name, calls `cdk/destr
 
 ## Scope and limits
 
-- **The HyperPod steps were not run on AWS.** Scenario C, scenario A and the Kata GPU node group ran in the practice account, as in "Verification status" above. B1 and B2 were only deployed as intermediate stacks; the other checks are synth, cdk-nag and the template assertions (`cdk/tests`).
+- **HyperPod B1**. The EKS 1.36 stack hosted a one-step GRPO run with two gVisor sandboxes on November 22. [Run and screenshots](../handson/07_hyperpod.md#how-to-verify)
 - **Outside the CDK stack:** the HyperPod cluster (`scripts/hyperpod/create.sh`), baking the IOMMU AMI (`scripts/kata/gpu_nodes.sh`) and the B2 AMI (`scripts/hyperpod/build_b2_ami.sh`), Karpenter, Production components such as the gateway, and the ECR repositories are created by the scripts.
 - **CPU topology of c8i:** the `CoreCount` and `ThreadsPerCore` that go with nested virtualization come from the table in `cdk/gpusandbox_cdk/config.py` (`c8i.2xlarge`: 4, 2). A type missing from the table is rejected when the CDK settings load, so to use another Kata CPU instance type, look up its core count and threads per core with the `describe-instance-types` command in that file's comment, add it to `CPU_TOPOLOGY`, then deploy.
 - **EKS encryption setting:** EKS 1.28 and later envelope-encrypt all Kubernetes API data by default, so CloudFormation marks `EncryptionConfig.Resources` as deprecated (W9009). The stack sets only the KMS key (`Provider`), without `Resources`. The CloudFormation documentation lists a change to this property as Replacement, so deploying onto a stack that was created with `Resources: [secrets]` can plan a cluster replacement. Check with `cdk diff` first, and if it shows a replacement, delete the stack and create it again.

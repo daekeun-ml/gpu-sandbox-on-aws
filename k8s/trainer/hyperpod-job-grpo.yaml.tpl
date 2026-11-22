@@ -68,8 +68,9 @@ spec:
                 - {name: HF_HOME, value: /cache/hf}
                 - {name: PYTORCH_CUDA_ALLOC_CONF, value: "expandable_segments:True"}
               resources:
-                requests: {nvidia.com/gpu: "1", cpu: "7", memory: 28Gi}
-                limits: {nvidia.com/gpu: "1", cpu: "7", memory: 28Gi}
+                # The operator, per-job pod manager and monitoring pods share the trainer node.
+                requests: {nvidia.com/gpu: "1", cpu: "5", memory: 24Gi}
+                limits: {nvidia.com/gpu: "1", cpu: "5", memory: 24Gi}
               volumeMounts:
                 - {name: routing, mountPath: /etc/gpusandbox/routing, readOnly: true}
                 - {name: sandbox-token, mountPath: /var/run/secrets/gpusandbox, readOnly: true}

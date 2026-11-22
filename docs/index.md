@@ -118,7 +118,7 @@
 
 !!! warning "직접 확인해야 하는 범위"
     - **실행한 것**: 실습 계정에서 시나리오 A(gVisor GPU, `g5`), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 풀의 런타임 벤치마크([08 런타임 벤치마크](handson/08_benchmark.md)), 공개 데모 사이트를 실행했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다.
-    - **실행하지 않은 것**: 학습 중의 `ops/rollout.sh`, `rollout.sh --finish`, HyperPod B1과 B2는 아직 실행하지 않았습니다. 실행하지 않은 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
+    - **실행하지 않은 것**: 학습 중의 `ops/rollout.sh`, `rollout.sh --finish`, HyperPod B2는 아직 실행하지 않았습니다. 실행하지 않은 단계는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
     - **수치의 출처**: 가격과 버전 같은 수치는 직접 측정한 값이 아니라 공식 문서와 공개 자료에서 가져온 값입니다.
     - **로컬 테스트**: 확인 범위는 [시작하기](getting_started.md)에 있습니다.
 

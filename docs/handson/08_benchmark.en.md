@@ -99,7 +99,7 @@ scripts/ops/bench.sh 64     # more requests per pool
 
 ## What goes into evaluation latency
 
-Evaluation latency includes the request path and execution inside the sandbox.
+The sandbox times evaluation and process cleanup after it accepts a request. These timings feed `eval_p50_s` and `eval_p95_s`. Pool throughput also accounts for the client's wait for a free pod and the request round trip.
 
 ??? note "Details"
     `duration_s` is the time from when the server takes a request until it returns the verdict; the kernel run is only part of it. Time the client spent waiting for a pod is not included.
@@ -243,6 +243,41 @@ With `maxSurge: 0`, pods are replaced one at a time, and in a pool with one pod 
 - **Same c8i node, same image and golden:** eval p50 was 3.76 s for `gvisor-cpu`, 4.058 s for `kata-qemu-cpu` and 4.225 s for `kata-clh-cpu`. The cold start with cached images was 10 to 11 s for all three. These come from nested virtualization, so use them only as a relative comparison on this node.
 - **Cold start of the GPU pools:** 16 s for gVisor (A10G), 30 to 36 s per pod for Kata QEMU (T4). The GPUs differ (A10G vs T4), so by the rule in "How to interpret the results" this difference is not an overhead comparison.
 - **Per-GPU values:** the median `ref_ms` was 0.58 ms on A10G and 1.15 ms on T4, and the speedup was 1.75 on A10G and 1.79 on T4.
+
+## HyperPod B1 · 2026-11-22 { #hyperpod-b1 }
+
+Two EC2 `g5.xlarge` nodes each hosted one `gvisor/v1` sandbox with an A10G. In `us-west-2` on EKS 1.36, we warmed the pool with two evaluations, then sent a batch of 32 copies of `relu_bias_triton` from each client in the order shown. No training job shared the pool. Both runs used image tag `a20261120b`.
+
+| Request source | Successful | Eval p50 | Eval p95 | Pool throughput | Median kernel speedup |
+|---|---:|---:|---:|---:|---:|
+| EKS system `m6i.large` | 32/32 | 9.918 s | 10.034 s | 0.199 eval/s | 1.735× |
+| HyperPod trainer `ml.g5.2xlarge` | 32/32 | 9.937 s | 10.071 s | 0.199 eval/s | 1.738× |
+
+The sandbox pods reached Ready in 15, 120 seconds respectively. The p50 and p95 come from successful server-side evaluations. Throughput includes the client waiting for a free pod. Each client ran once, so the difference between the rows does not isolate the effect of placement.
+
+![Completed B1 benchmark jobs, client placements and metrics](../images/terminal/hyperpod-b1-benchmark.png)
+
+[Run data (JSON)](data/hyperpod-b1.json) · [Interactive demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1)
+
+??? example "Repeat the runs on a B1 cluster"
+    Use the B1 configuration and the two ready sandbox pods from [07 HyperPod](07_hyperpod.md). The default Job used an EKS system node in this run. The final Job pins its client to the HyperPod trainer.
+
+    ```bash
+    scripts/ops/bench.sh 2
+    scripts/ops/bench.sh 32
+
+    source scripts/lib.sh
+    job="bench-b1-hyperpod-$(date +%s)"
+    client_spec=$(jq -nc --arg cluster "$HYPERPOD_CLUSTER_NAME" --arg type "$HYPERPOD_TRAINER_INSTANCE_TYPE" '
+      {spec:{template:{spec:{nodeSelector:{"sagemaker.amazonaws.com/cluster-name":$cluster,
+          "node.kubernetes.io/instance-type":$type, "sagemaker.amazonaws.com/node-health-status":"Schedulable"},
+        tolerations:[{key:"nvidia.com/gpu", operator:"Exists", effect:"NoSchedule"}]}}}}')
+    render k8s/probe/job-probe.yaml.tpl JOB_NAME="$job" \
+      TOOL_ARGS='["bench","--address","sandbox-gvisor-v1.sandbox.svc.cluster.local:8000","--requests","32","--golden","relu_bias_triton"]' \
+      | kubectl patch --local -f - --type=merge -p "$client_spec" -o yaml | kubectl create -f -
+    kubectl -n rl-trainer wait --for=condition=Complete "job/$job" --timeout=15m
+    kubectl -n rl-trainer logs "job/$job"
+    ```
 
 ## Published reference numbers
 

@@ -18,5 +18,6 @@
     "SecurityGroupIds": ["${HYPERPOD_SECURITY_GROUP_ID}"],
     "Subnets": ["${HYPERPOD_SUBNET_ID}"]
   },
-  "NodeRecovery": "Automatic"
+  "NodeRecovery": "Automatic",
+  "Tags": [{"Key": "SageMaker", "Value": "true"}]
 }

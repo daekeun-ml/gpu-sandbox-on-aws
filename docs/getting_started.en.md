@@ -7,7 +7,7 @@
 
 Use the local CPU test to check installation and scoring first. Then choose an AWS path. Later steps use image URIs and AMI IDs produced by earlier commands.
 
-![a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 109 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing](images/figures/getting_started.en.svg)
+![a: an import error or a missing setting is found after the GPU nodes start, and GPU node billing continues through the fix and the rerun. b: the plumbing is checked on a local CPU with 110 pytest tests and a 2-step GRPO dry run (no AWS cost), scripts/config.env is filled in (each script stops when a value its step needs is empty or __SET_ME__), a path is picked (A, B1, B2, C, production), and only then do the GPU nodes start billing](images/figures/getting_started.en.svg)
 
 *Takeaway: (a) starts the GPU nodes first. (b) runs pytest and the dry run on a local CPU, fills in the settings file and picks a path. The AWS nodes start after that, and scenario C runs CPU sandboxes with no GPU node.*
 
@@ -15,7 +15,7 @@ Use the local CPU test to check installation and scoring first. Then choose an A
 ## What you can verify locally
 
 - **Check the plumbing before paying for AWS.** The sandbox server, the two-process harness, authentication, routing and the reward functions run the same code on CPU.
-- **Reproduce what the author verified with the same commands.** The pytest suite and the 2-step GRPO dry run were run and checked on macOS (CPU only), when the suite had 94 tests (it now has 109).
+- **Reproduce what the author verified with the same commands.** The pytest suite and the 2-step GRPO dry run were run and checked on macOS (CPU only), when the suite had 94 tests (it now has 110).
 - **Keep settings in one file.** Every script reads `scripts/config.env` through `scripts/lib.sh` and stops right away when a required value is empty or still `__SET_ME__`.
 
 **Before you start:** a terminal, `git` and Python virtual environments are enough, and the local steps (sections 1 to 4) need no Kubernetes or AWS knowledge. The starting point is in [Choose a learning path](learning_paths.md), the overall picture in "What you build" on [Home](index.md), and the reason for GPU sandboxes in [01 When the sandbox needs a GPU](concepts/01_why_gpu_sandbox.md).
@@ -126,9 +126,9 @@ Run the whole test suite of the repository.
 python -m pytest -q
 ```
 
-**What to look for:** the last line starts with `109 passed` (the duration after it depends on your machine).
+**What to look for:** the last line starts with `110 passed` (the duration after it depends on your machine).
 
-- **Breakdown**: the 109 tests are 68 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbox.md) and [multi-turn episode](handson/11_multi_turn.md) and 11 [demo site](handson/09_demo_site.md) tests.
+- **Breakdown**: the 110 tests are 69 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbox.md) and [multi-turn episode](handson/11_multi_turn.md) and 11 [demo site](handson/09_demo_site.md) tests.
 - **Coverage**: the AST policy, the two-process harness on CPU (correct, wrong, crash, timeout, benchmark cheat, monkeypatch), fail-closed authentication, readiness after egress denial is verified, the client, the gateway's per-group version pinning, the operator tools, rendering of the manifest, node user data (`infra/eks/userdata.py`) and Karpenter templates, and the demo site's security properties. Per-file coverage is in [Repository map](reference/repository_map.md#tests).
 - **CDK stack tests**: the 18 CDK stack tests live separately in `cdk/tests`; after the CDK preparation in section 5, run them with `cd cdk && python -m pytest -q tests`.
 
@@ -155,7 +155,7 @@ python -m pytest -q
     python -m pytest -q -m "not slow"
     ```
 
-    **What to look for:** `91 passed, 18 deselected`.
+    **What to look for:** `92 passed, 18 deselected`.
 
 ## 4. Loopback smoke run (macOS)
 
@@ -315,7 +315,6 @@ cp scripts/config.env.example scripts/config.env
 | `KATA_IOMMU_AMI_ID`, `WITH_KATA_GPU` | after the first run of the Kata GPU node script (`scripts/kata/gpu_nodes.sh`) | the AMI ID is printed by `infra/kata/build-iommu-ami.sh`. Add it with `WITH_KATA_GPU=1` and run `02_create_cluster.sh` again to get the `sandbox-kata-gpu` (`g4dn.metal`) node group |
 | Instance types, pinned versions | usually unchanged | `GVISOR_RELEASE=20261109.0`, `KATA_VERSION=4.3.1`, `GPU_OPERATOR_VERSION=v26.7.2`, `NVIDIA_DEVICE_PLUGIN_VERSION=0.20.1` |
 
-- **`K8S_VERSION` and the HyperPod prerequisites page**: that page still says up to 1.35.
 - **Options that override `SCENARIO`**: `--hyperpod`, `--hyperpod-b2` and `--cpu-only`. If you deployed with an option, set this value to the deployed scenario, or pass the same option again when you rerun the script to add node groups (`cdk/deploy.sh` stops on a mismatch).
 - **If `ADMIN_PRINCIPAL_ARN` is empty**: `cdk/deploy.sh` uses your current role.
 - **If the role has a path**: set `ADMIN_PRINCIPAL_ARN` yourself.
@@ -370,10 +369,10 @@ If you have not chosen a runtime and instance types yet, read [05 Decision guide
 
 ## Scope and limits
 
-- The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 109); server tests on a Linux host were not run.
+- The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 110). On November 22, 2026, the full pytest suite and the CDK tests passed on Linux.
 - The author did not run `scripts/01_check_prereqs.sh` in section 5.
 - Of the later steps, the gVisor path of scenario A (`02` to `08`), scenario C, Kata GPU (`g4dn.metal`) and the runtime benchmark ran in a practice account. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record).
-- `ops/rollout.sh` during training in scenario A and HyperPod B1 and B2 were not run. Verify the steps that were not run with the checks on each hands-on page.
+- `ops/rollout.sh` during training in scenario A and HyperPod B2 were not run. Verify the steps that were not run with the checks on each hands-on page.
 - The dry run shows no training effect; real training runs on a GPU in [05 On-policy GRPO training](handson/05_grpo_training.md).
 
 ## Time and cost

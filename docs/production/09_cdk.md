@@ -37,9 +37,9 @@ CDK 스택은 VPC, EKS, 관리형 노드 그룹, SSM 접속 인스턴스를 함�
 !!! warning "검증 상태"
     - **실습 계정에서 실행한 것**: 시나리오 C의 배포, 확인, 삭제와 시나리오 A(gVisor 경로), Kata GPU 노드 그룹(`scripts/kata/gpu_nodes.sh`)입니다.
     - **시나리오 C에서 확인한 것**: 클러스터와 노드 상태, private endpoint, c8i 노드의 nested virtualization과 `/dev/kvm`, 노드의 gVisor와 node guard, SSM 터널을 통한 kubectl 접속(터널은 `127.0.0.1`에서만 열림), Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)의 kata-deploy, `gvisor-cpu` RuntimeClass, 세 런타임의 smoke pod, 삭제 후 남은 리소스입니다.
-    - **중간 단계로만 배포한 것**: B1과 B2 스택은 시나리오 A 클러스터를 만드는 중간 단계로만 배포했습니다.
-    - **AWS에서 실행하지 않은 것**: HyperPod 단계(`scripts/hyperpod/`)와 시나리오 A의 학습 중 `ops/rollout.sh`입니다.
-    - **로컬에서 확인하는 것**: synth로 보안 기본값(`cdk/tests`, 18개)과 cdk-nag를 확인합니다.
+    - **중간 단계로만 배포한 것**: B2 스택은 시나리오 A 클러스터를 만드는 중간 단계로만 배포했습니다.
+    - **AWS에서 실행하지 않은 것**: HyperPod B2 custom AMI 경로와 시나리오 A의 학습 중 `ops/rollout.sh`입니다.
+    - **로컬에서 확인하는 것**: synth로 보안 기본값(`cdk/tests`, 19개)과 cdk-nag를 확인합니다.
 
     날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
@@ -73,7 +73,7 @@ flowchart LR
 | 접속 | 필요 없음 (CloudFormation이 배포) | `cdk/tunnel.sh` (SSM 포트 포워딩)를 두 번째 터미널에서 실행해 둠 |
 | 노드 그룹 추가 | `WITH_KATA_CPU=1`, `WITH_KATA_GPU=1`(`KATA_IOMMU_AMI_ID` 필요)을 설정하고 `02_create_cluster.sh`를 다시 실행하면 CDK가 변경된 부분만 반영 | `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh`는 노드 그룹이 있는지 확인한 뒤 설치만 함 |
 | 삭제 | `cdk/destroy.sh` | `scripts/08_cleanup.sh` (클러스터 이름 확인 뒤 `cdk/destroy.sh --yes`, 그다음 AMI와 ECR) |
-| 보안 검사 | `cdk/tests` 18개 + cdk-nag (지적이 있으면 배포 중단) | `tests/`의 user data, 매니페스트 렌더링 테스트 |
+| 보안 검사 | `cdk/tests` 19개 + cdk-nag (지적이 있으면 배포 중단) | `tests/`의 user data, 매니페스트 렌더링 테스트 |
 | 스택 밖에서 만드는 것 | HyperPod 클러스터, IOMMU AMI와 B2 AMI, Karpenter, ECR 저장소 | `scripts/hyperpod/`, `kata/gpu_nodes.sh`(IOMMU AMI 빌드), `03_build_push_images.sh`(ECR) |
 
 ## 보안 기본값
@@ -241,7 +241,7 @@ cdk/destroy.sh
 
 ## 적용 범위와 한계
 
-- **HyperPod 단계는 AWS에서 실행하지 않았습니다.** 시나리오 C와 시나리오 A, Kata GPU 노드 그룹은 위 "검증 상태"대로 실습 계정에서 실행했습니다. B1과 B2는 스택 배포만 중간 단계로 거쳤고, 그 밖의 확인은 synth, cdk-nag, 템플릿 assertion 테스트(`cdk/tests`)입니다.
+- **HyperPod B1**. 11월 22일 EKS 1.36 스택에서 gVisor 샌드박스 2개를 연결해 GRPO 한 스텝을 실행했습니다. [실행 기록과 화면](../handson/07_hyperpod.md#확인-방법)
 - **CDK 스택 밖에 있는 것:** HyperPod 클러스터(`scripts/hyperpod/create.sh`), IOMMU AMI(`scripts/kata/gpu_nodes.sh`)와 B2 AMI(`scripts/hyperpod/build_b2_ami.sh`) 빌드, Karpenter, gateway 같은 Production 구성 요소, ECR 저장소는 스크립트로 만듭니다.
 - **c8i의 CPU 토폴로지:** nested virtualization을 활성화할 때 함께 지정하는 `CoreCount`, `ThreadsPerCore`는 `cdk/gpusandbox_cdk/config.py`의 표(`c8i.2xlarge`: 4, 2)에서 읽습니다. 표에 없는 유형은 CDK 설정 단계에서 거부되므로, 다른 Kata CPU 인스턴스 유형을 쓰려면 그 파일 주석의 `describe-instance-types` 명령으로 코어 수와 코어당 스레드 수를 확인해 `CPU_TOPOLOGY`에 추가한 뒤 배포하세요.
 - **EKS 암호화 설정:** EKS 1.28 이상은 모든 Kubernetes API 데이터를 기본으로 envelope 암호화하므로, CloudFormation은 `EncryptionConfig.Resources`를 deprecated로 표시합니다(W9009). 스택은 `Resources` 없이 KMS 키(`Provider`)만 지정합니다. CloudFormation 문서상 이 속성의 변경은 Replacement이므로, `Resources: [secrets]`로 이미 배포한 스택에 그대로 배포하면 클러스터 교체가 계획될 수 있습니다. 먼저 `cdk diff`로 확인하고, 교체가 보이면 스택을 지운 뒤 새로 만드세요.

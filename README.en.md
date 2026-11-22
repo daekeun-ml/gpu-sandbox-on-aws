@@ -89,7 +89,7 @@ AWS resources can incur charges while idle. Check the [cost estimates](https://d
 
 ## Validation status
 
-The AWS exercises ran EC2 GPU training (A), CPU grading and version switching (C), and Kata GPU with QEMU. HyperPod B1 and B2 and switching pools during GPU training were not verified on AWS. The experimental Kata GPU configuration with Cloud Hypervisor failed to start its VM. [Run records and measurement scope](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/sources/#aws-run-record)
+The AWS exercises verified EC2 GPU training (A), CPU grading and version switching (C), and GPU passthrough with Kata + QEMU. The Kata + Cloud Hypervisor CPU pool passed in scenario C. Its GPU experiment timed out while starting the VM. A one-step HyperPod B1 job scored 12 submissions on two EC2 gVisor sandboxes. HyperPod B2 and switching pools during GPU training were not verified on AWS. [Run records and measurement scope](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/sources/#aws-run-record)
 
 ## License
 

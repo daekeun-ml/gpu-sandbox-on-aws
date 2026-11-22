@@ -24,7 +24,7 @@
 
 !!! warning "Validation status and safety"
     - **What ran**: deleting the scenario C CDK stack and `08_cleanup.sh --images` on a scenario A cluster ran in a practice account; the record does not say whether the AMI step ran ([run record](../reference/sources.md#aws-run-record)).
-    - **What has not run end to end**: `hyperpod/delete.sh` and `demo/teardown.sh` passed shellcheck only and have not been run end to end on AWS.
+    - **What has not run end to end**: `demo/teardown.sh` passed shellcheck only. The November 22 B1 run exercised `hyperpod/delete.sh` through deletion of the execution role and lifecycle bucket.
     - **In a shared or production account**: confirm by name, tags and creation time that a resource belongs to this hands-on before deleting it (ideally, run from an account or role dedicated to this hands-on).
     - **Check commands**: the check commands below only read.
 

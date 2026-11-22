@@ -72,7 +72,7 @@ Create it only when it does not exist, with `test -f scripts/config.env || cp sc
 | `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | The B2 `sandbox` instance group. You can set `ml.g6.xlarge` instead | `instance-group-sandbox.json.tpl` |
 
 - **`AWS_REGION`**: the demo site (`demo/deploy.sh`) deploys to `us-east-1` regardless of this value.
-- **`K8S_VERSION`**: the example value `1.36` is inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes (the HyperPod prerequisites page still says up to 1.35).
+- **`K8S_VERSION`**: the example value `1.36` is inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes.
 - **`SCENARIO`**: `A` (system, trainer, gVisor), `B1` (system, gVisor), `B2` (system only), `C` (system, Kata CPU). The options of `02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) override it.
 - **`CHANGE_SCENARIO`**: not needed for a first deployment or a redeployment of the same scenario. When the scenario differs and this is not `1`, `cdk/deploy.sh` stops.
 - **`ADMIN_PRINCIPAL_ARN`**: comma-separated (not STS session ARNs). Set it yourself if the role has a path.
@@ -419,7 +419,7 @@ The Job templates (`k8s/trainer/job-grpo.yaml.tpl`, `hyperpod-job-grpo.yaml.tpl`
 
 - **Flags they pass**: only `--output-dir`, `--max-steps`, `--model` and `--metrics-file`. To change other flags, add them to the template's `args` (`command` for HyperPod).
 - **Env they set**: `SANDBOX_ROUTING_FILE`, `SANDBOX_TOKEN_FILE`, `HF_HOME=/cache/hf` and `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
-- **Resources**: 7 CPUs, 28Gi memory and 1 GPU
+- Scenario A requests 7 CPUs, 28 GiB and one GPU. The HyperPod worker requests 5 CPUs, 24 GiB and one GPU.
 
 ## 8. Runtime profiles (k8s/sandbox/profiles)
 

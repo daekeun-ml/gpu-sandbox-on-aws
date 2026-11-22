@@ -142,6 +142,12 @@ def test_waf_limits_video_downloads_per_ip():
 def test_extras_sections_parse_from_cluster_logs():
     extras = json.loads((SITE / "data/extras.json").read_text())
     assert extras["schema"] == "extras-1"
+    # The public replay and the guide show the same B1 client placements and observations.
+    b1 = json.loads((ROOT / "docs/handson/data/hyperpod-b1.json").read_text())
+    assert extras["b1"] == b1
+    assert [r["client"] for r in b1["bench"]["rows"]] == ["system", "hyperpod"]
+    assert all(r["runtime"] == "gvisor" and r["ok"] == r["requests"] for r in b1["bench"]["rows"])
+    assert len(b1["training"]["batches"]) == len(b1["training"]["steps"]) == 1
     passes = {p["label"]: p["rows"] for p in extras["bench"]["passes"]}
     assert all(r["ok"] == r["requests"] for rows in passes.values() for r in rows)
     assert all(r["cold_start_s"] for rows in passes.values() for r in rows)

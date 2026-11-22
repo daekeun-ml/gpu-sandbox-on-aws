@@ -32,12 +32,12 @@
 
 | Section | What it shows | Data |
 |---|---|---|
-| Top | Key numbers and a tour video (about 2 minutes, no sound) | `recording.json`, `extras.json`, `media/tour-ko.mp4` and `tour-en.mp4` |
+| Top | Key numbers and a tour video (2 min 39 s in English, silent) | `recording.json`, `extras.json`, `media/tour-ko.mp4` and `tour-en.mp4` |
 | 1. Architecture | A diagram whose components open a description and measurements when clicked, and a play button | Text in the page and measurements from `extras.json` |
 | 2. Try scoring | Pick a golden submission and press play: a progress bar fills, then the verdict, reward components and the reason appear | Golden evaluation results in `recording.json`, and rewards computed with the same `score_verdict` as the trainer |
 | 3. Attacks blocked | For each pool, the kernel inside the sandbox and the node kernel, the GPU and egress status. Eight cards of isolation and scoring checks, and a terminal replay | `/info` in `recording.json`, terminal transcripts in `extras.json` (verify.sh, the gVisor smoke test, rollout.sh) |
-| 4. Training | A chart of the verdict mix, pass rate and mean reward per GRPO batch with step playback, and a chart of a version switch during training | `training` (GRPO Job logs) and `simulation` in `extras.json` (or `training` in `recording.json` when absent) |
-| 5. Benchmark | Bar charts of eval p50, p95, cold start, throughput per pod and speedup per runtime, for cached images or as deployed | `bench` in `extras.json` (output of `scripts/ops/bench.sh`) |
+| 4. Training | Select the EC2 or HyperPod B1 GRPO run to inspect verdicts and rewards. A second chart replays the CPU version-switch simulation. | `training`, `b1.training`, `simulation` in `extras.json` |
+| 5. Benchmark | B1 client placement and whole-pool throughput, followed by the earlier runtime comparison with cold start, latency and throughput per pod | `b1.bench` and `bench` in `extras.json` |
 | Architecture patterns (`architecture.html`) | Scenarios A, B1, B2 and C drawn with AWS icons | Static data in the page (`arch.js`); no data file is read |
 
 - **Key numbers at the top**: GPU runtimes, goldens matching their expected verdict, connections blocked in the two pools' `verify.sh` transcripts, benchmark requests answered ok.
@@ -50,8 +50,12 @@ The published data and recordings are these.
 
 - **Published files**: HTML, CSS, JavaScript, AWS architecture icons (SVG), the tour videos (MP4) with their thumbnails (JPG), and two recording JSON files (`data/recording.json`, `data/extras.json`).
 - **The repository's `recording.json` sample**: a laptop CPU pool recording; replace it with a GPU recording made on your cluster.
-- **The 2026-11-18 published copy**: the GPU recording is in `demo/recordings/2026-11-18-eks-gpu.json`. The GRPO chart and the benchmark in `extras.json` were built from the logs of the same day's EKS run (us-west-2), and the version switch chart uses the log of a CPU simulation run on 2026-11-17 with golden submissions instead of a model.
+- The published GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. The EC2 five-step chart and runtime comparison come from November 18. The CPU version switch is from November 17. On November 22 we recorded one GRPO step and two fixed-kernel benchmark runs in B1. [B1 measurements](08_benchmark.md#hyperpod-b1)
 - **Progress bar in section 2**: the recorded total evaluation time. Per-stage times are not recorded, so the stages are filled in from the verdict once the evaluation ends.
+
+[Open the public B1 benchmark](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1)
+
+![CloudFront demo with EKS and HyperPod clients scoring the same kernel](../images/demo/hyperpod-b1-benchmark-en.png)
 
 ```mermaid
 flowchart LR
@@ -72,7 +76,7 @@ flowchart LR
 - **Deployment** is mostly waiting for the stack and for CloudFront to propagate, and the script waits for 200 for up to about 10 minutes (step 7 in section 4). The actual duration was not measured.
 - **Site cost**: usually small for a small static site, but it depends on traffic, so check [CloudFront pricing](https://aws.amazon.com/cloudfront/pricing/) and [S3 pricing](https://aws.amazon.com/s3/pricing/).
 - **WAF cost**: about 5 USD per month for the web ACL, 1 USD per rule per month (5 rules), and 0.60 USD per million requests ([AWS WAF pricing](https://aws.amazon.com/waf/pricing/)). While the stack exists, the fixed part (about 10 USD per month) bills even without traffic.
-- **Video transfer cost**: each tour video is about 5.5 MB. Transfer bills per [CloudFront pricing](https://aws.amazon.com/cloudfront/pricing/), and WAF limits `/media/` requests to 100 per 5 minutes per IP, which caps the transfer one client can cause. If you expect heavy use, set an AWS Budgets alert.
+- **Video transfer cost**: the Korean and English videos are 6.1 and 6.8 MiB respectively. Transfer bills per [CloudFront pricing](https://aws.amazon.com/cloudfront/pricing/), and WAF limits `/media/` requests to 100 per 5 minutes per IP, which caps the transfer one client can cause. If you expect heavy use, set an AWS Budgets alert.
 - **Log cost**: only S3 storage for the log bucket. Objects expire after 90 days, and the bucket stays after cleanup (section 6).
 - **GPU recording cost**: the GPU sandbox nodes must be up while you record (`g5.2xlarge` 1.212 USD per hour, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1 and us-west-2 On-Demand). The recorder pod runs on a system node without a GPU; recording from a trainer pod also needs the trainer node. Once you have the recording, scale the GPU nodes down with [99 Cleanup](99_cleanup.md).
 
@@ -102,13 +106,13 @@ Open http://127.0.0.1:8080 in a browser. Opening the file directly (`file://`) c
 - The terminal logs a 200 response for each file.
 
 ??? note "Where this was checked, and where each section's data comes from"
-    These items were checked on 2026-11-18 with Chromium (Playwright) on Linux. The pool cards in section 3 read `recording.json`; the attack cards and terminals in section 3 and sections 4 and 5 come from the repository's `extras.json`, and each chart shows its source. In the published copy the GRPO training and the benchmark are from the 2026-11-18 EKS run, and the version switch is the 2026-11-17 CPU simulation.
+    The public site was checked in Chromium on November 22 in Korean and English. Pool cards use the golden recording. Training, benchmarks and terminal playback use `extras.json`. The architecture page shows the latest verified run for each pattern.
 
 **If it fails:**
 
 - **On `Address already in use`**: use another port (for example `8081`) and its address.
 - **If `failed to load recording:` appears where the recording source should be**: check that `demo/site/data/recording.json` exists and is valid JSON.
-- **Without `data/extras.json`**: the blocked and benchmark tiles at the top and the terminal output disappear. Section 5 keeps its heading and an empty chart area. The attack cards in section 3 and the GRPO chart in section 4 show "This recording has no data for this part.", and the version switch chart in section 4 is drawn from the training events in `recording.json`.
+- Without `data/extras.json`, the benchmark section and the GRPO run selector are hidden. The golden recording still loads.
 - **For anything else**: see [Troubleshooting](../reference/troubleshooting.md).
 
 ## 2. Make a GPU recording on the cluster
@@ -303,6 +307,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 |---|---|---|
 | Benchmark | Save the output of `scripts/ops/bench.sh 32` to `bench.log` with `tee` | `--bench-log pass1=bench.log --bench-pass pass2`, node details with `--node` (see the example) |
 | GRPO training | `kubectl -n rl-trainer logs job/<job> > grpo.log`. It reads the reward function's `reward_batch` JSON lines and the trainer's metric lines (`{'loss': ...}`) | `--training-log grpo.log --model <model-id>` |
+| HyperPod B1 | The published B1 training log summary and fixed-kernel benchmark | `--b1-record docs/handson/data/hyperpod-b1.json` |
 | Version switch | Save the output of `scripts/ops/simulate.sh 30 20` to `simulate.log`, and switch the version with `rollout.sh` from [06](06_sandbox_update.md) meanwhile | `--simulation-log simulate.log` |
 | Terminal output | Save the output of commands such as `scripts/ops/verify.sh gvisor v1` to a file | `--transcript verify-gvisor=verify-gvisor.txt` (repeatable) |
 
@@ -314,6 +319,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 # Build data/extras.json from the saved command output (paths are examples)
 python3 demo/build_extras.py --out demo/site/data/extras.json \
   --source "Amazon EKS 1.36, us-west-2, 2026-11-18" \
+  --b1-record docs/handson/data/hyperpod-b1.json \
   --bench-log pass1=bench.log --bench-pass pass2 \
   --node 'gvisor=g5.2xlarge|NVIDIA A10G' --node 'kata-qemu=g4dn.metal|Tesla T4' \
   --unmeasured 'kata-clh=g4dn.metal|Tesla T4' \

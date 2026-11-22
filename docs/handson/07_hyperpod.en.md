@@ -24,7 +24,7 @@
     - **ENI**: a virtual network interface attached to an instance. The VPC CNI hands out the ENI's IP addresses to pods, so the number of ENIs sets the per-node pod limit.
 
 !!! warning "Validation status"
-    The HyperPod steps on this page (from `scripts/hyperpod/create.sh` on) were not run on AWS. Compare your output with "What to look for". The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
+    On November 22, 2026, B1 completed one GRPO step on an `ml.g5.2xlarge` in `us-west-2`. Two EC2 gVisor sandboxes evaluated 12 generated submissions. The [run record and screenshots](#how-to-verify) show node placement and the completed job. B2 is experimental.
 
 ## Layout
 
@@ -82,9 +82,11 @@ Check the HyperPod `ml.<type> for cluster usage` quotas under Amazon SageMaker i
 
 **If it fails:** see the "Configuration and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
 
+![Applied HyperPod quota and EKS 1.36 training operator versions in us-west-2](../images/terminal/hyperpod-prereqs.png)
+
 ## Time and cost
 
-Per the estimates the scripts print (not the author's measurements), the EKS cluster deployment (`cdk/deploy.sh`) takes 20 to 30 minutes and HyperPod `CreateCluster` 15 to 30 minutes to reach InService.
+Allow 20–30 minutes for EKS deployment. In the November 22 B1 run, the HyperPod cluster reached `InService` about 2½ minutes after `CreateCluster` returned. The trainer instance finished provisioning about 8 minutes after the request.
 
 | Item | Count | USD/hour |
 |---|---|---|
@@ -111,7 +113,7 @@ cdk/tunnel.sh    # in a second terminal; keep it running for every kubectl and h
 - When the deploy finishes, `Outputs` shows `EndpointPublicAccess = false`.
 - With the tunnel open, the `ROLE` column of `kubectl get nodes -L gpusandbox/role` shows two `system` nodes and two `sandbox-gvisor` nodes, and no `trainer` node.
 
-Kubernetes 1.36 has AMIs in the HyperPod EKS AMI release notes, but the prerequisites page still lists only up to 1.35; the two pages disagree.
+HyperPod supports EKS 1.36 and publishes a matching x86_64 AMI. [HyperPod EKS prerequisites](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html)
 
 ??? note "What the CDK stack sets up for HyperPod"
     The CDK stack sets the authentication mode `API_AND_CONFIG_MAP` that HyperPod requires and the VPC CNI with NetworkPolicy enabled. It also tags the private subnets with `kubernetes.io/role/internal-elb=1`, which step 4 uses to find a subnet.
@@ -120,7 +122,7 @@ Kubernetes 1.36 has AMIs in the HyperPod EKS AMI release notes, but the prerequi
 
 ### 2. Images
 
-Build the sandbox, trainer and control images and push them to ECR. With `HYPERPOD=1`, the trainer image gets `hyperpod-elastic-agent` (the `hyperpodrun` launcher).
+Build the sandbox, trainer and control images and push them to ECR. With `HYPERPOD=1`, the trainer image gets `hyperpod-elastic-agent` 1.1.3 on vLLM 0.26.0 and PyTorch 2.11.0. The build runs `hyperpodrun --help` to check that the launcher starts.
 
 ```bash
 HYPERPOD=1 scripts/03_build_push_images.sh
@@ -174,7 +176,7 @@ For the Kata CPU pool alone, set only `WITH_KATA_CPU="1"`, then run cluster crea
 
 ### 4. HyperPod cluster
 
-Create the HyperPod cluster and attach it to the EKS cluster. HyperPod instance charges start here. Before you run it, finish the preparation in "Training operator prerequisites" below.
+Create the HyperPod cluster and attach it to the EKS cluster. HyperPod instance charges start here.
 
 ```bash
 scripts/hyperpod/create.sh
@@ -187,11 +189,11 @@ The script's five steps:
 | 1 dependency chart | Clones `aws/sagemaker-hyperpod-cli` and installs `helm_chart/HyperPodHelmChart` into `kube-system` as `hyperpod-dependencies` | Required when HyperPod is created through the API |
 | 2 lifecycle bucket | Creates `HYPERPOD_LCS_BUCKET` if missing, turns on all four Block Public Access settings (`BlockPublicAcls`, `IgnorePublicAcls`, `BlockPublicPolicy`, `RestrictPublicBuckets`) and uploads `infra/hyperpod/lifecycle/` | Lifecycle scripts run when a node is created and can change the node's configuration, so they must not be public |
 | 3 execution role | `${HYPERPOD_CLUSTER_NAME}-execution`: trusts `sagemaker.amazonaws.com`, with `AmazonSageMakerClusterInstanceRolePolicy` + inline `hyperpod-eks` (EC2 ENI, ECR pull) + inline `lifecycle-bucket-read` | The role for HyperPod nodes is separate from the EKS node role |
-| 4 CreateCluster | Creates the cluster with `Orchestrator.Eks.ClusterArn`, instance group `trainer`, the EKS cluster security group and a private subnet, `NodeRecovery: Automatic`. Polls every 60 seconds until InService or Failed | With the same security group, HyperPod nodes, EC2 nodes and the control plane can talk to each other |
-| 5 training operator | `aws eks create-addon --addon-name amazon-sagemaker-hyperpod-training-operator`, then waits for `addon-active` | Installs the HyperPodPyTorchJob CRD and controller |
+| 4 CreateCluster | Creates the cluster with `Orchestrator.Eks.ClusterArn`, instance group `trainer`, the EKS cluster security group and a private subnet, `NodeRecovery: Automatic`. Polls every 30 seconds while creating and stops on failure | With the same security group, HyperPod nodes, EC2 nodes and the control plane can talk to each other |
+| 5 training operator | Waits for a schedulable, Ready trainer node, runs `aws eks create-addon --addon-name amazon-sagemaker-hyperpod-training-operator`, then waits for `addon-active` | Installs the HyperPodPyTorchJob CRD and controller |
 
 - **Defaults of the step 1 dependency chart**: with the main-branch values, the health monitoring agent, deep health check, job auto-restart, MPI operator and the NVIDIA, EFA and Neuron device plugins are on by default.
-- **Instance group `trainer` in step 4**: one `ml.g5.2xlarge`, `ThreadsPerCore` 2 (SMT on, so 8 vCPUs; the trainer requests 7), `OnCreate` `on_create.sh`.
+- **Instance group `trainer` in step 4**: one `ml.g5.2xlarge`, `ThreadsPerCore` 2 (8 vCPUs), `OnCreate` `on_create.sh`. The worker requests 5 vCPUs, 24 GiB and one GPU. The operator, its per-job pod manager and the other system pods together requested 2.75 vCPUs on this node.
 - **Private subnet in step 4**: found by the tag `kubernetes.io/role/internal-elb=1`, set by the CDK stack.
 
 **What to look for:**
@@ -210,24 +212,8 @@ NAME              STATUS   ROLES    AGE   VERSION   NODE-HEALTH-STATUS   INSTANC
 
 `cluster.json.tpl` does not configure deep health checks (`OnStartDeepHealthChecks`: `InstanceStress`, `InstanceConnectivity` and others); add them to the instance group yourself if you need them.
 
-!!! warning "Training operator prerequisites"
-    The AWS documentation lists these prerequisites of the training operator.
-
-    - cert-manager
-    - the EKS Pod Identity Agent
-    - a role with the managed policy `AmazonSageMakerHyperPodTrainingOperatorAccess` and a pod identity association (namespace `aws-hyperpod`, service account `hp-training-operator-controller-manager`), which the CLI installation creates first
-
-    This cluster has the `eks-pod-identity-agent` add-on, but step 5 of the script only runs `create-addon`, and cert-manager is off by default in the dependency chart. The script does not wait for this preparation and runs on through step 5, so before you run `create.sh`, set up cert-manager, the role and the pod identity association as described in the [installation guide](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-eks-operator-install.html). Also check that the `eks-pod-identity-agent` add-on is `ACTIVE`.
-
-    The operator page checked at the same time lists Kubernetes 1.28 to 1.33 and PyTorch 2.4.0 to 2.7.1 as supported; this repository uses Kubernetes 1.36 and PyTorch 2.14.0 from the vLLM image, so the combination is unconfirmed. List the add-on versions for your cluster version:
-
-    ```bash
-    aws eks describe-addon-versions --kubernetes-version 1.36 \
-      --addon-name amazon-sagemaker-hyperpod-training-operator \
-      --query 'addons[0].addonVersions[].addonVersion' --output table
-    ```
-
-    **What to look for:** the table shows at least one version. An empty table means there is no add-on for 1.36 yet.
+??? note "Training operator permissions"
+    The B1 and B2 CDK stacks install the `cert-manager` and `eks-pod-identity-agent` add-ons and associate the `aws-hyperpod/hp-training-operator-controller-manager` service account with an IAM role. `create.sh` tags the HyperPod cluster `SageMaker=true`, which the role’s `AmazonSageMakerHyperPodTrainingOperatorAccess` policy requires for `DescribeClusterNode`.
 
 On a rerun, the script behaves differently per step.
 
@@ -263,21 +249,26 @@ scripts/ops/verify.sh gvisor
 
 **What to look for:** the last line of the third command is `pool sandbox-gvisor-v1 verified`. The output of each step is the same as "What to look for" in [04 Deploy and verify sandbox pools](04_sandbox_pools.md).
 
+![Two ready gVisor replicas and six checks from the authenticated probe in the B1 cluster](../images/terminal/hyperpod-sandboxes.png)
+
 **If it fails:** see the "If it fails" table in [04 Deploy and verify sandbox pools](04_sandbox_pools.md) and the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md).
 
 ### 6. Training
 
-The first command creates the HyperPodPyTorchJob `grpo-${RUN_ID}`; the second shows only the event lines of the trainer log (stop with Ctrl-C).
+Set a run ID, submit a one-step job and save its output locally. The operator removes the worker pod on completion.
 
 ```bash
-scripts/hyperpod/run_grpo.sh        # 60 steps (default)
-kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '"event"'
+export RUN_ID="b1-$(date +%Y%m%d-%H%M%S)"
+scripts/hyperpod/run_grpo.sh 1      # smoke test; omit 1 for 60 steps
+kubectl -n rl-trainer wait --for=create pods -l "HPJob=grpo-${RUN_ID}" --timeout=5m
+kubectl -n rl-trainer wait --for=condition=Ready pods -l "HPJob=grpo-${RUN_ID}" --timeout=20m
+kubectl -n rl-trainer logs -f -l "HPJob=grpo-${RUN_ID}" --tail=-1 | tee trainer.log | grep --line-buffered '"event"'
 ```
 
 **What to look for:**
 
-- The first command prints `HyperPodPyTorchJob grpo-<RUN_ID> submitted` and one line for the job.
-- In the second command, `{"event": "routing", ...}` appears within 20 minutes, followed by a `{"event": "reward_batch", ...}` line for every step that sent completions to the sandboxes. The first step includes the model download and vLLM initialization, so it takes a while.
+- `run_grpo.sh` prints `HyperPodPyTorchJob grpo-<RUN_ID> submitted` and one line for the job.
+- In the trainer log, `{"event": "routing", ...}` appears within 20 minutes, followed by a `{"event": "reward_batch", ...}` line for every step that sent completions to the sandboxes. The first step includes the model download and vLLM initialization, so it takes a while.
 
 See the [HyperPod training script](../reference/scripts.md#scriptshyperpodrun_grposh) for configuration and what happens after submission. Rewards and log formats match the [GRPO exercise](05_grpo_training.md).
 
@@ -321,12 +312,20 @@ The template sets placement, the trainer command, and log patterns used to detec
 
     HyperPod nodes have two limits.
 
-    - **Pods per node**: they have one ENI, so few pods fit per node. `ml.g6.2xlarge` allowed at most 14 (the HyperPod chart's DaemonSets included), and the limit of `ml.g5.2xlarge` has not been checked.
+    - **Pods per node**. Kubernetes reported a limit of 14 pods on the `ml.g5.2xlarge` trainer in this run. Check `.status.allocatable.pods` on your node. The limit depends on the AMI and VPC CNI version.
     - **IMDS access**: only hostNetwork pods reach IMDS by default, so the trainer pod cannot read node credentials.
 
 ## How to verify
 
-`InService` confirms that the HyperPod instances are ready. Then check where Kubernetes scheduled the trainer and whether it reports routing and scoring events.
+On November 22, 2026, the AWS console showed `InService` while the trainer instance was still `Pending`. Check its status with `list-cluster-nodes`, then check node placement and trainer logs in Kubernetes.
+
+![The EKS-orchestrated lab cluster marked InService in the AWS HyperPod console](../images/console/hyperpod-b1.png)
+
+```bash
+source scripts/config.env
+aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" \
+  --query 'ClusterNodeSummaries[].[InstanceGroupName,InstanceStatus.Status]' --output table
+```
 
 1. In the last table of `hyperpod/create.sh`, the HyperPod node has `node-health-status` `Schedulable` and instance type `ml.g5.2xlarge`.
 2. The HyperPod cluster status and failure message:
@@ -350,15 +349,28 @@ The template sets placement, the trainer command, and log patterns used to detec
 4. The job and the node the trainer pod runs on:
 
     ```bash
-    kubectl -n rl-trainer get hyperpodpytorchjob grpo-<RUN_ID>
-    kubectl -n rl-trainer get pods -l app=grpo-trainer -o wide
+    kubectl -n rl-trainer get hyperpodpytorchjob "grpo-${RUN_ID}"
+    kubectl -n rl-trainer get pods -l "HPJob=grpo-${RUN_ID}" -o wide
     ```
 
     **What to look for:** the job shows one line, and the pod's NODE is the HyperPod node from item 1.
 
+    ![The running trainer on a schedulable HyperPod node with an NVIDIA A10G](../images/terminal/hyperpod-trainer-node.png)
+
 5. `{"event": "routing", ...}` appears in the trainer log within 20 minutes, followed by a `reward_batch` line for every step that sent completions to the sandboxes.
 
+    ```bash
+    kubectl -n rl-trainer wait --for=condition=Completed "hyperpodpytorchjob/grpo-${RUN_ID}" --timeout=30m
+    jq -Rrc 'fromjson? | select(.event=="reward_batch" or .event=="done")' trainer.log
+    ```
+
+    The one-step job `grpo-b1-grpo` ran from 13:11:57 to 13:17:35 UTC, including image pull and model initialization. TRL reported 49.2 s of training. Of the 12 submissions sent to gVisor v1, one passed, two gave wrong answers, eight raised runtime errors and one failed to compile.
+
+    ![Completed job condition, routing, reward counts and done event from the saved trainer log](../images/terminal/hyperpod-grpo-result.png)
+
 Load `$AWS_REGION`, `$CLUSTER_NAME` and `$HYPERPOD_CLUSTER_NAME` with `source scripts/config.env` first. If a check fails, see the "HyperPod" section of [Troubleshooting](../reference/troubleshooting.md).
+
+A separate fixed-kernel benchmark sent 32 requests from the HyperPod trainer node to the two EC2 sandboxes. All 32 passed. Server-side p50 was 9.937 s and pool throughput was 0.199 eval/s. [Benchmark, screenshot and run data](08_benchmark.md#hyperpod-b1)
 
 ## B2 (experimental): gVisor on a HyperPod instance group { #b2 }
 
@@ -623,12 +635,12 @@ A version swap during training is `scripts/ops/rollout.sh gvisor-hyperpod v1 v2`
 
 ## Scope and limits
 
-- **Training operator version combination:** Kubernetes 1.36 with PyTorch 2.14.0 is not on the supported list of the operator documentation (warning box above; the page may be out of date).
+- **Training operator**. In `us-west-2`, `v1.3.0-eksbuild.1` reached `ACTIVE` on EKS 1.36 after its HyperPod node registered.
 - **Elastic agent settings:** the official examples declare the elastic agent port (`containerPort: 8080`), and one of them also passes `--tee=3 --log_dir=/tmp/hyperpod` to `hyperpodrun`. This template has neither, so if the operator cannot read the agent's state or the log rules do not fire, compare with the official example.
 - **Checkpoints:** `/outputs` is an emptyDir, so a recreated pod starts training over (note above).
 - **Deep health checks:** not configured in `cluster.json.tpl`.
 - **Kata without a GPU:** likely blocked on HyperPod nodes by the same `/dev/kvm` condition (inference, unverified).
-- **B1 (`ml.g5`):** not run on AWS.
+- **B1 scope**. We completed one GRPO step and ran the fixed-kernel scoring benchmark from the HyperPod trainer node. Node replacement and checkpoint recovery require separate tests.
 - **B2 (experimental):** not run on AWS with `ml.g5` either. Five things are unconfirmed.
     - Whether the HyperPod base AMI installed the driver with dnf or with the `.run` installer (the builder handles both)
     - Whether HyperPod's image validation accepts an image with a replaced driver
@@ -645,6 +657,8 @@ Delete HyperPod first, then the EKS cluster. Both scripts ask you to type a conf
 scripts/hyperpod/delete.sh   # HyperPodPyTorchJobs, HyperPod cluster, execution role, lifecycle bucket
 scripts/08_cleanup.sh        # EKS cluster and the rest
 ```
+
+In the B1 test, CloudWatch retained the log group `/aws/sagemaker/Clusters/<cluster-name>/<cluster-id>` after `hyperpod/delete.sh` finished. To clean up a test account, check the exact name under CloudWatch Logs and delete that group when you have saved the logs you need.
 
 **What to look for:** the first command ends with `HyperPod resources deleted`. The words to type at each prompt, the resources that can remain and the check commands are in [99 Cleanup](99_cleanup.md).
 

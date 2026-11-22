@@ -1,6 +1,6 @@
 {
  "schema": "extras-1",
- "built_at": "2026-11-18T15:22:01Z",
+ "built_at": "2026-11-22T14:17:31Z",
  "source": "Amazon EKS 1.36, us-west-2, 2026-11-18",
  "bench": {
   "requests": 32,
@@ -1479,5 +1479,96 @@
     }
    ]
   }
- ]
+ ],
+ "b1": {
+  "source": "Amazon EKS 1.36 · us-west-2 · 2026-11-22",
+  "training": {
+   "source": "HyperPod ml.g5.2xlarge · gVisor v1 · us-west-2 · 2026-11-22",
+   "model": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+   "batches": [
+    {
+     "event": "reward_batch",
+     "batch": 1,
+     "global_step": 0,
+     "runtime": "gvisor",
+     "version": "v1",
+     "served_versions": {
+      "v1": 12
+     },
+     "routing_revision": 1,
+     "n": 12,
+     "status": {
+      "wrong_answer": 2,
+      "runtime_error": 8,
+      "ok": 1,
+      "compile_error": 1
+     },
+     "pass_rate": 0.0833,
+     "custom_kernel_rate": 0.0833,
+     "mean_speedup": 1.5789,
+     "eval_p50_s": 3.148,
+     "eval_p95_s": 8.459,
+     "batch_wall_s": 28.574,
+     "ts": 1795353442.56
+    }
+   ],
+   "switches": [],
+   "steps": [
+    {
+     "loss": 0.1143,
+     "reward": 0.2134,
+     "reward_std": 0.3592,
+     "rewards/format_reward/mean": 0.75,
+     "rewards/correctness_reward/mean": 0.1125,
+     "rewards/speedup_reward/mean": 0.05184,
+     "completions/mean_length": 380.1,
+     "step_time": 47.53,
+     "step": 1
+    }
+   ]
+  },
+  "bench": {
+   "sandbox_instance": "g5.xlarge",
+   "gpu": "NVIDIA A10G",
+   "version": "v1",
+   "image_tag": "a20261120b",
+   "warmup_requests": 2,
+   "cold_start_s": [
+    15,
+    120
+   ],
+   "rows": [
+    {
+     "client": "system",
+     "client_instance": "m6i.large",
+     "golden": "relu_bias_triton",
+     "runtime": "gvisor",
+     "requests": 32,
+     "ok": 32,
+     "throughput_eval_per_s": 0.199,
+     "eval_p50_s": 9.918,
+     "eval_p95_s": 10.034,
+     "speedup_median": 1.735,
+     "ref_ms_median": 0.5834,
+     "job_started_utc": "2026-11-22T14:10:15Z",
+     "job_completed_utc": "2026-11-22T14:13:00Z"
+    },
+    {
+     "client": "hyperpod",
+     "client_instance": "ml.g5.2xlarge",
+     "golden": "relu_bias_triton",
+     "runtime": "gvisor",
+     "requests": 32,
+     "ok": 32,
+     "throughput_eval_per_s": 0.199,
+     "eval_p50_s": 9.937,
+     "eval_p95_s": 10.071,
+     "speedup_median": 1.738,
+     "ref_ms_median": 0.5834,
+     "job_started_utc": "2026-11-22T14:14:27Z",
+     "job_completed_utc": "2026-11-22T14:17:16Z"
+    }
+   ]
+  }
+ }
 }

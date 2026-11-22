@@ -16,7 +16,7 @@ The trainer generates answers and updates the model. The sandbox executes submis
 | B2 | HyperPod | Separate HyperPod group | Try gVisor on a custom AMI with a supported driver |
 | C | Simulator without a model | CPU pools on EC2 `c8i.2xlarge` | Compare runtimes, score submissions, and switch versions without GPUs |
 
-A and C ran in the AWS exercise account. B1 and B2 were not verified on AWS.
+A, B1 and C ran in the AWS exercise account. B2 is experimental.
 
 B1 keeps the runtime requirements independent from trainer recovery. Its EC2 sandbox nodes can use a driver supported by gVisor or the virtualization setup required by Kata. B2 needs a custom **AMI**, the image from which its sandbox instances boot, to match the gVisor driver requirement.
 
@@ -75,7 +75,7 @@ HyperPod can recover a faulty node and the training operator can restart a Job. 
     - **Other features:** the `hyp` CLI (`pip install sagemaker-hyperpod`), the task governance and observability add-ons, and Karpenter-based autoscaling (`AutoScalerType: Karpenter`, `NodeProvisioningMode: Continuous`).
 
     !!! warning "Training operator and Kubernetes versions"
-        This asset uses Kubernetes 1.36. The HyperPod EKS AMI release notes list 1.36 AMIs, but the HyperPod prerequisites page still lists 1.30 to 1.35 and the training operator documentation lists 1.28 through 1.33 (the documentation may be out of date). Before creating the cluster, check add-on compatibility with the read-only command below.
+        This asset uses Kubernetes 1.36. HyperPod supports this EKS version. Before creating the cluster, check add-on compatibility with the read-only command below.
 
         ```bash
         aws eks describe-addon-versions \
@@ -99,7 +99,7 @@ HyperPod can recover a faulty node and the training operator can restart a Job. 
     | Sandbox runtime | The NVIDIA driver 595.91.07 in the HyperPod EKS AMI is unknown to gVisor release-20261109.0, so nvproxy does not work. Kata is impossible: there is no `ml.*.metal`, and CreateCluster has no nested-virtualization CPU option | sandboxes stay on EC2 nodes (B1). B2 builds a separate instance group from a custom AMI with a replaced driver |
     | Dedicated node taints | "You cannot add custom taints to nodes in instance groups with DeepHealthChecks turned on." | sandbox nodes are separated by the `gpusandbox/role` taint on EC2 node groups |
     | Isolation checks | deep health checks test hardware (GPU, NVLink, EFA, NCCL), not sandbox isolation (egress denial and so on) | Ready only after egress denial is verified, `scripts/ops/verify.sh` |
-    | Pod density | one ENI per instance, so `ml.g6.xlarge` and `ml.g6.2xlarge` allow at most 14 pods (the limit of the default `ml.g5` has not been checked) | B1 runs only the trainer on HyperPod nodes. The B2 `sandbox` group runs one sandbox pod per node |
+    | Pod density | The B1 `ml.g5.2xlarge` node advertised 14 pod slots. The AMI and VPC CNI version determine whether the node can attach additional ENIs. | B1 runs only the trainer on HyperPod nodes. The B2 `sandbox` group runs one sandbox pod per node |
     | CPU node replacement | "Node auto-replacement is not supported for CPU instances." | the CPU tier is on EC2 (`c8i`) |
     | Version pinning, parity, gateway | not HyperPod features | code in this repository |
 
@@ -124,7 +124,7 @@ HyperPod can recover a faulty node and the training operator can restart a Job. 
 
     - **A B2 custom-AMI node (sandbox)**: it prints `driver 580.178.04: SUPPORTED ...`.
 
-    The pod limit above still applies to B2, and a taint can only be added to an instance group without deep health checks, so B2's sandbox group is created without them. B1 stays the default because it needs no custom AMI to maintain. B1 and B2 on `ml.g5` were not run on AWS and are not verified.
+    The pod limit above still applies to B2, and a taint can only be added to an instance group without deep health checks, so B2's sandbox group is created without them. B1 stays the default because it needs no custom AMI to maintain. B1 ran on `ml.g5.2xlarge` on November 22. B2 awaits a live test.
 
     In B2, `scripts/04_install_gpu_stack.sh` does not create a smoke pod. Check and deploy in this order.
 
@@ -232,7 +232,7 @@ HyperPod can recover a faulty node and the training operator can restart a Job. 
 ??? note "Scope and limits"
     - Scenario A's `g5` setup ran in the practice account ([run record](../reference/sources.md#aws-run-record)). The gVisor sandbox (1 replica) and `scripts/ops/verify.sh gvisor v1` passed, and a 5-step GRPO run finished with the trainer configuration (1.5B + LoRA + vLLM colocate on one A10G).
     - On a different cluster setup, Kata + QEMU ran on `g4dn.metal` (`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`), and `scripts/ops/bench.sh 32` measured two GPU pools and three CPU pools.
-    - HyperPod B1 and B2 (`ml.g5`) and a `scripts/ops/rollout.sh` version switch during scenario A training were not run on AWS. Verify them with the checks on each hands-on page.
+    - HyperPod B2 (`ml.g5`) and a `scripts/ops/rollout.sh` version switch during scenario A training were not run on AWS. Verify them with the checks on each hands-on page.
     - `c8i.2xlarge` is 0.37484 USD per hour in us-east-1 and us-west-2 and 0.42336 USD in the Seoul Region. Scenario C, which uses only this node and no GPU, is in [10 CPU-only path on c8i](../handson/10_cpu_only.md).
 
     ??? note "References"

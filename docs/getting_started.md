@@ -7,7 +7,7 @@
 
 로컬 CPU 테스트로 설치와 채점을 먼저 확인하세요. 그다음 AWS 실습 경로를 고릅니다. 이미지 URI와 AMI ID는 앞 단계에서 만든 값을 사용합니다.
 
-![a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 109개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.](images/figures/getting_started.ko.svg)
+![a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 110개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.](images/figures/getting_started.ko.svg)
 
 *그림 요약: (a)는 GPU 노드부터 띄우는 순서이고, (b)는 로컬 CPU에서 pytest와 dry run을 마치고 설정 파일을 채운 뒤 경로를 고르는 순서입니다. AWS 노드는 그다음에 띄우고, 시나리오 C에서는 GPU 노드 없이 CPU 샌드박스를 실행합니다.*
 
@@ -15,7 +15,7 @@
 ## 로컬에서 확인할 수 있는 것
 
 - **AWS 비용 없이 파이프라인부터 확인합니다.** 샌드박스 서버, 2-프로세스 harness, 인증, 라우팅, reward 함수는 CPU에서도 같은 코드로 실행됩니다.
-- **저자가 확인한 범위를 같은 명령으로 재현합니다.** pytest와 GRPO dry run 2 step은 macOS(CPU 전용)에서 실행해 확인했습니다(당시 테스트 94개, 현재는 109개).
+- **저자가 확인한 범위를 같은 명령으로 재현합니다.** pytest와 GRPO dry run 2 step은 macOS(CPU 전용)에서 실행해 확인했습니다(당시 테스트 94개, 현재는 110개).
 - **설정은 한 파일에 모읍니다.** 모든 스크립트가 `scripts/lib.sh`를 거쳐 `scripts/config.env`를 읽습니다. 필요한 값이 비어 있거나 `__SET_ME__` 그대로이면 스크립트가 그 자리에서 멈춥니다.
 
 **읽기 전에**　터미널, `git`, Python 가상 환경을 다룰 수 있으면 충분하고, 로컬 단계(1~4장)에는 Kubernetes와 AWS 지식이 필요 없습니다. 시작할 코스는 [학습 코스 고르기](learning_paths.md), 전체 구성은 [홈](index.md)의 "만드는 것", GPU 샌드박스가 필요한 이유는 [01 GPU 샌드박스가 필요한 경우](concepts/01_why_gpu_sandbox.md)에 있습니다.
@@ -126,9 +126,9 @@ python -c "import torch, gpusandbox; print(torch.__version__, torch.cuda.is_avai
 python -m pytest -q
 ```
 
-**확인할 것:** 마지막 줄이 `109 passed`로 시작합니다(뒤에 붙는 소요 시간은 환경마다 다름).
+**확인할 것:** 마지막 줄이 `110 passed`로 시작합니다(뒤에 붙는 소요 시간은 환경마다 다름).
 
-- **구성**: 109개는 핵심 68개, [Agent Sandbox 확장](concepts/06_agent_sandbox.md)과 [multi-turn 에피소드](handson/11_multi_turn.md) 30개, [데모 사이트](handson/09_demo_site.md) 11개로 구성됩니다.
+- **구성**: 110개는 핵심 69개, [Agent Sandbox 확장](concepts/06_agent_sandbox.md)과 [multi-turn 에피소드](handson/11_multi_turn.md) 30개, [데모 사이트](handson/09_demo_site.md) 11개로 구성됩니다.
 - **범위**: AST 정책, CPU 2-프로세스 harness(정답, 오답, 크래시, timeout, 벤치마크 치팅, monkeypatch), fail closed 인증, egress 차단 확인 뒤의 readiness, 클라이언트, gateway의 group 단위 버전 고정, 운영 도구, 매니페스트와 노드 user data(`infra/eks/userdata.py`)와 Karpenter 템플릿 렌더링, 데모 사이트의 보안 속성입니다. 파일별 범위는 [저장소 구조](reference/repository_map.md#tests)에 있습니다.
 - **CDK 스택 테스트**: 18개는 `cdk/tests`에 따로 있고, 5장의 CDK 준비를 마친 뒤 `cd cdk && python -m pytest -q tests`로 실행합니다.
 
@@ -155,7 +155,7 @@ python -m pytest -q
     python -m pytest -q -m "not slow"
     ```
 
-    **확인할 것:** `91 passed, 18 deselected`가 출력됩니다.
+    **확인할 것:** `92 passed, 18 deselected`가 출력됩니다.
 
 ## 4. Loopback smoke run (macOS)
 
@@ -315,7 +315,6 @@ cp scripts/config.env.example scripts/config.env
 | `KATA_IOMMU_AMI_ID`, `WITH_KATA_GPU` | Kata GPU 노드 추가(`scripts/kata/gpu_nodes.sh`) 첫 실행 후 | AMI ID는 `infra/kata/build-iommu-ami.sh`가 출력. `WITH_KATA_GPU=1`과 함께 넣고 `02_create_cluster.sh`를 다시 실행하면 `sandbox-kata-gpu`(`g4dn.metal`) 노드 그룹이 생김 |
 | 인스턴스 타입, 버전 고정 값 | 보통 그대로 | `GVISOR_RELEASE=20261109.0`, `KATA_VERSION=4.3.1`, `GPU_OPERATOR_VERSION=v26.7.2`, `NVIDIA_DEVICE_PLUGIN_VERSION=0.20.1` |
 
-- **`K8S_VERSION`과 HyperPod 전제조건 페이지**: 이 페이지는 아직 1.35까지로 적혀 있습니다.
 - **`SCENARIO`를 덮어쓰는 옵션**: `--hyperpod`, `--hyperpod-b2`, `--cpu-only`입니다. 옵션으로 배포했다면 이 값을 배포한 시나리오로 바꿔 두거나, 노드 그룹을 추가하려고 다시 실행할 때도 같은 옵션을 붙이세요(다르면 `cdk/deploy.sh`가 멈춤).
 - **`ADMIN_PRINCIPAL_ARN`을 비우면**: `cdk/deploy.sh`가 현재 역할을 씁니다.
 - **역할에 path가 있으면**: `ADMIN_PRINCIPAL_ARN`을 직접 적으세요.
@@ -370,10 +369,10 @@ scripts/01_check_prereqs.sh
 
 ## 적용 범위와 한계
 
-- 1~4장의 로컬 단계는 저자가 macOS(CPU 전용)에서 확인했고(당시 테스트 94개, 현재는 109개), Linux 호스트에서 서버를 띄우는 테스트는 확인하지 않았습니다.
+- 1~4장의 로컬 단계는 테스트가 94개였을 때 macOS(CPU 전용)에서 확인했습니다. 2026-11-22에는 Linux에서 로컬 테스트 110개와 CDK 테스트 19개가 통과했습니다.
 - 5장의 `scripts/01_check_prereqs.sh`는 저자가 실행하지 않았습니다.
 - 그 뒤 단계 가운데 시나리오 A의 gVisor 경로(`02`부터 `08`까지), 시나리오 C, Kata GPU(`g4dn.metal`), 런타임 벤치마크는 실습 계정에서 실행했습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다.
-- 시나리오 A의 학습 중 `ops/rollout.sh`와 HyperPod B1, B2는 실행하지 않았습니다. 실행하지 않은 단계는 각 핸즈온 페이지의 확인 단계로 검증하세요.
+- 시나리오 A의 학습 중 `ops/rollout.sh`와 HyperPod B2는 실행하지 않았습니다. 실행하지 않은 단계는 각 핸즈온 페이지의 확인 단계로 검증하세요.
 - dry run은 학습 효과를 보여 주지 않으며, 실제 학습은 [05 On-policy GRPO 학습](handson/05_grpo_training.md)에서 GPU로 실행합니다.
 
 ## 소요 시간과 비용

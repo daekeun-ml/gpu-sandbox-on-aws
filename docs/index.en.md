@@ -118,7 +118,7 @@ Node groups, namespaces and a step-by-step reading of each arrow are in [Hands-o
 
 !!! warning "What you need to check yourself"
     - **What ran**: scenario A (gVisor GPU on `g5`), scenario C (three CPU runtimes) with a version switch, Kata GPU (`g4dn.metal`), the runtime benchmark on five pools ([08 Runtime benchmark](handson/08_benchmark.md)) and the public demo site ran in a practice account. The experimental Kata CLH GPU did not start its VM. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record).
-    - **What did not run**: `ops/rollout.sh` during training, `rollout.sh --finish` and HyperPod B1 and B2 have not been run yet. Confirm the steps that were not run with the checks on each hands-on page.
+    - **What did not run**: `ops/rollout.sh` during training, `rollout.sh --finish` and HyperPod B2 have not been run yet. Confirm the steps that were not run with the checks on each hands-on page.
     - **Where the numbers come from**: numbers such as prices and versions come from official documentation and public material, not measurements.
     - **Local tests**: what they cover is in [Getting started](getting_started.md).
 

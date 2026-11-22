@@ -21,7 +21,7 @@
     - **실습 계정에서 실행한 것**: 시나리오 C, 시나리오 A(`g5`), Kata GPU(`g4dn.metal`), 런타임 벤치마크, 데모 사이트.
     - **시나리오 A 클러스터**: GPU 노드 그룹 없이 만든 뒤 update로 추가했습니다(아래 "GPU 용량이 없을 때").
     - **Kata GPU 실행에서 나온 행**: 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행.
-    - **실행하지 않은 것**: 학습 중의 시나리오 A `ops/rollout.sh`와 HyperPod B1, B2.
+    - **실행하지 않은 것**: 학습 중의 시나리오 A `ops/rollout.sh`와 HyperPod B2.
     - **실험용 CLH GPU**: 풀을 배포했지만 VM이 시작되지 않았습니다.
     - **날짜별 실행 기록**: [검증된 사실과 출처](sources.md#aws-실행-기록)에 있습니다.
     - **증상과 원인의 출처**: 스크립트 오류 메시지, 코드 동작, 공식 문서입니다. 에러 문구는 도구 버전마다 다를 수 있습니다.
@@ -197,7 +197,7 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 | `cdk/tunnel.sh`가 `[error] missing tool: session-manager-plugin`으로 멈춤 | AWS CLI용 Session Manager plugin이 없음 | [Session Manager plugin 설치](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) 후 `session-manager-plugin --version`으로 확인 |
 | `cdk/destroy.sh`가 `cluster API not reachable (is cdk/tunnel.sh running?)` 경고를 냄 | 터널이 꺼져 있어 풀과 Job을 먼저 지우지 못함 | 그대로 두어도 스택 삭제가 노드를 지웁니다. 풀부터 지우려면 터널을 켜고 다시 실행 |
 
-- **`TargetNotConnected`가 10분 넘게 계속될 때**: `aws ssm describe-instance-information`으로 `PingStatus`를 확인하세요. `ConnectionLost`이면 `aws ec2 reboot-instances`로 재부팅한 뒤 `Online`이 되면 다시 실행합니다.
+- `TargetNotConnected`가 계속되면 `aws ssm get-connection-status --target <access-instance-id> --region "$AWS_REGION"`으로 접속 상태를 확인하세요. B1 실습에서는 마지막 ping이 오래됐는데도 `PingStatus`가 `Online`이었습니다. 실습용 access instance를 재부팅한 뒤 `connected`와 터널 접속을 확인했습니다.
 
 **오래 쉰 터널이 끊길 때:** 긴 작업 중에는 `cdk/tunnel.sh` 세션이 끊길 수 있습니다(2026-11-18 실행에서 두 번).
 
@@ -616,9 +616,10 @@ multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <ru
 | B2 lifecycle 로그에 `unsupported or missing config version` 또는 `containerd rejected the edited` | containerd 설정 파일 위치나 schema가 예상과 다름 | 노드에서 `ps -o args= -C containerd`로 `--config` 경로를 확인하고, `on_create_sandbox.sh`의 `HYPERPOD_CONTAINERD_CONFIG`를 그 값으로 고친 뒤 lifecycle 스크립트를 다시 업로드 |
 | `scripts/hyperpod/build_b2_ami.sh`가 `customization failed` | 드라이버 교체나 gVisor 확인이 builder에서 실패 | 출력된 `get-console-output` 명령으로 `GPUSANDBOX-B2-BUILD: FAILED ...` 줄과 그 앞 로그를 보고, 정지된 builder를 `terminate-instances`로 종료 |
 | CreateCluster 뒤 상태가 `Failed` | 스크립트가 출력하는 `FailureMessage` 참고. 사전 요구사항(EKS 인증 모드 API 또는 API_AND_CONFIG_MAP, VPC CNI 1.18.3 이상, private subnet, 지원 Kubernetes 버전), lifecycle 스크립트 S3 읽기 권한 | [HyperPod EKS 사전 요구사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html)과 비교. 버킷 이름의 `sagemaker-` 접두사 유지 |
+| Worker가 `Pending`이며 `Insufficient cpu` 또는 `Insufficient memory` 이벤트가 나타남 | `ml.g5.2xlarge` 한 대에서 controller, job별 pod manager, 시스템 pod가 CPU 2.75개와 메모리 3,272 MiB를 요청함 | B1 템플릿의 CPU 5개, 24 GiB를 사용하고 `kubectl describe node`의 할당량과 스케줄러 이벤트를 비교 |
 | HyperPodPyTorchJob pod가 Pending | 노드 라벨 `sagemaker.amazonaws.com/node-health-status`가 `Schedulable`이 아님(deep health check 중 등), instance type 불일치 | `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status,node.kubernetes.io/instance-type` |
 | pod가 `hyperpodrun`을 찾지 못하고 실패 | trainer 이미지를 `HYPERPOD=1` 없이 빌드함 | `HYPERPOD=1 scripts/03_build_push_images.sh`. ECR 태그가 IMMUTABLE이라 새 `IMAGE_TAG`가 필요 |
-| HyperPod 노드에 pod가 더 배치되지 않음(`Too many pods`) | 인스턴스당 ENI 1개: ml.g6.xlarge와 ml.g6.2xlarge는 pod 최대 14개(기본값인 ml.g5의 한도는 확인하지 않음) | 그 노드에서 실행되는 DaemonSet 수 확인, 불필요한 DaemonSet을 HyperPod 노드에서 제외 |
+| HyperPod 노드에 pod가 더 배치되지 않음(`Too many pods`) | B1의 `ml.g5.2xlarge` 노드가 보고한 pod 한도는 14개였습니다. ENI를 추가할 수 있는지는 AMI와 VPC CNI 버전에 따라 달라집니다. | 그 노드에서 실행되는 DaemonSet 수 확인, 불필요한 DaemonSet을 HyperPod 노드에서 제외 |
 | job 재시작 뒤 처음부터 다시 학습 | `/outputs`가 emptyDir라 새 노드의 pod에는 체크포인트가 없음 | 공유 스토리지(FSx for Lustre PVC)를 `/outputs`에 마운트 |
 
 ## 정리와 비용

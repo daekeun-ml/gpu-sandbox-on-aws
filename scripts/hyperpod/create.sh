@@ -33,8 +33,11 @@ trap 'rm -rf "${work}"' EXIT
 log "1) HyperPod dependency chart"
 git clone --depth 1 https://github.com/aws/sagemaker-hyperpod-cli.git "${work}/hp-cli"
 helm dependencies update "${work}/hp-cli/helm_chart/HyperPodHelmChart"
+# The resource monitor needs the HyperPod AMI's log directory and exits on ordinary EKS nodes.
 helm upgrade --install hyperpod-dependencies "${work}/hp-cli/helm_chart/HyperPodHelmChart" \
-  --namespace kube-system --wait --timeout 15m
+  --namespace kube-system --set-string "global.region=${AWS_REGION}" \
+  --set-json 'hyperpod-kubernetes-resource-monitor.nodeSelector={"sagemaker.amazonaws.com/compute-type":"hyperpod"}' \
+  --wait --timeout 15m
 
 log "2) lifecycle scripts in s3://${HYPERPOD_LCS_BUCKET}"
 if ! aws s3api head-bucket --bucket "${HYPERPOD_LCS_BUCKET}" 2>/dev/null; then
@@ -69,7 +72,7 @@ fi
 export HYPERPOD_EXECUTION_ROLE_ARN="arn:aws:iam::${account}:role/${role}"
 
 log "4) CreateCluster"
-cluster_json="$(aws eks describe-cluster --name "${CLUSTER_NAME}" --region "${AWS_REGION}")"
+cluster_json="$(aws eks describe-cluster --name "${CLUSTER_NAME}" --region "${AWS_REGION}" --output json)"
 EKS_CLUSTER_ARN="$(jq -r .cluster.arn <<<"${cluster_json}")"
 # The EKS cluster security group lets HyperPod nodes, EC2 nodes and the control plane talk.
 HYPERPOD_SECURITY_GROUP_ID="$(jq -r .cluster.resourcesVpcConfig.clusterSecurityGroupId <<<"${cluster_json}")"
@@ -88,12 +91,24 @@ if (( b2 )); then
 fi
 aws sagemaker create-cluster --region "${AWS_REGION}" --cli-input-json "file://${work}/cluster.json"
 log "waiting for InService (15-30 min)"
-until [[ "$(aws sagemaker describe-cluster --region "${AWS_REGION}" --cluster-name "${HYPERPOD_CLUSTER_NAME}" \
-  --query ClusterStatus --output text)" =~ ^(InService|Failed)$ ]]; do sleep 60; done
-aws sagemaker describe-cluster --region "${AWS_REGION}" --cluster-name "${HYPERPOD_CLUSTER_NAME}" \
-  --query '{status: ClusterStatus, failure: FailureMessage}'
+while true; do
+  status="$(aws sagemaker describe-cluster --region "${AWS_REGION}" --cluster-name "${HYPERPOD_CLUSTER_NAME}" \
+    --query '{status: ClusterStatus, failure: FailureMessage}' --output json)"
+  case "$(jq -r .status <<<"${status}")" in
+    InService) echo "${status}"; break ;;
+    Creating|Pending) sleep 30 ;;
+    *) die "HyperPod creation stopped: ${status}" ;;
+  esac
+done
 
 log "5) HyperPod training operator add-on"
+# The EKS add-on selects a HyperPod node. The cluster itself can already be InService
+# while its first trainer instance is still booting and absent from Kubernetes.
+trainer_selector="sagemaker.amazonaws.com/cluster-name=${HYPERPOD_CLUSTER_NAME}"
+trainer_selector+=",node.kubernetes.io/instance-type=${HYPERPOD_TRAINER_INSTANCE_TYPE}"
+trainer_selector+=",sagemaker.amazonaws.com/node-health-status=Schedulable"
+kubectl wait --for=create nodes -l "${trainer_selector}" --timeout=30m
+kubectl wait --for=condition=Ready nodes -l "${trainer_selector}" --timeout=5m
 aws eks create-addon --region "${AWS_REGION}" --cluster-name "${CLUSTER_NAME}" \
   --addon-name amazon-sagemaker-hyperpod-training-operator >/dev/null
 aws eks wait addon-active --region "${AWS_REGION}" --cluster-name "${CLUSTER_NAME}" \

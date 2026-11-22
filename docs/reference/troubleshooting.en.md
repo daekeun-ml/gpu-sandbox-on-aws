@@ -21,7 +21,7 @@ If the symptom is unclear, start with the events from `kubectl describe pod`.
     - **Ran in a practice account**: scenario C, scenario A (`g5`), Kata GPU (`g4dn.metal`), the runtime benchmark and the demo site.
     - **Scenario A cluster**: created without GPU node groups, which were added with updates (see "When there is no GPU capacity" below).
     - **Rows from the Kata GPU run**: the Kata GPU `vfio_iommu_type1` row and the AMI builder row below.
-    - **Not run**: `ops/rollout.sh` during training in scenario A, and HyperPod B1 and B2.
+    - **Not run**: `ops/rollout.sh` during training in scenario A, and HyperPod B2.
     - **Experimental CLH GPU**: the pool was deployed, but the VM did not start.
     - **Dated run record**: in [Verified facts and sources](sources.md#aws-run-record).
     - **Where symptoms and causes come from**: the scripts' error messages, the code's behavior and official documentation. The wording can differ by tool version.
@@ -197,7 +197,7 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 | `cdk/tunnel.sh` stops with `[error] missing tool: session-manager-plugin` | The Session Manager plugin for the AWS CLI is missing | [Install the Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) and check with `session-manager-plugin --version` |
 | `cdk/destroy.sh` warns `cluster API not reachable (is cdk/tunnel.sh running?)` | The tunnel is down, so the pools and Jobs cannot go first | You can leave it: the stack deletion removes the nodes anyway. To delete the pools first, start the tunnel and run it again |
 
-- **`TargetNotConnected` for more than 10 minutes**: check `PingStatus` with `aws ssm describe-instance-information`. If it is `ConnectionLost`, reboot with `aws ec2 reboot-instances` and run it again once it is `Online`.
+- If `TargetNotConnected` persists, check `aws ssm get-connection-status --target <access-instance-id> --region "$AWS_REGION"`. In the B1 test `PingStatus` still showed `Online` with an old ping. Rebooting the lab access instance restored `connected` and the tunnel.
 
 **When a long-idle tunnel drops:** during a long run the `cdk/tunnel.sh` session can drop (twice in the 2026-11-18 run).
 
@@ -616,9 +616,10 @@ Before it submits the Job, the multi-turn episode run (`scripts/extensions/agent
 | The B2 lifecycle log shows `unsupported or missing config version` or `containerd rejected the edited` | containerd's config file location or schema is not what the script expects | On the node, find the `--config` path with `ps -o args= -C containerd`, set `HYPERPOD_CONTAINERD_CONFIG` in `on_create_sandbox.sh` to it, and upload the lifecycle scripts again |
 | `scripts/hyperpod/build_b2_ami.sh` reports `customization failed` | The driver swap or the gVisor check failed on the builder | Read the `GPUSANDBOX-B2-BUILD: FAILED ...` line and the log before it with the printed `get-console-output` command, then delete the stopped builder with `terminate-instances` |
 | The status is `Failed` after CreateCluster | See the `FailureMessage` the script prints. Prerequisites (EKS authentication mode API or API_AND_CONFIG_MAP, VPC CNI 1.18.3 or later, private subnets, a supported Kubernetes version), S3 read permission for the lifecycle scripts | Compare with the [HyperPod EKS prerequisites](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html). Keep the `sagemaker-` prefix in the bucket name |
+| Worker stays `Pending` with `Insufficient cpu` or `Insufficient memory` | On a single `ml.g5.2xlarge`, the controller, per-job pod manager and system pods requested 2.75 vCPUs and 3,272 MiB | Use the B1 worker requests of 5 vCPUs and 24 GiB. Compare requests in `kubectl describe node` with the scheduler event |
 | HyperPodPyTorchJob pods are Pending | The node label `sagemaker.amazonaws.com/node-health-status` is not `Schedulable` (for example during deep health checks), or the instance type does not match | `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status,node.kubernetes.io/instance-type` |
 | Pods fail because they cannot find `hyperpodrun` | The trainer image was built without `HYPERPOD=1` | `HYPERPOD=1 scripts/03_build_push_images.sh`. ECR tags are IMMUTABLE, so you need a new `IMAGE_TAG` |
-| No more pods fit on a HyperPod node (`Too many pods`) | One ENI per instance: ml.g6.xlarge and ml.g6.2xlarge allow at most 14 pods (the limit of the default ml.g5 has not been checked) | Count the DaemonSets running on that node, and exclude unneeded DaemonSets from HyperPod nodes |
+| No more pods fit on a HyperPod node (`Too many pods`) | The B1 `ml.g5.2xlarge` node advertised 14 pod slots. The AMI and VPC CNI version determine whether the node can attach additional ENIs. | Count the DaemonSets running on that node, and exclude unneeded DaemonSets from HyperPod nodes |
 | Training starts from the beginning again after a job restart | `/outputs` is an emptyDir, so the pod on the new node has no checkpoints | Mount shared storage (an FSx for Lustre PVC) at `/outputs` |
 
 ## Cleanup and cost

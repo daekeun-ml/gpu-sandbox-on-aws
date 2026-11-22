@@ -89,7 +89,7 @@ AWS 리소스는 사용하지 않는 동안에도 과금될 수 있습니다. �
 
 ## 검증 상태
 
-AWS 실습 계정에서 EC2 GPU 학습(A), CPU 채점과 버전 전환(C), Kata GPU(QEMU)를 실행했습니다. HyperPod의 B1과 B2와 GPU 학습 중 풀 전환은 AWS에서 확인하지 않았습니다. 실험용 Kata + Cloud Hypervisor GPU 구성에서는 VM이 시작되지 않았습니다. [실행 기록과 측정 범위](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/sources/#aws-실행-기록)
+AWS 실습 계정에서 EC2 GPU 학습(A), CPU 채점과 버전 전환(C), Kata + QEMU의 GPU passthrough를 확인했습니다. Kata + Cloud Hypervisor는 C의 CPU 풀에서 검증했고, 별도 GPU 실험에서는 VM 부팅이 타임아웃으로 끝났습니다. HyperPod B1에서는 GRPO 한 스텝을 실행해 EC2 gVisor 샌드박스 2개로 제출 코드 12개를 채점했습니다. HyperPod B2와 GPU 학습 중 풀 전환은 AWS에서 확인하지 않았습니다. [실행 기록과 측정 범위](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/sources/#aws-실행-기록)
 
 ## License
 

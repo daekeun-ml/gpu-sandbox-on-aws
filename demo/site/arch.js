@@ -170,7 +170,7 @@ const PATTERNS = [
       train: L("EC2 g5.2xlarge (A10G 1장)", "EC2 g5.2xlarge (one A10G)"),
       sandbox: L("gVisor 풀, EC2 g5.xlarge 2대", "gVisor pool, two EC2 g5.xlarge"),
       when: L("모든 구성 요소를 직접 관리하고 싶을 때", "You want to manage every part yourself"),
-      status: L("2026-11-18 실행 (GRPO 5 step까지)", "Run on 2026-11-18 (up to 5 GRPO steps)"),
+      status: L("2026-11-20 · GRPO 60스텝 완료. 데모 차트는 11월 18일의 5스텝 실행입니다.", "2026-11-20 · 60 GRPO steps completed. The replay chart covers the five-step run on November 18."),
     },
     cloud: { x: 180, w: 1191 }, height: 780,
     nodes: [...COMMON_NODES, ...EGRESS_NODES,
@@ -213,7 +213,7 @@ const PATTERNS = [
       train: L("HyperPod ml.g5.2xlarge", "HyperPod ml.g5.2xlarge"),
       sandbox: L("gVisor 풀, EC2 g5.xlarge 2대", "gVisor pool, two EC2 g5.xlarge"),
       when: L("긴 학습에서 노드 자동 교체와 Job 재시작이 필요할 때", "Long training runs need automatic node replacement and Job restarts"),
-      status: L("AWS에서 아직 실행하지 않음", "Not run on AWS yet"),
+      status: L("2026-11-22 · GRPO 1스텝, 생성 코드 12개 채점", "2026-11-22 · 1 GRPO step, 12 generated submissions scored"),
     },
     cloud: { x: 180, w: 1191 }, height: 780,
     nodes: [...COMMON_NODES, ...EGRESS_NODES, S3_NODE,
@@ -235,8 +235,8 @@ const PATTERNS = [
           S("이미지를 ECR에 올리고, HyperPod 시작 스크립트를 비공개 S3 버킷에 올립니다.",
             "Images go to ECR, and the HyperPod lifecycle scripts go to a private S3 bucket.",
             { light: ["operator", "ecr", "s3"], moves: [{ e: "e_push", c: "ctl" }, { e: "e_s3up", c: "ctl" }] }),
-          S("HyperPod가 S3의 시작 스크립트로 학습 노드를 부팅합니다. 노드에 문제가 생기면 HyperPod가 바꿔 줍니다.",
-            "HyperPod boots the trainer node with the scripts from S3, and replaces the node if it fails.",
+          S("HyperPod가 S3의 시작 스크립트로 학습 노드를 부팅합니다. 노드가 작업을 받을 준비를 마치면 training operator가 시작됩니다.",
+            "HyperPod boots the trainer node with the scripts from S3. The training operator starts once the node is schedulable.",
             { light: ["s3", "trainer"], moves: [{ e: "e_boot", c: "ctl" }] }),
           S("샌드박스 노드(EC2)가 ECR에서 이미지를 받아 gVisor 풀을 띄웁니다.", "The sandbox nodes (EC2) pull the image from ECR and start the gVisor pool.",
             { light: ["ecr", "v1"], moves: [{ e: "e_pull", c: "ctl" }] }),
@@ -312,7 +312,7 @@ const PATTERNS = [
       sandbox: L("EC2 c8i.2xlarge 1대: gVisor, Kata CLH, Kata QEMU", "One EC2 c8i.2xlarge: gVisor, Kata CLH, Kata QEMU"),
       when: L("GPU 할당량 없이 런타임 비교와 버전 교체를 먼저 익히고 싶을 때 (컴퓨트 시간당 약 0.57 USD)",
         "You want to learn runtime comparison and version switching first, without GPU quota (about 0.57 USD per compute hour)"),
-      status: L("AWS에서 실행", "Run on AWS"),
+      status: L("2026-11-20 · v1↔v2 전환, Kata CLH CPU에서 3턴 에피소드 2개 완료", "2026-11-20 · v1↔v2 rollout and two three-turn episodes on Kata CLH CPU"),
     },
     cloud: { x: 180, w: 1317 }, height: 650,
     nodes: [...COMMON_NODES,
@@ -698,6 +698,11 @@ function selectPattern(p, flowId) {
     el("div", { class: "ap-facts" },
       [["train", f.train], ["sandbox", f.sandbox], ["when", f.when], ["status", f.status]].map(([k, v]) =>
         el("div", { class: `ap-fact ${k}` }, el("div", { class: "k" }, t(k)), el("div", { class: "v" }, tr(v))))));
+  if (p.id === "b1") {
+    const url = `index.html${lang === "en" ? "?lang=en" : ""}#hyperpod-b1`;
+    document.querySelector("#ap-summary .status").append(
+      el("a", { href: url }, tr(L("B1 벤치마크 보기 →", "View the B1 benchmark →"))));
+  }
   document.getElementById("ap-flows").replaceChildren(...p.flows.map((fl) => {
     const b = el("button", { type: "button", class: "tab", role: "tab", "data-id": fl.id }, tr(fl.title));
     b.addEventListener("click", () => selectFlow(fl));

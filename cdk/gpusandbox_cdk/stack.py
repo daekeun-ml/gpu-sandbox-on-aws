@@ -220,7 +220,28 @@ class GpuSandboxStack(cdk.Stack):
                            launch_template("system", 50), desired=2, minimum=2, maximum=3,
                            labels={"gpusandbox/role": "system"})
         # CoreDNS needs schedulable nodes to become active.
-        addon("coredns").node.add_dependency(system)
+        dns = addon("coredns")
+        dns.node.add_dependency(system)
+        roles = [(access_role, access_policies), (cluster_role, cluster_policies), (node_role, node_policies)]
+        if s.scenario in ("B1", "B2"):
+            addon("cert-manager").node.add_dependency(dns)
+            namespace = "aws-hyperpod"
+            service_account = "hp-training-operator-controller-manager"
+            operator_policy = "AmazonSageMakerHyperPodTrainingOperatorAccess"
+            principal = iam.ServicePrincipal("pods.eks.amazonaws.com", conditions={"StringEquals": {
+                "aws:RequestTag/eks-cluster-arn": cluster.attr_arn,
+                "aws:RequestTag/kubernetes-namespace": namespace,
+                "aws:RequestTag/kubernetes-service-account": service_account,
+            }})
+            operator_role = iam.Role(
+                self, "HyperPodOperatorRole", assumed_by=principal.with_session_tags(),
+                managed_policies=[iam.ManagedPolicy.from_aws_managed_policy_name(operator_policy)],
+            )
+            roles.append((operator_role, (operator_policy,)))
+            eks.CfnPodIdentityAssociation(
+                self, "HyperPodOperatorIdentity", cluster_name=cluster.ref, namespace=namespace,
+                service_account=service_account, role_arn=operator_role.role_arn,
+            )
 
         if s.scenario == "A":
             nodegroup("trainer", s.trainer_instance_type, "AL2023_x86_64_NVIDIA",
@@ -262,8 +283,7 @@ class GpuSandboxStack(cdk.Stack):
         # cdk/deploy.sh compares this with the requested scenario before changing node groups.
         cdk.CfnOutput(self, "Scenario", value=s.scenario)
 
-        self._suppress(access, [(access_role, access_policies), (cluster_role, cluster_policies),
-                                (node_role, node_policies)])
+        self._suppress(access, roles)
 
     def _role(self, construct_id: str, service: str, policies: tuple[str, ...]) -> iam.Role:
         return iam.Role(self, construct_id, assumed_by=iam.ServicePrincipal(service),
@@ -272,7 +292,7 @@ class GpuSandboxStack(cdk.Stack):
     def _suppress(self, access: ec2.Instance, roles: list[tuple[iam.Role, tuple[str, ...]]]) -> None:
         """cdk-nag findings accepted on purpose, each with its reason (cdk-nag v3 acknowledgements)."""
         managed = "AwsSolutions-IAM4[Policy::arn:<AWS::Partition>:iam::aws:policy/{}]"
-        reason = "AWS managed policy that the EKS or SSM documentation prescribes for this role"
+        reason = "AWS managed policy prescribed for this role by EKS, SSM or SageMaker"
         for role, names in roles:
             for name in names:
                 cdk.Validations.of(role).acknowledge(cdk.Acknowledgment(id=managed.format(name), reason=reason))

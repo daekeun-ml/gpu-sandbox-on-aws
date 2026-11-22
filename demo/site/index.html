@@ -137,6 +137,10 @@
           <h3 data-i18n="grpoTitle"></h3>
           <span id="grpo-source" class="muted small"></span>
         </div>
+        <label id="grpo-runs" hidden><span data-i18n="runRecord"></span>
+          <select id="grpo-run"><option value="training">EC2</option><option value="b1">HyperPod B1</option></select>
+        </label>
+        <p id="grpo-empty" class="muted" hidden data-i18n="noData"></p>
         <div class="chart-wrap"><svg id="grpo-chart" viewBox="0 0 900 300" role="img" aria-label="GRPO reward batches"></svg></div>
         <div class="legend" id="grpo-legend"></div>
         <div class="step-ctl">
@@ -161,6 +165,18 @@
     <section id="bench">
       <h2><span class="num">5</span><span data-i18n="sBench"></span></h2>
       <p class="hint" data-i18n="sBenchHint"></p>
+      <article id="hyperpod-b1" class="panel" hidden>
+        <div class="panel-head">
+          <h3 data-i18n="b1Title"></h3>
+          <span id="b1-source" class="muted small"></span>
+        </div>
+        <p id="b1-setup"></p>
+        <div id="b1-clients" class="cards"></div>
+        <p class="muted small" data-i18n="b1Note"></p>
+        <a id="b1-pattern" href="architecture.html?pattern=b1" data-i18n="b1Diagram"></a>
+      </article>
+      <h3 id="runtime-bench" data-i18n="runtimeComparison"></h3>
+      <p id="runtime-source" class="muted small"></p>
       <div class="bench-ctl">
         <div id="bench-metric" class="tabs" role="tablist"></div>
         <div id="bench-pass" class="tabs" role="tablist"></div>

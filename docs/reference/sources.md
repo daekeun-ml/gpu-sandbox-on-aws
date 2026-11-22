@@ -17,7 +17,7 @@
 | 블로그의 측정값 | 다른 사람이 다른 환경에서 측정한 값 | AWS 기술 블로그 2부의 warm pool claim 약 55 ms, AWS China 블로그의 cold start 약 3 s |
 | 추론 | 근거에서 이끌어 낸 판단, 미검증 | NodeConfig `imports`가 kata-deploy drop-in을 유지하는 효과 |
 | AWS에서 저자가 실행 | 실습 계정에서 실제로 실행하고 출력을 확인 | 시나리오 A의 gVisor 경로, Kata GPU(`g4dn.metal`), 시나리오 C의 CPU 런타임 세 개, 런타임 벤치마크, 데모 사이트. 날짜별 기록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
-| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 학습 중의 시나리오 A `ops/rollout.sh`, `ml.g5`의 HyperPod B1과 B2(HyperPod 생성 포함). 전체 목록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
+| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | 학습 중의 시나리오 A `ops/rollout.sh`, `ml.g5`의 HyperPod B2. 전체 목록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
 
 ## 이 저장소에서 확인한 것
 
@@ -75,14 +75,16 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 | 2026-11-18 | us-east-1(클러스터는 us-west-2) | 데모 사이트 | recorder pod에서 `record`(gVisor A10G 풀, Kata QEMU T4 풀), 클러스터 로그로 `extras.json` 생성, `demo/deploy.sh`, 배포 뒤 외부 점검 | 성공. 보안 헤더, 허용 메서드, 버킷 설정, 로그 전송을 확인. 기본 인증서에서 TLS 1.0과 1.1 handshake가 받아들여짐([09 데모 사이트](../handson/09_demo_site.md)의 보안 설계) |
 | 2026-11-20 | us-west-2 | 시나리오 C(c8i) | `ops/rollout.sh kata-clh-cpu`(v1에서 v2, v2에서 v1), 함께 실행한 `ops/simulate.sh`, `extensions/agent_sandbox.sh install`, `pool kata-clh-cpu 1`, `claim kata-clh-cpu`, `episodes kata-clh-cpu 2 3` | 성공. 전환이 배치 경계에서 한 번 일어났고 batch마다 버전이 하나였음. v2에서 v1 방향 한 번은 CPU 측정 노이즈로 parity가 speedup 조건에서 실패(0.8979에서 0.5365, 판정은 같음). Agent Sandbox는 claim이 샌드박스 주소를 받고 반납했으며 warm pool이 새 샌드박스를 채움. `episodes`는 에피소드 2개가 모두 3 turn에 solved, 에피소드마다 claim과 샌드박스가 하나, 끝난 뒤 남은 claim 없음 |
 | 2026-11-20 | us-west-2 | 시나리오 A(gVisor) | `01_check_prereqs.sh`, `02_create_cluster.sh`(GPU 노드 그룹 포함 첫 생성, CDK 배포 약 15분), `03_build_push_images.sh`, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`, `ops/verify.sh gvisor v1`, `07_run_grpo.sh`(기본 60 step) | 성공. 이번에는 용량 부족 없이 첫 생성이 끝남. 접속 인스턴스의 SSM 연결이 등록 직후 끊겨(`ConnectionLost`) 재부팅 뒤 터널이 연결됨. 검증 6개 제출물 모두 PASS. 학습은 `reward_batch` 60개, `sandbox_error` 0건, 한 batch의 버전 혼합 0건, `train_runtime` 2697초, Job 약 50분 Complete. `ok` 비율은 처음 20 step 5.3%, 마지막 20 step 6.0% |
+| 2026-11-22 | us-west-2 | HyperPod B1, EKS 1.36 | `ml.g5.2xlarge` trainer, EC2 `g5.xlarge` 샌드박스 2대, training operator `v1.3.0-eksbuild.1`, `hyperpod/run_grpo.sh 1` | `Completed=True`. probe 검사 6/6 통과, 제출 코드 12개 채점, 정답 1개. HyperPod·EKS 클러스터, 테스트 GPU 노드, lifecycle 버킷, 테스트용 trainer 저장소를 삭제했습니다. EKS용 KMS 키는 7일 후 삭제 예약 상태를 확인했습니다. [콘솔과 trainer 실행 화면](../handson/07_hyperpod.md#확인-방법) |
+| 2026-11-22 | us-west-2 | HyperPod B1 벤치마크 | `relu_bias_triton`, gVisor v1, EC2 `g5.xlarge` 샌드박스 2대 | EKS 시스템 노드와 HyperPod 학습 노드에서 각각 32/32 성공. HyperPod에서 요청했을 때 풀 처리량은 0.199 eval/s. [측정값과 실행 화면](../handson/08_benchmark.md#hyperpod-b1) |
 
 2026-11-14에는 ap-south-1 콘솔에서 Service Quotas 화면과 EC2 AMI Catalog의 HyperPod AMI 검색 결과도 캡처했습니다. 조회만 했고 스크립트는 실행하지 않았습니다.
 
 **AWS에서 실행하지 않은 것:**
 
 - 학습 중의 시나리오 A `ops/rollout.sh`와 `ops/rollout.sh --finish`(어느 시나리오에서도 실행하지 않음)
-- HyperPod 단계(`hyperpod/create.sh`부터)와 `ml.g5`의 B1, B2. B1과 B2 CDK 스택은 2026-11-18 시나리오 A 클러스터를 만들 때 중간 단계로만 배포함
-- `hyperpod/delete.sh`, `demo/teardown.sh`(shellcheck만 통과)
+- Sandbox용 custom AMI를 쓰는 HyperPod B2, 자동 노드 교체와 체크포인트 복구.
+- `demo/teardown.sh`(shellcheck만 통과)
 - [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)의 `gvisor-cpu` warm pool과 GPU 절(`kata-clh-cpu` warm pool로는 실행함)
 - 운영 가이드가 핸즈온에 더하는 구성: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity
 
@@ -104,7 +106,7 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
     - **HyperPod EKS AMI**: 1.34~1.36(2026-10-16)은 595.91.07, 1.33은 580.178.04입니다.
 - [ ] **가격:** EC2 온디맨드 요금과 SageMaker AI(HyperPod `ml.*`) 요금. 이 가이드의 값(`c8i.2xlarge` 0.37484 USD/시간 등)은 2026-11 기준입니다.
 - [ ] **quota:** Running On-Demand G and VT instances(vCPU 기준, 새 계정은 0일 수 있음), Running On-Demand Standard instances, HyperPod의 `ml.<type> for cluster usage`.
-- [ ] **HyperPod가 지원하는 Kubernetes 버전:** 사전 요구사항 페이지는 1.30부터 1.35까지, AMI 릴리스 노트는 1.36까지 적습니다. 이 가이드는 1.36을 씁니다.
+- [ ] **HyperPod가 지원하는 Kubernetes 버전:** 2026-11-22 기준 사전 요구사항에는 1.31~1.37이 명시되어 있습니다. 이 실습은 1.36을 씁니다.
 - [ ] **EKS 버전:** standard support 1.37, 1.36, 1.35, 1.34.
 - [ ] **nested virtualization 지원 계열과 리전:** User Guide의 계열 목록과 리전별 지원 여부.
 - [ ] **관리형 샌드박스의 GPU 지원:** Nitro Sandboxes와 EKS isolated pods의 "GPU and other device passthrough are not supported at launch", AgentCore Code Interpreter 문서의 실행 환경 설명.
@@ -149,7 +151,7 @@ scripts/01_check_prereqs.sh
 | [EKS Kubernetes 버전](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html) | standard support 1.37, 1.36, 1.35, 1.34 (최신 1.37) |
 | [VPC CNI network policy 설정](https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html) | `{"enableNetworkPolicy": "true"}`, VPC CNI 1.21 이상, standard 모드는 정책 적용 전까지 새 pod를 허용, strict 모드(`NETWORK_POLICY_ENFORCING_MODE`)는 CoreDNS까지 기본 거부 |
 | [EKS Auto Mode managed instances](https://docs.aws.amazon.com/eks/latest/userguide/automode-learn-instances.html) | "You can't directly access or install software on instances managed by EKS Auto Mode" |
-| [HyperPod EKS 사전 요구사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html) | 인증 모드 API 또는 API_AND_CONFIG_MAP, VPC CNI 1.18.3 이상, private subnet, Kubernetes 1.30부터 1.35까지, API로 만들 때 의존성 Helm chart 필요, HyperPod 노드와 EKS 노드의 IAM 역할 분리 |
+| [HyperPod EKS 사전 요구사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html) | 인증 모드 API 또는 API_AND_CONFIG_MAP, VPC CNI 1.18.3 이상, private subnet, Kubernetes 1.31부터 1.37까지, API로 만들 때 의존성 Helm chart 필요, HyperPod 노드와 EKS 노드의 IAM 역할 분리 |
 | [HyperPod IAM 사전 요구사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-prerequisites-iam.html) | 실행 역할: `AmazonSageMakerClusterInstanceRolePolicy`와 EC2 ENI, ECR inline policy |
 | [HyperPod EKS AMI 릴리스 노트](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-release-ami-eks.html) | 2026-10-16 릴리스: Kubernetes 1.34~1.36용 AMI는 NVIDIA 595.91.07, 1.33(x86_64)은 580.178.04. 1.36 AMI는 커널 6.12.111, containerd 2.3.5, CUDA 13.2 |
 | [HyperPod custom AMI](https://docs.aws.amazon.com/sagemaker/latest/dg/hyperpod-custom-ami-support.html), [custom AMI 만들기](https://docs.aws.amazon.com/sagemaker/latest/dg/hyperpod-custom-ami-how-to.html), [custom AMI로 클러스터 관리](https://docs.aws.amazon.com/sagemaker/latest/dg/hyperpod-custom-ami-cluster-management.html) | HyperPod 공개 base AMI로 만든 이미지만 쓸 수 있음, 용도 목록에 "driver customizations", 인스턴스 그룹의 `ImageId`(EKS, Slurm), `UpdateClusterSoftware`로 교체 |

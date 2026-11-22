@@ -183,8 +183,8 @@ details summary { cursor: pointer; color: var(--blue); margin: 6px 0; }
 .sub .n { font-weight: 700; font-size: 14px; display: block; }
 .sub .d { font-size: 12px; color: var(--muted); display: block; margin-top: 2px; }
 .sub[aria-checked="true"] { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 3px rgba(255,153,0,.18); }
-.try-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-@media (max-width: 960px) { .try-grid { grid-template-columns: 1fr; } }
+.try-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 960px) { .try-grid { grid-template-columns: minmax(0, 1fr); } }
 .run-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .speed { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 select { font: inherit; font-size: 13px; padding: 3px 6px; }
@@ -262,6 +262,11 @@ select { font: inherit; font-size: 13px; padding: 3px 6px; }
 .step-ctl { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .step-ctl input[type=range] { flex: 1; min-width: 160px; max-width: 360px; accent-color: var(--accent); }
 .bench-ctl { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+[hidden] { display: none !important; }
+#hyperpod-b1 { scroll-margin-top: 5rem; }
+#b1-clients { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+#grpo-runs { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+#grpo-runs select { font-size: 14px; }
 .bar-gpu { fill: var(--accent); }
 .bar-cpu { fill: var(--blue); }
 .bar-na { fill: none; stroke: var(--muted); stroke-dasharray: 4 3; }

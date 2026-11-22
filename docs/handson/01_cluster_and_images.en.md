@@ -41,7 +41,7 @@ Every script reads this file through `scripts/lib.sh`; if a required value is em
 |---|---|---|
 | `AWS_REGION` | `us-west-2` | the Region for the cluster, the ECR images and HyperPod |
 | `CLUSTER_NAME` | `gpu-sandbox` | the EKS cluster name, also used in the CDK stack name (`<CLUSTER_NAME>-cdk`), the kubectl context (`<CLUSTER_NAME>-tunnel`) and the AMI builder instance names; not used in AMI names |
-| `K8S_VERSION` | `1.36` | inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes (the HyperPod prerequisites page still says up to 1.35) |
+| `K8S_VERSION` | `1.36` | inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes |
 | `SCENARIO` | `A` | what `02_create_cluster.sh` builds (A, B1, B2, C). An option to `02_create_cluster.sh` (`--hyperpod` and so on) wins over it |
 | `WITH_KATA_CPU`, `WITH_KATA_GPU` | `0`, `0` | `1` adds the Kata CPU node (`c8i.2xlarge`) and the Kata GPU node (`g4dn.metal`, needs `KATA_IOMMU_AMI_ID`) to any scenario ([03 Kata sandboxes](03_kata.md)) |
 | `ADMIN_PRINCIPAL_ARN` | empty | IAM role or user ARNs (comma-separated) that get the cluster admin access entry |
@@ -436,7 +436,7 @@ The base images (PyTorch, vLLM) are large, so the build needs a lot of disk and 
 | Image | Dockerfile | Base image | Contents | Runs as |
 |---|---|---|---|---|
 | `sandbox` | `sandbox/Dockerfile` | `pytorch/pytorch:2.14.1-cuda12.6-cudnn9-runtime` | `gcc`, `libc6-dev` (to compile the Triton launcher), `tini` (PID 1), `gpusandbox[server]` (FastAPI, uvicorn, prometheus-client, PyJWT) | uid 10001 |
-| `trainer` | `trainer/Dockerfile` | `vllm/vllm-openai:v0.33.0` | TRL 1.18.0, PEFT 0.21.3, `datasets>=4.7`, `gpusandbox[client]`, `rl/`, `hyperpod-elastic-agent` (with `HYPERPOD=1`) | base image default |
+| `trainer` | `trainer/Dockerfile` | `vllm/vllm-openai:v0.33.0` (A), `v0.26.0` (HyperPod) | TRL 1.18.0, PEFT 0.21.3, `datasets>=4.7`, `gpusandbox[client]`, `rl/`, `hyperpod-elastic-agent` (with `HYPERPOD=1`) | base image default |
 | `control` | `gateway/Dockerfile` | `public.ecr.aws/docker/library/python:3.14-slim` | `gpusandbox[gateway]`, the gateway and operator tools (`probe`, `parity`, `bench`, `sync-jwks` of `python -m gpusandbox.tools`), no torch and no GPU | uid 10001 |
 
 gVisor and Kata share the sandbox image.

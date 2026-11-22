@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     같은 입력을 런타임별로 평가해 지연을 비교합니다. `ops/bench.sh`는 평가 결과와 시간을 기록하므로, 결과가 같은 경우의 지연을 비교할 수 있습니다. GPU 결과는 같은 GPU 종류끼리 비교하세요.
 
-    **완료 기준** cold와 warm을 나눠 보세요. warm에서는 p50으로 일반적인 응답 시간을 보고 p95로 느린 요청의 응답 시간이 어느 정도까지 늘어나는지 확인합니다.
+    **완료 기준** pod가 Ready가 되기까지 걸린 시간과 준비된 pod가 채점에 쓴 시간을 구분하세요. 채점 시간의 p50은 일반적인 요청을, p95는 느린 요청을 보여 줍니다.
 
 **시작 전에**
 
@@ -99,7 +99,7 @@ scripts/ops/bench.sh 64     # more requests per pool
 
 ## 평가 지연에 포함되는 과정
 
-평가 지연에는 요청 전달과 샌드박스 안의 실행이 모두 포함됩니다. 수치를 비교할 때 아래 해석 기준을 함께 보세요.
+`eval_p50_s`와 `eval_p95_s`는 샌드박스가 요청을 맡은 뒤 채점과 프로세스 정리에 쓴 시간으로 계산합니다. 클라이언트가 빈 pod를 기다리고 요청을 보내는 데 걸린 시간은 풀 처리량에 반영됩니다.
 
 ??? note "상세 설명"
     `duration_s`는 서버가 요청 하나를 맡은 뒤 verdict를 낼 때까지 걸린 시간으로, 커널 실행 외의 과정도 모두 들어갑니다. 클라이언트가 pod를 기다린 시간은 들어가지 않습니다.
@@ -243,6 +243,41 @@ scripts/ops/bench.sh
 - **같은 c8i 노드, 같은 이미지와 golden:** eval p50은 `gvisor-cpu` 3.76 s, `kata-qemu-cpu` 4.058 s, `kata-clh-cpu` 4.225 s였고, 이미지가 캐시된 상태의 cold start는 세 풀 모두 10에서 11 s였습니다. nested virtualization에서 얻은 값이므로 이 노드 안의 상대 비교로만 씁니다.
 - **GPU 풀의 cold start:** gVisor(A10G)는 16 s, Kata QEMU(T4)는 pod마다 30에서 36 s였습니다. GPU가 다르므로(A10G 대 T4) "해석하는 방법"의 규칙대로 이 차이는 오버헤드 비교가 아닙니다.
 - **GPU별 값:** `ref_ms` 중앙값은 A10G 0.58 ms, T4 1.15 ms였고, speedup은 A10G 1.75, T4 1.79였습니다.
+
+## HyperPod B1 · 2026-11-22 { #hyperpod-b1 }
+
+`us-west-2`의 EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v1` 샌드박스 두 개를 띄웠습니다. 이미지 태그는 `a20261120b`입니다. 같은 풀을 두 건으로 예열한 뒤, 학습을 멈춘 상태에서 아래 순서대로 각 클라이언트가 `relu_bias_triton` 32건을 한 배치로 보냈습니다.
+
+| 요청을 보낸 노드 | 성공 | 채점 p50 | 채점 p95 | 풀 처리량 | 커널 speedup 중앙값 |
+|---|---:|---:|---:|---:|---:|
+| EKS 시스템 `m6i.large` | 32/32 | 9.918 s | 10.034 s | 0.199 eval/s | 1.735× |
+| HyperPod 학습 `ml.g5.2xlarge` | 32/32 | 9.937 s | 10.071 s | 0.199 eval/s | 1.738× |
+
+두 샌드박스 pod가 생성된 뒤 Ready가 되기까지 각각 15, 120초가 걸렸습니다. p50과 p95는 성공한 요청을 서버가 처리한 시간이고, 처리량에는 클라이언트가 빈 pod를 기다린 시간도 들어갑니다. 클라이언트별로 한 번씩 측정했으므로 두 행의 차이만으로 배치 위치의 효과를 판단하기는 어렵습니다.
+
+![B1 벤치마크 Job이 실행된 노드와 각 Job의 측정값](../images/terminal/hyperpod-b1-benchmark.png)
+
+[실행 기록 JSON](data/hyperpod-b1.json) · [공개 데모](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1)
+
+??? example "B1에서 같은 조건으로 다시 측정하기"
+    [07 HyperPod](07_hyperpod.md)의 B1 설정과 Ready 상태인 샌드박스 두 개를 사용합니다. 기본 Job은 이번 실행에서 EKS 시스템 노드에 배치됐습니다. 마지막 Job은 클라이언트를 HyperPod 학습 노드에 지정합니다.
+
+    ```bash
+    scripts/ops/bench.sh 2
+    scripts/ops/bench.sh 32
+
+    source scripts/lib.sh
+    job="bench-b1-hyperpod-$(date +%s)"
+    client_spec=$(jq -nc --arg cluster "$HYPERPOD_CLUSTER_NAME" --arg type "$HYPERPOD_TRAINER_INSTANCE_TYPE" '
+      {spec:{template:{spec:{nodeSelector:{"sagemaker.amazonaws.com/cluster-name":$cluster,
+          "node.kubernetes.io/instance-type":$type, "sagemaker.amazonaws.com/node-health-status":"Schedulable"},
+        tolerations:[{key:"nvidia.com/gpu", operator:"Exists", effect:"NoSchedule"}]}}}}')
+    render k8s/probe/job-probe.yaml.tpl JOB_NAME="$job" \
+      TOOL_ARGS='["bench","--address","sandbox-gvisor-v1.sandbox.svc.cluster.local:8000","--requests","32","--golden","relu_bias_triton"]' \
+      | kubectl patch --local -f - --type=merge -p "$client_spec" -o yaml | kubectl create -f -
+    kubectl -n rl-trainer wait --for=condition=Complete "job/$job" --timeout=15m
+    kubectl -n rl-trainer logs "job/$job"
+    ```
 
 ## 공개된 참고 수치
 

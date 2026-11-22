@@ -23,8 +23,8 @@
     - **IMDS**: EC2 인스턴스가 자기 메타데이터와 임시 자격 증명을 읽는 주소(169.254.169.254)입니다.
     - **ENI**: 인스턴스에 연결되는 가상 네트워크 인터페이스입니다. VPC CNI는 ENI의 IP 주소를 pod에 할당하므로, ENI 수에 따라 노드당 pod 수 한도가 정해집니다.
 
-!!! warning "검증 상태"
-    이 페이지의 HyperPod 단계(`scripts/hyperpod/create.sh`부터)는 AWS에서 실행하지 않았습니다. 실제 출력을 "확인할 것"과 비교하세요. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
+!!! info "검증 상태"
+    2026-11-22에 `us-west-2`의 `ml.g5.2xlarge`에서 B1 GRPO 한 스텝을 완료했습니다. EC2의 gVisor 샌드박스 2개가 생성된 코드 12개를 채점했습니다. 아래 [실제 실행 화면](#확인-방법)에서 노드 배치와 완료 로그를 확인할 수 있습니다. B2는 실험 경로입니다.
 
 ## 구성
 
@@ -82,9 +82,11 @@ HyperPod의 `ml.<유형> for cluster usage` 쿼터는 Service Quotas 콘솔의 A
 
 **문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "설정과 스크립트" 항목을 보세요.
 
+![us-west-2에서 조회한 HyperPod 적용 쿼터와 EKS 1.36 training operator 버전](../images/terminal/hyperpod-prereqs.png)
+
 ## 소요 시간과 비용
 
-아래 시간은 스크립트가 출력하는 안내값이며, 저자가 측정한 값이 아닙니다. EKS 클러스터 배포(`cdk/deploy.sh`)에 20~30분, HyperPod `CreateCluster`가 InService가 되기까지 15~30분이 걸립니다.
+EKS 배포에는 20~30분을 잡으세요. 11월 22일 B1 실습에서는 HyperPod `CreateCluster`가 응답한 뒤 약 2분 30초에 클러스터가 `InService`가 됐고, 요청 후 약 8분에 trainer 인스턴스 생성이 완료됐습니다.
 
 | 항목 | 수 | USD/시간 |
 |---|---|---|
@@ -111,7 +113,7 @@ cdk/tunnel.sh    # in a second terminal; keep it running for every kubectl and h
 - 배포가 끝나면 `Outputs`에 `EndpointPublicAccess = false`가 나옵니다.
 - 터널을 연 뒤 `kubectl get nodes -L gpusandbox/role`의 `ROLE` 열에 `system` 2대와 `sandbox-gvisor` 2대가 보이고, `trainer`는 없어야 정상입니다.
 
-Kubernetes 1.36용 AMI는 HyperPod EKS AMI 릴리스 노트에 있지만, 전제조건 페이지에는 아직 1.35까지만 적혀 있어 두 문서의 내용이 다릅니다.
+HyperPod는 EKS 1.36을 지원하며 이에 맞는 x86_64 AMI를 제공합니다. [HyperPod EKS 사전 요구 사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html)
 
 ??? note "CDK 스택이 HyperPod용으로 설정하는 것"
     CDK 스택은 HyperPod가 요구하는 인증 모드 `API_AND_CONFIG_MAP`과, NetworkPolicy를 켠 VPC CNI를 설정합니다. 또 4단계가 subnet을 찾을 때 쓰는 `kubernetes.io/role/internal-elb=1` 태그를 private subnet에 추가합니다.
@@ -120,7 +122,7 @@ Kubernetes 1.36용 AMI는 HyperPod EKS AMI 릴리스 노트에 있지만, 전제
 
 ### 2. 이미지
 
-sandbox, trainer, control 이미지를 빌드해 ECR에 올립니다. `HYPERPOD=1`이면 trainer 이미지에 `hyperpod-elastic-agent`(`hyperpodrun` launcher)가 포함됩니다.
+sandbox, trainer, control 이미지를 빌드해 ECR에 올립니다. `HYPERPOD=1`이면 trainer 이미지에 `hyperpod-elastic-agent` 1.1.3(`hyperpodrun`)을 설치하고 빌드 중 `hyperpodrun --help`를 실행합니다. 이 경로는 vLLM 0.26.0과 PyTorch 2.11.0을 씁니다.
 
 ```bash
 HYPERPOD=1 scripts/03_build_push_images.sh
@@ -174,7 +176,7 @@ Kata CPU 풀만 쓰면 `WITH_KATA_CPU="1"`만 설정하고 클러스터 생성�
 
 ### 4. HyperPod 클러스터
 
-HyperPod 클러스터를 만들고 EKS 클러스터에 연결합니다. 이 단계부터 HyperPod 인스턴스 요금이 발생합니다. 실행하기 전에 아래 "training operator 전제조건"의 준비를 먼저 마치세요.
+HyperPod 클러스터를 만들고 EKS 클러스터에 연결합니다. 이 단계부터 HyperPod 인스턴스 요금이 발생합니다.
 
 ```bash
 scripts/hyperpod/create.sh
@@ -187,11 +189,11 @@ scripts/hyperpod/create.sh
 | 1 dependency chart | `aws/sagemaker-hyperpod-cli`를 clone하고 `helm_chart/HyperPodHelmChart`를 `hyperpod-dependencies`라는 이름으로 `kube-system`에 설치 | API로 HyperPod를 만들 때 필요합니다 |
 | 2 lifecycle bucket | `HYPERPOD_LCS_BUCKET`이 없으면 만들고, Block Public Access 네 가지(`BlockPublicAcls`, `IgnorePublicAcls`, `BlockPublicPolicy`, `RestrictPublicBuckets`)를 모두 켠 뒤 `infra/hyperpod/lifecycle/`을 올림 | lifecycle script는 노드가 만들어질 때 실행되어 노드 설정을 바꿀 수 있으므로 공개되면 안 됩니다 |
 | 3 execution role | `${HYPERPOD_CLUSTER_NAME}-execution`: `sagemaker.amazonaws.com` 신뢰, `AmazonSageMakerClusterInstanceRolePolicy` + inline `hyperpod-eks`(EC2 ENI, ECR pull) + inline `lifecycle-bucket-read` | HyperPod 노드용 역할은 EKS 노드 역할과 따로 둡니다 |
-| 4 CreateCluster | `Orchestrator.Eks.ClusterArn`, 인스턴스 그룹 `trainer`, EKS 클러스터 보안 그룹과 private subnet, `NodeRecovery: Automatic`으로 만듦. InService나 Failed가 될 때까지 60초 간격으로 기다림 | HyperPod 노드, EC2 노드, control plane이 같은 보안 그룹을 써서 서로 통신합니다 |
-| 5 training operator | `aws eks create-addon --addon-name amazon-sagemaker-hyperpod-training-operator` 뒤 `addon-active` 대기 | HyperPodPyTorchJob CRD와 controller를 설치합니다 |
+| 4 CreateCluster | `Orchestrator.Eks.ClusterArn`, 인스턴스 그룹 `trainer`, EKS 클러스터 보안 그룹과 private subnet, `NodeRecovery: Automatic`으로 만듦. 생성 중에는 30초 간격으로 조회하고 실패 사유가 있으면 출력한 뒤 종료 | HyperPod 노드, EC2 노드, control plane이 같은 보안 그룹을 써서 서로 통신합니다 |
+| 5 training operator | trainer 노드가 `Schedulable`이고 `Ready`가 될 때까지 기다린 뒤 `aws eks create-addon --addon-name amazon-sagemaker-hyperpod-training-operator` 뒤 `addon-active` 대기 | HyperPodPyTorchJob CRD와 controller를 설치합니다 |
 
 - **1단계 dependency chart의 기본값**: main 브랜치 values 기준으로 health monitoring agent, deep health check, job auto-restart, MPI operator, NVIDIA, EFA, Neuron device plugin이 기본으로 켜집니다.
-- **4단계의 인스턴스 그룹 `trainer`**: `ml.g5.2xlarge` 1대, `ThreadsPerCore` 2(SMT를 켜서 vCPU 8개, trainer는 7개 요청), `OnCreate` `on_create.sh`입니다.
+- **4단계의 인스턴스 그룹 `trainer`**: `ml.g5.2xlarge` 1대, `ThreadsPerCore` 2(vCPU 8개), `OnCreate` `on_create.sh`입니다. Worker는 CPU 5개, 메모리 24 GiB, GPU 1개를 요청합니다. 이 노드에서 operator, job별 pod manager, 그 밖의 시스템 pod가 요청한 CPU의 합은 2.75개였습니다.
 - **4단계의 private subnet**: CDK 스택이 추가한 `kubernetes.io/role/internal-elb=1` 태그로 찾습니다.
 
 **확인할 것:**
@@ -210,24 +212,8 @@ NAME              STATUS   ROLES    AGE   VERSION   NODE-HEALTH-STATUS   INSTANC
 
 `cluster.json.tpl`은 deep health check(`OnStartDeepHealthChecks`: `InstanceStress`, `InstanceConnectivity` 등)를 설정하지 않으니, 필요하면 인스턴스 그룹에 직접 추가하세요.
 
-!!! warning "training operator 전제조건"
-    AWS 문서에 따르면 training operator의 전제조건은 다음과 같습니다.
-
-    - cert-manager
-    - EKS Pod Identity Agent
-    - CLI로 설치하기 전에 만드는, 관리형 정책 `AmazonSageMakerHyperPodTrainingOperatorAccess`를 연결한 역할과 pod identity association(namespace `aws-hyperpod`, service account `hp-training-operator-controller-manager`)
-
-    이 클러스터에는 `eks-pod-identity-agent` add-on이 설치되어 있습니다. 하지만 스크립트 5단계는 `create-addon`만 실행하고, dependency chart의 cert-manager는 기본값이 꺼져 있습니다. 스크립트는 이 준비를 기다리지 않고 5단계까지 이어서 실행하므로, `create.sh`를 실행하기 전에 [설치 문서](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-eks-operator-install.html)에 따라 cert-manager와, 역할 및 pod identity association을 준비하세요. `eks-pod-identity-agent` add-on이 `ACTIVE`인지도 확인합니다.
-
-    같은 시점의 operator 문서는 지원 버전으로 Kubernetes 1.28~1.33, PyTorch 2.4.0~2.7.1을 나열합니다. 이 저장소는 Kubernetes 1.36과 vLLM 이미지의 PyTorch 2.14.0을 쓰므로, 이 조합에서 operator가 동작하는지는 확인되지 않았습니다. 클러스터 버전에 맞는 add-on 버전은 다음 명령으로 확인합니다.
-
-    ```bash
-    aws eks describe-addon-versions --kubernetes-version 1.36 \
-      --addon-name amazon-sagemaker-hyperpod-training-operator \
-      --query 'addons[0].addonVersions[].addonVersion' --output table
-    ```
-
-    **확인할 것:** 표에 버전이 하나 이상 나옵니다. 비어 있으면 1.36용 add-on이 아직 없다는 뜻입니다.
+??? note "Training operator 권한"
+    B1과 B2 CDK 스택은 `cert-manager`와 `eks-pod-identity-agent`를 설치하고 `aws-hyperpod/hp-training-operator-controller-manager` 서비스 계정에 IAM 역할을 연결합니다. `create.sh`는 HyperPod 클러스터에 `SageMaker=true` 태그를 붙입니다. 역할의 `AmazonSageMakerHyperPodTrainingOperatorAccess` 정책은 이 태그가 있어야 `DescribeClusterNode`를 허용합니다.
 
 스크립트를 다시 실행하면 단계마다 다르게 동작합니다.
 
@@ -263,21 +249,26 @@ scripts/ops/verify.sh gvisor
 
 **확인할 것:** 셋째 명령의 마지막 줄이 `pool sandbox-gvisor-v1 verified`입니다. 단계별 출력은 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)의 "확인할 것"과 같습니다.
 
+![B1 클러스터에서 준비된 gVisor 샌드박스 2개와 인증된 probe가 통과한 6개 검사](../images/terminal/hyperpod-sandboxes.png)
+
 **문제가 생기면:** [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)의 "문제가 생기면" 표와 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
 
 ### 6. 학습
 
-첫 명령은 HyperPodPyTorchJob `grpo-${RUN_ID}`를 만듭니다. 둘째 명령은 trainer 로그에서 이벤트 줄만 걸러 보여 주며, Ctrl-C로 멈춥니다.
+실행 ID를 정한 뒤 한 스텝짜리 Job을 제출하고 로그를 로컬에 저장합니다. 완료되면 operator가 worker pod를 정리합니다.
 
 ```bash
-scripts/hyperpod/run_grpo.sh        # 60 steps (default)
-kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '"event"'
+export RUN_ID="b1-$(date +%Y%m%d-%H%M%S)"
+scripts/hyperpod/run_grpo.sh 1      # smoke test; omit 1 for 60 steps
+kubectl -n rl-trainer wait --for=create pods -l "HPJob=grpo-${RUN_ID}" --timeout=5m
+kubectl -n rl-trainer wait --for=condition=Ready pods -l "HPJob=grpo-${RUN_ID}" --timeout=20m
+kubectl -n rl-trainer logs -f -l "HPJob=grpo-${RUN_ID}" --tail=-1 | tee trainer.log | grep --line-buffered '"event"'
 ```
 
 **확인할 것:**
 
-- 첫 명령이 `HyperPodPyTorchJob grpo-<RUN_ID> submitted`와 job 한 줄을 출력합니다.
-- 둘째 명령에서 20분 안에 `{"event": "routing", ...}`이 나오고, 이어서 샌드박스로 completion을 보낸 step마다 `{"event": "reward_batch", ...}` 줄이 나옵니다. 첫 step에는 모델 다운로드와 vLLM 초기화가 포함되어 시간이 걸립니다.
+- `run_grpo.sh`가 `HyperPodPyTorchJob grpo-<RUN_ID> submitted`와 job 한 줄을 출력합니다.
+- trainer 로그에 20분 안에 `{"event": "routing", ...}`이 나오고, 이어서 샌드박스로 completion을 보낸 step마다 `{"event": "reward_batch", ...}` 줄이 나옵니다. 첫 step에는 모델 다운로드와 vLLM 초기화가 포함되어 시간이 걸립니다.
 
 설정값과 Job 제출 이후의 동작은 [HyperPod 학습 스크립트](../reference/scripts.md#scriptshyperpodrun_grposh)를 참고하세요. 채점 방식과 로그 형식은 [05 GRPO 학습](05_grpo_training.md)과 같습니다.
 
@@ -321,12 +312,20 @@ kubectl -n rl-trainer logs -f -l app=grpo-trainer | grep --line-buffered '"event
 
     HyperPod 노드에는 두 가지 제약이 있습니다.
 
-    - **노드당 pod 수**: ENI가 하나라 노드당 pod 수가 적습니다. `ml.g6.2xlarge`는 최대 14개(HyperPod chart의 DaemonSet 포함)였고, `ml.g5.2xlarge`의 한도는 확인하지 않았습니다.
+    - **노드당 pod 수**. 이번 실습에서 `ml.g5.2xlarge` trainer의 `.status.allocatable.pods`는 14였습니다. AMI와 VPC CNI 버전에 따라 한도가 달라지므로 배포한 노드에서 확인하세요.
     - **IMDS 접근**: 기본적으로 hostNetwork pod만 IMDS에 접근할 수 있으므로 trainer pod는 노드 자격 증명을 읽을 수 없습니다.
 
 ## 확인 방법
 
-HyperPod 클러스터가 `InService`가 되면 인스턴스가 준비된 것입니다. 학습까지 확인하려면 trainer pod가 HyperPod 노드에 배치됐는지, 이어서 `routing`과 평가 결과가 로그에 남는지 보세요.
+2026-11-22 실습에서는 AWS 콘솔에 `InService`가 먼저 표시됐고 trainer 인스턴스는 잠시 `Pending`이었습니다. `list-cluster-nodes`에서 인스턴스 상태를 확인한 뒤 Kubernetes에서 노드와 학습 로그를 확인하세요.
+
+![AWS 콘솔에서 InService가 된 EKS 기반 HyperPod 실습 클러스터](../images/console/hyperpod-b1.png)
+
+```bash
+source scripts/config.env
+aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" \
+  --query 'ClusterNodeSummaries[].[InstanceGroupName,InstanceStatus.Status]' --output table
+```
 
 1. `hyperpod/create.sh`의 마지막 표에서 HyperPod 노드의 `node-health-status`가 `Schedulable`이고 instance type이 `ml.g5.2xlarge`입니다.
 2. HyperPod 클러스터의 상태와 실패 메시지를 확인합니다.
@@ -350,15 +349,28 @@ HyperPod 클러스터가 `InService`가 되면 인스턴스가 준비된 것입�
 4. job과, trainer pod가 배치된 노드를 확인합니다.
 
     ```bash
-    kubectl -n rl-trainer get hyperpodpytorchjob grpo-<RUN_ID>
-    kubectl -n rl-trainer get pods -l app=grpo-trainer -o wide
+    kubectl -n rl-trainer get hyperpodpytorchjob "grpo-${RUN_ID}"
+    kubectl -n rl-trainer get pods -l "HPJob=grpo-${RUN_ID}" -o wide
     ```
 
     **확인할 것:** job이 한 줄 보이고, pod의 NODE가 1번에서 본 HyperPod 노드입니다.
 
+    ![실행 중인 trainer의 HyperPod 노드와 NVIDIA A10G 확인](../images/terminal/hyperpod-trainer-node.png)
+
 5. trainer 로그에 20분 안에 `{"event": "routing", ...}`이 나오고, 이어서 샌드박스로 completion을 보낸 step마다 `reward_batch` 줄이 나옵니다.
 
+    ```bash
+    kubectl -n rl-trainer wait --for=condition=Completed "hyperpodpytorchjob/grpo-${RUN_ID}" --timeout=30m
+    jq -Rrc 'fromjson? | select(.event=="reward_batch" or .event=="done")' trainer.log
+    ```
+
+    한 스텝짜리 `grpo-b1-grpo` Job은 이미지 다운로드와 모델 초기화를 포함해 13:11:57~13:17:35 UTC에 실행됐습니다. TRL이 기록한 학습 시간은 49.2초였습니다. gVisor v1에 전달된 코드 12개 중 정답 1개, 오답 2개, 실행 오류 8개, 컴파일 오류 1개였습니다.
+
+    ![Job의 Completed 상태와 trainer 로그에 기록된 경로, 채점 결과, done 이벤트](../images/terminal/hyperpod-grpo-result.png)
+
 `$AWS_REGION`, `$CLUSTER_NAME`, `$HYPERPOD_CLUSTER_NAME`은 `source scripts/config.env`로 먼저 불러오세요. 문제가 생기면 [문제 해결](../reference/troubleshooting.md)의 "HyperPod" 항목을 보세요.
+
+별도 벤치마크에서 HyperPod 학습 노드가 고정 Triton 커널을 EC2 샌드박스 두 개에 32번 보냈습니다. 32건 모두 성공했고, 서버 채점 시간 p50은 9.937초, 풀 처리량은 초당 0.199건이었습니다. [벤치마크 결과와 실행 화면](08_benchmark.md#hyperpod-b1)
 
 ## B2 (실험): HyperPod 인스턴스 그룹에서 실행하는 gVisor { #b2 }
 
@@ -625,12 +637,12 @@ scripts/hyperpod/run_grpo.sh
 
 ## 적용 범위와 한계
 
-- **training operator 버전 조합:** Kubernetes 1.36과 PyTorch 2.14.0 조합은 operator 문서의 지원 목록에 없습니다(위 경고 상자 참고). 문서가 아직 갱신되지 않았을 수도 있습니다.
+- **Training operator**. `us-west-2`의 EKS 1.36에서 HyperPod 노드가 등록된 뒤 `v1.3.0-eksbuild.1`이 `ACTIVE`가 됐습니다.
 - **elastic agent 설정:** 공식 예시는 elastic agent 포트(`containerPort: 8080`)를 선언하고, 한 예시는 `hyperpodrun`에 `--tee=3 --log_dir=/tmp/hyperpod`도 전달합니다. 이 템플릿에는 둘 다 없습니다. operator가 agent 상태를 읽지 못하거나 로그 규칙이 동작하지 않으면 공식 예시와 비교하세요.
 - **checkpoint:** `/outputs`가 emptyDir라서 pod가 새로 만들어지면 학습이 처음부터 다시 시작됩니다(위 note 참고).
 - **deep health check:** `cluster.json.tpl`에 설정하지 않았습니다.
 - **GPU 없는 Kata:** GPU를 쓰지 않는 Kata도 같은 `/dev/kvm` 조건 때문에 HyperPod 노드에서는 실행하기 어려울 것으로 봅니다(추론, 미검증).
-- **B1 (`ml.g5`):** AWS에서 실행하지 않았습니다.
+- **B1 검증 범위**. GRPO 한 스텝을 실행하고 HyperPod 학습 노드에서 고정 커널 채점 벤치마크도 완료했습니다. 노드 교체와 체크포인트 복구는 별도 검증이 필요합니다.
 - **B2 (실험):** `ml.g5`로도 AWS에서 실행하지 않았습니다. 확인하지 못한 항목은 다섯 가지입니다.
     - HyperPod base AMI가 드라이버를 dnf와 `.run` 중 어느 방식으로 설치했는지(builder는 두 방식을 모두 처리)
     - 드라이버를 바꾼 이미지가 HyperPod의 이미지 검증을 통과하는지
@@ -647,6 +659,8 @@ HyperPod 리소스를 먼저 삭제한 뒤 EKS 클러스터를 삭제합니다. 
 scripts/hyperpod/delete.sh   # HyperPodPyTorchJobs, HyperPod cluster, execution role, lifecycle bucket
 scripts/08_cleanup.sh        # EKS cluster and the rest
 ```
+
+`hyperpod/delete.sh`를 실행한 뒤에도 CloudWatch에는 `/aws/sagemaker/Clusters/<클러스터 이름>/<클러스터 ID>` 로그 그룹이 남았습니다. 테스트 계정을 정리할 때는 필요한 로그를 저장한 뒤 CloudWatch Logs에서 해당 그룹의 이름을 확인해 삭제하세요.
 
 **확인할 것:** 첫 명령은 `HyperPod resources deleted`로 끝납니다. 프롬프트별로 입력할 단어, 남는 리소스, 확인 명령은 [99 정리](99_cleanup.md)에 있습니다.
 

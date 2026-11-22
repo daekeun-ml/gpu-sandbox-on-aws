@@ -41,7 +41,7 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 |---|---|---|
 | `AWS_REGION` | `us-west-2` | 클러스터, ECR 이미지, HyperPod 리소스를 만드는 리전 |
 | `CLUSTER_NAME` | `gpu-sandbox` | EKS 클러스터 이름. CDK 스택 이름(`<CLUSTER_NAME>-cdk`), kubectl context(`<CLUSTER_NAME>-tunnel`), AMI 빌더 인스턴스 이름에도 쓰임. AMI 이름에는 쓰이지 않음 |
-| `K8S_VERSION` | `1.36` | EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 버전 안 (HyperPod 전제조건 페이지는 아직 1.35까지) |
+| `K8S_VERSION` | `1.36` | EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 버전 안 |
 | `SCENARIO` | `A` | `02_create_cluster.sh`가 만드는 구성(A, B1, B2, C). `02_create_cluster.sh`에 옵션(`--hyperpod` 등)을 주면 옵션이 우선 |
 | `WITH_KATA_CPU`, `WITH_KATA_GPU` | `0`, `0` | `1`이면 Kata CPU 노드(`c8i.2xlarge`)와 Kata GPU 노드(`g4dn.metal`, `KATA_IOMMU_AMI_ID` 필요)를 어느 시나리오에든 추가함 ([03 Kata 샌드박스](03_kata.md)) |
 | `ADMIN_PRINCIPAL_ARN` | 빈 값 | 클러스터 관리자 access entry를 받을 IAM 역할 또는 사용자 ARN(쉼표로 여러 개) |
@@ -438,7 +438,7 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 | 이미지 | Dockerfile | 베이스 이미지 | 들어 있는 것 | 실행 사용자 |
 |---|---|---|---|---|
 | `sandbox` | `sandbox/Dockerfile` | `pytorch/pytorch:2.14.1-cuda12.6-cudnn9-runtime` | `gcc`, `libc6-dev`(Triton launcher 컴파일), `tini`(PID 1), `gpusandbox[server]`(FastAPI, uvicorn, prometheus-client, PyJWT) | uid 10001 |
-| `trainer` | `trainer/Dockerfile` | `vllm/vllm-openai:v0.33.0` | TRL 1.18.0, PEFT 0.21.3, `datasets>=4.7`, `gpusandbox[client]`, `rl/`, (`HYPERPOD=1`일 때) `hyperpod-elastic-agent` | 베이스 이미지 기본값 |
+| `trainer` | `trainer/Dockerfile` | `vllm/vllm-openai:v0.33.0` (A), `v0.26.0` (HyperPod) | TRL 1.18.0, PEFT 0.21.3, `datasets>=4.7`, `gpusandbox[client]`, `rl/`, (`HYPERPOD=1`일 때) `hyperpod-elastic-agent` | 베이스 이미지 기본값 |
 | `control` | `gateway/Dockerfile` | `public.ecr.aws/docker/library/python:3.14-slim` | `gpusandbox[gateway]`, gateway와 operator 도구(`python -m gpusandbox.tools`의 `probe`, `parity`, `bench`, `sync-jwks`), torch와 GPU 없음 | uid 10001 |
 
 샌드박스 이미지는 gVisor와 Kata가 함께 씁니다.

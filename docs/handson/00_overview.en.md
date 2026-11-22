@@ -318,7 +318,7 @@ When a script shows Job logs on a terminal, it turns the JSON events into short 
 - **Check 1 of `ops/verify.sh`**: the script does not judge the kernel comparison, so confirm that the two printed values differ.
 
 !!! warning "Validation status"
-    The required path of scenario A, scenario C, Kata GPU and Kata CPU ran in the author's practice account. `ops/rollout.sh` during training (scenario A) and HyperPod B1 and B2 were not run, and the experimental Kata CLH GPU VM did not start. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
+    The required path of scenario A, scenario C, Kata GPU and Kata CPU ran in the author's practice account. `ops/rollout.sh` during training (scenario A) and HyperPod B2 were not run, and the experimental Kata CLH GPU VM did not start. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Next step
 

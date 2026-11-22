@@ -17,7 +17,7 @@
 | Blog measurement | A value someone else measured in a different environment | About 55 ms for a warm pool claim in part 2 of the AWS Korea tech blog series, about 3 s cold start in the AWS China blog |
 | Inference | A judgment derived from the evidence, unverified | The effect of NodeConfig `imports` on keeping kata-deploy drop-ins |
 | Executed on AWS by the author | Actually run in a practice account, with the output checked | The gVisor path of scenario A, Kata GPU (`g4dn.metal`), the three CPU runtimes of scenario C, the runtime benchmark, the demo site. The dated record is in [AWS run record](#aws-run-record) |
-| Not executed on AWS by the author | Designed, with templates written, but not run | `ops/rollout.sh` in scenario A during training, HyperPod B1 and B2 on `ml.g5` (including creating HyperPod). The full list is in [AWS run record](#aws-run-record) |
+| Not executed on AWS by the author | Designed, with templates written, but not run | `ops/rollout.sh` in scenario A during training, HyperPod B2 on `ml.g5`. The full list is in [AWS run record](#aws-run-record) |
 
 ## What this repository verified
 
@@ -75,14 +75,16 @@ All of these ran in the author's practice account.
 | 2026-11-18 | us-east-1 (cluster in us-west-2) | Demo site | `record` in the recorder pod (gVisor A10G pool, Kata QEMU T4 pool), `extras.json` built from the cluster logs, `demo/deploy.sh`, an external check after deployment | Succeeded. Checked the security headers, allowed methods, bucket settings and log delivery. With the default certificate the endpoint accepted TLS 1.0 and 1.1 handshakes (security design in [09 Demo site](../handson/09_demo_site.md)) |
 | 2026-11-20 | us-west-2 | Scenario C (c8i) | `ops/rollout.sh kata-clh-cpu` (v1 to v2, v2 to v1) with `ops/simulate.sh` running, `extensions/agent_sandbox.sh install`, `pool kata-clh-cpu 1`, `claim kata-clh-cpu`, `episodes kata-clh-cpu 2 3` | Success. The switch happened once at a batch boundary and every batch had one version. One v2-to-v1 run failed parity on the speedup check from CPU timing noise (0.8979 to 0.5365, same verdicts). For Agent Sandbox, the claim got a sandbox address and released it, and the warm pool refilled with a new sandbox. `episodes` solved both episodes in 3 turns, with one claim and one sandbox per episode and no claims left afterwards |
 | 2026-11-20 | us-west-2 | Scenario A (gVisor) | `01_check_prereqs.sh`, `02_create_cluster.sh` (first creation with the GPU node groups, CDK deploy about 15 min), `03_build_push_images.sh`, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`, `ops/verify.sh gvisor v1`, `07_run_grpo.sh` (default 60 steps) | Success. This time the first creation finished without a capacity error. The access instance lost its SSM connection right after registering (`ConnectionLost`), and the tunnel connected after a reboot. All six verification submissions passed. Training printed 60 `reward_batch` lines with no `sandbox_error` and no batch mixing versions, `train_runtime` 2697 s, and the Job was Complete in about 50 min. The `ok` share was 5.3% over the first 20 steps and 6.0% over the last 20 |
+| 2026-11-22 | us-west-2 | HyperPod B1 on EKS 1.36 | `ml.g5.2xlarge` trainer, two EC2 `g5.xlarge` sandboxes, training operator `v1.3.0-eksbuild.1`, `hyperpod/run_grpo.sh 1` | `Completed=True`, 6/6 probe checks passed, 12 submissions evaluated, 1 correct. The HyperPod and EKS clusters, test GPU nodes, lifecycle bucket and test trainer repository were deleted. The EKS KMS key entered its seven-day deletion window. [Console and trainer screenshots](../handson/07_hyperpod.md#how-to-verify) |
+| 2026-11-22 | us-west-2 | HyperPod B1 benchmark | `relu_bias_triton`, gVisor v1, two EC2 `g5.xlarge` sandbox nodes | EKS system and HyperPod trainer clients each passed 32/32. The HyperPod run reached 0.199 eval/s. [Measurements and screenshot](../handson/08_benchmark.md#hyperpod-b1) |
 
 On 2026-11-14 the author also captured the Service Quotas screens and the HyperPod AMI search in the EC2 AMI Catalog from the ap-south-1 console. These were read-only views, and no script ran there.
 
 **Not executed on AWS:**
 
 - `ops/rollout.sh` in scenario A during training, and `ops/rollout.sh --finish` (not run in any scenario)
-- The HyperPod steps (from `hyperpod/create.sh` on) and B1 and B2 on `ml.g5`. The B1 and B2 CDK stacks were deployed only as intermediate steps while creating the scenario A cluster on 2026-11-18
-- `hyperpod/delete.sh` and `demo/teardown.sh` (shellcheck only)
+- HyperPod B2 with its custom sandbox AMI, automatic node replacement and checkpoint recovery.
+- `demo/teardown.sh` (shellcheck only)
 - The `gvisor-cpu` warm pool and the GPU section of [11 Multi-turn episodes](../handson/11_multi_turn.md) (it ran with the `kata-clh-cpu` warm pool)
 - What the production guide adds to the hands-on: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity
 
@@ -104,7 +106,7 @@ The values below are as of 2026-11. Check them one by one before deploying or sh
     - **HyperPod EKS AMIs**: 1.34 to 1.36 (2026-10-16) ship 595.91.07 and 1.33 ships 580.178.04.
 - [ ] **Prices:** EC2 On-Demand and SageMaker AI (HyperPod `ml.*`) pricing. The values in this guide (such as 0.37484 USD/hour for `c8i.2xlarge`) are as of 2026-11.
 - [ ] **Quotas:** Running On-Demand G and VT instances (vCPU based, can be 0 for new accounts), Running On-Demand Standard instances, and HyperPod's `ml.<type> for cluster usage`.
-- [ ] **Kubernetes versions supported by HyperPod:** the prerequisites page lists 1.30 through 1.35, and the AMI release notes go up to 1.36. This guide uses 1.36.
+- [ ] **Kubernetes versions supported by HyperPod:** the prerequisites list 1.31 through 1.37 as of 2026-11-22. The lab uses 1.36.
 - [ ] **EKS versions:** standard support 1.37, 1.36, 1.35, 1.34.
 - [ ] **Nested virtualization families and Regions:** the family list in the User Guide and the support per Region.
 - [ ] **GPU support in managed sandboxes:** "GPU and other device passthrough are not supported at launch" for Nitro Sandboxes and EKS isolated pods, and the execution environment described in the AgentCore Code Interpreter documentation.
@@ -149,7 +151,7 @@ scripts/01_check_prereqs.sh
 | [EKS Kubernetes versions](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html) | Standard support 1.37, 1.36, 1.35, 1.34 (latest 1.37) |
 | [Configure VPC CNI network policy](https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html) | `{"enableNetworkPolicy": "true"}`, VPC CNI 1.21 or later, standard mode allows new pods until policies apply, strict mode (`NETWORK_POLICY_ENFORCING_MODE`) default-denies everything including CoreDNS |
 | [EKS Auto Mode managed instances](https://docs.aws.amazon.com/eks/latest/userguide/automode-learn-instances.html) | "You can't directly access or install software on instances managed by EKS Auto Mode" |
-| [HyperPod EKS prerequisites](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html) | Authentication mode API or API_AND_CONFIG_MAP, VPC CNI 1.18.3 or later, private subnets, Kubernetes 1.30 through 1.35, the dependency Helm chart when creating through the API, separate IAM roles for HyperPod nodes and EKS nodes |
+| [HyperPod EKS prerequisites](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html) | Authentication mode API or API_AND_CONFIG_MAP, VPC CNI 1.18.3 or later, private subnets, Kubernetes 1.31 through 1.37, the dependency Helm chart when creating through the API, separate IAM roles for HyperPod nodes and EKS nodes |
 | [HyperPod IAM prerequisites](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-prerequisites-iam.html) | Execution role: `AmazonSageMakerClusterInstanceRolePolicy` plus an EC2 ENI and ECR inline policy |
 | [HyperPod EKS AMI release notes](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-release-ami-eks.html) | Release of 2026-10-16: the AMIs for Kubernetes 1.34 to 1.36 ship NVIDIA 595.91.07, 1.33 (x86_64) ships 580.178.04. The 1.36 AMI has kernel 6.12.111, containerd 2.3.5, CUDA 13.2 |
 | [HyperPod custom AMIs](https://docs.aws.amazon.com/sagemaker/latest/dg/hyperpod-custom-ami-support.html), [Build a custom AMI](https://docs.aws.amazon.com/sagemaker/latest/dg/hyperpod-custom-ami-how-to.html), [Cluster management with custom AMIs](https://docs.aws.amazon.com/sagemaker/latest/dg/hyperpod-custom-ami-cluster-management.html) | Only images built from a HyperPod public base AMI; "driver customizations" as a use case; the instance group's `ImageId` (EKS and Slurm); replace with `UpdateClusterSoftware` |

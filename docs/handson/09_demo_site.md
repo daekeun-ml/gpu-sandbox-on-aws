@@ -32,12 +32,12 @@
 
 | 절 | 보여 주는 것 | 데이터 |
 |---|---|---|
-| 맨 위 | 핵심 수치와 둘러보기 영상(약 2분, 소리 없음) | `recording.json`, `extras.json`, `media/tour-ko.mp4`와 `tour-en.mp4` |
+| 맨 위 | 핵심 수치와 둘러보기 영상(한국어 2분 40초, 무음) | `recording.json`, `extras.json`, `media/tour-ko.mp4`와 `tour-en.mp4` |
 | 1. 아키텍처 | 구성 요소를 누르면 설명과 측정값이 열리는 구성도와 재생 버튼 | 페이지의 설명과 `extras.json`의 측정값 |
 | 2. 채점 체험 | golden 제출물을 골라 재생하면 진행 막대가 차고 verdict, reward 구성 요소, 판정 이유가 나옵니다 | `recording.json`의 golden 평가 결과와, trainer와 같은 `score_verdict`로 계산한 reward |
 | 3. 공격 차단 | 풀마다 샌드박스 안 커널과 노드 커널, GPU, egress 차단 여부. 격리와 채점 검증 결과 카드 8개와 터미널 출력 재생 | `recording.json`의 `/info`, `extras.json`의 터미널 기록(verify.sh, gVisor 스모크 테스트, rollout.sh) |
-| 4. 학습 | GRPO 배치마다 판정 분포, 통과율, 평균 reward 차트와 step 재생. 학습 중 버전 전환 차트 | `extras.json`의 `training`(GRPO Job 로그)과 `simulation`(없으면 `recording.json`의 `training`) |
-| 5. 벤치마크 | 런타임별 eval p50, p95, cold start, pod당 처리량, speedup 막대 차트. 이미지 캐시 후와 배포 직후를 바꿔 볼 수 있습니다 | `extras.json`의 `bench`(`scripts/ops/bench.sh` 출력) |
+| 4. 학습 | EC2와 HyperPod B1의 GRPO 실행을 고르면 배치별 판정과 점수를 볼 수 있습니다. 아래 차트는 CPU 모의 실행에서의 버전 전환입니다. | `extras.json`의 `training`, `b1.training`, `simulation` |
+| 5. 벤치마크 | B1에서 요청을 보낸 두 노드의 채점 지연과 풀 전체 처리량을 보여 줍니다. 이어지는 런타임별 차트에서는 pod당 처리량과 시작 시간도 볼 수 있습니다. | `extras.json`의 `b1.bench`, `bench` |
 | 패턴별 아키텍처 (`architecture.html`) | 시나리오 A, B1, B2, C를 AWS 아이콘으로 그린 구성도 | 페이지에 들어 있는 정적 데이터(`arch.js`). 데이터 파일을 읽지 않습니다 |
 
 - **맨 위의 핵심 수치**: GPU 런타임 수, 기대 판정과 일치한 golden 수, 두 풀의 `verify.sh` 기록에서 막힌 연결 수, 벤치마크 정상 응답 수입니다.
@@ -50,8 +50,12 @@
 
 - **공개되는 파일**: HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다.
 - **저장소의 `recording.json` 샘플**: 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요.
-- **2026-11-18 공개본**: GPU 기록은 `demo/recordings/2026-11-18-eks-gpu.json`에 있습니다. `extras.json`의 GRPO 차트와 벤치마크는 같은 날 EKS 실행(us-west-2)의 로그로 만들었고, 버전 전환 차트는 2026-11-17에 모델 없이 golden 제출물로 실행한 CPU 시뮬레이션 로그를 씁니다.
+- 공개 데모는 `demo/recordings/2026-11-18-eks-gpu.json`으로 GPU 채점을 재생합니다. EC2 5스텝 학습과 런타임별 비교는 11월 18일, CPU 버전 전환은 11월 17일 기록입니다. 11월 22일에는 B1에서 GRPO 한 스텝과 고정 커널 벤치마크 두 번을 실행했습니다. [B1 측정 결과](08_benchmark.md#hyperpod-b1)
 - **2절의 진행 막대**: 기록된 전체 평가 시간입니다. 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.
+
+[공개 데모에서 B1 벤치마크 열기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1)
+
+![같은 커널을 채점한 EKS와 HyperPod 클라이언트의 실측값을 표시한 CloudFront 데모](../images/demo/hyperpod-b1-benchmark-ko.png)
 
 ```mermaid
 flowchart LR
@@ -72,7 +76,7 @@ flowchart LR
 - **배포** 시간은 대부분 스택 생성과 CloudFront 전파를 기다리는 시간입니다. 스크립트가 200 응답을 기다리는 시간은 최대 약 10분입니다(4절 7번 단계). 실제 소요 시간은 측정하지 않았습니다.
 - **사이트 비용**: 작은 정적 사이트의 비용은 보통 크지 않지만 트래픽에 따라 달라지므로 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)과 [S3 요금](https://aws.amazon.com/s3/pricing/)을 확인하세요.
 - **WAF 비용**: web ACL 월 약 5 USD, 규칙마다 월 1 USD(규칙 5개), 요청 100만 건마다 0.60 USD입니다([AWS WAF 요금](https://aws.amazon.com/waf/pricing/)). 스택이 있는 동안은 트래픽이 없어도 고정 비용(월 약 10 USD)이 나옵니다.
-- **영상 전송 비용**: 둘러보기 영상은 언어마다 약 5.5 MB입니다. 전송량은 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)에 따라 과금되고, WAF가 IP마다 `/media/` 요청을 5분에 100건으로 제한해 한 클라이언트가 만들 수 있는 전송량에 상한을 둡니다. 예상보다 많이 쓰일 것 같으면 AWS Budgets 알림을 걸어 두세요.
+- **영상 전송 비용**: 한국어 영상은 6.1 MiB, 영어 영상은 6.8 MiB입니다. 전송량은 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)에 따라 과금되고, WAF가 IP마다 `/media/` 요청을 5분에 100건으로 제한해 한 클라이언트가 만들 수 있는 전송량에 상한을 둡니다. 예상보다 많이 쓰일 것 같으면 AWS Budgets 알림을 걸어 두세요.
 - **로그 비용**: 로그 버킷의 S3 저장 요금만 듭니다. 객체는 90일 뒤 만료되고, 버킷은 정리 뒤에도 남습니다(6절).
 - **GPU 기록 비용**: 기록하는 동안 GPU 샌드박스 노드가 실행 중이어야 합니다(`g5.2xlarge` 시간당 1.212 USD, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1과 us-west-2 온디맨드 요금). recorder pod는 system 노드에서 GPU 없이 실행되고, trainer pod로 기록하면 trainer 노드도 실행 중이어야 합니다. 기록을 만든 뒤에는 [99 정리](99_cleanup.md)에 따라 GPU 노드를 줄이세요.
 
@@ -102,13 +106,13 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 - 터미널에는 파일마다 200 응답 로그가 출력됩니다.
 
 ??? note "확인한 환경과 각 절의 데이터 출처"
-    이 항목은 2026-11-18에 Linux의 Chromium(Playwright)으로 확인했습니다. 3절의 풀 카드는 `recording.json`을 읽고, 3절의 공격 카드와 터미널, 4절, 5절은 저장소의 `extras.json`에서 나오며 각 차트 옆에 그 출처가 표시됩니다. 공개본의 GRPO 학습과 벤치마크는 2026-11-18 EKS 기록이고, 버전 전환은 2026-11-17 CPU 시뮬레이션입니다.
+    11월 22일에 공개 사이트를 Chromium에서 한국어와 영어로 확인했습니다. 풀 카드는 golden 채점 기록을, 학습·벤치마크·터미널 재생은 `extras.json`을 읽습니다. 패턴별 아키텍처 페이지에는 각 구성에서 확인한 실행 범위가 표시됩니다.
 
 **문제가 생기면:**
 
 - **`Address already in use`가 나오면**: 다른 포트(예: `8081`)로 실행하고 브라우저에서도 그 포트의 주소를 여세요.
 - **"기록 출처" 자리에 `failed to load recording:`이 나오면**: `demo/site/data/recording.json`이 있는지, 올바른 JSON인지 확인하세요.
-- **`data/extras.json`이 없으면**: 맨 위의 차단 수와 벤치마크 타일, 터미널 출력이 사라집니다. 5절은 제목과 빈 차트 영역이 남습니다. 3절의 공격 카드와 4절의 GRPO 차트 자리에는 "이 기록에는 이 부분의 데이터가 없습니다."가 나오고, 4절의 버전 전환 차트는 `recording.json`의 학습 이벤트로 그려집니다.
+- `data/extras.json`이 없으면 벤치마크 섹션과 GRPO 실행 선택기가 숨겨집니다. golden 채점 기록은 계속 재생할 수 있습니다.
 - **그 밖의 경우**: [문제 해결](../reference/troubleshooting.md)을 보세요.
 
 ## 2. 클러스터에서 GPU 기록 만들기
@@ -303,6 +307,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 |---|---|---|
 | 벤치마크 | `scripts/ops/bench.sh 32`의 출력을 `tee`로 `bench.log`에 저장 | `--bench-log pass1=bench.log --bench-pass pass2`, 노드 정보는 `--node` (아래 예시) |
 | GRPO 학습 | `kubectl -n rl-trainer logs job/<job> > grpo.log`. reward 함수의 `reward_batch` JSON 줄과 trainer의 metric 줄(`{'loss': ...}`)을 읽습니다 | `--training-log grpo.log --model <model-id>` |
+| HyperPod B1 | 공개용 B1 학습 로그 요약과 고정 커널 벤치마크 실측값 | `--b1-record docs/handson/data/hyperpod-b1.json` |
 | 버전 전환 | `scripts/ops/simulate.sh 30 20`의 출력을 `simulate.log`에 저장하고, 그동안 [06](06_sandbox_update.md)의 `rollout.sh`로 버전을 바꿉니다 | `--simulation-log simulate.log` |
 | 터미널 출력 | `scripts/ops/verify.sh gvisor v1` 같은 명령의 출력을 파일로 저장 | `--transcript verify-gvisor=verify-gvisor.txt` (반복 가능) |
 
@@ -314,6 +319,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 # Build data/extras.json from the saved command output (paths are examples)
 python3 demo/build_extras.py --out demo/site/data/extras.json \
   --source "Amazon EKS 1.36, us-west-2, 2026-11-18" \
+  --b1-record docs/handson/data/hyperpod-b1.json \
   --bench-log pass1=bench.log --bench-pass pass2 \
   --node 'gvisor=g5.2xlarge|NVIDIA A10G' --node 'kata-qemu=g4dn.metal|Tesla T4' \
   --unmeasured 'kata-clh=g4dn.metal|Tesla T4' \

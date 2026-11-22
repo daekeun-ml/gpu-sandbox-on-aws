@@ -5,9 +5,13 @@
 # TRL 1.18.0 declares vllm>=0.23.0,<0.34.0, and vllm 0.33.0 pins torch 2.14.0 and
 # transformers>=5.16.1,<5.21.0. Starting from the vLLM image keeps that triangle consistent;
 # the constraints file stops pip from upgrading torch/transformers/vllm underneath it.
-# Versions as of 2026-11; re-verify before building.
+# HyperPod elastic agent 1.1.3 requires torch < 2.12. Its vLLM 0.26 base uses torch 2.11.
 ARG BASE_IMAGE=vllm/vllm-openai:v0.33.0
-FROM ${BASE_IMAGE}
+ARG HYPERPOD_BASE_IMAGE=vllm/vllm-openai:v0.26.0
+ARG INSTALL_HYPERPOD_AGENT=0
+FROM ${BASE_IMAGE} AS trainer-0
+FROM ${HYPERPOD_BASE_IMAGE} AS trainer-1
+FROM trainer-${INSTALL_HYPERPOD_AGENT}
 
 # The vLLM image has python3 (3.12) but no "python" command, and the import check below, CMD
 # and the Job spec (k8s/trainer/job-grpo.yaml.tpl) all call "python".
@@ -23,7 +27,8 @@ RUN pip freeze | grep -iE '^(torch|transformers|vllm|triton)==' > /tmp/constrain
  && pip install --no-cache-dir -c /tmp/constraints.txt \
       "trl==${TRL_VERSION}" "peft==${PEFT_VERSION}" "datasets>=4.7" \
  && if [ "${INSTALL_HYPERPOD_AGENT}" = "1" ]; then \
-      pip install --no-cache-dir -c /tmp/constraints.txt hyperpod-elastic-agent; \
+      pip install --no-cache-dir -c /tmp/constraints.txt hyperpod-elastic-agent==1.1.3 \
+      && hyperpodrun --help >/dev/null; \
     fi
 
 COPY pyproject.toml README.md LICENSE ./

@@ -24,7 +24,7 @@
 
 !!! warning "검증 상태와 안전"
     - **실행한 것**: 시나리오 C의 CDK 스택 삭제와 시나리오 A 클러스터의 `08_cleanup.sh --images`는 실습 계정에서 실행했습니다. 그 실행에서 AMI 삭제 단계가 돌았는지는 기록에 없습니다([실행 기록](../reference/sources.md#aws-실행-기록)).
-    - **끝까지 실행하지 않은 것**: `hyperpod/delete.sh`와 `demo/teardown.sh`는 shellcheck만 통과했고 AWS에서 끝까지 실행하지 않았습니다.
+    - **끝까지 실행하지 않은 것**: `demo/teardown.sh`는 shellcheck만 통과했습니다. `hyperpod/delete.sh`는 11월 22일 B1 실습에서 실행 역할과 lifecycle 버킷 삭제까지 확인했습니다.
     - **공유 계정이나 production 계정이라면**: 삭제 전에 이름, 태그, 생성 시각으로 이 실습의 리소스인지 확인하세요. 가능하면 이 실습 전용 계정이나 역할에서 실행하세요.
     - **확인 명령**: 아래 확인 명령은 조회만 하고 리소스를 변경하지 않습니다.
 

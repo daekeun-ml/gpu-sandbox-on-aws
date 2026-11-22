@@ -72,7 +72,7 @@ flowchart LR
 | `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | B2 `sandbox` 인스턴스 그룹. `ml.g6.xlarge`도 지정할 수 있음 | `instance-group-sandbox.json.tpl` |
 
 - **`AWS_REGION`**: 데모 사이트(`demo/deploy.sh`)는 이 값과 관계없이 `us-east-1`에 배포합니다.
-- **`K8S_VERSION`**: 예시 값 `1.36`은 EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 범위에 포함됩니다(HyperPod 전제조건 페이지는 아직 1.35까지).
+- **`K8S_VERSION`**: 예시 값 `1.36`은 EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 범위에 포함됩니다.
 - **`SCENARIO`**: `A`(system, trainer, gVisor), `B1`(system, gVisor), `B2`(system만), `C`(system, Kata CPU). `02_create_cluster.sh`의 옵션(`--hyperpod`, `--hyperpod-b2`, `--cpu-only`)이 이 값을 덮어씁니다.
 - **`CHANGE_SCENARIO`**: 첫 배포와 같은 시나리오의 재배포에는 필요 없습니다. 시나리오가 다를 때 이 값이 없으면 `cdk/deploy.sh`가 멈춥니다.
 - **`ADMIN_PRINCIPAL_ARN`**: 여러 개는 쉼표로 구분합니다(STS 세션 ARN 불가). 역할에 path가 있으면 직접 적습니다.
@@ -419,7 +419,7 @@ Job 템플릿(`k8s/trainer/job-grpo.yaml.tpl`, `hyperpod-job-grpo.yaml.tpl`)은 
 
 - **전달하는 플래그**: `--output-dir`, `--max-steps`, `--model`, `--metrics-file`만 전달합니다. 다른 플래그를 바꾸려면 템플릿의 `args`(HyperPod는 `command`)에 추가하세요.
 - **넣는 env**: `SANDBOX_ROUTING_FILE`, `SANDBOX_TOKEN_FILE`, `HF_HOME=/cache/hf`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
-- **리소스**: CPU 7, 메모리 28Gi, GPU 1
+- 시나리오 A trainer는 CPU 7개, 메모리 28 GiB, GPU 1개를 요청합니다. HyperPod worker는 CPU 5개, 메모리 24 GiB, GPU 1개를 요청합니다.
 
 ## 8. 런타임 profile (k8s/sandbox/profiles)
 

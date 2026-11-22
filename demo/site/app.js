@@ -19,18 +19,18 @@ const TEXT = {
     bannerGo: "구성도 열기 →",
     eyebrow: "강화학습용 GPU 코드 채점 샌드박스",
     title: "AI가 쓴 GPU 코드를 안전하게 채점합니다",
-    lede: "강화학습을 하는 동안 모델은 계속 새로운 GPU 코드(Triton, CUDA)를 만듭니다. 믿을 수 없는 코드라서 격리된 환경에서 실행해야 합니다. 이 페이지는 Amazon EKS에서 gVisor와 Kata Containers로 실제 채점한 기록을 다시 보여 줍니다. 클러스터나 GPU에 직접 연결하지는 않습니다.",
+    lede: "강화학습 중 모델이 만든 GPU 코드는 격리된 샌드박스에서 실행하고 채점합니다. 제출 코드의 판정부터 EC2와 SageMaker HyperPod에서 모델이 받은 점수까지, 저장된 실행 기록을 따라가 보세요.",
     ctaTry: "채점 장면 보기", ctaDefense: "공격 차단 결과 보기",
-    sourceLabel: "기록 출처:",
-    videoCaption: "2분 소개 영상입니다. 이 페이지의 기능을 순서대로 보여 줍니다(소리 없음).",
+    sourceLabel: "채점 재생 기록",
+    videoCaption: "채점, GRPO 학습, HyperPod 벤치마크를 보여 주는 무음 영상입니다.",
     kpiGpu: "GPU 격리 방식 (gVisor, Kata)", kpiGolden: "예상대로 나온 채점 결과",
-    kpiBlocked: "샌드박스 안에서 막힌 접근 시도", kpiBench: "성능 측정 요청 중 성공",
+    kpiBlocked: "샌드박스 안에서 막힌 접근 시도", kpiBench: "런타임 비교에서 성공한 요청 (캐시된 이미지)",
     sArch: "구조: 채점 요청 하나가 지나가는 길",
     sArchHint: "상자를 누르면 설명이 나옵니다. 재생 버튼을 누르면 채점 요청 하나가 어디를 거치는지 차례로 보여 줍니다.",
     flowPlay: "▶ 요청 흐름 보기", flowStop: "■ 멈춤", evidence: "실제 기록 보기",
     zoneTrainer: "학습 영역 (rl-trainer)", zoneSandbox: "샌드박스 영역 (기본 차단)", zoneOut: "샌드박스에서 접근 불가",
-    sTry: "채점해 보기: 같은 코드, 두 가지 샌드박스",
-    sTryHint: "제출 코드를 고르고 재생을 누르세요. gVisor(A10G GPU)와 Kata(T4 GPU)가 같은 코드를 채점한 기록이 나란히 재생됩니다.",
+    sTry: "같은 코드의 채점 결과 비교",
+    sTryHint: "제출 코드를 고르고 재생을 누르면 각 풀의 판정을 볼 수 있습니다. 이 기록의 풀은 {pools}입니다.",
     showTask: "문제와 정답 코드 보기", candidate: "제출된 코드",
     run: "▶ 채점 재생", running: "재생 중...",
     speed: "속도", speed1: "실제 속도", speed4: "4배 빠르게", speed0: "결과만 보기",
@@ -56,10 +56,10 @@ const TEXT = {
     runtime: "런타임", version: "샌드박스 버전", kernel: "샌드박스 커널", nodeKernel: "서버 커널",
     gpu: "GPU", egress: "외부 연결 차단", yes: "확인됨", no: "열려 있음", none: "없음 (CPU)",
     sTrain: "학습: 채점 결과가 점수가 되기까지",
-    sTrainHint: "위 그래프는 실제 모델을 GPU에서 5 step 학습한 기록이고, 아래 그래프는 학습 도중 샌드박스 버전을 바꾼 기록입니다.",
-    grpoTitle: "GRPO 학습 5 step: 모델이 쓴 코드를 gVisor(A10G)가 채점",
+    sTrainHint: "학습 기록을 고르면 모델이 쓴 코드의 판정과 점수를 볼 수 있습니다. 버전 전환 그래프 옆에는 해당 실행의 출처가 표시됩니다.",
+    grpoTitle: "GRPO 학습 중 모델이 받은 점수", runRecord: "학습 기록",
     stepPlay: "▶ step 순서대로 보기",
-    grpoNote: "동작 확인용으로 5 step만 돌렸기 때문에, 모델이 좋아지는지를 보여 주는 결과는 아닙니다. 모델이 쓴 코드가 어떤 채점 결과를 받고 점수가 어떻게 나오는지를 보여 줍니다.",
+    grpoNote: "짧은 학습 실행에서 각 배치의 코드가 받은 점수입니다.",
     lPass: "통과율 (오른쪽 눈금, 0~1)", lReward: "평균 점수 (오른쪽 눈금)",
     st_ok: "통과", st_wrong_answer: "오답", st_compile_error: "컴파일 오류", st_runtime_error: "실행 오류",
     st_timeout: "시간 초과", st_policy_violation: "사전 검사 위반", st_sandbox_error: "샌드박스 오류",
@@ -73,7 +73,12 @@ const TEXT = {
     showRollout: "버전 전환 터미널 기록 보기",
     simSummary: "배치 {n}개가 하나도 빠지지 않고 채점됐습니다. step {s}에서 {from}에서 {to}로 바뀌었고, 채점 시간 중앙값은 바꾸기 전 {a}초, 바꾼 뒤 {b}초입니다.",
     sBench: "성능 비교: 런타임별 측정 결과",
-    sBenchHint: "샌드박스마다 같은 코드를 32번씩 채점했습니다. 막대에 마우스를 올리면 자세한 값이 나옵니다.",
+    sBenchHint: "기대 결과가 정해진 코드를 반복 채점했습니다. p50과 p95는 샌드박스가 요청을 맡은 뒤 판정까지 걸린 시간입니다. 풀 처리량에는 빈 pod를 기다린 시간도 들어갑니다.",
+    b1Title: "HyperPod B1에서 본 샌드박스 채점 성능", runtimeComparison: "런타임별 벤치마크",
+    b1Setup: "EC2 {instance} {pods}대에서 gVisor v1 샌드박스를 하나씩 띄웠습니다. 사전 채점 {warmup}건 뒤에 아래 두 클라이언트가 차례로 같은 {golden} 커널을 요청했습니다.",
+    b1Note: "이 측정에서는 모델 학습을 멈추고 샌드박스 채점만 실행했습니다. 각 클라이언트의 처리량은 샌드박스 풀 전체에서 측정한 값입니다.",
+    b1Diagram: "B1에서 요청이 지나가는 경로 보기 →", b1System: "EKS 시스템 노드", b1Trainer: "HyperPod 학습 노드",
+    b1Success: "성공 / 요청", b1PoolRate: "풀 처리량", b1Speed: "PyTorch 대비 커널 속도 (중앙값)",
     mP50: "채점 시간 중앙값 (초)", mP95: "채점 시간 p95 (초)", mCold: "시작 시간 (초, pod 중앙값)",
     mTput: "pod 하나의 초당 채점 수", mSpeed: "속도 향상 중앙값 (GPU)",
     pass2: "이미지를 받아 둔 뒤 (기준)", pass1: "처음 배포했을 때",
@@ -95,18 +100,18 @@ const TEXT = {
     bannerGo: "Open the diagrams →",
     eyebrow: "GPU reward sandboxes for on-policy RL",
     title: "Score model-written GPU code in isolated sandboxes",
-    lede: "During reinforcement learning, a model writes untrusted Triton and CUDA code at every step. This page replays real records of that code being scored on Amazon EKS with gVisor and Kata Containers. Your browser never connects to a cluster or a GPU.",
+    lede: "During reinforcement learning, a model writes GPU code and an isolated sandbox scores it. Replay recorded submissions and follow their verdicts through to the rewards earned in EC2 and SageMaker HyperPod training runs.",
     ctaTry: "Try scoring", ctaDefense: "See blocked attacks",
-    sourceLabel: "Recording source:",
-    videoCaption: "Tour video: this page playing its features automatically (no sound).",
+    sourceLabel: "Scoring replay source",
+    videoCaption: "A silent tour of scoring, GRPO training and the HyperPod benchmark.",
     kpiGpu: "GPU isolation runtimes (gVisor, Kata)", kpiGolden: "golden verdicts matching the expected one",
-    kpiBlocked: "access attempts from inside a sandbox, blocked", kpiBench: "benchmark requests answered ok",
+    kpiBlocked: "access attempts from inside a sandbox, blocked", kpiBench: "successful runtime benchmark requests (cached images)",
     sArch: "Architecture: the path of one reward request",
     sArchHint: "Click a component to open its description. The play button shows the order in which one reward request travels.",
     flowPlay: "▶ Play request flow", flowStop: "■ Stop", evidence: "See evidence",
     zoneTrainer: "rl-trainer namespace", zoneSandbox: "sandbox namespace (default deny)", zoneOut: "Blocked from sandboxes",
-    sTry: "Try scoring: the same code in two sandboxes",
-    sTryHint: "Pick a submission and press play: the records of gVisor (A10G) and Kata QEMU (T4) scoring the same code replay side by side.",
+    sTry: "Compare verdicts for the same code",
+    sTryHint: "Pick a submission and press play to see its verdict in each pool. This recording covers {pools}.",
     showTask: "Show the task and reference", candidate: "Submitted code",
     run: "▶ Replay scoring in both sandboxes", running: "Replaying...",
     speed: "Speed", speed1: "real time", speed4: "4x", speed0: "result only",
@@ -132,10 +137,10 @@ const TEXT = {
     runtime: "Runtime", version: "Sandbox version", kernel: "Kernel inside sandbox", nodeKernel: "Node kernel",
     gpu: "GPU", egress: "Egress blocked", yes: "verified", no: "open", none: "none (CPU)",
     sTrain: "Training: where the reward comes from",
-    sTrainHint: "Top: five GRPO steps of a real model on a GPU. Bottom: switching the sandbox version during training.",
-    grpoTitle: "GRPO, 5 steps: model outputs scored by gVisor (A10G)",
+    sTrainHint: "Choose a training run to see the verdicts and rewards for model-generated code. The version-switch chart names its own data source.",
+    grpoTitle: "Rewards during GRPO training", runRecord: "Training run",
     stepPlay: "▶ Play steps",
-    grpoNote: "A five-step check run, so it does not show a training effect. It shows which verdicts real model outputs get in the sandbox and how the reward adds up.",
+    grpoNote: "These short training runs show the rewards earned by each batch of generated code.",
     lPass: "Pass rate (right axis, 0 to 1)", lReward: "Mean reward (right axis)",
     st_ok: "ok", st_wrong_answer: "wrong answer", st_compile_error: "compile error", st_runtime_error: "runtime error",
     st_timeout: "timeout", st_policy_violation: "policy violation", st_sandbox_error: "infrastructure error",
@@ -149,7 +154,12 @@ const TEXT = {
     showRollout: "Show the rollout terminal output",
     simSummary: "All {n} batches were scored. At step {s} the pool changed from {from} to {to}; the median eval p50 was {a} s before and {b} s after.",
     sBench: "Benchmark: measurements per runtime",
-    sBenchHint: "Each pool received the same golden 32 times. Hover a bar for details.",
+    sBenchHint: "Each run repeats a submission with a known answer. The p50 and p95 cover time from the sandbox accepting a request to returning its verdict. Pool throughput includes time spent waiting for a free pod.",
+    b1Title: "Sandbox scoring in HyperPod B1", runtimeComparison: "Runtime benchmarks",
+    b1Setup: "Each of the {pods} EC2 {instance} nodes hosted one gVisor v1 sandbox. After {warmup} warm-up evaluations, the clients took turns submitting the same {golden} kernel.",
+    b1Note: "Training was idle during these runs. Throughput for each client covers the entire sandbox pool.",
+    b1Diagram: "Follow a request through B1 →", b1System: "EKS system node", b1Trainer: "HyperPod trainer node",
+    b1Success: "Successful / requested", b1PoolRate: "Pool throughput", b1Speed: "Kernel speedup over PyTorch (median)",
     mP50: "eval p50 (s)", mP95: "eval p95 (s)", mCold: "cold start (s, pod median)",
     mTput: "throughput per pod (eval/s)", mSpeed: "speedup median (GPU)",
     pass2: "cached images (reference)", pass1: "as deployed",
@@ -214,7 +224,7 @@ const ARCH = {
   ko: {
     trainer: { t1: "GRPO trainer", t2: "vLLM으로 코드 생성, TRL로 학습", title: "GRPO trainer",
       items: ["vLLM으로 문제마다 코드를 여러 개 만들고, TRL의 GRPO로 모델을 학습합니다.",
-        "기본 모델은 Qwen2.5-Coder-1.5B-Instruct이고, g5.2xlarge(A10G GPU 1장)에서 돌립니다.",
+        "Qwen2.5-Coder-1.5B-Instruct를 A에서는 EC2 g5.2xlarge, B1에서는 HyperPod ml.g5.2xlarge에서 학습했습니다. 각각 A10G 한 장을 씁니다.",
         "샌드박스에는 학습 영역(rl-trainer)에 있는 허가된 pod만 요청을 보낼 수 있습니다."], link: "#train" },
     reward: { t1: "점수 계산 (reward)", t2: "채점 결과를 점수로 바꿈", title: "점수 계산 (reward 함수)",
       items: ["모델이 쓴 코드를 샌드박스에 보내 채점받고, 그 결과를 점수로 바꿉니다.",
@@ -254,7 +264,7 @@ const ARCH = {
   en: {
     trainer: { t1: "GRPO trainer", t2: "vLLM generation + TRL, GPU node", title: "GRPO trainer",
       items: ["vLLM generates several completions per prompt; TRL GRPO trains on them.",
-        "The default model is Qwen2.5-Coder-1.5B-Instruct on a g5.2xlarge (one A10G).",
+        "Qwen2.5-Coder-1.5B-Instruct trained on an EC2 g5.2xlarge in A and a HyperPod ml.g5.2xlarge in B1. Both use one A10G.",
         "Only rl-trainer pods labelled gpusandbox/client can call the sandbox API."], link: "#train" },
     reward: { t1: "Reward function", t2: "verdict to reward (score_verdict)", title: "Reward function",
       items: ["Sends every completion to a sandbox and turns the returned verdict into a reward.",
@@ -418,6 +428,9 @@ function nodeKernel(runtime) {
 function renderStatic() {
   document.documentElement.lang = lang;
   for (const node of document.querySelectorAll("[data-i18n]")) node.textContent = t(node.dataset.i18n);
+  document.querySelector('[data-i18n="sTryHint"]').textContent = fill(t("sTryHint"), {
+    pools: recording.pools.map((p) => p.runtime).join(", "),
+  });
   document.getElementById("lang").textContent = lang === "ko" ? "EN" : "KO";
   document.getElementById("source").textContent = `${recording.source} (${recording.recorded_at})`;
   for (const id of ["nav-patterns", "patterns-link", "hero-patterns", "patterns-banner"]) {
@@ -969,14 +982,22 @@ function seekTerm(id, pattern) {
 }
 
 // ---------- 4. training ----------
+function selectedTraining() {
+  return document.getElementById("grpo-run").value === "b1" ? extras?.b1?.training : extras?.training;
+}
+
 function renderGrpo() {
-  const tr = extras?.training;
+  const tr = selectedTraining();
   const svgEl = document.getElementById("grpo-chart");
   const panel = svgEl.closest(".panel");
-  if (!tr?.batches?.length) {
-    panel.replaceChildren(el("h3", {}, t("grpoTitle")), el("p", { class: "muted" }, t("noData")));
-    return;
+  const hasBatches = Boolean(tr?.batches?.length);
+  const picker = document.getElementById("grpo-runs");
+  picker.hidden = !(extras?.training?.batches?.length && extras?.b1?.training?.batches?.length);
+  document.getElementById("grpo-empty").hidden = hasBatches;
+  for (const node of panel.querySelectorAll(".chart-wrap,.legend,.step-ctl,.cards,[data-i18n='grpoNote']")) {
+    node.hidden = !hasBatches;
   }
+  if (!hasBatches) return;
   document.getElementById("grpo-source").textContent = `${tr.source}${tr.model ? `, ${t("model")} ${tr.model}` : ""}`;
   const batches = tr.batches;
   const steps = tr.steps || [];
@@ -1034,6 +1055,8 @@ function renderGrpo() {
     el("span", {}, sw("var(--blue)"), t("lPass")),
     steps.length === batches.length ? el("span", {}, sw("var(--violet)"), t("lReward")) : null);
   const range = document.getElementById("grpo-step");
+  range.disabled = batches.length === 1;
+  document.getElementById("grpo-play").disabled = batches.length === 1;
   range.min = String(batches[0].batch);
   range.max = String(batches[batches.length - 1].batch);
   range.value = String(ui.grpoStep);
@@ -1046,7 +1069,7 @@ function setGrpoStep(n) {
 }
 
 function renderGrpoDetail() {
-  const tr = extras.training;
+  const tr = selectedTraining();
   const b = tr.batches.find((x) => x.batch === ui.grpoStep) || tr.batches[0];
   const idx = tr.batches.indexOf(b);
   const s = (tr.steps || [])[idx];
@@ -1079,7 +1102,7 @@ function renderGrpoDetail() {
 
 async function playGrpo() {
   const button = document.getElementById("grpo-play");
-  const tr = extras?.training;
+  const tr = selectedTraining();
   if (!tr?.batches?.length) return;
   if (ui.grpoTimer) { clearTimeout(ui.grpoTimer); ui.grpoTimer = null; button.textContent = t("stepPlay"); return; }
   let i = 0;
@@ -1153,6 +1176,27 @@ function renderSim() {
 }
 
 // ---------- 5. benchmark ----------
+function renderB1Bench() {
+  const run = extras?.b1;
+  const bench = run?.bench;
+  const panel = document.getElementById("hyperpod-b1");
+  panel.hidden = !bench?.rows?.length;
+  if (panel.hidden) return;
+  document.getElementById("b1-source").textContent = run.source;
+  document.getElementById("b1-setup").textContent = fill(t("b1Setup"), {
+    instance: bench.sandbox_instance, pods: bench.cold_start_s.length,
+    warmup: bench.warmup_requests, golden: bench.rows[0].golden,
+  });
+  document.getElementById("b1-clients").replaceChildren(...bench.rows.map((r) =>
+    el("div", { class: "card" },
+      el("h4", {}, `${t(r.client === "hyperpod" ? "b1Trainer" : "b1System")} · ${r.client_instance}`),
+      row(t("b1Success"), `${r.ok} / ${r.requests}`),
+      row(t("evalTimes"), `${r.eval_p50_s} / ${r.eval_p95_s} s`),
+      row(t("b1PoolRate"), `${r.throughput_eval_per_s} eval/s`),
+      row(t("b1Speed"), `${r.speedup_median}×`))));
+  document.getElementById("b1-pattern").href = `architecture.html?pattern=b1${lang === "en" ? "&lang=en" : ""}`;
+}
+
 const METRICS = [
   { id: "p50", key: "mP50", get: (r) => r.eval_p50_s },
   { id: "p95", key: "mP95", get: (r) => r.eval_p95_s },
@@ -1163,8 +1207,6 @@ const METRICS = [
 
 function renderBenchTabs() {
   const passes = extras?.bench?.passes || [];
-  const section = document.getElementById("bench");
-  if (!passes.length) { section.hidden = true; return; }
   const mk = (boxId, items, current, onPick) => {
     document.getElementById(boxId).replaceChildren(...items.map(([id, label]) => {
       const b = el("button", { type: "button", class: "tab", role: "tab", "aria-selected": String(id === current) }, label);
@@ -1178,8 +1220,15 @@ function renderBenchTabs() {
 }
 
 function renderBench() {
+  renderB1Bench();
   const passes = extras?.bench?.passes || [];
+  const section = document.getElementById("bench");
+  section.hidden = !passes.length && document.getElementById("hyperpod-b1").hidden;
+  for (const node of section.querySelectorAll("#runtime-bench,#runtime-source,.bench-ctl,.bench-ctl + .panel")) {
+    node.hidden = !passes.length;
+  }
   if (!passes.length) return;
+  document.getElementById("runtime-source").textContent = extras.source;
   renderBenchTabs();
   const metric = METRICS.find((m) => m.id === ui.benchMetric);
   const rows = [...benchRows(ui.benchPass)];
@@ -1264,6 +1313,16 @@ async function main() {
   document.getElementById("term-play").addEventListener("click", playTerm);
   document.getElementById("term-all").addEventListener("click", showAllTerm);
   document.getElementById("grpo-play").addEventListener("click", playGrpo);
+  document.getElementById("grpo-run").addEventListener("change", () => {
+    clearTimeout(ui.grpoTimer);
+    ui.grpoTimer = null;
+    document.getElementById("grpo-play").textContent = t("stepPlay");
+    setGrpoStep(selectedTraining().batches[0].batch);
+  });
+  if (!extras?.training?.batches?.length && extras?.b1?.training?.batches?.length) {
+    document.getElementById("grpo-run").value = "b1";
+    ui.grpoStep = selectedTraining().batches[0].batch;
+  }
   document.getElementById("grpo-step").addEventListener("input", (e) => setGrpoStep(Number(e.target.value)));
   renderAll();
 }

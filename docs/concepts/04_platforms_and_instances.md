@@ -18,7 +18,7 @@
 | B2 | HyperPod trainer | 별도 HyperPod GPU 그룹 | custom AMI를 사용하는 gVisor 배치 실험 |
 | C | 모델 없이 시뮬레이터 실행 | EC2 `c8i.2xlarge`의 CPU 풀 | GPU 없이 런타임 비교, 채점, 버전 교체 |
 
-A와 C는 실습 계정에서 실행했습니다. B1과 B2는 AWS에서 검증하지 않았습니다.
+A, B1, C를 실습 계정에서 실행했습니다. B2는 실험 경로입니다.
 
 B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타임 조건을 따로 맞추기 위해서입니다. HyperPod trainer가 Job 재시작 기능을 쓰는 동안, EC2 샌드박스는 gVisor가 지원하는 드라이버나 Kata에 필요한 가상화 환경을 그대로 사용할 수 있습니다. B2에서는 gVisor의 드라이버 조건을 맞추기 위해 노드 시작에 쓰는 이미지인 **AMI**를 별도로 준비합니다.
 
@@ -79,7 +79,7 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
     - **그 밖의 기능:** CLI `hyp`(`pip install sagemaker-hyperpod`), task governance와 observability add-on, Karpenter 기반 autoscaling(`AutoScalerType: Karpenter`, `NodeProvisioningMode: Continuous`)이 있습니다.
 
     !!! warning "training operator와 Kubernetes 버전"
-        이 저장소는 Kubernetes 1.36을 씁니다. HyperPod EKS AMI 릴리스 노트에는 1.36 AMI가 있지만, HyperPod 사전 요구 사항 페이지에는 1.30에서 1.35까지, training operator 문서에는 1.28부터 1.33까지가 명시돼 있습니다(문서가 갱신되지 않았을 수 있음). 클러스터를 만들기 전에 아래 읽기 전용 명령으로 add-on 호환 버전을 확인하세요.
+        이 저장소는 Kubernetes 1.36을 씁니다. HyperPod의 EKS 지원 범위에 포함되는 버전입니다. 클러스터를 만들기 전에 아래 읽기 전용 명령으로 add-on 호환 버전을 확인하세요.
 
         ```bash
         aws eks describe-addon-versions \
@@ -103,7 +103,7 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
     | 샌드박스 런타임 | HyperPod EKS AMI의 NVIDIA 드라이버 595.91.07은 gVisor release-20261109.0에서 unknown이라 nvproxy가 동작하지 않습니다. Kata는 `ml.*.metal`이 없고 CreateCluster에 nested virtualization CPU 옵션이 없어서 실행할 수 없습니다 | 샌드박스는 EC2 노드에서 실행 (B1). B2는 드라이버를 바꾼 custom AMI로 별도 인스턴스 그룹을 만듦 |
     | 전용 노드 taint | "You cannot add custom taints to nodes in instance groups with DeepHealthChecks turned on." | 샌드박스 노드는 EC2 노드 그룹에서 `gpusandbox/role` taint로 분리 |
     | 격리 검증 | deep health check는 GPU, NVLink, EFA, NCCL 같은 하드웨어 점검이며 샌드박스 격리(egress 차단 등)를 확인하지 않습니다 | egress 차단을 확인한 뒤에만 Ready, `scripts/ops/verify.sh` |
-    | pod 밀도 | 인스턴스당 ENI 1개라 `ml.g6.xlarge`, `ml.g6.2xlarge`는 최대 14 pod(기본값인 `ml.g5`의 한도는 확인하지 않음) | B1은 HyperPod 노드에 trainer만 배치. B2의 `sandbox` 그룹은 노드당 샌드박스 pod 1개 |
+    | pod 밀도 | B1의 `ml.g5.2xlarge` 노드가 보고한 pod 한도는 14개였습니다. ENI를 추가할 수 있는지는 AMI와 VPC CNI 버전에 따라 달라집니다. | B1은 HyperPod 노드에 trainer만 배치. B2의 `sandbox` 그룹은 노드당 샌드박스 pod 1개 |
     | CPU 노드 교체 | "Node auto-replacement is not supported for CPU instances." | CPU 계층은 EC2 (`c8i`) |
     | 버전 고정, parity, gateway | HyperPod 기능이 아닙니다 | 이 저장소의 코드 |
 
@@ -128,7 +128,7 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
 
     - **B2 custom AMI를 쓰는 sandbox 노드**: `driver 580.178.04: SUPPORTED ...`가 출력됩니다.
 
-    B2에서도 위의 pod 수 제한은 그대로 적용됩니다. taint는 deep health check를 켜지 않은 인스턴스 그룹에만 추가할 수 있으므로 B2의 sandbox 그룹은 deep health check 없이 만듭니다. B1을 기본으로 둔 이유는 custom AMI를 직접 관리하지 않아도 되기 때문입니다. `ml.g5`의 B1과 B2는 AWS에서 실행 여부를 확인하지 않음입니다.
+    B2에서도 위의 pod 수 제한은 그대로 적용됩니다. taint는 deep health check를 켜지 않은 인스턴스 그룹에만 추가할 수 있으므로 B2의 sandbox 그룹은 deep health check 없이 만듭니다. B1을 기본으로 둔 이유는 custom AMI를 직접 관리하지 않아도 되기 때문입니다. 11월 22일 `ml.g5.2xlarge`에서 B1을 실행했습니다. B2의 실제 노드 검증은 남아 있습니다.
 
     B2에서는 `scripts/04_install_gpu_stack.sh`가 smoke pod를 만들지 않습니다. 다음 순서로 확인하고 배포하세요.
 
@@ -236,7 +236,7 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
 ??? note "적용 범위와 한계"
     - 시나리오 A의 `g5` 구성은 실습 계정에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). gVisor 샌드박스(1 replica)와 `scripts/ops/verify.sh gvisor v1`이 통과했고, trainer 설정(1.5B + LoRA + vLLM colocate on A10G 하나)으로 GRPO 5 step을 마쳤습니다.
     - 다른 클러스터 구성에서는 `g4dn.metal`의 Kata + QEMU(`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`)를 실행했고, `scripts/ops/bench.sh 32`로 GPU 풀 2개와 CPU 풀 3개를 측정했습니다.
-    - HyperPod B1과 B2(`ml.g5`), 시나리오 A 학습 중의 `scripts/ops/rollout.sh` 버전 교체는 AWS에서 실행하지 않았습니다. 각 핸즈온 페이지의 확인 단계로 검증하세요.
+    - HyperPod B2(`ml.g5`), 시나리오 A 학습 중의 `scripts/ops/rollout.sh` 버전 교체는 AWS에서 실행하지 않았습니다. 각 핸즈온 페이지의 확인 단계로 검증하세요.
     - `c8i.2xlarge`는 us-east-1과 us-west-2에서 시간당 0.37484 USD, 서울 리전에서 0.42336 USD입니다. GPU 없이 이 노드만 쓰는 시나리오 C는 [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)에 있습니다.
 
     ??? note "참고 자료"

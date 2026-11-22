@@ -274,9 +274,18 @@ HYPERPOD_ENV = {
 }
 
 
+def test_hyperpod_trainer_leaves_room_for_the_operator_and_pod_manager():
+    env = {**COMMON, **HYPERPOD_ENV, "RUN_ID": "smoke", "TRAINER_IMAGE_URI": "trainer:test",
+           "MODEL_ID": "test", "MAX_STEPS": "1"}
+    (job,) = _render("k8s/trainer/hyperpod-job-grpo.yaml.tpl", env)
+    (container,) = job["spec"]["replicaSpecs"][0]["template"]["spec"]["containers"]
+    assert container["resources"]["requests"] == {"nvidia.com/gpu": "1", "cpu": "5", "memory": "24Gi"}
+
+
 def test_hyperpod_b2_sandbox_group_matches_runtimeclass_and_device_plugin():
     """The B2 instance group's label and taint are what the RuntimeClass and the CDI plugin expect."""
     (cluster,) = _render("infra/hyperpod/cluster.json.tpl", HYPERPOD_ENV)
+    assert {"Key": "SageMaker", "Value": "true"} in cluster["Tags"]  # training operator's IAM policy
     (group,) = _render("infra/hyperpod/instance-group-sandbox.json.tpl", HYPERPOD_ENV)
     assert [g["InstanceGroupName"] for g in cluster["InstanceGroups"]] == ["trainer"]
     assert "ImageId" not in cluster["InstanceGroups"][0], "the trainer keeps the default HyperPod AMI"

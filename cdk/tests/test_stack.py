@@ -43,6 +43,14 @@ def test_scenarios_create_the_expected_node_groups(monkeypatch, scenario, groups
     assert names == groups
 
 
+def test_hyperpod_training_operator_prerequisites(monkeypatch):
+    template, _ = synth(monkeypatch, SCENARIO="B1")
+    template.has_resource_properties("AWS::EKS::Addon", {"AddonName": "cert-manager"})
+    template.has_resource_properties("AWS::EKS::PodIdentityAssociation", {
+        "Namespace": "aws-hyperpod", "ServiceAccount": "hp-training-operator-controller-manager",
+    })
+
+
 def test_api_endpoint_is_private_by_default(monkeypatch):
     template, _ = synth(monkeypatch, SCENARIO="C")
     template.has_resource_properties("AWS::EKS::Cluster", {
