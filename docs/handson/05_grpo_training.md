@@ -5,8 +5,6 @@
 
     **완료 기준** `routing` 로그가 나오면 사용할 풀을 읽은 상태입니다. `reward_batch`에는 샌드박스에 채점을 요청한 배치의 결과가 나옵니다. 학습 step도 함께 진행되는지 보세요.
 
-**2026-11-22 실행 화면** · [실행 중인 trainer와 첫 배치](#trainer-running) · [완료된 학습과 채점 건수](#trainer-complete)
-
 **시작 전에** [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)을 마쳐야 합니다. GRPO와 버전 고정은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, reward 설계는 [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -92,7 +90,7 @@ kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 
 ### 실행 중인 trainer와 첫 배치 { #trainer-running }
 
-11월 22일에 `RUN_ID=guide-replay scripts/07_run_grpo.sh 16`을 실행했습니다. `g5.2xlarge`의 A10G 한 장에서 모델을 학습하고, 실제 생성 코드의 채점은 EC2 gVisor 풀에 보냈습니다.
+`RUN_ID=guide-replay scripts/07_run_grpo.sh 16`을 실행했습니다. `g5.2xlarge`의 A10G 한 장에서 모델을 학습하고, 실제 생성 코드의 채점은 EC2 gVisor 풀에 보냈습니다.
 
 ![실행 중인 GRPO Job, 요청한 GPU와 첫 배치의 실제 판정](../images/terminal/grpo-running-replay.png)
 

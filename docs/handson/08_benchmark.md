@@ -5,9 +5,9 @@
 
     **완료 기준** pod가 Ready가 되기까지 걸린 시간과 준비된 pod가 채점에 쓴 시간을 구분하세요. 채점 시간의 p50은 일반적인 요청을, p95는 느린 요청을 보여 줍니다.
 
-## 2026-11-22 런타임 벤치마크 결과 { #runtime-results }
+## 다섯 EKS 풀의 채점 시간과 처리량 { #runtime-results }
 
-`us-west-2`, EKS 1.36, 이미지 `a20261120b`. 시나리오 A의 학습과 롤백이 끝난 뒤 `scripts/ops/bench.sh 32`를 실행했습니다. 다섯 풀에 32건씩 보낸 **160건 모두 성공**했습니다. GPU 풀은 `relu_bias_triton`, CPU 풀은 `relu_bias_torch_only`를 사용했습니다.
+측정 조건은 2026-11-22, `us-west-2`, EKS 1.36, 이미지 `a20261120b`입니다. 시나리오 A의 학습과 롤백이 끝난 뒤 `scripts/ops/bench.sh 32`를 실행했습니다. 다섯 풀에 32건씩 보낸 **160건 모두 성공**했습니다. GPU 풀은 `relu_bias_triton`, CPU 풀은 `relu_bias_torch_only`를 사용했습니다.
 
 | v1 풀 | 노드 | Ready pod | 성공 / 요청 | 채점 p50 (초) | 채점 p95 (초) | 풀 처리량 (건/초) |
 |---|---|---:|---:|---:|---:|---:|
@@ -21,7 +21,7 @@ p50과 p95는 서버가 성공한 요청 한 건을 채점하는 데 걸린 시�
 
 ![실행 JSONL에서 읽은 다섯 풀의 성공 수, 지연, 처리량과 커널 측정값](../images/terminal/bench-results-replay.png)
 
-[데모에서 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results) · [이번 벤치마크 원본 JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [11월 18일 측정 결과](#results-20261118) · [HyperPod B1 측정 결과](#hyperpod-b1)
+[데모에서 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results) · [이번 벤치마크 원본 JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [이미지 캐시 전후 비교](#results-20261118) · [HyperPod B1 측정 결과](#hyperpod-b1)
 
 **시작 전에**
 
@@ -200,9 +200,9 @@ scripts/ops/bench.sh
 
 **문제가 생기면:** 둘째 명령이 timeout으로 끝나면 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목과, Kata라면 "Kata" 항목을 보세요.
 
-## 2026-11-18 런타임 측정 결과 { #results-20261118 }
+## 첫 배포와 이미지 캐시 후 비교 { #results-20261118 }
 
-당시 이미지를 캐시한 뒤 다시 시작한 v1 풀에서 측정한 두 번째 실행입니다. GPU 종류와 replica 수는 아래 표와 같습니다.
+2026-11-18에 이미지를 노드에 캐시한 뒤 v1 풀을 다시 시작해 측정한 두 번째 실행입니다. GPU 종류와 replica 수는 아래 표와 같습니다.
 
 | runtime | 인스턴스 (GPU) | Ready pod | cold start (s, pod 중앙값) | eval p50 (s) | eval p95 (s) | 처리량 (eval/s) | pod당 처리량 | speedup 중앙값 | ref_ms 중앙값 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -267,7 +267,7 @@ scripts/ops/bench.sh
 - **GPU 풀의 cold start:** gVisor(A10G)는 16 s, Kata QEMU(T4)는 pod마다 30에서 36 s였습니다. GPU가 다르므로(A10G 대 T4) "해석하는 방법"의 규칙대로 이 차이는 오버헤드 비교가 아닙니다.
 - **GPU별 값:** `ref_ms` 중앙값은 A10G 0.58 ms, T4 1.15 ms였고, speedup은 A10G 1.75, T4 1.79였습니다.
 
-## HyperPod B1 · 2026-11-22 { #hyperpod-b1 }
+## HyperPod B1 { #hyperpod-b1 }
 
 `us-west-2`의 EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v1` 샌드박스 두 개를 띄웠습니다. 이미지 태그는 `a20261120b`입니다. 같은 풀을 두 건으로 예열한 뒤, 학습을 멈춘 상태에서 아래 순서대로 각 클라이언트가 `relu_bias_triton` 32건을 한 배치로 보냈습니다.
 

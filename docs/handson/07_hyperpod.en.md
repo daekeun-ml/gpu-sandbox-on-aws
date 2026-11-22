@@ -24,7 +24,7 @@
     - **ENI**: a virtual network interface attached to an instance. The VPC CNI hands out the ENI's IP addresses to pods, so the number of ENIs sets the per-node pod limit.
 
 !!! warning "Validation status"
-    On November 22, 2026, B1 completed one GRPO step on an `ml.g5.2xlarge` in `us-west-2`. Two EC2 gVisor sandboxes evaluated 12 generated submissions. The [run record and screenshots](#how-to-verify) show node placement and the completed job. B2 is experimental.
+    B1 completed one GRPO step on an `ml.g5.2xlarge` in `us-west-2`. Two EC2 gVisor sandboxes evaluated 12 generated submissions. The [run record and screenshots](#how-to-verify) show node placement and the completed job. B2 is experimental.
 
 ## Layout
 
@@ -86,7 +86,7 @@ Check the HyperPod `ml.<type> for cluster usage` quotas under Amazon SageMaker i
 
 ## Time and cost
 
-Allow 20–30 minutes for EKS deployment. In the November 22 B1 run, the HyperPod cluster reached `InService` about 2½ minutes after `CreateCluster` returned. The trainer instance finished provisioning about 8 minutes after the request.
+Allow 20–30 minutes for EKS deployment. In the B1 run, the HyperPod cluster reached `InService` about 2½ minutes after `CreateCluster` returned. The trainer instance finished provisioning about 8 minutes after the request.
 
 | Item | Count | USD/hour |
 |---|---|---|
@@ -317,7 +317,7 @@ The template sets placement, the trainer command, and log patterns used to detec
 
 ## How to verify
 
-On November 22, 2026, the AWS console showed `InService` while the trainer instance was still `Pending`. Check its status with `list-cluster-nodes`, then check node placement and trainer logs in Kubernetes.
+The AWS console showed `InService` while the trainer instance was still `Pending`. Check its status with `list-cluster-nodes`, then check node placement and trainer logs in Kubernetes.
 
 ![The EKS-orchestrated lab cluster marked InService in the AWS HyperPod console](../images/console/hyperpod-b1.png)
 

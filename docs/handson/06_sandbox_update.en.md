@@ -5,8 +5,6 @@
 
     **Completion check** Verify that v2 has graded a submission before scaling down v1.
 
-**Screenshots from November 22, 2026** · [Parity before switching](#rollout-parity) · [The batch where training switched](#switch-batches) · [Rollback to v1 and scale-down](#rollback-run)
-
 **Before you start:** the training from [05 On-policy GRPO training](05_grpo_training.md) should be running. Why versions are pinned per group is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and terms are in the [Glossary](../reference/glossary.md).
 
 ??? note "Terms (expand if a word is new to you)"
@@ -18,7 +16,7 @@
     - **Rollback**: going back to the previous version when something goes wrong.
 
 !!! warning "Validation status"
-    On November 22 we switched gVisor from v1 to v2 during scenario A GRPO training. Batch 5 was the first scored on v2. We scaled down v1 with `--finish` and rolled back to v1 after training.
+    We switched gVisor from v1 to v2 during scenario A GRPO training. Batch 5 was the first scored on v2. We scaled down v1 with `--finish` and rolled back to v1 after training.
 
 ## How v1 and v2 differ
 

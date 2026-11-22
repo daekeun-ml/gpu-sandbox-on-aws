@@ -1,8 +1,10 @@
-# 05 Try scoring on your computer
+# 05 Grade locally and compare runtimes on AWS
 
 In this exercise, two local CPU servers grade prepared submissions. The test uses `relu_bias`, a function that adds a bias to each value and clamps negative results to zero. For example, adding `[1, 1]` to `[-3, 2]` gives `[-2, 3]`, so the expected output is `[0, 3]`. No model or AWS account is needed.
 
 ![The same prepared answers run on two local CPU servers. pytest checks the verdicts.](../images/figures/beginner-05_hands_on--local-scoring.en.svg)
+
+The two parts answer different questions. The local test checks whether the grader recognizes a wrong answer. The optional AWS lab checks which kernel each pod sees on the same node. [Go to the AWS kernel comparison](#aws-cpu)
 
 ## 1. Install the tools
 
@@ -25,7 +27,15 @@ On Linux, add `--index-url https://download.pytorch.org/whl/cpu` to the `uv pip 
 python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parity_on_cpu_pools
 ```
 
-`1 passed` means the test got the expected verdicts from both local servers. `ok` means the output matches the reference answer, `wrong_answer` means it differs, and `policy_violation` means the submission was rejected by the execution policy. A deliberately incorrect submission should get `wrong_answer` for the test to pass.
+The test sends prepared submissions to both servers. `1 passed` means the verdicts matched expectations and agreed across servers. Run `python -m pytest -q` to run the full suite.
+
+A **verdict** is the grader's decision on one answer. If the function above leaves negative values alone, it returns `[-2, 3]`, which differs from the expected `[0, 3]`. The grader should report `wrong_answer` for that submission.
+
+- `ok` means the output matches the reference.
+- `wrong_answer` means the output differs.
+- `policy_violation` means the execution policy rejected the submission.
+
+![The focused pytest on two local CPU pools reporting one passing test](../images/learning/local-cpu-grading.png)
 
 If Python reports `ModuleNotFoundError`, activate `.venv` in the repository root and rerun the installation commands.
 
@@ -85,8 +95,92 @@ If Python reports `ModuleNotFoundError`, activate `.venv` in the repository root
 
     **What is happening now:** You check that the grader passes only the correct answer and does not run dangerous code at all. When you are done, stop the servers with `Ctrl-C` in the two server terminals.
 
-## 3. Next exercises
+## 3. Compare kernels on one AWS CPU node { #aws-cpu }
 
-Use the [CPU-only hands-on guide](../handson/10_cpu_only.md) to compare isolation runtimes on AWS. The cluster incurs charges until you remove it. Follow its cleanup steps when finished.
+The two local servers let you practice scoring. Both use your computer's operating system. In this part, gVisor, Kata with Cloud Hypervisor, and Kata with QEMU run the same container image on one EKS `c8i.2xlarge`. Predict the release that `uname -r` will report in each pod.
 
-[Chapter 06](06_multi_turn_agent.md) follows what happens when an agent revises and resubmits an answer.
+**Cost and prerequisites.** This part incurs charges for EKS, EC2 and the NAT gateway. Use a practice account and Region. The example creates two system nodes, one `c8i.2xlarge`, and a tunnel access instance. It needs 14 Standard On-Demand vCPUs. For AWS CLI credentials, Node.js, the CDK CLI, the Session Manager plugin, `kubectl`, Helm, Docker and `jq`, see [cluster setup](../handson/01_cluster_and_images.md). [Scenario C costs](../handson/10_cpu_only.md)
+
+### Configure and create the cluster
+
+Start in the repository and Python environment from the local exercise. The first command keeps an existing configuration file.
+
+```bash
+test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
+uv pip install -r cdk/requirements.txt
+```
+
+In `scripts/config.env`, check `AWS_REGION` and `CLUSTER_NAME` for your practice account. Use `SCENARIO="C"` and `WITH_KATA_GPU="0"` for this CPU lab. In the prerequisite output, check the regional Standard quota and `nested-virtualization` support for `c8i.2xlarge`. This feature lets Kata boot a VM inside an EC2 virtual server.
+
+```bash
+source scripts/config.env
+scripts/01_check_prereqs.sh
+```
+
+When you first deploy CDK in this account and Region, run the first line to bootstrap it. The second creates the cluster. Review the changes CDK lists before continuing. With the default configuration, the outputs include `EndpointPublicAccess = false`.
+
+```bash
+cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
+scripts/02_create_cluster.sh --cpu-only
+```
+
+![Private EKS API endpoint in the CloudFormation stack outputs](../images/console/cfn-outputs.png)
+
+### Open the tunnel and check the nodes
+
+In another terminal, enter the repository root and run `cdk/tunnel.sh`. Keep it open. In the first terminal run the following command. The tunnel carries local `kubectl` requests to the private EKS API inside the VPC.
+
+```bash
+kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
+```
+
+Look for `Ready` nodes and a `c8i.2xlarge` with the `sandbox-kata` role. If `kubectl` cannot connect, check the tunnel terminal and `kubectl config current-context` first.
+
+### Interpret the three runtime outputs
+
+```bash
+scripts/kata/cpu_nodes.sh
+```
+
+The script installs Kata on the CPU node and starts a short-lived test pod with each of `gvisor-cpu`, `kata-clh`, and `kata-qemu`. Compare each pod's kernel line with the node kernel printed at the end. The runc line in the screenshot comes from the separate, optional comparison below.
+
+![Sentry, two Kata guests, runc and the host kernel reported on the same c8i node](../images/learning/aws-runtime-kernels.png)
+
+| Output | What it demonstrates |
+|---|---|
+| `4.19.0-gvisor` from `gvisor-cpu` | Sentry reports this kernel release to programs in the pod. |
+| The `6.18.56` guest build from both `kata-clh` and `kata-qemu` | Two different hypervisors booted the same guest kernel image. |
+| `6.18.56-125.164.amzn2023…` from `host kernel` | The final line identifies the EC2 node kernel. Compare the build string as well as the release number. |
+
+??? example "Compare with an ordinary runc container on the same node"
+    This pod omits `runtimeClassName` and uses the default runtime. Compare `kubectl logs` with the `host kernel` line above.
+
+    ```bash
+    cat <<'EOF' | kubectl apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: runc-smoke, namespace: default}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector: {gpusandbox/kata-gpu: "false"}
+      tolerations: [{key: gpusandbox/role, operator: Equal, value: sandbox-kata, effect: NoSchedule}]
+      containers:
+        - name: smoke
+          image: public.ecr.aws/amazonlinux/amazonlinux:2023
+          command: ["/bin/sh", "-c", "echo kernel seen inside: $(uname -r) $(uname -v)"]
+    EOF
+    kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/runc-smoke --timeout=180s
+    kubectl logs runc-smoke
+    kubectl delete pod runc-smoke
+    ```
+
+### Clean up the lab resources
+
+You can continue on this cluster by [deploying the CPU pools and switching versions](../handson/10_cpu_only.md). To finish here, keep the tunnel open and run the command below. Check the account, Region and cluster name before confirming deletion.
+
+```bash
+scripts/08_cleanup.sh
+```
+
+Once the stack is deleted and the final instance query shows no lab nodes, close the tunnel. [Cleanup checks](../handson/99_cleanup.md) · [Follow an episode in the next chapter](06_multi_turn_agent.md)

@@ -24,7 +24,7 @@
     - **ENI**: 인스턴스에 연결되는 가상 네트워크 인터페이스입니다. VPC CNI는 ENI의 IP 주소를 pod에 할당하므로, ENI 수에 따라 노드당 pod 수 한도가 정해집니다.
 
 !!! info "검증 상태"
-    2026-11-22에 `us-west-2`의 `ml.g5.2xlarge`에서 B1 GRPO 한 스텝을 완료했습니다. EC2의 gVisor 샌드박스 2개가 생성된 코드 12개를 채점했습니다. 아래 [실제 실행 화면](#확인-방법)에서 노드 배치와 완료 로그를 확인할 수 있습니다. B2는 실험 경로입니다.
+    `us-west-2`의 `ml.g5.2xlarge`에서 B1 GRPO 한 스텝을 완료했습니다. EC2의 gVisor 샌드박스 2개가 생성된 코드 12개를 채점했습니다. 아래 [실제 실행 화면](#확인-방법)에서 노드 배치와 완료 로그를 확인할 수 있습니다. B2는 실험 경로입니다.
 
 ## 구성
 
@@ -86,7 +86,7 @@ HyperPod의 `ml.<유형> for cluster usage` 쿼터는 Service Quotas 콘솔의 A
 
 ## 소요 시간과 비용
 
-EKS 배포에는 20~30분을 잡으세요. 11월 22일 B1 실습에서는 HyperPod `CreateCluster`가 응답한 뒤 약 2분 30초에 클러스터가 `InService`가 됐고, 요청 후 약 8분에 trainer 인스턴스 생성이 완료됐습니다.
+EKS 배포에는 20~30분을 잡으세요. B1 실습에서는 HyperPod `CreateCluster`가 응답한 뒤 약 2분 30초에 클러스터가 `InService`가 됐고, 요청 후 약 8분에 trainer 인스턴스 생성이 완료됐습니다.
 
 | 항목 | 수 | USD/시간 |
 |---|---|---|
@@ -317,7 +317,7 @@ kubectl -n rl-trainer logs -f -l "HPJob=grpo-${RUN_ID}" --tail=-1 | tee trainer.
 
 ## 확인 방법
 
-2026-11-22 실습에서는 AWS 콘솔에 `InService`가 먼저 표시됐고 trainer 인스턴스는 잠시 `Pending`이었습니다. `list-cluster-nodes`에서 인스턴스 상태를 확인한 뒤 Kubernetes에서 노드와 학습 로그를 확인하세요.
+AWS 콘솔에는 `InService`가 먼저 표시됐고 trainer 인스턴스는 잠시 `Pending`이었습니다. `list-cluster-nodes`에서 인스턴스 상태를 확인한 뒤 Kubernetes에서 노드와 학습 로그를 확인하세요.
 
 ![AWS 콘솔에서 InService가 된 EKS 기반 HyperPod 실습 클러스터](../images/console/hyperpod-b1.png)
 

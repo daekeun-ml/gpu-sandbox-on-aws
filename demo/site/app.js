@@ -77,7 +77,7 @@ const TEXT = {
     resultsP50: "p50 (초)", resultsP95: "p95 (초)", resultsRate: "풀 처리량 (건/초)",
     resultsNote: "풀 처리량은 Ready 상태의 pod가 합쳐서 초당 처리한 요청 수입니다. GPU 풀을 비교할 때는 GPU 종류와 pod 수도 함께 보세요.",
     resultsGuide: "측정 조건과 실행 화면", resultsRaw: "원본 JSONL", resultsImage: "이미지",
-    resultsKpi: "{date} 벤치마크 성공 건수 →",
+    resultsKpi: "벤치마크 성공 건수 →",
     b1Setup: "EC2 {instance} {pods}대에서 gVisor v1 샌드박스를 하나씩 띄웠습니다. 사전 채점 {warmup}건 뒤에 아래 두 클라이언트가 차례로 같은 {golden} 커널을 요청했습니다.",
     b1Note: "이 측정에서는 모델 학습을 멈추고 샌드박스 채점만 실행했습니다. 각 클라이언트의 처리량은 샌드박스 풀 전체에서 측정한 값입니다.",
     b1Diagram: "B1에서 요청이 지나가는 경로 보기 →", b1System: "EKS 시스템 노드", b1Trainer: "HyperPod 학습 노드",
@@ -161,7 +161,7 @@ const TEXT = {
     resultsP50: "p50 (s)", resultsP95: "p95 (s)", resultsRate: "Pool throughput (eval/s)",
     resultsNote: "Pool throughput counts requests per second across all ready pods. When comparing GPU pools, check the GPU model and the number of pods.",
     resultsGuide: "Run conditions and screenshots", resultsRaw: "Raw JSONL", resultsImage: "image",
-    resultsKpi: "Successful benchmark requests · {date} →",
+    resultsKpi: "Successful benchmark requests →",
     b1Setup: "Each of the {pods} EC2 {instance} nodes hosted one gVisor v1 sandbox. After {warmup} warm-up evaluations, the clients took turns submitting the same {golden} kernel.",
     b1Note: "Training was idle during these runs. Throughput for each client covers the entire sandbox pool.",
     b1Diagram: "Follow a request through B1 →", b1System: "EKS system node", b1Trainer: "HyperPod trainer node",
@@ -481,7 +481,7 @@ function renderKpis() {
   tiles.push([`${match}/${total}`, t("kpiGolden")]);
   if (blocked) tiles.push([String(blocked), t("kpiBlocked")]);
   if (req) {
-    const label = run?.rows?.length ? fill(t("resultsKpi"), { date: run.date }) : t("kpiBench");
+    const label = run?.rows?.length ? t("resultsKpi") : t("kpiBench");
     tiles.push([`${ok}/${req}`, label, run?.rows?.length ? "#runtime-results" : "#runtime-bench"]);
   }
   document.getElementById("kpis").replaceChildren(

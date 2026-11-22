@@ -5,8 +5,6 @@
 
     **완료 기준** `ops/verify.sh`로 pod 상태뿐 아니라 접근 제어와 기준 입력의 채점 결과를 확인합니다. 검증을 통과하면 학습을 시작하세요.
 
-**2026-11-22 실행 화면** · [다섯 v1 풀과 Service](#ready-pools) · [두 GPU 풀의 검증 결과](#gpu-verdicts)
-
 **시작 전에** [02 gVisor GPU 샌드박스](02_gvisor.md)(또는 Kata 풀이라면 [03 Kata 샌드박스](03_kata.md))를 먼저 마쳐야 합니다. 샌드박스 버전과 routing의 개념은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -187,7 +185,7 @@ sandbox-gvisor-v1-xxxxxxxxxx-xxxxx   1/1     Running   0          3m    10.0.x.x
 
 ### 다섯 v1 풀과 Service { #ready-pools }
 
-11월 22일 `us-west-2`에서 gVisor GPU 2개, Kata QEMU GPU 4개, CPU 런타임별 1개씩 총 9개 replica가 Ready였습니다. 각 풀에는 `ClusterIP`가 `None`이고 포트가 8000인 Service가 하나씩 있습니다.
+`us-west-2`에서 gVisor GPU 2개, Kata QEMU GPU 4개, CPU 런타임별 1개씩 총 9개 replica가 Ready였습니다. 각 풀에는 `ClusterIP`가 `None`이고 포트가 8000인 Service가 하나씩 있습니다.
 
 ![다섯 v1 Deployment의 Ready replica와 해당 headless Service](../images/terminal/pools-v1-replay.png)
 

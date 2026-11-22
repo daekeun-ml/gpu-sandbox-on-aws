@@ -198,7 +198,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Success signal**: One `bench  <runtime>  ok <n>/<requests>  p50 ...` line per pool, and `results: <file>` at the end.
 - **If it fails**: [Troubleshooting: Sandbox pools and readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/#sandbox-pools-and-readiness), [08 Runtime benchmark](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/08_benchmark/)
 
-On November 22, 2026, all five EKS pools completed 32 requests each (160/160). [Results and run conditions](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/08_benchmark/#runtime-results)
+All five EKS pools completed 32 requests each (160/160). [Results and run conditions](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/08_benchmark/#runtime-results)
 
 ### `scripts/ops/sync_jwks.sh`
 
@@ -262,7 +262,7 @@ The argument is the number of optimizer steps. It defaults to 60. The default mo
 | `routing` | The trainer read the pool route. The template expects this event within 20 minutes. |
 | `reward_batch` and advancing steps | Check the sample verdicts and training progress. Investigate repeated `sandbox_error`. |
 
-On November 22, 2026, the B1 trainer completed one GRPO step and two EC2 gVisor sandboxes scored 12 submissions. [Job status and logs](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod/#how-to-verify)
+The B1 trainer completed one GRPO step and two EC2 gVisor sandboxes scored 12 submissions. [Job status and logs](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod/#how-to-verify)
 
 The script prints the Job name. Use it as the `HPJob` label value to find this run’s pod.
 

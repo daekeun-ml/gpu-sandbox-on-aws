@@ -4,6 +4,8 @@
 
 ![시험용 답안을 로컬 CPU 서버 두 개에서 채점하고 pytest가 예상 판정과 대조하는 흐름](../images/figures/beginner-05_hands_on--local-scoring.ko.svg)
 
+이 편은 두 곳에서 서로 다른 질문을 확인합니다. 로컬 테스트에서는 **틀린 답을 채점기가 구별하는지**, 선택 AWS 실습에서는 **같은 노드에서 각 pod가 어느 커널을 쓰는지**를 봅니다. [AWS 커널 비교로 이동](#aws-cpu)
+
 ## 1. 설치하기
 
 Git과 `uv`가 필요합니다. 아래 명령은 저장소를 받고 전용 Python 환경에 채점 서버와 테스트를 설치합니다.
@@ -25,13 +27,15 @@ Linux에서 CPU용 PyTorch만 설치하려면 `uv pip install torch numpy`에 `-
 python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parity_on_cpu_pools
 ```
 
-테스트는 채점 서버에 시험용 답을 보내고 예상한 판정이 돌아오는지 확인합니다. 마지막에 `1 passed`가 나오면 두 로컬 서버의 채점 결과가 예상과 일치한 것입니다. 전체 테스트를 보려면 `python -m pytest -q`를 실행하세요.
+테스트는 준비된 답안을 두 서버에 보내고, 예상한 판정이 돌아오는지와 두 서버가 같은 판정을 내리는지 확인합니다. 마지막에 `1 passed`가 나오면 이 비교를 통과한 것입니다. 전체 테스트를 보려면 `python -m pytest -q`를 실행하세요.
 
-여기서 **verdict**는 채점기가 답 하나에 내린 판정입니다. 예를 들어 틀린 답에 `wrong_answer`가 나오면 채점기가 예상대로 동작한 것입니다.
+여기서 **verdict**는 채점기가 답 하나에 내린 판정입니다. 위 예시의 함수가 음수를 그대로 남겨 `[-2, 3]`을 출력하면 기준 답 `[0, 3]`과 다릅니다. 이 답안에 `wrong_answer`가 나오면 채점기가 예상대로 동작한 것입니다.
 
 - `ok`는 실행 결과가 예상한 답과 일치할 때 나옵니다.
 - 실행 결과가 틀리면 `wrong_answer`가 나옵니다.
 - `policy_violation`은 실행 정책 검사에서 제출을 거절했다는 뜻입니다.
+
+![로컬 CPU 풀 두 개를 확인한 pytest의 완료 출력](../images/learning/local-cpu-grading.png)
 
 `ModuleNotFoundError`가 나오면 저장소 루트에서 `.venv`를 활성화했는지 확인하고 설치 명령을 다시 실행하세요.
 
@@ -91,8 +95,92 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
 
     **지금 일어나는 일:** 채점 프로그램이 정답만 통과시키고, 위험한 코드는 실행하지 않고 거절하는지 확인합니다. 끝나면 두 서버 터미널에서 `Ctrl-C`로 서버를 끄세요.
 
-## 3. 다음에 해 볼 것
+## 3. AWS에서 같은 CPU 노드의 커널 비교하기 { #aws-cpu }
 
-AWS에서 각 런타임의 커널과 채점 결과를 비교하려면 [CPU 전용 핸즈온](../handson/10_cpu_only.md)을 따라가세요. EKS와 노드는 삭제할 때까지 과금되므로 실습을 마치면 같은 가이드의 정리 단계까지 실행하세요.
+로컬 서버 두 개는 채점을 연습할 수 있게 해 줍니다. 두 서버 모두 내 PC의 운영체제를 사용합니다. 이번에는 EKS의 `c8i.2xlarge` 한 대에서 같은 컨테이너 이미지를 gVisor, Kata + Cloud Hypervisor, Kata + QEMU로 실행합니다. pod마다 `uname -r`가 어떤 값을 출력하는지 예상해 보세요.
 
-채점 결과를 보고 답을 고치는 흐름이 궁금하다면 [06 multi-turn 에이전트](06_multi_turn_agent.md)로 이어집니다.
+**비용과 준비물**　이 단계부터 EKS, EC2, NAT gateway 등에 요금이 발생합니다. 실습용 계정과 리전에서 진행하세요. 예제 구성은 system 노드 두 대, `c8i.2xlarge` 한 대, 터널용 인스턴스 한 대를 만듭니다. Standard 온디맨드 vCPU가 14개 필요합니다. AWS CLI 자격 증명, Node.js, CDK CLI, Session Manager plugin, `kubectl`, Helm, Docker와 `jq` 설치 방법은 [클러스터 준비](../handson/01_cluster_and_images.md)에 있습니다. [시나리오 C 비용](../handson/10_cpu_only.md)
+
+### 설정과 클러스터 준비
+
+로컬 실습에 쓴 저장소와 가상 환경에서 시작합니다. 다음 명령은 설정 파일이 이미 있으면 그대로 둡니다.
+
+```bash
+test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
+uv pip install -r cdk/requirements.txt
+```
+
+`scripts/config.env`를 열어 실습 계정에서 쓸 `AWS_REGION`과 `CLUSTER_NAME`을 확인하세요. 이 CPU 실습은 `SCENARIO="C"`, `WITH_KATA_GPU="0"`을 사용합니다. 사전 검사 결과에서 선택한 리전의 Standard 쿼터와 `c8i.2xlarge`의 `nested-virtualization` 지원 여부를 확인합니다. EC2 가상 서버 안에서 Kata VM을 띄우는 데 필요한 기능입니다.
+
+```bash
+source scripts/config.env
+scripts/01_check_prereqs.sh
+```
+
+이 계정과 리전에 CDK를 처음 배포할 때 첫 줄로 bootstrap을 준비합니다. 두 번째 줄이 클러스터를 만듭니다. CDK가 표시하는 변경 내역을 확인하고 계속하세요. 배포가 끝나면 기본 설정에서 `EndpointPublicAccess = false`가 보입니다.
+
+```bash
+cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
+scripts/02_create_cluster.sh --cpu-only
+```
+
+![CloudFormation Outputs에서 확인하는 private EKS API endpoint](../images/console/cfn-outputs.png)
+
+### 터널을 열고 노드 확인
+
+두 번째 터미널에서 저장소 루트로 이동해 `cdk/tunnel.sh`를 실행하고 열어 둡니다. 첫 번째 터미널에서 다음 명령을 실행하세요. 터널은 로컬의 `kubectl` 요청을 VPC 안에 있는 EKS API에 전달합니다.
+
+```bash
+kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
+```
+
+노드가 `Ready`이고 `sandbox-kata` 역할의 `c8i.2xlarge`가 보이면 CPU 런타임을 설치할 준비가 됐습니다. `kubectl`이 연결되지 않으면 먼저 터널 터미널의 메시지와 `kubectl config current-context`를 확인하세요.
+
+### 세 런타임의 출력 해석
+
+```bash
+scripts/kata/cpu_nodes.sh
+```
+
+스크립트는 CPU 노드에 Kata를 설치하고 `gvisor-cpu`, `kata-clh`, `kata-qemu`로 짧은 시험용 pod를 하나씩 띄웁니다. 각 pod가 출력한 커널과 마지막에 출력한 노드 커널을 나란히 읽으세요. 아래 화면의 runc 줄은 선택 단계로 따로 실행한 일반 컨테이너의 결과입니다.
+
+![같은 c8i 노드에서 본 Sentry와 두 Kata 게스트, runc와 호스트 커널의 차이](../images/learning/aws-runtime-kernels.png)
+
+| 출력 | 무엇을 확인했나요? |
+|---|---|
+| `gvisor-cpu`의 `4.19.0-gvisor` | Sentry가 프로그램에 보고한 커널 버전입니다. |
+| `kata-clh`와 `kata-qemu`의 `6.18.56` 게스트 빌드 | VM을 시작하는 프로그램은 달라도 두 게스트는 같은 커널 이미지를 부팅했습니다. |
+| `host kernel`의 `6.18.56-125.164.amzn2023…` | EC2 노드의 Linux 커널입니다. 게스트와 구분하려면 빌드 문자열까지 읽으세요. |
+
+??? example "같은 노드에서 일반 컨테이너(runc)로도 확인하기"
+    아래 pod에는 `runtimeClassName`이 없어 노드의 기본 런타임을 사용합니다. `kubectl logs`의 출력과 위의 `host kernel` 줄을 비교합니다.
+
+    ```bash
+    cat <<'EOF' | kubectl apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: runc-smoke, namespace: default}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector: {gpusandbox/kata-gpu: "false"}
+      tolerations: [{key: gpusandbox/role, operator: Equal, value: sandbox-kata, effect: NoSchedule}]
+      containers:
+        - name: smoke
+          image: public.ecr.aws/amazonlinux/amazonlinux:2023
+          command: ["/bin/sh", "-c", "echo kernel seen inside: $(uname -r) $(uname -v)"]
+    EOF
+    kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/runc-smoke --timeout=180s
+    kubectl logs runc-smoke
+    kubectl delete pod runc-smoke
+    ```
+
+### 실습 리소스 정리
+
+이 클러스터에서 [CPU 풀을 배포하고 버전을 교체하는 실습](../handson/10_cpu_only.md)으로 이어갈 수 있습니다. 여기서 끝내려면 **터널을 열어 둔 상태에서** 아래 명령을 실행합니다. 확인 메시지의 계정, 리전과 클러스터 이름을 확인하세요.
+
+```bash
+scripts/08_cleanup.sh
+```
+
+스택 삭제가 끝나고 마지막 인스턴스 조회에 실습 노드가 보이지 않으면 터널을 종료합니다. [정리 확인 항목](../handson/99_cleanup.md) · [다음 편에서 에피소드 따라가기](06_multi_turn_agent.md)

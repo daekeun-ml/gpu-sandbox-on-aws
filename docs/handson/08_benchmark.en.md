@@ -5,9 +5,9 @@
 
     **Completion check** Read cold and warm measurements separately. The warm p50 describes typical latency, and p95 gives a view of slower requests.
 
-## Runtime benchmark measured on 2026-11-22 { #runtime-results }
+## Scoring latency and throughput across five EKS pools { #runtime-results }
 
-In `us-west-2` on EKS 1.36, we ran `scripts/ops/bench.sh 32` with image `a20261120b` after scenario A training and rollback finished. **All 160 evaluations passed**, 32 per pool. GPU pools evaluated `relu_bias_triton` and CPU pools evaluated `relu_bias_torch_only`.
+On November 22, 2026, in `us-west-2` on EKS 1.36, we ran `scripts/ops/bench.sh 32` with image `a20261120b` after scenario A training and rollback finished. **All 160 evaluations passed**, 32 per pool. GPU pools evaluated `relu_bias_triton` and CPU pools evaluated `relu_bias_torch_only`.
 
 | v1 pool | Node | Ready pods | OK / requests | Eval p50 (s) | Eval p95 (s) | Pool throughput (eval/s) |
 |---|---|---:|---:|---:|---:|---:|
@@ -21,7 +21,7 @@ The p50 and p95 measure server time per successful evaluation. Throughput includ
 
 ![Success counts, latency, throughput and kernel timings from the benchmark JSONL](../images/terminal/bench-results-replay.png)
 
-[View the results in the demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results) · [Download the raw benchmark JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [November 18 results](#results-20261118) · [HyperPod B1 results](#hyperpod-b1)
+[View the results in the demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results) · [Download the raw benchmark JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [First deployment and cached images](#results-20261118) · [HyperPod B1 results](#hyperpod-b1)
 
 **Before you start:**
 
@@ -200,9 +200,9 @@ With `maxSurge: 0`, pods are replaced one at a time, and in a pool with one pod 
 
 **If it fails:** if the second command times out, see the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md), and for Kata also the "Kata" section.
 
-## Runtime measurements from 2026-11-18 { #results-20261118 }
+## First deployment and cached images { #results-20261118 }
 
-This was the second pass on v1 pools restarted with images cached on the nodes. The table gives the hardware and replica counts for that run.
+The second pass on November 18, 2026 restarted the v1 pools with images cached on the nodes. The table gives the hardware and replica counts for that run.
 
 | runtime | Instance (GPU) | Ready pods | cold start (s, median over pods) | eval p50 (s) | eval p95 (s) | throughput (eval/s) | throughput per pod | median speedup | median ref_ms |
 |---|---|---|---|---|---|---|---|---|---|
@@ -267,7 +267,7 @@ This was the second pass on v1 pools restarted with images cached on the nodes. 
 - **Cold start of the GPU pools:** 16 s for gVisor (A10G), 30 to 36 s per pod for Kata QEMU (T4). The GPUs differ (A10G vs T4), so by the rule in "How to interpret the results" this difference is not an overhead comparison.
 - **Per-GPU values:** the median `ref_ms` was 0.58 ms on A10G and 1.15 ms on T4, and the speedup was 1.75 on A10G and 1.79 on T4.
 
-## HyperPod B1 · 2026-11-22 { #hyperpod-b1 }
+## HyperPod B1 { #hyperpod-b1 }
 
 Two EC2 `g5.xlarge` nodes each hosted one `gvisor/v1` sandbox with an A10G. In `us-west-2` on EKS 1.36, we warmed the pool with two evaluations, then sent a batch of 32 copies of `relu_bias_triton` from each client in the order shown. No training job shared the pool. Both runs used image tag `a20261120b`.
 

@@ -35,91 +35,143 @@
 
 [Multi-turn 핸즈온](../handson/11_multi_turn.md)에서는 CPU 풀로 시작합니다. 로그에서 `claim`이 한 에피소드의 턴 동안 같은지, 마지막에 `released: true`가 나오는지 확인할 수 있습니다. 이 저장소의 AWS 실습에서는 Kata GPU 템플릿과 veRL 연동을 검증하지 않았습니다.
 
-## 더 살펴보기
+## 템플릿에서 반납까지 따라가기
 
-??? note "Agent Sandbox는 RuntimeClass를 그대로 따릅니다"
-    Agent Sandbox는 pod의 수명과 할당을 관리하고, 격리 방식은 podTemplate의 `runtimeClassName`이 결정합니다. 그래서 노드가 해당 RuntimeClass를 지원한다면, 같은 template에 런타임 프로필만 바꿔 넣어 gVisor와 Kata(Cloud Hypervisor 또는 QEMU)를 모두 쓸 수 있습니다. 프로필은 RuntimeClass와 함께 노드 선택 조건과 GPU 리소스 이름(`nvidia.com/gpu` 또는 `nvidia.com/pgpu`)도 지정합니다.
+[CPU 에피소드 실습](../handson/11_multi_turn.md)의 준비 단계에서 `sandbox`와 `rl-trainer` 네임스페이스, 인증 설정, CPU 노드와 이미지가 준비됐다고 가정합니다. 아래 명령으로 controller를 설치하고 대기 풀을 만든 뒤, 에피소드가 샌드박스를 할당받아 반납하는 과정을 확인합니다.
 
-    | 조합 | 근거 | 상태 |
-    |---|---|---|
-    | Kata on AKS | upstream 예제 `kata-aks`, `kata-aks-sandbox` | upstream 예제 |
-    | Kata on GKE (`kata-qemu`, 선택으로 `kata-clh`) | upstream 예제 `kata-gke-sandbox`. N2 노드의 nested virtualization을 씁니다 | upstream 예제 |
-    | gVisor + L4 GPU on GKE | upstream 예제 `gpu-l4-snapshot-sandbox`. GKE Sandbox(gVisor)와 Pod snapshot으로 GPU 메모리까지 저장하고 복원합니다 | upstream 예제. snapshot은 GKE 기능이며, 이 문서는 EKS에서 같은 기능을 확인하지 않았습니다 |
-    | gVisor on EKS (CPU) | AWS 블로그 1부, 2부: Agent Sandbox v1.0.5, gVisor release-20260928.0, EKS 1.36, `m7i.xlarge` | 블로그 저자가 구성하고 측정 |
-    | Kata on EKS | AWS 블로그 3부: 에이블리는 현재 runc로 운영하고, Agent Sandbox API는 유지한 채 런타임만 Kata(microVM)로 바꾸는 평가를 계획 | 계획 단계 |
-    | 이 저장소 (`gvisor`, `gvisor-cpu`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`, `kata-clh-cpu`, `kata-qemu-cpu` 프로필) | `template.yaml.tpl`이 일곱 프로필 모두에서 렌더링됨 | 로컬 렌더링 테스트만 통과. 클러스터 미실행. SandboxTemplate 안의 Kata GPU(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)는 미검증 |
+```bash
+scripts/extensions/agent_sandbox.sh install
+scripts/extensions/agent_sandbox.sh pool kata-clh-cpu 1
+scripts/extensions/agent_sandbox.sh episodes kata-clh-cpu 2 3
+```
 
-    AWS에서 각 RuntimeClass를 실행할 수 있는 위치는 Agent Sandbox와 상관없이 [02 격리 런타임 비교](02_isolation_runtimes.md)의 위치 표와 같습니다.
+| 시점 | 무슨 일이 일어나나요? | 확인할 것 |
+|---|---|---|
+| `install` 후 | controller가 API에 등록된 샌드박스 리소스를 감시합니다. 실행 Job이 claim을 만들 권한도 준비합니다. | 설치된 CRD와 controller의 준비 상태 |
+| `pool` 후 | `SandboxTemplate`에는 이미지와 RuntimeClass가 있고 `SandboxWarmPool`은 준비된 샌드박스 한 개를 유지합니다. | `kubectl -n sandbox get sandboxwarmpools`에서 `kernel-eval-kata-clh-cpu` 확인 |
+| 에피소드 진행 중 | `SandboxClaim`이 샌드박스를 배정받고, 각 턴이 같은 주소로 코드 전체를 보냅니다. | 한 `episode` 안의 `claim`, `pod`, `version` |
+| 에피소드 종료 | 실행기가 claim을 반납하고 사용한 샌드박스를 정리합니다. warm pool은 다음 요청에 쓸 샌드박스를 채웁니다. | `episode_end`의 `released`, 종료 뒤 남은 claim 수 |
 
-    - **Kata + GPU**: 이 저장소의 x86 구성에서 `g4dn.metal`에서만 실행됩니다.
-    - **Kata CPU**: nested virtualization 인스턴스에서도 실행됩니다.
-    - **gVisor + GPU**: 일반 GPU VM에서 실행됩니다.
+![CPU warm pool에서 claim을 할당하고 반납한 결과](../images/terminal/agent-sandbox-claim.png)
 
-    !!! question "❓ 오해: Agent Sandbox는 gVisor용 도구다"
-        Agent Sandbox는 격리를 직접 구현하지 않고 RuntimeClass로 지정한 런타임에 맡깁니다. upstream 예제도 Kata(AKS, GKE)와 gVisor(GKE)를 함께 다룹니다. AWS 블로그 1부도 강한 격리를 "RuntimeClass로 지정하는 gVisor나 Kata"로 설명합니다. 블로그 시리즈가 EKS에서 gVisor를 쓴 것은 블로그 저자의 선택이며, Agent Sandbox의 제약 때문이 아닙니다.
+Kata CPU 실습은 에피소드 두 개를 순서대로 처리했습니다. 각 에피소드는 세 번째 턴에 정답을 냈습니다. `2`는 에피소드 수, `3`은 에피소드당 최대 턴 수입니다. 첫 턴에 정답이면 그 에피소드는 바로 끝납니다. `replicas: 1`은 대기 목표입니다. 샌드박스 하나는 한 에피소드에 할당되지만 노드에 여유가 있으면 controller가 다음 claim을 위한 샌드박스를 더 준비할 수 있습니다. [턴별 결과와 정리](../handson/11_multi_turn.md)
 
-??? note "veRL multi-turn rollout에 연결하기"
-    [`rl/verl/sandbox_tool.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool.py)는 veRL v0.9.1용 multi-turn tool이고, [`rl/verl/sandbox_tool_config.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool_config.yaml)은 그 tool의 설정 예시입니다. veRL v0.9.1 소스를 읽고 작성했으며, veRL에서 실행한 적은 없습니다. 로컬 테스트(`tests/test_multiturn.py`)는 veRL 없이 fake Kubernetes API로 tool의 동작만 확인합니다. 아래 소스 위치는 v0.9.1 기준이므로 설치한 버전에서 다시 확인하세요.
+### `Ready`가 늦을 때 어디에서 기다리는지 확인하기
 
-    | 구성 요소 | 하는 일 |
-    |---|---|
-    | `KernelSandboxTool` (tool 이름 `submit_kernel`) | 모델이 `submit_kernel(code=...)`를 호출하면, trajectory의 첫 호출에서 warm pool의 샌드박스 하나를 claim하고(`EpisodeSandbox`) 이후 호출도 같은 샌드박스에서 평가합니다. verdict 요약(`format_feedback`)을 tool response로 반환하고, 모델은 이를 읽고 다음 turn을 생성합니다 |
-    | `compute_score` | veRL custom reward 함수입니다. `extra_info`에 들어 있는 에피소드 요약에서 마지막 제출의 점수를 반환합니다 |
-    | `SandboxToolAgentLoop` (`sandbox_tool_agent`로 등록) | `ToolAgentLoop`의 `run()`을 감쌉니다. trajectory마다 episode key를 만들어 `tools_kwargs`에 넣고, trajectory가 끝나면 claim을 삭제합니다 |
-    | `sandbox_tool_config.yaml` | `tools[].class_name: sandbox_tool.KernelSandboxTool`, `config.type: native`, OpenAI function 형식의 `tool_schema`. `config`에는 `warm_pool`, `max_turns`(3), `require_triton`, `max_feedback_chars`(240), `idle_release_s`(600), `claim_lifetime_s`(3600), `ready_timeout_s`(600)가 있습니다 |
+warm pool 목표가 1인데 요청을 두 개 동시에 받는 경우를 생각해 보세요. 첫 claim은 이미 준비된 샌드박스를 받을 수 있습니다. 다음 claim은 여분의 샌드박스가 준비될 때까지 기다릴 수 있습니다. 이 구간에는 pod 스케줄링, 이미지 받기와 부팅, 채점 서버의 준비 검사가 들어갑니다. 준비된 샌드박스가 실제로 채점을 시작한 뒤의 실행 시간과 따로 봐야 합니다.
 
-    - **`KernelSandboxTool`이 claim을 삭제하는 때**: solved, `max_turns`회 제출, `sandbox_error` 중 하나가 되면 claim을 삭제합니다.
-    - **`compute_score`가 GPU 평가를 다시 하지 않는 이유**: 샌드박스가 rollout 중에 모든 제출을 이미 채점했으므로, trajectory마다 GPU 평가를 다시 하지 않습니다.
+```bash
+kubectl -n sandbox get sandboxclaims
+kubectl -n sandbox get sandboxwarmpools
+kubectl -n sandbox get pods -o wide
+```
 
-    ### veRL v0.9.1의 동작과 이 구현의 대응
+`episode_start` 전부터 주소를 기다린다면 위 세 목록에서 claim의 할당과 pod의 준비 상태를 확인하세요. 반면 여러 `turn`이 같은 pod에서 끝났다면 할당은 성공한 상태입니다. 그때는 각 턴의 `status`와 피드백을 읽으면 됩니다.
 
-    veRL v0.9.1은 tool을 아래와 같이 호출합니다. 그래서 `create`에서 claim하고 `release`에서 반납하거나 `calc_reward`로 에피소드를 채점하는 방식은 v0.9.1에서 동작하지 않습니다.
+### 템플릿을 바꾸면 다음 에피소드는 어느 버전을 쓸까요?
 
-    | veRL v0.9.1의 동작 (소스) | 이 구현의 대응 |
-    |---|---|
-    | `ToolAgentLoop`는 tool 호출마다 `create`, `execute`, `release`를 실행합니다(`tool_agent_loop.py` 485~496행). tool 인스턴스는 trajectory 하나가 아니라 호출 하나 동안만 유지되고, `execute`가 반환하는 metrics 값은 사용되지 않습니다 | 에피소드를 tool 객체의 registry에 보관하고, trajectory의 `agent_data.extra_fields`에 저장한 key로 찾습니다(trajectory마다 `AgentData`가 하나). `release`는 호출마다 실행되므로 claim을 삭제하지 않습니다 |
-    | `agent_data.request_id`는 `rollout.full_determinism`을 켜면 `det-<priority>`가 되고, priority는 batch마다 0부터 다시 시작합니다 | `request_id`를 에피소드 key로 쓰지 않습니다 |
-    | `calc_reward`는 `base_tool.py`에만 정의되어 있고, v0.9.1에는 이를 호출하는 코드가 없습니다 | 에피소드 요약을 `agent_data.extra_fields["gpusandbox_episode"]`에 기록합니다. reward loop가 `extra_fields`를 reward 함수의 `extra_info`에 합치고(`reward_loop/reward_manager/naive.py`), `compute_score`가 그 값을 읽습니다. `calc_reward`도 같은 점수를 반환하도록 구현했지만 호출되지 않습니다 |
-    | `ToolAgentLoop`에는 trajectory가 끝날 때 tool을 호출하는 hook이 없습니다 | `SandboxToolAgentLoop`가 `run()`이 끝나면 claim을 삭제합니다. 기본 `tool_agent` loop의 경우는 표 아래 목록 |
-    | tool response가 `multi_turn.max_tool_response_length`(기본 256)보다 길면 잘립니다 | 피드백을 `max_feedback_chars`(기본 240)자로 제한합니다. 이 값은 veRL 설정 이하로 유지하세요 |
+이 저장소의 template 이름은 런타임별로 고정돼 있습니다. `VERSION_FILE=v2`로 같은 풀을 다시 적용하면 이후에 만들어지는 샌드박스의 설정이 바뀝니다. warm pool의 `OnReplenish` 정책에서는 이미 대기 중인 샌드박스가 할당되거나 정리될 때까지 이전 버전이 남을 수 있습니다. 같은 GRPO group의 모든 에피소드에 같은 버전이 필요하다면 `turn.version`을 확인하고, 버전별 template과 pool을 나누어 같은 group의 claim을 같은 풀로 보내는 방법을 검토하세요.
 
-    - **기본 `tool_agent` loop를 쓸 때**: 기본 `tool_agent` loop에는 별도 타이머가 없습니다. 다음 tool 호출의 `create()`가 `idle_release_s`(기본 600초)보다 오래 호출이 없던 에피소드의 샌드박스를 반납하고, 후속 호출이 없으면 claim의 `shutdownTime`이 마지막 안전장치입니다. `idle_release_s`는 두 turn 사이의 가장 긴 생성 시간보다 커야 합니다.
+### Python에서 보는 할당의 범위
 
-    ### reward와 자원
+아래는 클러스터 안에서 실행되는 에피소드 Job의 호출 구조입니다. `first_code`와 `revised_code`는 같은 문제의 완전한 제출 코드이고, `token_file`은 샌드박스 채점 API가 검증할 토큰 파일 경로입니다. `with`에 들어갈 때 claim을 만들고 블록에서 나올 때 반납합니다. 두 번째 호출도 같은 `episode` 인스턴스를 사용합니다.
 
-    - **trajectory reward는 마지막 제출의 `score_verdict`입니다.** `python -m gpusandbox.tools multiturn`과 같은 규칙입니다. `execute`는 turn마다 reward 0.0을 반환합니다. 실패한 turn에도 점수를 주면 적은 노력으로 여러 번 제출하는 행동이 reward를 받기 때문입니다(코드 주석).
-    - **인프라 오류를 오답으로 처리하지 않습니다.** claim 실패를 포함한 `sandbox_error`는 [Production 06 veRL로 확장](../production/06_scaling_with_verl.md)의 규칙과 같이(`reward_fn.py`) format 점수만 주고 `sandbox_error: 1`로 표시합니다. 제출이 없으면 점수는 0.0이고 status는 `no_submission`입니다.
-    - **`compute_score`는 결과와 관계없이 같은 key를 반환합니다**(`score`, `status`, `turns`, `first_turn_reward`, `sandbox_error`). veRL이 `reward_extra_info`를 key별로 batch에 쌓기 때문입니다.
-    - **블로킹 호출은 스레드로 실행합니다.** `EpisodeSandbox`는 Ready를 기다리는 동안과 평가하는 동안 호출한 스레드를 블로킹하므로, tool은 claim과 평가를 `asyncio.to_thread`로 실행해 rollout 이벤트 루프가 블로킹되지 않게 합니다. worker 하나의 모든 에피소드는 `BackgroundLoop` 하나를 공유합니다.
-    - **warm pool 크기는 기다리지 않고 시작할 수 있는 에피소드 수를 정합니다.** claim한 샌드박스는 pool에서 빠지고 pool은 대기분을 다시 채웁니다. 실행 중인 GPU 에피소드는 첫 제출부터 반납까지 GPU 하나를 점유하므로, 동시 에피소드 수의 상한은 GPU 수입니다. 동시 에피소드가 대기 없이 시작하게 하려면 replicas를 그 수에 맞추세요.
+```python
+from gpusandbox.agent_sandbox import EpisodeSandbox
 
-    ### 설정 (veRL v0.9.1 key)
+with EpisodeSandbox("kernel-eval-kata-clh-cpu", token_file=token_file) as episode:
+    first = episode.evaluate(task_id="relu_bias", code=first_code)
+    if first["status"] == "wrong_answer":
+        second = episode.evaluate(task_id="relu_bias", code=revised_code)
+```
 
-    ```text
-    actor_rollout_ref.rollout.multi_turn.enable=True
-    actor_rollout_ref.rollout.multi_turn.tool_config_path=/opt/gpusandbox/rl/verl/sandbox_tool_config.yaml
-    actor_rollout_ref.rollout.multi_turn.max_assistant_turns=4     # >= max_turns submissions
-    actor_rollout_ref.rollout.agent.default_agent_loop=sandbox_tool_agent
-    reward.custom_reward_function.path=pkg://sandbox_tool
-    reward.custom_reward_function.name=compute_score
-    ```
+<a id="더-살펴보기"></a>
 
-    - veRL은 tool class를 module 이름으로 import하므로(`tool_registry.get_tool_class`), `sandbox_tool.py`가 있는 디렉터리(veRL 이미지의 `/opt/gpusandbox/rl/verl`)가 모든 Ray worker의 `PYTHONPATH`에 있어야 합니다. module을 이름으로 import하면 `SandboxToolAgentLoop`도 등록되고, `pkg://`는 같은 module에서 reward 함수를 읽습니다.
-    - `SandboxToolAgentLoop`는 task id를 `extra_info.task_id`에서 읽습니다(`rl/verl/prepare_data.py`가 기록). 기본 `tool_agent` loop를 쓰면 데이터의 각 행에 `extra_info.tools_kwargs.submit_kernel.create_kwargs.task_id`가 있어야 합니다.
+## Agent Sandbox는 RuntimeClass를 그대로 따릅니다
 
-    ### 확인하지 않은 것
+Agent Sandbox는 pod의 수명과 할당을 관리하고, 격리 방식은 podTemplate의 `runtimeClassName`이 결정합니다. 그래서 노드가 해당 RuntimeClass를 지원한다면, 같은 template에 런타임 프로필만 바꿔 넣어 gVisor와 Kata(Cloud Hypervisor 또는 QEMU)를 모두 쓸 수 있습니다. 프로필은 RuntimeClass와 함께 노드 선택 조건과 GPU 리소스 이름(`nvidia.com/gpu` 또는 `nvidia.com/pgpu`)도 지정합니다.
 
-    veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습니다(코드의 `# TODO verify`).
+| 조합 | 근거 | 상태 |
+|---|---|---|
+| Kata on AKS | upstream 예제 `kata-aks`, `kata-aks-sandbox` | upstream 예제 |
+| Kata on GKE (`kata-qemu`, 선택으로 `kata-clh`) | upstream 예제 `kata-gke-sandbox`. N2 노드의 nested virtualization을 씁니다 | upstream 예제 |
+| gVisor + L4 GPU on GKE | upstream 예제 `gpu-l4-snapshot-sandbox`. GKE Sandbox(gVisor)와 Pod snapshot으로 GPU 메모리까지 저장하고 복원합니다 | upstream 예제. snapshot은 GKE 기능이며, 이 문서는 EKS에서 같은 기능을 확인하지 않았습니다 |
+| gVisor on EKS (CPU) | AWS 블로그 1부, 2부: Agent Sandbox v1.0.5, gVisor release-20260928.0, EKS 1.36, `m7i.xlarge` | 블로그 저자가 구성하고 측정 |
+| Kata on EKS | AWS 블로그 3부: 에이블리는 현재 runc로 운영하고, Agent Sandbox API는 유지한 채 런타임만 Kata(microVM)로 바꾸는 평가를 계획 | 계획 단계 |
+| 이 저장소 (`gvisor`, `gvisor-cpu`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`, `kata-clh-cpu`, `kata-qemu-cpu` 프로필) | `template.yaml.tpl`이 일곱 프로필 모두에서 렌더링됨 | 일곱 프로필의 렌더링을 확인했고 EKS에서는 `kata-clh-cpu`의 할당, 채점, 반납을 확인했습니다. SandboxTemplate 안의 Kata GPU(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)는 미검증 |
 
-    - **tool 전체의 동작과 `SandboxToolAgentLoop` 등록.** 등록은 `AgentLoopWorker`가 `default_agent_loop`를 찾기 전에 tool(즉 이 module)을 먼저 load한다는 전제에 의존합니다. 이 전제는 v0.9.1 `agent_loop.py`를 읽고 판단한 것입니다.
-    - **Ray worker의 `PYTHONPATH`에 `rl/verl`을 넣는 방법.** RayCluster pod의 env와 `ray job submit --runtime-env-json`의 `env_vars` 중 어느 쪽이 동작하는지 클러스터에서 확인해야 합니다.
-    - **`extra_fields`가 `extra_info`로 전달되는 경로.** reward-loop manager(naive, remote, limited)에서만 소스로 확인했습니다.
-    - **rollout worker의 실행 조건.** `k8s/production/raycluster-verl.yaml.tpl`의 worker에는 `gpusandbox/client=true` label과 `grpo-trainer` ServiceAccount가 이미 있습니다. 이 계정은 warm pool의 기본 허용 subject이고, `install`이 적용하는 `sandbox-claims` RoleBinding에도 들어 있습니다. 빠진 것은 다음과 같습니다.
-        - Kubernetes API 토큰(`automountServiceAccountToken: false`)
-        - veRL 이미지의 `kubernetes` Python 패키지(`client` extra만 설치)
-        - `SANDBOX_TOKEN_FILE`의 sandbox audience 토큰(지금 마운트된 토큰은 gateway audience)
+AWS에서 각 RuntimeClass를 실행할 수 있는 위치는 Agent Sandbox와 상관없이 [02 격리 런타임 비교](02_isolation_runtimes.md)의 위치 표와 같습니다.
 
-        rollout worker가 claim을 직접 만들지, broker에 맡길지도 먼저 정하세요(위 조건 표).
+- **Kata + GPU**: 이 저장소의 x86 구성에서 `g4dn.metal`에서만 실행됩니다.
+- **Kata CPU**: nested virtualization 인스턴스에서도 실행됩니다.
+- **gVisor + GPU**: 일반 GPU VM에서 실행됩니다.
+
+!!! question "❓ 오해: Agent Sandbox는 gVisor용 도구다"
+    Agent Sandbox는 격리를 직접 구현하지 않고 RuntimeClass로 지정한 런타임에 맡깁니다. upstream 예제도 Kata(AKS, GKE)와 gVisor(GKE)를 함께 다룹니다. AWS 블로그 1부도 강한 격리를 "RuntimeClass로 지정하는 gVisor나 Kata"로 설명합니다. 블로그 시리즈가 EKS에서 gVisor를 쓴 것은 블로그 저자의 선택이며, Agent Sandbox의 제약 때문이 아닙니다.
+
+## veRL multi-turn rollout에 연결하기
+
+[`rl/verl/sandbox_tool.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool.py)는 veRL v0.9.1용 multi-turn tool이고, [`rl/verl/sandbox_tool_config.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/rl/verl/sandbox_tool_config.yaml)은 그 tool의 설정 예시입니다. veRL v0.9.1 소스를 읽고 작성했으며, veRL에서 실행한 적은 없습니다. 로컬 테스트(`tests/test_multiturn.py`)는 veRL 없이 fake Kubernetes API로 tool의 동작만 확인합니다. 아래 소스 위치는 v0.9.1 기준이므로 설치한 버전에서 다시 확인하세요.
+
+| 구성 요소 | 하는 일 |
+|---|---|
+| `KernelSandboxTool` (tool 이름 `submit_kernel`) | 모델이 `submit_kernel(code=...)`를 호출하면, trajectory의 첫 호출에서 warm pool의 샌드박스 하나를 claim하고(`EpisodeSandbox`) 이후 호출도 같은 샌드박스에서 평가합니다. verdict 요약(`format_feedback`)을 tool response로 반환하고, 모델은 이를 읽고 다음 turn을 생성합니다 |
+| `compute_score` | veRL custom reward 함수입니다. `extra_info`에 들어 있는 에피소드 요약에서 마지막 제출의 점수를 반환합니다 |
+| `SandboxToolAgentLoop` (`sandbox_tool_agent`로 등록) | `ToolAgentLoop`의 `run()`을 감쌉니다. trajectory마다 episode key를 만들어 `tools_kwargs`에 넣고, trajectory가 끝나면 claim을 삭제합니다 |
+| `sandbox_tool_config.yaml` | `tools[].class_name: sandbox_tool.KernelSandboxTool`, `config.type: native`, OpenAI function 형식의 `tool_schema`. `config`에는 `warm_pool`, `max_turns`(3), `require_triton`, `max_feedback_chars`(240), `idle_release_s`(600), `claim_lifetime_s`(3600), `ready_timeout_s`(600)가 있습니다 |
+
+- **`KernelSandboxTool`이 claim을 삭제하는 때**: solved, `max_turns`회 제출, `sandbox_error` 중 하나가 되면 claim을 삭제합니다.
+- **`compute_score`가 GPU 평가를 다시 하지 않는 이유**: 샌드박스가 rollout 중에 모든 제출을 이미 채점했으므로, trajectory마다 GPU 평가를 다시 하지 않습니다.
+
+### veRL v0.9.1의 동작과 이 구현의 대응
+
+veRL v0.9.1은 tool을 아래와 같이 호출합니다. 그래서 `create`에서 claim하고 `release`에서 반납하거나 `calc_reward`로 에피소드를 채점하는 방식은 v0.9.1에서 동작하지 않습니다.
+
+| veRL v0.9.1의 동작 (소스) | 이 구현의 대응 |
+|---|---|
+| `ToolAgentLoop`는 tool 호출마다 `create`, `execute`, `release`를 실행합니다(`tool_agent_loop.py` 485~496행). tool 인스턴스는 trajectory 하나가 아니라 호출 하나 동안만 유지되고, `execute`가 반환하는 metrics 값은 사용되지 않습니다 | 에피소드를 tool 객체의 registry에 보관하고, trajectory의 `agent_data.extra_fields`에 저장한 key로 찾습니다(trajectory마다 `AgentData`가 하나). `release`는 호출마다 실행되므로 claim을 삭제하지 않습니다 |
+| `agent_data.request_id`는 `rollout.full_determinism`을 켜면 `det-<priority>`가 되고, priority는 batch마다 0부터 다시 시작합니다 | `request_id`를 에피소드 key로 쓰지 않습니다 |
+| `calc_reward`는 `base_tool.py`에만 정의되어 있고, v0.9.1에는 이를 호출하는 코드가 없습니다 | 에피소드 요약을 `agent_data.extra_fields["gpusandbox_episode"]`에 기록합니다. reward loop가 `extra_fields`를 reward 함수의 `extra_info`에 합치고(`reward_loop/reward_manager/naive.py`), `compute_score`가 그 값을 읽습니다. `calc_reward`도 같은 점수를 반환하도록 구현했지만 호출되지 않습니다 |
+| `ToolAgentLoop`에는 trajectory가 끝날 때 tool을 호출하는 hook이 없습니다 | `SandboxToolAgentLoop`가 `run()`이 끝나면 claim을 삭제합니다. 기본 `tool_agent` loop의 경우는 표 아래 목록 |
+| tool response가 `multi_turn.max_tool_response_length`(기본 256)보다 길면 잘립니다 | 피드백을 `max_feedback_chars`(기본 240)자로 제한합니다. 이 값은 veRL 설정 이하로 유지하세요 |
+
+- **기본 `tool_agent` loop를 쓸 때**: 기본 `tool_agent` loop에는 별도 타이머가 없습니다. 다음 tool 호출의 `create()`가 `idle_release_s`(기본 600초)보다 오래 호출이 없던 에피소드의 샌드박스를 반납하고, 후속 호출이 없으면 claim의 `shutdownTime`이 마지막 안전장치입니다. `idle_release_s`는 두 turn 사이의 가장 긴 생성 시간보다 커야 합니다.
+
+### reward와 자원
+
+- **trajectory reward는 마지막 제출의 `score_verdict`입니다.** `python -m gpusandbox.tools multiturn`과 같은 규칙입니다. `execute`는 turn마다 reward 0.0을 반환합니다. 실패한 turn에도 점수를 주면 적은 노력으로 여러 번 제출하는 행동이 reward를 받기 때문입니다(코드 주석).
+- **인프라 오류를 오답으로 처리하지 않습니다.** claim 실패를 포함한 `sandbox_error`는 [Production 06 veRL로 확장](../production/06_scaling_with_verl.md)의 규칙과 같이(`reward_fn.py`) format 점수만 주고 `sandbox_error: 1`로 표시합니다. 제출이 없으면 점수는 0.0이고 status는 `no_submission`입니다.
+- **`compute_score`는 결과와 관계없이 같은 key를 반환합니다**(`score`, `status`, `turns`, `first_turn_reward`, `sandbox_error`). veRL이 `reward_extra_info`를 key별로 batch에 쌓기 때문입니다.
+- **블로킹 호출은 스레드로 실행합니다.** `EpisodeSandbox`는 Ready를 기다리는 동안과 평가하는 동안 호출한 스레드를 블로킹하므로, tool은 claim과 평가를 `asyncio.to_thread`로 실행해 rollout 이벤트 루프가 블로킹되지 않게 합니다. worker 하나의 모든 에피소드는 `BackgroundLoop` 하나를 공유합니다.
+- **warm pool 크기는 기다리지 않고 시작할 수 있는 에피소드 수를 정합니다.** claim한 샌드박스는 pool에서 빠지고 pool은 대기분을 다시 채웁니다. 실행 중인 GPU 에피소드는 첫 제출부터 반납까지 GPU 하나를 점유하므로, 동시 에피소드 수의 상한은 GPU 수입니다. 동시 에피소드가 대기 없이 시작하게 하려면 replicas를 그 수에 맞추세요.
+
+### 설정 (veRL v0.9.1 key)
+
+```text
+actor_rollout_ref.rollout.multi_turn.enable=True
+actor_rollout_ref.rollout.multi_turn.tool_config_path=/opt/gpusandbox/rl/verl/sandbox_tool_config.yaml
+actor_rollout_ref.rollout.multi_turn.max_assistant_turns=4     # >= max_turns submissions
+actor_rollout_ref.rollout.agent.default_agent_loop=sandbox_tool_agent
+reward.custom_reward_function.path=pkg://sandbox_tool
+reward.custom_reward_function.name=compute_score
+```
+
+- veRL은 tool class를 module 이름으로 import하므로(`tool_registry.get_tool_class`), `sandbox_tool.py`가 있는 디렉터리(veRL 이미지의 `/opt/gpusandbox/rl/verl`)가 모든 Ray worker의 `PYTHONPATH`에 있어야 합니다. module을 이름으로 import하면 `SandboxToolAgentLoop`도 등록되고, `pkg://`는 같은 module에서 reward 함수를 읽습니다.
+- `SandboxToolAgentLoop`는 task id를 `extra_info.task_id`에서 읽습니다(`rl/verl/prepare_data.py`가 기록). 기본 `tool_agent` loop를 쓰면 데이터의 각 행에 `extra_info.tools_kwargs.submit_kernel.create_kwargs.task_id`가 있어야 합니다.
+
+### 확인하지 않은 것
+
+veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습니다(코드의 `# TODO verify`).
+
+- **tool 전체의 동작과 `SandboxToolAgentLoop` 등록.** 등록은 `AgentLoopWorker`가 `default_agent_loop`를 찾기 전에 tool(즉 이 module)을 먼저 load한다는 전제에 의존합니다. 이 전제는 v0.9.1 `agent_loop.py`를 읽고 판단한 것입니다.
+- **Ray worker의 `PYTHONPATH`에 `rl/verl`을 넣는 방법.** RayCluster pod의 env와 `ray job submit --runtime-env-json`의 `env_vars` 중 어느 쪽이 동작하는지 클러스터에서 확인해야 합니다.
+- **`extra_fields`가 `extra_info`로 전달되는 경로.** reward-loop manager(naive, remote, limited)에서만 소스로 확인했습니다.
+- **rollout worker의 실행 조건.** `k8s/production/raycluster-verl.yaml.tpl`의 worker에는 `gpusandbox/client=true` label과 `grpo-trainer` ServiceAccount가 이미 있습니다. 이 계정은 warm pool의 기본 허용 subject이고, `install`이 적용하는 `sandbox-claims` RoleBinding에도 들어 있습니다. 빠진 것은 다음과 같습니다.
+    - Kubernetes API 토큰(`automountServiceAccountToken: false`)
+    - veRL 이미지의 `kubernetes` Python 패키지(`client` extra만 설치)
+    - `SANDBOX_TOKEN_FILE`의 sandbox audience 토큰(지금 마운트된 토큰은 gateway audience)
+
+    rollout worker가 claim을 직접 만들지, broker에 맡길지도 먼저 정하세요(위 조건 표).
 
 ??? note "AWS 블로그 시리즈의 교훈을 GPU 샌드박스에 적용하기"
     출처는 AWS 기술 블로그 "AWS에서 AI 에이전트 실행 환경 격리하기" 1부, 2부, 3부입니다. 표의 수치는 모두 블로그 저자가 EKS의 CPU 샌드박스에서 측정한 값이며, 이 저장소의 측정이 아닙니다.
@@ -161,26 +213,27 @@
     - **샌드박스 안에서 GPU로 reward를 측정한다면**: 이 저장소의 GPU 프로필을 쓰세요.
     - **Nitro Sandboxes(`isolated-sandbox`)**: 출시 시점에 GPU passthrough를 지원하지 않으므로([검증된 사실과 출처](../reference/sources.md)), GPU 커널 채점에는 쓸 수 없습니다.
 
-??? note "적용 범위와 한계"
-    - **로컬 테스트로 확인한 것:** claim 본문, 주소 해석, claim 후 반납, Ready가 되지 않을 때의 반납(fake Kubernetes API), 일곱 프로필의 template 렌더링과 하드닝 값(비어 있는 egress, `runtimeClassName`, `automountServiceAccountToken: false`, `dnsPolicy: None`)입니다.
-    - **multi-turn 경로의 로컬 테스트:** 에피소드마다 claim 하나, 중지 조건, `sandbox_error` 처리, policy가 실패할 때의 claim 반납, 피드백 길이, `multiturn` CLI를 fake Kubernetes API로 확인했습니다. veRL tool은 veRL 없이 trajectory 하나에 샌드박스 하나, 방치된 trajectory의 반납, trajectory 종료 시 반납, claim 실패, 설정 파일과 tool의 일치를 확인했습니다. 에피소드 Job 매니페스트(API 토큰과 하드닝, claim 권한, 허용 subject)도 확인했고, loopback 샌드박스 서버 두 개(CPU harness)에서 에피소드 두 개를 끝까지 실행했습니다.
-    - **클러스터에서 실행한 것:** 시나리오 C에서 `install`, `pool kata-clh-cpu 1`, `claim kata-clh-cpu`. claim이 샌드박스 주소를 받고 반납한 뒤 warm pool이 새 샌드박스를 채웠습니다([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)의 9단계). 이어서 `episodes kata-clh-cpu 2 3`이 pod 안의 `EpisodeSandbox`로 에피소드 2개를 실행했고, 에피소드마다 claim과 샌드박스가 하나씩이었으며 끝나면 claim이 반납됐습니다([11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)).
-    - **클러스터에서 실행하지 않은 것:** 위의 평가 확인 절차입니다. SandboxTemplate 안의 Kata GPU(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)도 검증하지 않았습니다. veRL tool은 veRL에서 실행하지 않았습니다(위 "확인하지 않은 것").
-    - **trainer에서 바로 쓰려면 추가 준비가 필요합니다.** 위 조건 표에 있는 API 토큰과 `kubernetes` 패키지를 준비하고, broker 사용 여부를 결정하세요.
-    - **template 이름에 버전이 없습니다.** `VERSION_FILE=v2`로 `pool`을 다시 적용하면 같은 `kernel-eval-<runtime>` template이 수정됩니다. `OnReplenish`는 대기 중인 이전 버전 샌드박스를 claim되거나 삭제될 때까지 유지하므로, 전환 중에는 claim마다 v1과 v2가 섞일 수 있습니다(upstream 주석 기준 추론).
-        - **`multiturn` CLI에서는**: 각 `turn` 이벤트의 `version`으로 확인할 수 있습니다.
-        - **veRL tool에서는**: veRL tool은 에피소드 요약과 `compute_score` 결과에 버전을 싣지 않으므로, GRPO group 안에서 버전이 섞이면 안 되는 veRL 학습이라면 그 값을 직접 기록하거나 버전마다 이름이 다른 template과 pool을 만들어 group의 claim을 한 풀로 보내세요(둘 다 이 저장소에 없음).
-    - **template에는 livenessProbe가 없습니다.** Deployment 풀과 달리 GPU 오류로 draining된 샌드박스를 kubelet이 다시 시작하지 않습니다. 그 에피소드의 남은 평가는 `sandbox_error`가 되므로(코드 기준), 에피소드를 폐기하고 새 claim을 만드세요.
-    - **`loop`를 전달하지 않은 `EpisodeSandbox`는 인스턴스마다 이벤트 루프 스레드를 하나 만들고 닫지 않습니다.** 한 프로세스에서 에피소드를 매우 많이 실행하면 스레드가 계속 늘어나므로, `BackgroundLoop` 하나를 `loop`로 전달하세요(코드 검토 결과). `multiturn` CLI와 veRL tool은 루프 하나를 공유합니다.
-    - **upstream이 빠르게 변경되고 있습니다.** 필드 이름은 v1.0.11의 `sandboxclaim_types.go`를 따릅니다.
+## 적용 범위와 한계
 
-    ??? note "참고 자료"
-        | 주제 | 링크 |
-        |---|---|
-        | Agent Sandbox 저장소, 릴리스 (v1.0.11) | https://github.com/kubernetes-sigs/agent-sandbox , https://github.com/kubernetes-sigs/agent-sandbox/releases |
-        | SandboxClaim, SandboxTemplate, SandboxWarmPool, Sandbox 타입 (v1.0.11) | https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/extensions/api/v1beta1/sandboxclaim_types.go , https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/extensions/api/v1beta1/sandboxtemplate_types.go , https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/extensions/api/v1beta1/sandboxwarmpool_types.go , https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/api/v1beta1/sandbox_types.go |
-        | AWS 기술 블로그 2부: 이 페이지가 인용한 기본 정책, DNS, router 점검과 warm pool 측정 | https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/ |
-        | Amazon EKS NetworkPolicy (VPC CNI), policy agent | https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html , https://github.com/aws/aws-network-policy-agent |
-        | veRL `ToolAgentLoop` (v0.9.1, tool 호출마다 create, execute, release) | https://github.com/verl-project/verl/blob/v0.9.1/verl/experimental/agent_loop/tool_agent_loop.py |
+- **로컬 테스트로 확인한 것:** claim 본문, 주소 해석, claim 후 반납, Ready가 되지 않을 때의 반납(fake Kubernetes API), 일곱 프로필의 template 렌더링과 하드닝 값(비어 있는 egress, `runtimeClassName`, `automountServiceAccountToken: false`, `dnsPolicy: None`)입니다.
+- **multi-turn 경로의 로컬 테스트:** 에피소드마다 claim 하나, 중지 조건, `sandbox_error` 처리, policy가 실패할 때의 claim 반납, 피드백 길이, `multiturn` CLI를 fake Kubernetes API로 확인했습니다. veRL tool은 veRL 없이 trajectory 하나에 샌드박스 하나, 방치된 trajectory의 반납, trajectory 종료 시 반납, claim 실패, 설정 파일과 tool의 일치를 확인했습니다. 에피소드 Job 매니페스트(API 토큰과 하드닝, claim 권한, 허용 subject)도 확인했고, loopback 샌드박스 서버 두 개(CPU harness)에서 에피소드 두 개를 끝까지 실행했습니다.
+- **클러스터에서 실행한 것:** 시나리오 C에서 `install`, `pool kata-clh-cpu 1`, `claim kata-clh-cpu`. claim이 샌드박스 주소를 받고 반납한 뒤 warm pool이 새 샌드박스를 채웠습니다([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)의 9단계). 이어서 `episodes kata-clh-cpu 2 3`이 pod 안의 `EpisodeSandbox`로 에피소드 2개를 실행했고, 에피소드마다 claim과 샌드박스가 하나씩이었으며 끝나면 claim이 반납됐습니다([11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)).
+- **클러스터에서 추가 검증할 구성:** SandboxTemplate 안의 Kata GPU(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)도 검증하지 않았습니다. veRL tool은 veRL에서 실행하지 않았습니다(위 "확인하지 않은 것").
+- **trainer에서 바로 쓰려면 추가 준비가 필요합니다.** 위 조건 표에 있는 API 토큰과 `kubernetes` 패키지를 준비하고, broker 사용 여부를 결정하세요.
+- **template 이름에 버전이 없습니다.** `VERSION_FILE=v2`로 `pool`을 다시 적용하면 같은 `kernel-eval-<runtime>` template이 수정됩니다. `OnReplenish`는 대기 중인 이전 버전 샌드박스를 claim되거나 삭제될 때까지 유지하므로, 전환 중에는 claim마다 v1과 v2가 섞일 수 있습니다(upstream 주석 기준 추론).
+    - **`multiturn` CLI에서는**: 각 `turn` 이벤트의 `version`으로 확인할 수 있습니다.
+    - **veRL tool에서는**: veRL tool은 에피소드 요약과 `compute_score` 결과에 버전을 싣지 않으므로, GRPO group 안에서 버전이 섞이면 안 되는 veRL 학습이라면 그 값을 직접 기록하거나 버전마다 이름이 다른 template과 pool을 만들어 group의 claim을 한 풀로 보내세요(둘 다 이 저장소에 없음).
+- **template에는 livenessProbe가 없습니다.** Deployment 풀과 달리 GPU 오류로 draining된 샌드박스를 kubelet이 다시 시작하지 않습니다. 그 에피소드의 남은 평가는 `sandbox_error`가 되므로(코드 기준), 에피소드를 폐기하고 새 claim을 만드세요.
+- **`loop`를 전달하지 않은 `EpisodeSandbox`는 인스턴스마다 이벤트 루프 스레드를 하나 만들고 닫지 않습니다.** 한 프로세스에서 에피소드를 매우 많이 실행하면 스레드가 계속 늘어나므로, `BackgroundLoop` 하나를 `loop`로 전달하세요(코드 검토 결과). `multiturn` CLI와 veRL tool은 루프 하나를 공유합니다.
+- **upstream이 빠르게 변경되고 있습니다.** 필드 이름은 v1.0.11의 `sandboxclaim_types.go`를 따릅니다.
 
-        [관련 대표 자료](../reference/references.md#ref-concepts-06-agent-sandbox)
+??? note "참고 자료"
+    | 주제 | 링크 |
+    |---|---|
+    | Agent Sandbox 저장소, 릴리스 (v1.0.11) | https://github.com/kubernetes-sigs/agent-sandbox , https://github.com/kubernetes-sigs/agent-sandbox/releases |
+    | SandboxClaim, SandboxTemplate, SandboxWarmPool, Sandbox 타입 (v1.0.11) | https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/extensions/api/v1beta1/sandboxclaim_types.go , https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/extensions/api/v1beta1/sandboxtemplate_types.go , https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/extensions/api/v1beta1/sandboxwarmpool_types.go , https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/api/v1beta1/sandbox_types.go |
+    | AWS 기술 블로그 2부: 이 페이지가 인용한 기본 정책, DNS, router 점검과 warm pool 측정 | https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/ |
+    | Amazon EKS NetworkPolicy (VPC CNI), policy agent | https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html , https://github.com/aws/aws-network-policy-agent |
+    | veRL `ToolAgentLoop` (v0.9.1, tool 호출마다 create, execute, release) | https://github.com/verl-project/verl/blob/v0.9.1/verl/experimental/agent_loop/tool_agent_loop.py |
+
+    [관련 대표 자료](../reference/references.md#ref-concepts-06-agent-sandbox)

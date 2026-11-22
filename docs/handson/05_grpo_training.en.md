@@ -5,8 +5,6 @@
 
     **Completion check** Look for `routing`, `reward_batch`, and progressing optimizer steps.
 
-**Screenshots from November 22, 2026** · [The running trainer and first batches](#trainer-running) · [Completed training and verdict counts](#trainer-complete)
-
 **Before you start:** finish [04 Deploy and verify sandbox pools](04_sandbox_pools.md). GRPO and version pinning are in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), the reward design in [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md), and terms in the [Glossary](../reference/glossary.md).
 
 ??? note "Terms (expand if a word is new to you)"
@@ -92,7 +90,7 @@ kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 
 ### The running trainer and first batches { #trainer-running }
 
-On November 22 we ran `RUN_ID=guide-replay scripts/07_run_grpo.sh 16`. The model trained on one A10G on a `g5.2xlarge` and sent its generated submissions to the EC2 gVisor pool.
+The example runs `RUN_ID=guide-replay scripts/07_run_grpo.sh 16`. The model trained on one A10G on a `g5.2xlarge` and sent its generated submissions to the EC2 gVisor pool.
 
 ![Running GRPO Job, GPU request and verdicts from early batches](../images/terminal/grpo-running-replay.png)
 

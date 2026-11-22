@@ -41,7 +41,7 @@
 | 2. 채점 체험 | golden 제출물을 골라 재생하면 진행 막대가 차고 verdict, reward 구성 요소, 판정 이유가 나옵니다 | `recording.json`의 golden 평가 결과와, trainer와 같은 `score_verdict`로 계산한 reward |
 | 3. 공격 차단 | 풀마다 샌드박스 안 커널과 노드 커널, GPU, egress 차단 여부. 격리와 채점 검증 결과 카드 8개와 터미널 출력 재생 | `recording.json`의 `/info`, `extras.json`의 터미널 기록(verify.sh, gVisor 스모크 테스트, rollout.sh) |
 | 4. 학습 | EC2와 HyperPod B1의 GRPO 실행을 고르면 배치별 판정과 점수를 볼 수 있습니다. 아래 차트는 CPU 모의 실행에서의 버전 전환입니다. | `extras.json`의 `training`, `b1.training`, `simulation` |
-| 5. 벤치마크 | 11월 22일 EKS 다섯 풀의 결과와 B1 클라이언트 비교, 11월 18일 배포 직후와 이미지 캐시 후 비교 | `extras.json`의 `runtime_run`, `b1.bench`, `bench` |
+| 5. 벤치마크 | EKS 다섯 풀의 처리량, B1 클라이언트별 채점 시간, 이미지 캐시 전후의 시작 시간 | `extras.json`의 `runtime_run`, `b1.bench`, `bench` |
 | 패턴별 아키텍처 (`architecture.html`) | 시나리오 A, B1, B2, C를 AWS 아이콘으로 그린 구성도 | 페이지에 들어 있는 정적 데이터(`arch.js`). 데이터 파일을 읽지 않습니다 |
 
 - **맨 위의 핵심 수치**: GPU 런타임 수, 기대 판정과 일치한 golden 수, 두 풀의 `verify.sh` 기록에서 막힌 연결 수, 벤치마크 정상 응답 수입니다.
@@ -54,7 +54,7 @@
 
 - **공개되는 파일**: HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다.
 - **저장소의 `recording.json` 샘플**: 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요.
-- 공개 데모는 `demo/recordings/2026-11-18-eks-gpu.json`으로 GPU 채점을 재생합니다. EC2 5스텝 학습과 이미지 캐시 전후 비교는 11월 18일, CPU 버전 전환은 11월 17일 기록입니다. 11월 22일에는 B1에서 GRPO 한 스텝과 고정 커널 벤치마크 두 번을 실행했습니다. [B1 측정 결과](08_benchmark.md#hyperpod-b1)
+- 공개 데모는 `demo/recordings/2026-11-18-eks-gpu.json`으로 GPU 채점을 재생합니다. 학습 탭에서는 EC2의 5스텝과 HyperPod B1의 1스텝을 고를 수 있습니다. B1 결과표는 같은 풀에 고정 커널을 보낸 두 클라이언트를 비교합니다. [B1 측정 결과](08_benchmark.md#hyperpod-b1)
 - **2절의 진행 막대**: 기록된 전체 평가 시간입니다. 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.
 
 [데모에서 EKS 벤치마크 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results)
@@ -105,7 +105,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 - 핵심 수치 타일은 세 개입니다. 샘플 기록에는 GPU 풀이 없어서 GPU 샌드박스 풀 타일은 나오지 않습니다.
     - `8/8`: 예상대로 나온 채점 결과
     - `10`은 두 풀의 `verify.sh` 로그에 남은 차단 건수입니다. 샌드박스에서 외부로 시도한 연결 8건과 `default` 네임스페이스에서 들어온 연결 2건입니다.
-    - `160/160`은 11월 22일 다섯 EKS 풀이 처리한 벤치마크 요청의 성공 건수입니다. 숫자를 누르면 결과표로 이동합니다.
+    - `160/160`은 다섯 EKS 풀이 처리한 벤치마크 요청의 성공 건수입니다. 숫자를 누르면 결과표로 이동합니다.
 - 2절에 제출 코드 카드 네 개(PyTorch만 사용, ReLU 빠뜨린 오답, 속도 측정 속이기, 서버 파일 읽기)가 있고, 재생하면 `local-cpu v1`, `local-cpu v2` 두 줄이 채워집니다. 코드는 문법 색상과 줄 번호로 표시됩니다.
 - 3절에 공격 카드 여덟 개와 터미널 탭 네 개(verify.sh gvisor, verify.sh kata-qemu, gVisor GPU 동작 확인, rollout.sh v1 → v2)가 있습니다.
 - 4절 아래 차트의 요약이 "배치 30개가 하나도 빠지지 않고 채점됐습니다. step 8에서 kata-clh-cpu/v1에서 kata-clh-cpu/v2로 바뀌었고"로 시작합니다.
@@ -114,7 +114,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 - 터미널에는 파일마다 200 응답 로그가 출력됩니다.
 
 ??? note "확인한 환경과 각 절의 데이터 출처"
-    11월 22일에 공개 사이트를 Chromium에서 한국어와 영어로 확인했습니다. 풀 카드는 golden 채점 기록을, 학습·벤치마크·터미널 재생은 `extras.json`을 읽습니다. 패턴별 아키텍처 페이지에는 각 구성에서 확인한 실행 범위가 표시됩니다.
+    풀 카드는 golden 채점 기록을, 학습·벤치마크·터미널 재생은 `extras.json`을 읽습니다. 패턴별 아키텍처 페이지에는 각 구성에서 확인한 실행 범위가 표시됩니다.
 
 **문제가 생기면:**
 

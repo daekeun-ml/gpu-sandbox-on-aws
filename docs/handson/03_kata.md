@@ -5,8 +5,6 @@
 
     **완료 기준** CPU smoke test와 GPU smoke test는 각각 VM 부팅과 GPU 연결을 확인합니다. CPU 실습만 하려면 1단계까지 진행하세요.
 
-**2026-11-22 실행 화면** · [CPU 노드에서 확인한 세 커널](#cpu-run) · [Kata VM 안에서 확인한 T4](#gpu-run)
-
 **시작 전에** [01 클러스터와 이미지](01_cluster_and_images.md)를 먼저 마쳐야 합니다. Kata가 GPU를 다루는 방식은 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)의 "Kata + VFIO passthrough" 절에, 처음 보는 용어는 아래 "용어" 상자와 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -162,7 +160,7 @@ pod "kata-qemu-smoke-34567" deleted
 
 ### CPU 노드에서 확인한 세 커널 { #cpu-run }
 
-11월 22일 `c8i.2xlarge`에서 nested virtualization이 `enabled`인 것을 확인하고 세 smoke pod 안에서 `uname -r`를 실행했습니다. 화면 마지막 줄에는 비교할 호스트 커널이 나옵니다.
+`c8i.2xlarge`에서 nested virtualization이 `enabled`인 것을 확인하고 세 smoke pod 안에서 `uname -r`를 실행했습니다. 화면 마지막 줄에는 비교할 호스트 커널이 나옵니다.
 
 ![EC2 nested virtualization 설정과 gVisor, Kata CLH, Kata QEMU의 실제 커널 출력](../images/terminal/kata-cpu-replay.png)
 

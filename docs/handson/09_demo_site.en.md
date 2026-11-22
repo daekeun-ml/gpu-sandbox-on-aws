@@ -41,7 +41,7 @@ The first screen opens the scoring replay, benchmarks, or deployment diagrams. U
 | 2. Try scoring | Pick a golden submission and press play: a progress bar fills, then the verdict, reward components and the reason appear | Golden evaluation results in `recording.json`, and rewards computed with the same `score_verdict` as the trainer |
 | 3. Attacks blocked | For each pool, the kernel inside the sandbox and the node kernel, the GPU and egress status. Eight cards of isolation and scoring checks, and a terminal replay | `/info` in `recording.json`, terminal transcripts in `extras.json` (verify.sh, the gVisor smoke test, rollout.sh) |
 | 4. Training | Select the EC2 or HyperPod B1 GRPO run to inspect verdicts and rewards. A second chart replays the CPU version-switch simulation. | `training`, `b1.training`, `simulation` in `extras.json` |
-| 5. Benchmark | Results for five EKS pools on November 22, the B1 client comparison, and the November 18 cold-start and latency charts | `runtime_run`, `b1.bench`, and `bench` in `extras.json` |
+| 5. Benchmark | Throughput across five EKS pools, B1 client latency, and cold starts before and after caching images | `runtime_run`, `b1.bench`, and `bench` in `extras.json` |
 | Architecture patterns (`architecture.html`) | Scenarios A, B1, B2 and C drawn with AWS icons | Static data in the page (`arch.js`); no data file is read |
 
 - **Key numbers at the top**: GPU runtimes, goldens matching their expected verdict, connections blocked in the two pools' `verify.sh` transcripts, benchmark requests answered ok.
@@ -54,7 +54,7 @@ The published data and recordings are these.
 
 - **Published files**: HTML, CSS, JavaScript, AWS architecture icons (SVG), the tour videos (MP4) with their thumbnails (JPG), and two recording JSON files (`data/recording.json`, `data/extras.json`).
 - **The repository's `recording.json` sample**: a laptop CPU pool recording; replace it with a GPU recording made on your cluster.
-- The published GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. The EC2 five-step chart and the image-cache comparison come from November 18. The CPU version switch is from November 17. On November 22 we recorded one GRPO step and two fixed-kernel benchmark runs in B1. [B1 measurements](08_benchmark.md#hyperpod-b1)
+- The published GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. In the training tab you can select the five-step EC2 run or the one-step HyperPod B1 run. The B1 benchmark compares two clients submitting the same fixed kernel to one pool. [B1 measurements](08_benchmark.md#hyperpod-b1)
 - **Progress bar in section 2**: the recorded total evaluation time. Per-stage times are not recorded, so the stages are filled in from the verdict once the evaluation ends.
 
 [View the EKS benchmark results](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results)
@@ -105,7 +105,7 @@ Open http://127.0.0.1:8080 in a browser. Opening the file directly (`file://`) c
 - There are three key-number tiles. The sample has no GPU pool, so the GPU sandbox pool count does not appear.
     - `8/8`: goldens matching their expected verdict
     - `10` connection attempts blocked in the two `verify.sh` logs (eight outbound and two inbound from `default`).
-    - `160/160` successful requests across five EKS pools on November 22. Select the number to open the results table.
+    - `160/160` successful requests across five EKS pools. Select the number to open the results table.
 - Section 2 has four submission cards (PyTorch only, Missing ReLU, Benchmark cheat, Read a host file), and playing fills two lanes, `local-cpu v1` and `local-cpu v2`. Code is shown with syntax colors and line numbers.
 - Section 3 has eight attack cards and four terminal tabs (verify.sh gvisor, verify.sh kata-qemu, gVisor GPU smoke test, rollout.sh v1 → v2).
 - The summary under the lower chart in section 4 starts with "All 30 batches were scored. At step 8 the pool changed from kata-clh-cpu/v1 to kata-clh-cpu/v2".
@@ -114,7 +114,7 @@ Open http://127.0.0.1:8080 in a browser. Opening the file directly (`file://`) c
 - The terminal logs a 200 response for each file.
 
 ??? note "Where this was checked, and where each section's data comes from"
-    The public site was checked in Chromium on November 22 in Korean and English. Pool cards use the golden recording. Training, benchmarks and terminal playback use `extras.json`. The architecture page shows the latest verified run for each pattern.
+    Pool cards use the golden recording. Training, benchmarks and terminal playback use `extras.json`. The architecture page shows the latest verified run for each pattern.
 
 **If it fails:**
 

@@ -6,7 +6,10 @@ Suppose a model writes three implementations of array addition. One gives a wron
 
 A **verdict** is an evaluation result such as correct or incorrect. A **reward** is the number used for learning. An illustrative scheme gives `0` to the wrong answer, `1` to the slower correct answer, and `2` to the faster one. The repository's scoring also accounts for the answer format.
 
-**GRPO** compares answers to the same problem as a **group**. In this example the fast correct answer scores above the group average, so the update encourages the model to produce answers like it more often.
+**GRPO** compares answers to the same problem as a **group**. The mean of `0`, `1`, and `2` is `1`. The fast correct answer scores above that mean, so the update encourages the model to produce answers like it more often.
+
+??? note "A group with equal scores"
+    Suppose all three answers score `1`. Consider which answer the model should produce more often. Each score equals the group mean, so the reward differences in this group give no reason to prefer one answer.
 
 ## Generate, score, update
 
@@ -19,5 +22,24 @@ Comparing answers within a group requires a common scoring standard. The trainer
 ## How scoring shapes behavior
 
 A program that skips a calculation may look fastest if the grader checks only the time. Exploiting gaps in the scoring rules to earn a higher reward is called **reward hacking**. Here, the grader checks outputs on changing inputs and awards performance credit to correct code. See [reward integrity](../production/04_reward_integrity.md) for the measurement rules.
+
+## Two correct answers can earn different rewards
+
+Imagine two correct submissions for `relu_bias`. One calls standard PyTorch operations. The other implements a custom Triton kernel and runs twice as fast as the reference. These are **calculated examples** using the default GPU scoring rule. Both submissions pass the format check.
+
+| Submission | Format × 0.1 | Correctness × 1 | Speed × 0.5 | Total |
+|---|---:|---:|---:|---:|
+| Correct standard PyTorch operations | 0.1 | 0.3 | 0 | 0.4 |
+| Correct custom Triton kernel, 2× speed | 0.1 | 1.0 | 0.5 | 1.6 |
+
+Both verdicts are `ok`. The task also asks the model to write its own kernel. The sandbox reports correctness and timing, and the trainer turns those observations into a number that reflects the objective. [Explore the score for each submission](https://dohbsn4kn34ya.cloudfront.net/?lang=en#try)
+
+## When the grading criteria change
+
+Suppose the grader starts checking five inputs instead of three. If one answer fails on a new input, you need to know whether its peers faced the same check before comparing their scores. In the lab the operator verifies the new pool first. The trainer fixes the version at the start of each batch.
+
+![Trainer logs showing the first four batches graded on v1 and the switch to v2](../images/terminal/rollout-batches-replay.png)
+
+In the 16-step run, batches 1–4 used `v1` and batches 5–16 used `v2`. Read `served_versions` in each batch to check that it finished on one version. [Per-batch record and switch](../handson/06_sandbox_update.md#switch-batches)
 
 In [chapter 05](05_hands_on.md), you can check the scoring part locally.

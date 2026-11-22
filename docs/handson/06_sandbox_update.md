@@ -5,8 +5,6 @@
 
     **완료 기준** 전환 후 v2가 실제로 평가를 처리했는지 `reward_batch`에서 확인하세요. 확인이 끝나면 v1을 정리합니다.
 
-**2026-11-22 실행 화면** · [전환을 허용한 parity 검사](#rollout-parity) · [trainer가 v2를 사용한 배치](#switch-batches) · [v1 복구와 v2 축소](#rollback-run)
-
 **시작 전에** [05 On-policy GRPO 학습](05_grpo_training.md)의 학습이 실행 중이어야 합니다. 버전을 group 단위로 고정하는 이유는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -18,7 +16,7 @@
     - **rollback**: 문제가 생겼을 때 이전 버전으로 되돌리는 작업입니다.
 
 !!! warning "검증 상태"
-    11월 22일 시나리오 A의 GRPO 학습 중 gVisor 풀을 v1에서 v2로 전환했습니다. 첫 v2 채점은 배치 5였습니다. v1을 `--finish`로 축소하고, 학습이 끝난 뒤 v1으로 롤백했습니다.
+    시나리오 A의 GRPO 학습 중 gVisor 풀을 v1에서 v2로 전환했습니다. 첫 v2 채점은 배치 5였습니다. v1을 `--finish`로 축소하고, 학습이 끝난 뒤 v1으로 롤백했습니다.
 
 ## v1과 v2의 차이
 

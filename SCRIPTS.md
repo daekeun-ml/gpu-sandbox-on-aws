@@ -198,7 +198,7 @@
 - **성공 신호**: 풀마다 `bench  <runtime>  ok <n>/<requests>  p50 ...` 한 줄이 나오고, 끝에 `results: <파일>`이 나옵니다.
 - **막히면**: [문제 해결: 샌드박스 풀과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-풀과-readiness), [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)
 
-2026-11-22 EKS 실습에서 다섯 풀에 32건씩 보내 160건 모두 성공했습니다. [결과표와 실행 조건](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/#runtime-results)
+EKS 실습에서 다섯 풀에 32건씩 보내 160건 모두 성공했습니다. [결과표와 실행 조건](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/#runtime-results)
 
 ### `scripts/ops/sync_jwks.sh`
 
@@ -262,7 +262,7 @@ scripts/hyperpod/run_grpo.sh 5
 | `routing` 이벤트 | trainer가 샌드박스 경로를 읽었습니다. 템플릿은 시작 후 20분 안에 이 이벤트를 기대합니다. |
 | `reward_batch` 이벤트와 학습 step | 샌드박스 평가 요청이 처리되고 학습이 진행되는지 확인할 수 있습니다. `sandbox_error`가 반복되면 풀을 점검하세요. |
 
-2026-11-22에 B1 trainer가 GRPO 한 스텝을 완료했고, EC2 gVisor 샌드박스 두 개가 제출 코드 12개를 채점했습니다. [Job 상태와 학습 로그](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/#확인-방법)
+B1 trainer가 GRPO 한 스텝을 완료했고, EC2 gVisor 샌드박스 두 개가 제출 코드 12개를 채점했습니다. [Job 상태와 학습 로그](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/#확인-방법)
 
 스크립트가 출력한 Job 이름을 `HPJob` 라벨 값에 넣으면 이번 실행의 pod를 찾을 수 있습니다.
 
