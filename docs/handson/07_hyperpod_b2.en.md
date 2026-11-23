@@ -10,7 +10,7 @@ The model sends the code it generates to a separate GPU sandbox for grading. In 
 | `trainer` | One `ml.g5.2xlarge` | GRPO training on an NVIDIA A10G |
 | `sandbox` | Two `ml.g5.xlarge` | One gVisor grading pod per node, each with its own A10G |
 
-[Download the Korean slide deck (PPTX, B1 and B2 comparison on slide 18)](https://github.com/daekeun-ml/gpu-sandbox-on-aws/raw/refs/heads/main/slides/gpu-sandbox-theory.pptx)
+[Download the Korean slide deck (PPTX, B1 and B2 comparison on slide 18)](../slides/gpu-sandbox-theory.pptx)
 
 At `us-east-1` on-demand rates the four workers cost **$4.561 per hour** together. EKS, storage and networking have separate charges. [Cost breakdown](../production/08_cost.md)
 

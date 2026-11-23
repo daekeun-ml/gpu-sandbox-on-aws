@@ -10,7 +10,7 @@
 | `trainer` | `ml.g5.2xlarge` 1대 | NVIDIA A10G에서 GRPO 학습 |
 | `sandbox` | `ml.g5.xlarge` 2대 | A10G 한 장을 쓰는 gVisor 채점 Pod를 노드당 하나씩 배치 |
 
-[이론 슬라이드 다운로드 (PPTX, B1·B2 비교는 18쪽)](https://github.com/daekeun-ml/gpu-sandbox-on-aws/raw/refs/heads/main/slides/gpu-sandbox-theory.pptx)
+[이론 슬라이드 다운로드 (PPTX, B1·B2 비교는 18쪽)](../slides/gpu-sandbox-theory.pptx)
 
 `us-east-1` 온디맨드 단가로 워커 네 대의 합계는 **시간당 4.561 USD**입니다. EKS 제어 영역, 스토리지, 네트워크 비용은 별도입니다. [비용 구성](../production/08_cost.md)
 

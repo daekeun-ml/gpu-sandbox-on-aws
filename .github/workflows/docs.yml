@@ -3,9 +3,9 @@ name: docs
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "mkdocs.yml", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "slides/gpu-sandbox-theory.pptx", "mkdocs.yml", ".github/workflows/docs.yml"]
   pull_request:
-    paths: ["docs/**", "mkdocs.yml"]
+    paths: ["docs/**", "slides/gpu-sandbox-theory.pptx", "mkdocs.yml"]
   workflow_dispatch:
 
 permissions:
