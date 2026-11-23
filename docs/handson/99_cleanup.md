@@ -1,11 +1,10 @@
 # 99 정리
 
-!!! info "TL;DR"
-    실습에서 만든 리소스를 의존성이 있는 순서대로 지웁니다. HyperPod를 사용했다면 HyperPod부터 삭제한 뒤 EKS 스택을 정리하세요.
+먼저 `aws sts get-caller-identity`의 계정과 `scripts/config.env`의 `AWS_REGION`, `CLUSTER_NAME`을 확인하세요. 현재 `kubectl` context도 지울 실습 클러스터와 일치해야 합니다. 터널은 열어 둡니다. 사용한 리소스에 맞는 순서로 진행하세요.
 
-    **완료 기준** 삭제 명령이 끝나면 AWS에서 스택, 인스턴스, 별도로 만든 리소스가 남아 있는지 확인합니다.
-
-**시작 전에** 무엇을 만들었는지 확인하세요. 클러스터와 이미지는 [01 클러스터와 이미지](01_cluster_and_images.md), HyperPod는 [07 HyperPod 시나리오](07_hyperpod.md), 데모 사이트는 [09 데모 사이트 (CloudFront)](09_demo_site.md), Agent Sandbox 확장은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 만들었습니다.
+1. **에피소드를 실행했다면** 남은 [claim과 warm pool](#0-agent-sandbox-확장-쓴-경우만)을 먼저 정리하세요. **HyperPod를 썼다면** EKS가 있는 동안 [HyperPod 클러스터](#1-hyperpod-먼저-시나리오-b)를 삭제합니다.
+2. [EKS 스택 삭제](#2-eks-클러스터cdk-스택와-나머지)에서 이미지를 남길지 함께 지울지 선택하세요. 직접 배포한 [데모 사이트](#데모-사이트-09를-만든-경우)는 별도 스택입니다.
+3. [남은 리소스 확인](#3-남은-리소스-확인)에서 실습 태그가 붙은 인스턴스와 스택 밖에 만든 리소스를 살피세요. 다음 실습을 위해 [노드 수만 0으로 줄이면](#일시-정지-노드-그룹을-0으로-줄이기) EKS와 NAT gateway 요금은 계속 나옵니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **CloudFormation stack**: 여러 AWS 리소스를 한 묶음으로 만들고 지우는 단위입니다. 클러스터 생성(`02_create_cluster.sh`)이 만드는 CDK 스택(`<CLUSTER_NAME>-cdk`)과 데모 사이트는 각각 별도의 stack입니다.
@@ -88,9 +87,9 @@ kubectl -n sandbox delete sandboxclaims,sandboxwarmpools,sandboxtemplates --all
 
 ```bash
 demo/teardown.sh
-# if you deployed with another stack name
-DEMO_STACK_NAME=<stack-name> demo/teardown.sh
 ```
+
+별도 스택 이름으로 배포했다면 이 명령을 실행할 때 `DEMO_STACK_NAME`을 해당 이름으로 설정하세요.
 
 스크립트는 `scripts/config.env`를 읽지 않고, `demo/deploy.sh`처럼 리전을 `us-east-1`로 고정합니다. 셸의 `AWS_REGION` 값은 쓰지 않습니다.
 
@@ -146,17 +145,19 @@ scripts/hyperpod/delete.sh
 2. CDK 스택(클러스터, 노드 그룹, launch template, VPC, NAT gateway, access instance, 로그 그룹)을 삭제합니다.
 3. AMI를 삭제할지 묻습니다.
 
-두 명령 중 하나만 실행하세요.
+한 탭만 선택하세요. 기본 명령은 ECR 이미지를 보관합니다. `--images`를 선택하면 `ECR_REPO_PREFIX`가 가리키는 `sandbox`, `trainer`, `control` 리포지토리와 그 안의 이미지를 함께 삭제합니다. 공유 접두사라면 먼저 각 리포지토리의 사용처를 확인하세요.
 
-- **ECR 이미지를 남기려면**: 첫 줄을 실행합니다.
-- **ECR 이미지도 함께 지우려면**: 처음부터 둘째 줄을 실행합니다. 두 줄을 차례로 실행하면 둘째 호출이 클러스터와 AMI 단계부터 다시 시작합니다.
+=== "ECR 이미지 보관"
 
-**`--images`를 쓸 때 주의:** `--images`는 이번 실습에서 만들었는지와 관계없이 접두사가 같은 `sandbox`, `trainer`, `control` 리포지토리를 모두 삭제합니다. 다른 실습과 `ECR_REPO_PREFIX`를 함께 쓴다면 세 리포지토리의 사용처를 먼저 확인하세요.
+    ```bash
+    scripts/08_cleanup.sh
+    ```
 
-```bash
-scripts/08_cleanup.sh            # pools, Jobs, the CDK stack, AMIs (asks); keeps ECR
-scripts/08_cleanup.sh --images   # the same, plus the ECR repositories
-```
+=== "ECR 이미지도 삭제"
+
+    ```bash
+    scripts/08_cleanup.sh --images
+    ```
 
 | 순서 | 프롬프트 | 입력할 단어 | 지우는 것 |
 |---|---|---|---|
@@ -195,6 +196,9 @@ bootstrap 스택 `CDKToolkit`은 다음 배포에 다시 쓰므로 남겨 둡니
 
 !!! question "❓ 오해: CDK 스택을 지우면 실습 리소스가 모두 지워진다"
     CDK 스택을 삭제하면 그 스택이 만든 리소스(클러스터, 노드 그룹, launch template, VPC, NAT gateway, access instance, KMS 키, 스택의 로그 그룹)만 삭제됩니다. IOMMU AMI와 B2 AMI, 그 snapshot, ECR 리포지토리(`03_build_push_images.sh`가 만듦), HyperPod의 S3 버킷과 IAM 역할, 데모 stack, `CDKToolkit`은 스택 밖에서 만들어졌으므로 이 페이지의 다른 단계에서 처리합니다.
+
+<details class="note" markdown="1">
+<summary>다음 실습을 위해 노드 수만 줄일 때</summary>
 
 ## 일시 정지: 노드 그룹을 0으로 줄이기
 
@@ -243,7 +247,11 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
     HyperPod 인스턴스도 이 명령으로는 종료되지 않습니다. `CreateCluster` API는 인스턴스 그룹의 `InstanceCount` 최솟값으로 0을 허용합니다. 하지만 이 저장소는 그 방법을 스크립트로 제공하거나 검증하지 않았으므로, HyperPod를 쓰지 않을 때는 `hyperpod/delete.sh`로 삭제하기를 권합니다.
 
+</details>
+
 ## 3. 남은 리소스 확인
+
+마지막 인스턴스 표는 실습 태그가 붙은 EC2 인스턴스를 조회한 결과입니다. 표가 비었으면 아래에서 별도 생성한 볼륨, 스냅샷이나 로그 버킷도 자신이 사용한 항목만 골라 확인하세요.
 
 삭제 명령의 성공 출력 뒤에는 리소스 상태를 조회하세요. HyperPod와 데모 사이트처럼 별도로 만든 리소스는 각 삭제 절차가 끝났는지 확인하고, AMI와 스냅샷이 남았는지도 살펴봅니다.
 

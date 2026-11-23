@@ -1,11 +1,10 @@
 # 01 Cluster and images
 
-!!! info "TL;DR"
-    Create the private EKS cluster with CDK and push the images to ECR. The GPU smoke test uses the sandbox image you build here.
+By the end of this chapter you can list EKS nodes from your workstation, and the sandbox image is in ECR. For a first deployment, prepare the [local Python environment](../getting_started.md) and [check quotas for your scenario](00_overview.md#prerequisites).
 
-    **Completion check** Open the tunnel, check that the required nodes are `Ready`, and save the image URIs to `scripts/config.env`.
-
-**Before you start:** read the step table in [00 Overview](00_overview.md) and the local Python environment in [Getting started](../getting_started.md) first. The full list of the CDK stack's security defaults is in [Production 09 CDK](../production/09_cdk.md), and unfamiliar terms in the "Terms" box below and the [Glossary](../reference/glossary.md).
+1. [Set the account and Region](#preparation-1-scriptsconfigenv), then [run the preflight checks](#preflight-01_check_prereqssh). The scenario determines which nodes the stack creates.
+2. [Create the cluster](#create-the-cluster-cdk-02_create_clustersh) and keep the [SSM tunnel](#open-the-tunnel-cdktunnelsh) open in a second terminal. In the original terminal, look for `Ready` next to your lab nodes in `kubectl get nodes`.
+3. [Build the images](#build-and-push-the-images-03_build_push_imagessh) and save the printed URIs to `scripts/config.env`. The test pod in chapter 02 pulls the sandbox image from that address.
 
 ??? note "Terms (expand if a word is new to you)"
     - **AWS CDK, stack, synth**: a tool that defines AWS infrastructure in code (Python here) and deploys it through CloudFormation, the set of resources created and deleted together, and the step that turns the code into a CloudFormation template.
@@ -142,14 +141,31 @@ Request increases for low quotas in the Service Quotas console (the vCPU math is
 
 ## Create the cluster (CDK): `02_create_cluster.sh`
 
-Run the one line that matches your scenario.
+Run the command in the tab for your scenario. For A, set `SCENARIO=A` in `scripts/config.env`.
 
-```bash
-scripts/02_create_cluster.sh                 # scenario A: EC2 trainer + gVisor GPU nodes
-scripts/02_create_cluster.sh --hyperpod      # scenario B1: gVisor GPU nodes, the trainer runs on HyperPod
-scripts/02_create_cluster.sh --hyperpod-b2   # scenario B2: no EC2 GPU node groups (see 07)
-scripts/02_create_cluster.sh --cpu-only      # scenario C: the c8i node only, no GPU (see 10)
-```
+=== "A · EC2"
+
+    ```bash
+    scripts/02_create_cluster.sh
+    ```
+
+=== "B1 · HyperPod"
+
+    ```bash
+    scripts/02_create_cluster.sh --hyperpod
+    ```
+
+=== "B2 · HyperPod"
+
+    ```bash
+    scripts/02_create_cluster.sh --hyperpod-b2
+    ```
+
+=== "C · CPU"
+
+    ```bash
+    scripts/02_create_cluster.sh --cpu-only
+    ```
 
 `scripts/02_create_cluster.sh` sets the scenario from the option and calls `cdk/deploy.sh`, which proceeds as follows.
 
@@ -201,6 +217,8 @@ In the EKS console, the cluster's Networking tab must show API server endpoint a
 
 ### Open the tunnel (cdk/tunnel.sh)
 
+`Waiting for connections...` means the tunnel is listening. Leave that window open and run `kubectl` in your **original work terminal**.
+
 Keep it running in a second terminal while you use kubectl or helm. The script works in this order.
 
 1. It reads the endpoint and the access instance ID from the stack Outputs.
@@ -246,26 +264,28 @@ B1 (`--hyperpod`) has no trainer line, B2 only the two system nodes, and C two s
 - For `stack <CLUSTER_NAME>-cdk has no outputs; run cdk/deploy.sh first`, finish the cluster creation (`02_create_cluster.sh`) first.
 - For `Unable to connect to the server`, check that the tunnel is still running; after using another cluster, switch back with `kubectl config use-context <CLUSTER_NAME>-tunnel`.
 
+<details class="note" markdown="1">
+<summary>Node layout, boot sequence and manifest rendering</summary>
+
 ### What the CDK stack creates
 
-??? note "Details"
-    The stack code is in `cdk/gpusandbox_cdk/stack.py`; `cdk/tests` checks the security defaults below in the synthesized template. The authentication mode and VPC CNI settings already meet the HyperPod requirements, so scenario B needs no new cluster.
+The stack code is in `cdk/gpusandbox_cdk/stack.py`; `cdk/tests` checks the security defaults below in the synthesized template. The authentication mode and VPC CNI settings already meet the HyperPod requirements, so scenario B needs no new cluster.
 
-    | Resource | Value | Reason |
-    |---|---|---|
-    | VPC | 2 AZs, 1 NAT gateway, public subnets (only the NAT, no automatic public IPs) and private subnets | nodes stay in private subnets |
-    | EKS version | `${K8S_VERSION}` (1.36) | inside EKS standard support |
-    | API endpoint | private only. Public only for a single /32 when `EKS_PUBLIC_ACCESS_CIDR` is set | keeps the cluster API off the internet |
-    | Authentication | mode `API_AND_CONFIG_MAP`, access entry (`AmazonEKSClusterAdminPolicy`) for `ADMIN_PRINCIPAL_ARN` | HyperPod requires `API` or `API_AND_CONFIG_MAP`. The CloudFormation execution role gets no cluster admin permissions |
-    | Secrets encryption, logs | Kubernetes secrets encrypted with a KMS key (automatic rotation), 5 control plane log types (api, audit, authenticator, controllerManager, scheduler, 30-day retention), VPC flow log (rejected traffic) | audits and incident investigation |
-    | Service CIDR | `172.20.0.0/16` | set explicitly because the Kata GPU node's NodeConfig must state it |
-    | Add-ons | `vpc-cni` (`{"enableNetworkPolicy": "true"}`), `kube-proxy`, `coredns`, `eks-pod-identity-agent` | eBPF-based NetworkPolicy, needs VPC CNI 1.21+ (HyperPod needs 1.18.3+) |
-    | Access instance | `t4g.nano`, private subnet, no inbound rules, HTTPS egress only, IMDSv2 | the hop for the SSM tunnel |
-    | `system` managed node group | `m6i.large` x2 (min 2, max 3), 50 GB, label `gpusandbox/role=system` | CoreDNS and add-ons |
-    | Launch templates of all nodes | IMDSv2 required, hop limit 1, encrypted gp3 root volume, instance tag `project=gpu-sandbox-on-aws` | pods cannot reach node credentials. The cleanup script (`08_cleanup.sh`) finds leftover instances by this tag |
+| Resource | Value | Reason |
+|---|---|---|
+| VPC | 2 AZs, 1 NAT gateway, public subnets (only the NAT, no automatic public IPs) and private subnets | nodes stay in private subnets |
+| EKS version | `${K8S_VERSION}` (1.36) | inside EKS standard support |
+| API endpoint | private only. Public only for a single /32 when `EKS_PUBLIC_ACCESS_CIDR` is set | keeps the cluster API off the internet |
+| Authentication | mode `API_AND_CONFIG_MAP`, access entry (`AmazonEKSClusterAdminPolicy`) for `ADMIN_PRINCIPAL_ARN` | HyperPod requires `API` or `API_AND_CONFIG_MAP`. The CloudFormation execution role gets no cluster admin permissions |
+| Secrets encryption, logs | Kubernetes secrets encrypted with a KMS key (automatic rotation), 5 control plane log types (api, audit, authenticator, controllerManager, scheduler, 30-day retention), VPC flow log (rejected traffic) | audits and incident investigation |
+| Service CIDR | `172.20.0.0/16` | set explicitly because the Kata GPU node's NodeConfig must state it |
+| Add-ons | `vpc-cni` (`{"enableNetworkPolicy": "true"}`), `kube-proxy`, `coredns`, `eks-pod-identity-agent` | eBPF-based NetworkPolicy, needs VPC CNI 1.21+ (HyperPod needs 1.18.3+) |
+| Access instance | `t4g.nano`, private subnet, no inbound rules, HTTPS egress only, IMDSv2 | the hop for the SSM tunnel |
+| `system` managed node group | `m6i.large` x2 (min 2, max 3), 50 GB, label `gpusandbox/role=system` | CoreDNS and add-ons |
+| Launch templates of all nodes | IMDSv2 required, hop limit 1, encrypted gp3 root volume, instance tag `project=gpu-sandbox-on-aws` | pods cannot reach node credentials. The cleanup script (`08_cleanup.sh`) finds leftover instances by this tag |
 
-    - **Tags on the private subnets**: they are tagged `kubernetes.io/role/internal-elb=1` and `karpenter.sh/discovery=<CLUSTER_NAME>`. The HyperPod script ([07](07_hyperpod.md)) finds a subnet by the internal-elb tag, and the Production Karpenter EC2NodeClasses by the discovery tag.
-    - **Self-managed copies of the add-ons**: the self-managed copies of these components are not installed (`BootstrapSelfManagedAddons: false`).
+- **Tags on the private subnets**: they are tagged `kubernetes.io/role/internal-elb=1` and `karpenter.sh/discovery=<CLUSTER_NAME>`. The HyperPod script ([07](07_hyperpod.md)) finds a subnet by the internal-elb tag, and the Production Karpenter EC2NodeClasses by the discovery tag.
+- **Self-managed copies of the add-ons**: the self-managed copies of these components are not installed (`BootstrapSelfManagedAddons: false`).
 
 ### Node groups per scenario
 
@@ -282,140 +302,150 @@ B1 (`--hyperpod`) has no trainer line, B2 only the two system nodes, and C two s
 
 ### Trainer and gVisor node groups
 
-??? note "Details"
-    | Item | `trainer` (scenario A only) | `sandbox-gvisor` (A, B1) |
-    |---|---|---|
-    | Instance | `${TRAINER_INSTANCE_TYPE}` (`g5.2xlarge`, one A10G) | `${GVISOR_INSTANCE_TYPE}` (`g5.xlarge`, one A10G) |
-    | AMI | `AmiType: AL2023_x86_64_NVIDIA` (EKS AL2023 NVIDIA AMI) | same |
-    | Size | desired 1, min 0, max 1, 200 GB | desired `${GVISOR_NODES}` (2), min 0, max 4, 100 GB |
-    | Network, IMDS | private subnets, IMDSv2 and hop limit 1 from the launch template | same |
-    | Labels | `gpusandbox/role=trainer`, `gpusandbox/device-plugin=cdi`, `nvidia.com/gpu.deploy.operands=false` | `gpusandbox/role=sandbox-gvisor`, `gpusandbox/device-plugin=cdi`, `nvidia.com/gpu.deploy.operands=false` |
-    | Taint | `gpusandbox/role=trainer:NoSchedule` | `gpusandbox/role=sandbox-gvisor:NoSchedule` |
-    | User data | none | MIME multipart: a NodeConfig (adds a `runsc` runtime handler to containerd), `install-gvisor.sh`, `node-guard.sh` |
-    | Container runtime | runc (trusted training code) | runsc (model-written code) |
+| Item | `trainer` (scenario A only) | `sandbox-gvisor` (A, B1) |
+|---|---|---|
+| Instance | `${TRAINER_INSTANCE_TYPE}` (`g5.2xlarge`, one A10G) | `${GVISOR_INSTANCE_TYPE}` (`g5.xlarge`, one A10G) |
+| AMI | `AmiType: AL2023_x86_64_NVIDIA` (EKS AL2023 NVIDIA AMI) | same |
+| Size | desired 1, min 0, max 1, 200 GB | desired `${GVISOR_NODES}` (2), min 0, max 4, 100 GB |
+| Network, IMDS | private subnets, IMDSv2 and hop limit 1 from the launch template | same |
+| Labels | `gpusandbox/role=trainer`, `gpusandbox/device-plugin=cdi`, `nvidia.com/gpu.deploy.operands=false` | `gpusandbox/role=sandbox-gvisor`, `gpusandbox/device-plugin=cdi`, `nvidia.com/gpu.deploy.operands=false` |
+| Taint | `gpusandbox/role=trainer:NoSchedule` | `gpusandbox/role=sandbox-gvisor:NoSchedule` |
+| User data | none | MIME multipart: a NodeConfig (adds a `runsc` runtime handler to containerd), `install-gvisor.sh`, `node-guard.sh` |
+| Container runtime | runc (trusted training code) | runsc (model-written code) |
 
-    `gpusandbox/device-plugin=cdi` selects the nodes for the device plugin that `04_install_gpu_stack.sh` installs, and `nvidia.com/gpu.deploy.operands=false` keeps the GPU Operator that the Kata GPU node step (`scripts/kata/gpu_nodes.sh`) installs away from these nodes.
+`gpusandbox/device-plugin=cdi` selects the nodes for the device plugin that `04_install_gpu_stack.sh` installs, and `nvidia.com/gpu.deploy.operands=false` keeps the GPU Operator that the Kata GPU node step (`scripts/kata/gpu_nodes.sh`) installs away from these nodes.
 
-    `infra/eks/userdata.py` builds the gVisor node group's user data.
+`infra/eks/userdata.py` builds the gVisor node group's user data.
 
-    ??? note "How the user data is merged"
-        - The launch template sets no AMI, so EKS merges in the bootstrap the node needs to join (per the EKS launch template documentation).
-        - nodeadm merges the first part, the NodeConfig, on every boot, so the `runsc` handler survives reboots.
+??? note "How the user data is merged"
+    - The launch template sets no AMI, so EKS merges in the bootstrap the node needs to join (per the EKS launch template documentation).
+    - nodeadm merges the first part, the NodeConfig, on every boot, so the `runsc` handler survives reboots.
 
-    The next command prints it locally, without AWS.
+The next command prints it locally, without AWS.
 
-    ```bash
-    source scripts/config.env
-    python3 infra/eks/userdata.py gvisor-gpu "$GVISOR_RELEASE" | head -23
-    ```
+```bash
+source scripts/config.env
+python3 infra/eks/userdata.py gvisor-gpu "$GVISOR_RELEASE" | head -23
+```
 
-    **What to look for:** run locally with the example settings, the first 23 lines are:
+**What to look for:** run locally with the example settings, the first 23 lines are:
 
-    ```text
-    MIME-Version: 1.0
-    Content-Type: multipart/mixed; boundary="GPUSANDBOX"
+```text
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="GPUSANDBOX"
 
-    --GPUSANDBOX
-    Content-Type: application/node.eks.aws
+--GPUSANDBOX
+Content-Type: application/node.eks.aws
 
-    apiVersion: node.eks.aws/v1alpha1
-    kind: NodeConfig
-    spec:
-      containerd:
-        config: |
-          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]
-            runtime_type = 'io.containerd.runsc.v1'
-          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc.options]
-            TypeUrl = 'io.containerd.runsc.v1.options'
-            ConfigPath = '/etc/containerd/runsc.toml'
+apiVersion: node.eks.aws/v1alpha1
+kind: NodeConfig
+spec:
+  containerd:
+    config: |
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]
+        runtime_type = 'io.containerd.runsc.v1'
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc.options]
+        TypeUrl = 'io.containerd.runsc.v1.options'
+        ConfigPath = '/etc/containerd/runsc.toml'
 
-    --GPUSANDBOX
-    Content-Type: text/x-shellscript; charset="us-ascii"
+--GPUSANDBOX
+Content-Type: text/x-shellscript; charset="us-ascii"
 
-    #!/bin/bash
-    export GVISOR_RELEASE="20261109.0"
-    export GVISOR_NVPROXY="true"
-    ```
+#!/bin/bash
+export GVISOR_RELEASE="20261109.0"
+export GVISOR_NVPROXY="true"
+```
 
-    The AMI ships containerd 2.3.7 with config schema v3, and the RuntimeClass that `04_install_gpu_stack.sh` registers uses `handler: runsc` to match the `runtimes.runsc` key here.
+The AMI ships containerd 2.3.7 with config schema v3, and the RuntimeClass that `04_install_gpu_stack.sh` registers uses `handler: runsc` to match the `runtimes.runsc` key here.
 
 ### Boot order of a gVisor node
 
-??? note "Details"
-    ```mermaid
-    flowchart LR
-        A["nodeadm-config<br/>reads the NodeConfig"] --> B["user data<br/>install-gvisor.sh<br/>node-guard.sh"] --> C["nodeadm-run<br/>starts containerd, kubelet"]
-    ```
+```mermaid
+flowchart LR
+    A["nodeadm-config<br/>reads the NodeConfig"] --> B["user data<br/>install-gvisor.sh<br/>node-guard.sh"] --> C["nodeadm-run<br/>starts containerd, kubelet"]
+```
 
-    *Takeaway: user data runs before containerd and kubelet, so `runsc` and the node guard are ready before the node accepts pods.*
+*Takeaway: user data runs before containerd and kubelet, so `runsc` and the node guard are ready before the node accepts pods.*
 
 ### install-gvisor.sh
 
-??? note "Details"
-    `infra/gvisor/install-gvisor.sh` installs a pinned gVisor release (shipped as tarballs only since release-20260831).
+`infra/gvisor/install-gvisor.sh` installs a pinned gVisor release (shipped as tarballs only since release-20260831).
 
-    1. It builds the URL from the `GVISOR_RELEASE` exported at the top of the user data and `uname -m`: `https://storage.googleapis.com/gvisor/releases/release/${GVISOR_RELEASE}/${ARCH}`
-    2. It installs `bzip2` if missing and downloads `gvisor.tar.bz2` and `gvisor.tar.bz2.sha512`.
-    3. It checks integrity with `sha512sum -c gvisor.tar.bz2.sha512`; on failure, `set -euo pipefail` stops it right there.
-    4. It unpacks `runsc`, `containerd-shim-runsc-v1` and `gvisor-bin/` into `/usr/local/bin` (`gvisor-bin/` must stay next to `runsc`).
-    5. It writes `/etc/containerd/runsc.toml` (explained in [02 gVisor GPU sandboxes](02_gvisor.md)) and warns if the loaded NVIDIA driver is not in `runsc nvproxy list-supported-drivers`.
+1. It builds the URL from the `GVISOR_RELEASE` exported at the top of the user data and `uname -m`: `https://storage.googleapis.com/gvisor/releases/release/${GVISOR_RELEASE}/${ARCH}`
+2. It installs `bzip2` if missing and downloads `gvisor.tar.bz2` and `gvisor.tar.bz2.sha512`.
+3. It checks integrity with `sha512sum -c gvisor.tar.bz2.sha512`; on failure, `set -euo pipefail` stops it right there.
+4. It unpacks `runsc`, `containerd-shim-runsc-v1` and `gvisor-bin/` into `/usr/local/bin` (`gvisor-bin/` must stay next to `runsc`).
+5. It writes `/etc/containerd/runsc.toml` (explained in [02 gVisor GPU sandboxes](02_gvisor.md)) and warns if the loaded NVIDIA driver is not in `runsc nvproxy list-supported-drivers`.
 
 ### node-guard.sh
 
-??? note "Details"
-    An iptables rule set for sandbox nodes only (gVisor, Kata CPU, Kata GPU). The VPC CNI network policy agent always allows traffic between a pod and its own node's IP so that kubelet probes are never blocked (per the policy agent source). A default-deny NetworkPolicy alone therefore does not stop candidate code from reaching node-local daemons (kubelet, hostNetwork services, metrics ports). The script installs the rules below; you do not run them.
+An iptables rule set for sandbox nodes only (gVisor, Kata CPU, Kata GPU). The VPC CNI network policy agent always allows traffic between a pod and its own node's IP so that kubelet probes are never blocked (per the policy agent source). A default-deny NetworkPolicy alone therefore does not stop candidate code from reaching node-local daemons (kubelet, hostNetwork services, metrics ports). The script installs the rules below; you do not run them.
 
-    ```bash
-    iptables -w -N GPUSANDBOX-GUARD 2>/dev/null || iptables -w -F GPUSANDBOX-GUARD
-    iptables -w -A GPUSANDBOX-GUARD -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
-    iptables -w -A GPUSANDBOX-GUARD -j DROP
-    iptables -w -C INPUT -i eni+ -j GPUSANDBOX-GUARD 2>/dev/null \
-      || iptables -w -I INPUT 1 -i eni+ -j GPUSANDBOX-GUARD
-    ```
+```bash
+iptables -w -N GPUSANDBOX-GUARD 2>/dev/null || iptables -w -F GPUSANDBOX-GUARD
+iptables -w -A GPUSANDBOX-GUARD -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+iptables -w -A GPUSANDBOX-GUARD -j DROP
+iptables -w -C INPUT -i eni+ -j GPUSANDBOX-GUARD 2>/dev/null \
+  || iptables -w -I INPUT 1 -i eni+ -j GPUSANDBOX-GUARD
+```
 
-    New connections from the VPC CNI pod veth interfaces (prefix `eni`) to the node are dropped; replies to connections the node opened (kubelet probes) pass. The rules are registered as the systemd unit `gpusandbox-node-guard.service` (oneshot, `Before=kubelet.service`) and applied on every boot; the sandbox pod's readiness self-test and the pool verification (`scripts/ops/verify.sh`) check that traffic is actually blocked ([04 Deploy and verify sandbox pools](04_sandbox_pools.md)).
+New connections from the VPC CNI pod veth interfaces (prefix `eni`) to the node are dropped; replies to connections the node opened (kubelet probes) pass. The rules are registered as the systemd unit `gpusandbox-node-guard.service` (oneshot, `Before=kubelet.service`) and applied on every boot; the sandbox pod's readiness self-test and the pool verification (`scripts/ops/verify.sh`) check that traffic is actually blocked ([04 Deploy and verify sandbox pools](04_sandbox_pools.md)).
 
 ### Manifest rendering (render.py)
 
-??? note "Details"
-    The scripts from `04_install_gpu_stack.sh` onward fill the templates under `k8s/` (`*.tpl`) with `scripts/render.py` and apply them. It substitutes `${VAR}` from environment variables and `KEY=VALUE` arguments.
+The scripts from `04_install_gpu_stack.sh` onward fill the templates under `k8s/` (`*.tpl`) with `scripts/render.py` and apply them. It substitutes `${VAR}` from environment variables and `KEY=VALUE` arguments.
 
-    - **When a variable name the template references is in neither the environment nor the arguments**: unlike envsubst, it stops. So a typo in a variable name never yields a manifest with an empty image name or namespace.
-    - **A variable defined as an empty string (for example `ACTIVE_RUNTIME=`)**: it is inserted as is.
-    - **The `$$` (literal `$`) and `@@include path@@` syntax**: see the [Repository map](../reference/repository_map.md).
+- **When a variable name the template references is in neither the environment nor the arguments**: unlike envsubst, it stops. So a typo in a variable name never yields a manifest with an empty image name or namespace.
+- **A variable defined as an empty string (for example `ACTIVE_RUNTIME=`)**: it is inserted as is.
+- **The `$$` (literal `$`) and `@@include path@@` syntax**: see the [Repository map](../reference/repository_map.md).
 
-    You can see the rendered result locally, without contacting AWS.
+You can see the rendered result locally, without contacting AWS.
 
-    ```bash
-    source scripts/config.env
-    python3 scripts/render.py k8s/base/routing.json.tpl ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v1 | head -3
-    ```
+```bash
+source scripts/config.env
+python3 scripts/render.py k8s/base/routing.json.tpl ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v1 | head -3
+```
 
-    **What to look for:** the start of the routing table that `05_setup_namespaces_auth.sh` creates.
+**What to look for:** the start of the routing table that `05_setup_namespaces_auth.sh` creates.
 
-    ```text
-    {
-      "active": {"runtime": "gvisor", "version": "v1"},
-      "pools": {
-    ```
+```text
+{
+  "active": {"runtime": "gvisor", "version": "v1"},
+  "pools": {
+```
 
-    **If it fails:**
+**If it fails:**
 
-    - **On `render: <template>: missing variable 'X'`**: the renderer did not receive `X` as an environment variable or a `KEY=VALUE` argument. A value in `config.env` or your shell does not reach it unless it is exported, so check that it is written as `export X=...` or pass `X=...` to the `render.py` command.
-    - **If that does not help**: see the "config and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
+- **On `render: <template>: missing variable 'X'`**: the renderer did not receive `X` as an environment variable or a `KEY=VALUE` argument. A value in `config.env` or your shell does not reach it unless it is exported, so check that it is written as `export X=...` or pass `X=...` to the `render.py` command.
+- **If that does not help**: see the "config and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
+
+</details>
 
 ## Build and push the images: `03_build_push_images.sh`
 
-Build the three images and push them to ECR. For scenario B, use the second line from the start to save a tag.
+Choose the same scenario as your cluster. The B1/B2 trainer needs `hyperpodrun`. C uses only the sandbox and control images.
 
-```bash
-scripts/03_build_push_images.sh
-HYPERPOD=1 scripts/03_build_push_images.sh    # scenario B: the trainer image also gets hyperpodrun
-```
+=== "A · EC2"
+
+    ```bash
+    scripts/03_build_push_images.sh
+    ```
+
+=== "B1 / B2 · HyperPod"
+
+    ```bash
+    HYPERPOD=1 scripts/03_build_push_images.sh
+    ```
+
+=== "C · CPU"
+
+    ```bash
+    scripts/03_build_push_images.sh --no-trainer
+    ```
 
 The script logs in to ECR, creates missing repositories with `scanOnPush=true` and `--image-tag-mutability IMMUTABLE`, and builds and pushes each image with `docker buildx build --platform linux/amd64 ... --push`.
 
-**What to look for:** it ends by printing these three lines; paste them into `scripts/config.env`.
+**What to look for:** paste the printed `export` lines into `scripts/config.env`. A and B print all three below. C prints the sandbox and control URIs.
 
 ```text
 Add to scripts/config.env:
@@ -427,9 +457,12 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 **If it fails:** if the build is very slow or a push fails, see the "config and scripts" section of [Troubleshooting](../reference/troubleshooting.md).
 
 !!! warning "Tags cannot be overwritten (IMMUTABLE)"
-    Pushing a tag that already exists returns `ImageTagAlreadyExistsException`. This is deliberate: if one tag pointed at different images, you could not trace which sandbox version scored a reward. To rebuild, bump `IMAGE_TAG` in `scripts/config.env` (for example `v2`), rerun the script and update config.env with the three printed URIs.
+    Pushing a tag that already exists returns `ImageTagAlreadyExistsException`. This is deliberate: if one tag pointed at different images, you could not trace which sandbox version scored a reward. To rebuild, bump `IMAGE_TAG` in `scripts/config.env` (for example `v2`), rerun the script and update config.env with the printed URIs.
 
 The base images (PyTorch, vLLM) are large, so the build needs a lot of disk and time; on an arm64 workstation, build on an x86_64 host with 100+ GB of disk.
+
+<details class="note" markdown="1">
+<summary>Image contents and trainer dependency versions</summary>
 
 ### What the three images contain
 
@@ -448,18 +481,19 @@ gVisor and Kata share the sandbox image.
 
 ### Version pinning in the trainer image
 
-??? note "Details"
-    | Component | Version | Pinned by |
-    |---|---|---|
-    | vLLM | 0.33.0 | base image `vllm/vllm-openai:v0.33.0` |
-    | TRL | 1.18.0 | `ARG TRL_VERSION`; TRL allows `vllm>=0.23.0,<0.34.0` |
-    | torch | 2.14.0 | pinned by vLLM 0.33.0 |
-    | transformers | `>=5.16.1,<5.21` | pinned by vLLM 0.33.0 |
-    | PEFT | 0.21.3 | `ARG PEFT_VERSION` |
+| Component | Version | Pinned by |
+|---|---|---|
+| vLLM | 0.33.0 | base image `vllm/vllm-openai:v0.33.0` |
+| TRL | 1.18.0 | `ARG TRL_VERSION`; TRL allows `vllm>=0.23.0,<0.34.0` |
+| torch | 2.14.0 | pinned by vLLM 0.33.0 |
+| transformers | `>=5.16.1,<5.21` | pinned by vLLM 0.33.0 |
+| PEFT | 0.21.3 | `ARG PEFT_VERSION` |
 
-    The Dockerfile writes the torch, transformers, vllm and triton versions from `pip freeze` to a constraints file and adds `-c /tmp/constraints.txt` to every later `pip install`, so pip cannot quietly upgrade torch or vLLM while installing TRL or PEFT. The final `python -c "import trl, peft, vllm, gpusandbox.rewards; ..."` checks import compatibility during the build.
+The Dockerfile writes the torch, transformers, vllm and triton versions from `pip freeze` to a constraints file and adds `-c /tmp/constraints.txt` to every later `pip install`, so pip cannot quietly upgrade torch or vLLM while installing TRL or PEFT. The final `python -c "import trl, peft, vllm, gpusandbox.rewards; ..."` checks import compatibility during the build.
 
-    The two images may differ in torch version (sandbox 2.14.1, trainer 2.14.0): they talk only through JSON over HTTP, and the reference kernel is timed with the sandbox's torch.
+The two images may differ in torch version (sandbox 2.14.1, trainer 2.14.0): they talk only through JSON over HTTP, and the reference kernel is timed with the sandbox's torch.
+
+</details>
 
 ## How to verify
 

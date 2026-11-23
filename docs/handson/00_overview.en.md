@@ -8,6 +8,8 @@ Send code to a sandbox and follow its verdict into a training step. You can also
 - **[B1 · Train on HyperPod](07_hyperpod.md)** Run the trainer on HyperPod and grade its code on an EC2 gVisor pool.
 - **[C · Switch pools without GPUs](10_cpu_only.md)** Compare three CPU runtimes and switch from v1 to v2 as the simulator sends submissions.
 
+After choosing a path, **check the nodes and then the grading pool**. A `Ready` node can accept pods. Later, `verified` on the grading pool means the sample submissions received their expected verdicts. Look for each result at its own step.
+
 ## Check before deploying { #prerequisites }
 
 Complete the local test and `scripts/config.env` setup in [Getting started](../getting_started.md). From the repository root, run the read-only check for your tools and AWS account configuration.

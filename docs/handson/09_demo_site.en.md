@@ -1,17 +1,20 @@
 # 09 Demo site (CloudFront)
 
-!!! info "TL;DR"
-    Replay evaluation recordings in a browser. Preview the sample, or review and deploy your own GPU recording to CloudFront.
+In the [public demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#try), pick a submission and replay its grading run. The browser replays saved results, so you can inspect gVisor and Kata verdicts, training logs and benchmarks without an AWS account.
 
-    **Completion check** Check the recording and replay locally. If you deploy, verify the public URL too.
+- **Preview on your computer.** Open the [local sample](#1-preview-locally) and replay one correct and one incorrect answer. This CPU sample and the public GPU recording have different sources.
+- **Publish your lab results.** [Record a GPU run](#2-make-a-gpu-recording-on-the-cluster), [review the files for publication](#25-review-before-publishing), then [deploy to CloudFront](#4-deploy-demodeploysh). At the deployed URL, select the same answer and check your recording's pool name and verdict.
 
-**Before you start:**
+<details class="note" markdown="1">
+<summary>What you need to make your own recordings</summary>
 
 - You need the local Python environment (section 2 of [Getting started](../getting_started.md)).
 - **GPU recording**: needs the pools deployed in [04](04_sandbox_pools.md).
 - **GRPO chart in section 4**: needs the training log from [05](05_grpo_training.md).
 - **Version switch chart in section 4**: can come from a training log that went through the switch in [06](06_sandbox_update.md) or from the CPU simulation log in [10](10_cpu_only.md).
 - What the verdicts and rewards mean is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
+
+</details>
 
 ??? note "Terms (expand if a word is new to you)"
     - **Static site**: a site that serves only HTML, CSS and JavaScript files, with no server-side code.
@@ -33,6 +36,9 @@
 The first screen opens the scoring replay, benchmarks, or deployment diagrams. Use **Play the tour** for the subtitled walkthrough.
 
 ![Replay controls, the B1 diagram video cover, and four run totals](../images/demo/demo-overview-en.png)
+
+<details class="note" markdown="1">
+<summary>Data sources for each part of the demo</summary>
 
 | Section | What it shows | Data |
 |---|---|---|
@@ -56,6 +62,8 @@ The published data and recordings are these.
 - **The repository's `recording.json` sample**: a laptop CPU pool recording; replace it with a GPU recording made on your cluster.
 - The published GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. In the training tab you can select the five-step EC2 run or the one-step HyperPod B1 run. The B1 benchmark compares two clients submitting the same fixed kernel to one pool. [B1 measurements](08_benchmark.md#hyperpod-b1)
 - **Progress bar in section 2**: the recorded total evaluation time. Per-stage times are not recorded, so the stages are filled in from the verdict once the evaluation ends.
+
+</details>
 
 [View the EKS benchmark results](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results)
 
@@ -307,6 +315,9 @@ cp /tmp/rec.json /tmp/demo-preview/data/recording.json
 python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 ```
 
+<details class="note" markdown="1">
+<summary>Add training logs, benchmarks and a recorded tour</summary>
+
 ### 2.6 Build the training, benchmark and terminal data (extras.json)
 
 `demo/build_extras.py` builds `extras.json` from the output of commands run against the cluster. Every input is a text file saved on the operator workstation.
@@ -393,6 +404,11 @@ python3 demo/check_arch_layout.py --shots /tmp/arch  # also saves one PNG per pa
 
 **What to look for:** the last line is `ok`. Text sizes vary a little with the fonts; this was checked on 2026-11-19 with Chromium on Linux.
 
+</details>
+
+<details class="note" markdown="1">
+<summary>Regenerate the local CPU sample</summary>
+
 ## 3. Regenerate the sample recording (local, no AWS)
 
 Regenerate the sample `demo/site/data/recording.json` on a laptop, with no GPU.
@@ -422,20 +438,33 @@ After regenerating, check the schema and reward consistency with `python -m pyte
 
 **If it fails:** `ModuleNotFoundError` means the virtual environment is not active or an install step was missed; run section 2 of [Getting started](../getting_started.md) again.
 
+</details>
+
 ## 4. Deploy (demo/deploy.sh)
 
 Choose whether to publish the sample or your own recording, and review the selected files before publishing.
 
 `demo/deploy.sh` creates one CloudFormation stack (site bucket, log bucket, OAC, response headers policy, WAF web ACL, CloudFront distribution and its log delivery, bucket policies), uploads the static files and the recording, and checks the public state.
 
-```bash
-# Publish the shipped sample recording (always us-east-1)
-demo/deploy.sh
-# Publish your GPU recording instead (EXTRAS defaults to demo/site/data/extras.json)
-RECORDING=/tmp/rec.json demo/deploy.sh
-# The 2026-11-18 public demo
-RECORDING=demo/recordings/2026-11-18-eks-gpu.json demo/deploy.sh
-```
+Choose the one recording to publish. If your recording is elsewhere, replace `/tmp/rec.json` with its actual path.
+
+=== "My GPU recording"
+
+    ```bash
+    RECORDING=/tmp/rec.json demo/deploy.sh
+    ```
+
+=== "CPU sample"
+
+    ```bash
+    demo/deploy.sh
+    ```
+
+=== "Bundled GPU recording"
+
+    ```bash
+    RECORDING=demo/recordings/2026-11-18-eks-gpu.json demo/deploy.sh
+    ```
 
 **The Region is fixed to us-east-1,** because a WAF web ACL for CloudFront and CloudFront log delivery are us-east-1 resources.
 
@@ -491,6 +520,9 @@ Step 7 moves on to the header check even if 200 never arrives, so open the final
 - **`http:// returned <code>, expected a 301 redirect to https`**: check that the distribution's `ViewerProtocolPolicy` is `redirect-to-https`; if it is still propagating, run it again a few minutes later.
 - **If stack creation failed**: find the failed resource and the reason with `aws cloudformation describe-stack-events --region us-east-1 --stack-name gpu-sandbox-demo`. Cleanup and cost issues are in the "Cleanup and cost" section of [Troubleshooting](../reference/troubleshooting.md).
 
+<details class="note" markdown="1">
+<summary>Custom domain and CloudFront security configuration</summary>
+
 ## 5. Custom domain (optional)
 
 With the default `*.cloudfront.net` certificate the viewer security policy is TLSv1 and cannot be raised (per the CloudFront documentation), and the default domain of the 2026-11-18 deployment accepted TLS 1.0 and 1.1 handshakes (it also offers TLS 1.2 and 1.3). To accept only TLS 1.2 and later, use a custom domain with an ACM certificate. When both values are set, the template applies `sni-only` and `TLSv1.2_2021`.
@@ -519,66 +551,67 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name gpu-sandbox-d
 
 CloudFront serves the recordings uploaded to S3. Review the files before publishing.
 
-??? note "Details"
-    The settings live in [`demo/infra/site.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/demo/infra/site.yaml) and [`demo/site`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/demo/site).
+The settings live in [`demo/infra/site.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/demo/infra/site.yaml) and [`demo/site`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/demo/site).
 
-    | Layer | Setting | What it prevents |
-    |---|---|---|
-    | Bucket | All four Block Public Access settings (`BlockPublicAcls`, `IgnorePublicAcls`, `BlockPublicPolicy`, `RestrictPublicBuckets`) turned on | The bucket or its objects becoming public through a policy or an ACL |
-    | Bucket | Object Ownership `BucketOwnerEnforced` (ACLs disabled) | Permissions leaking through ACLs. This is the setting the OAC documentation recommends |
-    | Bucket | Default encryption with SSE-S3 (`AES256`) | Stored objects left unencrypted |
-    | Bucket policy | `s3:GetObject` allowed only for `cloudfront.amazonaws.com`, and only when `AWS:SourceArn` is this distribution's ARN | Other CloudFront distributions (including those in other accounts) reading this bucket |
-    | Bucket policy | Deny every `s3:*` request where `aws:SecureTransport` is `false` | Accessing the bucket over plain HTTP |
-    | OAC | `SigningBehavior: always`, `sigv4` | Unsigned origin requests |
-    | CloudFront | `ViewerProtocolPolicy: redirect-to-https` | Viewing the page over plain HTTP |
-    | CloudFront | `AllowedMethods: [GET, HEAD]` | Write requests such as PUT, POST and DELETE |
-    | CloudFront | `DefaultRootObject: index.html` | Exposing the distribution's contents on a request for the root URL |
-    | WAF | A web ACL attached to the distribution (scope `CLOUDFRONT`, default action Allow): a rate limit, a limit on the video path, and three AWS managed rule groups | Excessive requests from one IP and transfer cost from repeated video downloads, IPs on the reputation list, common web attack patterns and known bad inputs |
-    | Access logs | CloudFront standard logging v2 (CloudWatch Logs vended delivery: `AWS::Logs::DeliverySource`, `DeliveryDestination`, `Delivery`) into the log bucket | No record of access to the public endpoint |
-    | Access logs | S3 server access logs of the site bucket into the same log bucket under the `s3-access/` prefix | No record of bucket access |
-    | Log bucket | All four Block Public Access settings, `BucketOwnerEnforced`, SSE-S3, 90-day expiration, non-TLS requests denied, restricted writes, `DeletionPolicy: Retain` | Logs becoming public or piling up forever, and logs disappearing with the stack |
-    | Response headers | CSP `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` | External scripts, styles, media, connections, form submissions, and framing by other sites |
-    | Response headers | HSTS `max-age` 63072000, `includeSubDomains` | Downgrading to HTTP |
-    | Response headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` | MIME sniffing, clickjacking, referrer leaks, use of browser features |
-    | Page | Every value from the data goes in as a text node (charts are SVG elements with text nodes); no HTML insertion such as `innerHTML` is used | Strings in the data (error tails and policy violations produced by evaluated code, terminal output) running as HTML or script |
-    | Published data | `build_extras.py` masks internal addresses and identifiers, and `deploy.sh` runs the same scan (`--check`) again before uploading | Internal addresses and identifiers in cluster logs becoming public, and unscanned data showing up in the videos |
-    | Upload | `aws s3 sync` uploads only an allow list, and only the two scanned data files are uploaded separately | Leftover or unscanned files in `demo/site` becoming public |
+| Layer | Setting | What it prevents |
+|---|---|---|
+| Bucket | All four Block Public Access settings (`BlockPublicAcls`, `IgnorePublicAcls`, `BlockPublicPolicy`, `RestrictPublicBuckets`) turned on | The bucket or its objects becoming public through a policy or an ACL |
+| Bucket | Object Ownership `BucketOwnerEnforced` (ACLs disabled) | Permissions leaking through ACLs. This is the setting the OAC documentation recommends |
+| Bucket | Default encryption with SSE-S3 (`AES256`) | Stored objects left unencrypted |
+| Bucket policy | `s3:GetObject` allowed only for `cloudfront.amazonaws.com`, and only when `AWS:SourceArn` is this distribution's ARN | Other CloudFront distributions (including those in other accounts) reading this bucket |
+| Bucket policy | Deny every `s3:*` request where `aws:SecureTransport` is `false` | Accessing the bucket over plain HTTP |
+| OAC | `SigningBehavior: always`, `sigv4` | Unsigned origin requests |
+| CloudFront | `ViewerProtocolPolicy: redirect-to-https` | Viewing the page over plain HTTP |
+| CloudFront | `AllowedMethods: [GET, HEAD]` | Write requests such as PUT, POST and DELETE |
+| CloudFront | `DefaultRootObject: index.html` | Exposing the distribution's contents on a request for the root URL |
+| WAF | A web ACL attached to the distribution (scope `CLOUDFRONT`, default action Allow): a rate limit, a limit on the video path, and three AWS managed rule groups | Excessive requests from one IP and transfer cost from repeated video downloads, IPs on the reputation list, common web attack patterns and known bad inputs |
+| Access logs | CloudFront standard logging v2 (CloudWatch Logs vended delivery: `AWS::Logs::DeliverySource`, `DeliveryDestination`, `Delivery`) into the log bucket | No record of access to the public endpoint |
+| Access logs | S3 server access logs of the site bucket into the same log bucket under the `s3-access/` prefix | No record of bucket access |
+| Log bucket | All four Block Public Access settings, `BucketOwnerEnforced`, SSE-S3, 90-day expiration, non-TLS requests denied, restricted writes, `DeletionPolicy: Retain` | Logs becoming public or piling up forever, and logs disappearing with the stack |
+| Response headers | CSP `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` | External scripts, styles, media, connections, form submissions, and framing by other sites |
+| Response headers | HSTS `max-age` 63072000, `includeSubDomains` | Downgrading to HTTP |
+| Response headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` | MIME sniffing, clickjacking, referrer leaks, use of browser features |
+| Page | Every value from the data goes in as a text node (charts are SVG elements with text nodes); no HTML insertion such as `innerHTML` is used | Strings in the data (error tails and policy violations produced by evaluated code, terminal output) running as HTML or script |
+| Published data | `build_extras.py` masks internal addresses and identifiers, and `deploy.sh` runs the same scan (`--check`) again before uploading | Internal addresses and identifiers in cluster logs becoming public, and unscanned data showing up in the videos |
+| Upload | `aws s3 sync` uploads only an allow list, and only the two scanned data files are uploaded separately | Leftover or unscanned files in `demo/site` becoming public |
 
-    - **`always` in OAC**: with every origin request signed (`always`), traffic between CloudFront and S3 also uses HTTPS only (CloudFront documentation).
-    - **WAF rules**: a rate limit that blocks an IP above 1000 requests per 5 minutes, a separate limit of 100 requests per 5 minutes per IP on the video path (`/media/`), and the AWS managed rule groups `AWSManagedRulesAmazonIpReputationList`, `AWSManagedRulesCommonRuleSet` and `AWSManagedRulesKnownBadInputsRuleSet`.
-    - **Restricted writes on the log bucket**: writes are allowed only for this account's log delivery services (`logging.s3.amazonaws.com`, `delivery.logs.amazonaws.com`).
-    - **Files the page loads**: `index.html` loads only `style.css` and `app.js`, and `app.js` fetches only `data/recording.json` and `data/extras.json` from the same origin. The videos also play from `media/` on the same origin.
-    - **Values masked in published data**: IP addresses (IPv4, IPv6, pod DNS form), node names, AWS endpoint hosts, account IDs, ARNs, EC2 resource IDs and tokens. `record_tour.py` runs the same scan before recording and keeps the hashes of the data it recorded, so `deploy.sh` warns when the published data differs.
-    - **Upload allow list**: `index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`.
+- **`always` in OAC**: with every origin request signed (`always`), traffic between CloudFront and S3 also uses HTTPS only (CloudFront documentation).
+- **WAF rules**: a rate limit that blocks an IP above 1000 requests per 5 minutes, a separate limit of 100 requests per 5 minutes per IP on the video path (`/media/`), and the AWS managed rule groups `AWSManagedRulesAmazonIpReputationList`, `AWSManagedRulesCommonRuleSet` and `AWSManagedRulesKnownBadInputsRuleSet`.
+- **Restricted writes on the log bucket**: writes are allowed only for this account's log delivery services (`logging.s3.amazonaws.com`, `delivery.logs.amazonaws.com`).
+- **Files the page loads**: `index.html` loads only `style.css` and `app.js`, and `app.js` fetches only `data/recording.json` and `data/extras.json` from the same origin. The videos also play from `media/` on the same origin.
+- **Values masked in published data**: IP addresses (IPv4, IPv6, pod DNS form), node names, AWS endpoint hosts, account IDs, ARNs, EC2 resource IDs and tokens. `record_tour.py` runs the same scan before recording and keeps the hashes of the data it recorded, so `deploy.sh` warns when the published data differs.
+- **Upload allow list**: `index.html`, `app.js`, `style.css`, `architecture.html`, `arch.js`, `icons/*.svg`, `media/tour-*.mp4`, `media/tour-*.jpg`.
 
-    Every response header uses `Override: true`, so the policy value wins over the same header sent by the origin. The bucket policy's `AWS:SourceArn` condition is a fixed value, so S3 does not consider the policy public and it applies with `BlockPublicPolicy` turned on (the definition of "public" in the S3 documentation).
+Every response header uses `Override: true`, so the policy value wins over the same header sent by the origin. The bucket policy's `AWS:SourceArn` condition is a fixed value, so S3 does not consider the policy public and it applies with `BlockPublicPolicy` turned on (the definition of "public" in the S3 documentation).
 
-    !!! warning "This page is public"
-        The demo is public by design and the template has no authentication or access control; WAF only blocks abnormal requests with a rate limit and managed rules. Anyone with the URL can view it, so go through the review in 2.5 before uploading.
+!!! warning "This page is public"
+    The demo is public by design and the template has no authentication or access control; WAF only blocks abnormal requests with a rate limit and managed rules. Anyone with the URL can view it, so go through the review in 2.5 before uploading.
 
-    !!! warning "Residual risk: TLS 1.0 and 1.1 with the default certificate"
-        With the default `*.cloudfront.net` certificate the viewer security policy is fixed at TLSv1, and on 2026-11-18 the endpoint accepted TLS 1.0 and 1.1 handshakes (it also offers TLS 1.2 and 1.3). `TLSv1.2_2021` is available only with a custom domain and an ACM certificate in us-east-1 (`DEMO_DOMAIN`, `DEMO_CERT_ARN`); see section 5. This practice account has no Route 53 hosted zone, so the default certificate was used.
+!!! warning "Residual risk: TLS 1.0 and 1.1 with the default certificate"
+    With the default `*.cloudfront.net` certificate the viewer security policy is fixed at TLSv1, and on 2026-11-18 the endpoint accepted TLS 1.0 and 1.1 handshakes (it also offers TLS 1.2 and 1.3). `TLSv1.2_2021` is available only with a custom domain and an ACM certificate in us-east-1 (`DEMO_DOMAIN`, `DEMO_CERT_ARN`); see section 5. This practice account has no Route 53 hosted zone, so the default certificate was used.
 
-    !!! note "Validation status"
-        Locally, the eleven tests in `tests/test_demo.py`, `cfn-lint demo/infra/site.yaml` and `node --check demo/site/app.js` pass. Every feature was clicked through in Chromium against a local server that sends the same CSP header as the deployment, with no CSP violation. The tests check the following.
+!!! note "Validation status"
+    Locally, the eleven tests in `tests/test_demo.py`, `cfn-lint demo/infra/site.yaml` and `node --check demo/site/app.js` pass. Every feature was clicked through in Chromium against a local server that sends the same CSP header as the deployment, with no CSP violation. The tests check the following.
 
-        - The four Block Public Access settings on the bucket
-        - That the only Allow statement is for the CloudFront service principal with an `AWS:SourceArn` condition
-        - The denial of non-TLS access, `redirect-to-https`, GET and HEAD only
-        - The CSP directives and HSTS of at least one year
-        - That the page loads nothing external, uses no HTML insertion such as `innerHTML`, fetches only `data/recording.json` and `data/extras.json`, and that the CSP has `media-src 'self'`
-        - That each verdict in the sample and in `demo/recordings/` matches its expected status and its reward equals `score_verdict`
-        - That no published data file contains an IP address, node name, account ID, ARN or token, while the masking keeps the IMDS address
-        - That `extras.json` has the expected benchmark, training, version switch and transcript structure
-        - That WAF limits `/media/` requests per IP, while `deploy.sh` uploads only an allow list and runs `--check` first
-        - That the architecture patterns page loads nothing external, injects no HTML and fetches nothing, with icon SVGs free of scripts and external references
+    - The four Block Public Access settings on the bucket
+    - That the only Allow statement is for the CloudFront service principal with an `AWS:SourceArn` condition
+    - The denial of non-TLS access, `redirect-to-https`, GET and HEAD only
+    - The CSP directives and HSTS of at least one year
+    - That the page loads nothing external, uses no HTML insertion such as `innerHTML`, fetches only `data/recording.json` and `data/extras.json`, and that the CSP has `media-src 'self'`
+    - That each verdict in the sample and in `demo/recordings/` matches its expected status and its reward equals `score_verdict`
+    - That no published data file contains an IP address, node name, account ID, ARN or token, while the masking keeps the IMDS address
+    - That `extras.json` has the expected benchmark, training, version switch and transcript structure
+    - That WAF limits `/media/` requests per IP, while `deploy.sh` uploads only an allow list and runs `--check` first
+    - That the architecture patterns page loads nothing external, injects no HTML and fetches nothing, with icon SVGs free of scripts and external references
 
-        The stack was deployed to us-east-1, and an external check after the deploy found the following ([run record](../reference/sources.md#aws-run-record)):
+    The stack was deployed to us-east-1, and an external check after the deploy found the following ([run record](../reference/sources.md#aws-run-record)):
 
-        - **Headers:** CSP, HSTS (max-age 63072000, includeSubDomains), `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: strict-origin-when-cross-origin`, Permissions-Policy
-        - **Requests:** POST, PUT and DELETE return 403, a missing path returns 403, `http://` returns 301; only GET and HEAD are allowed
-        - **Buckets:** both buckets have Block Public Access on and a policy status that is not public, and both use SSE-S3
-        - **Logging:** the log delivery to S3 exists
+    - **Headers:** CSP, HSTS (max-age 63072000, includeSubDomains), `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: strict-origin-when-cross-origin`, Permissions-Policy
+    - **Requests:** POST, PUT and DELETE return 403, a missing path returns 403, `http://` returns 301; only GET and HEAD are allowed
+    - **Buckets:** both buckets have Block Public Access on and a policy status that is not public, and both use SSE-S3
+    - **Logging:** the log delivery to S3 exists
+
+</details>
 
 ## How to verify
 

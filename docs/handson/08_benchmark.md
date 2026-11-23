@@ -1,13 +1,12 @@
 # 08 런타임 벤치마크
 
-!!! info "TL;DR"
-    같은 입력을 런타임별로 평가해 지연을 비교합니다. `ops/bench.sh`는 평가 결과와 시간을 기록하므로, 결과가 같은 경우의 지연을 비교할 수 있습니다. GPU 결과는 같은 GPU 종류끼리 비교하세요.
+같은 코드를 여러 번 보내면 **한 건을 채점하는 시간**과 **풀 전체가 초당 처리하는 건수**를 따로 볼 수 있습니다. 기존 [EKS 결과표](#runtime-results)와 [HyperPod B1 결과](#hyperpod-b1)는 클러스터 없이도 읽을 수 있습니다.
 
-    **완료 기준** pod가 Ready가 되기까지 걸린 시간과 준비된 pod가 채점에 쓴 시간을 구분하세요. 채점 시간의 p50은 일반적인 요청을, p95는 느린 요청을 보여 줍니다.
+직접 비교하려면 [v1 풀과 학습 종료 여부를 확인](#시작-전-확인)한 뒤 [풀마다 32건 보내기](#실행)를 실행하세요. 출력에서 먼저 `ok 32/32`를 찾고, 그 줄의 p50·p95와 초당 처리량을 읽으세요. 서로 다른 GPU나 pod 수를 썼다면 그 조건도 함께 적으세요.
 
 ## 다섯 EKS 풀의 채점 시간과 처리량 { #runtime-results }
 
-측정 조건은 2026-11-22, `us-west-2`, EKS 1.36, 이미지 `a20261120b`입니다. 시나리오 A의 학습과 롤백이 끝난 뒤 `scripts/ops/bench.sh 32`를 실행했습니다. 다섯 풀에 32건씩 보낸 **160건 모두 성공**했습니다. GPU 풀은 `relu_bias_triton`, CPU 풀은 `relu_bias_torch_only`를 사용했습니다.
+다섯 v1 풀에 32건씩 보내 **160건 모두 성공**했습니다. 예를 들어 EC2 gVisor 풀은 pod 두 개로 한 건을 채점하는 데 p50이 약 10초였고, 두 pod를 합쳐 초당 0.198건을 처리했습니다.
 
 | v1 풀 | 노드 | Ready pod | 성공 / 요청 | 채점 p50 (초) | 채점 p95 (초) | 풀 처리량 (건/초) |
 |---|---|---:|---:|---:|---:|---:|
@@ -17,7 +16,14 @@
 | `kata-clh-cpu` | `c8i.2xlarge` | 1 | 32/32 | 4.043 | 4.120 | 0.244 |
 | `kata-qemu-cpu` | `c8i.2xlarge` | 1 | 32/32 | 3.819 | 3.958 | 0.258 |
 
-p50과 p95는 서버가 성공한 요청 한 건을 채점하는 데 걸린 시간입니다. 처리량은 클라이언트가 빈 pod를 기다린 시간까지 포함한 풀 전체 값입니다. GPU 두 행은 A10G와 T4를 서로 다른 pod 수로 쓴 결과입니다.
+성공한 요청의 서버 채점 시간을 짧은 순서로 놓았을 때 **p50**은 절반, **p95**는 95%가 끝나는 지점입니다. 처리량은 클라이언트가 빈 pod를 기다린 시간까지 포함한 풀 전체 값입니다. GPU 두 행은 A10G와 T4를 서로 다른 pod 수로 쓴 결과입니다.
+
+<details class="note" markdown="1">
+<summary>실행 조건과 GPU·CPU에 보낸 코드</summary>
+
+시나리오 A에서 학습과 롤백을 마친 뒤 `scripts/ops/bench.sh 32`를 실행했습니다. 환경은 `us-west-2`, EKS 1.36, 이미지 `a20261120b`입니다. GPU 풀에는 `relu_bias_triton`, CPU 풀에는 `relu_bias_torch_only`를 보냈습니다. [실행 조건 원본](data/runtime-benchmark-2026-11-22.meta.json)
+
+</details>
 
 ![실행 JSONL에서 읽은 다섯 풀의 성공 수, 지연, 처리량과 커널 측정값](../images/terminal/bench-results-replay.png)
 
@@ -61,12 +67,13 @@ kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version
 
 ## 실행
 
-스크립트는 배포된 v1 풀마다 cold start를 출력하고, 평가 결과를 JSONL 파일 끝에 추가합니다.
+풀이 준비된 시간을 출력한 뒤, 각 v1 풀에 같은 제출물을 32번 보내고 결과 파일 경로를 출력합니다.
 
 ```bash
-scripts/ops/bench.sh        # 32 evaluations per pool (default)
-scripts/ops/bench.sh 64     # more requests per pool
+scripts/ops/bench.sh 32
 ```
+
+64건을 비교하려면 다음 실행에서 인자를 `64`로 바꾸세요.
 
 | 순서 | 스크립트 동작 |
 |---|---|
@@ -98,6 +105,9 @@ scripts/ops/bench.sh 64     # more requests per pool
 - **`ok`가 `requests`보다 작을 때**: bench JSON에는 실패한 요청의 status나 오류가 남지 않습니다.
 - **원인을 찾으려면**: 같은 풀에 `scripts/ops/verify.sh <runtime> v1`을 실행하세요. golden 요청에서 문제가 재현되면 `FAIL` 줄에 status와 오류가 나오니, 그 문자열로 [문제 해결](../reference/troubleshooting.md)의 "probe 도구로 /info 보기"와 "샌드박스 풀과 readiness" 항목을 찾아보세요.
 
+<details class="note" markdown="1">
+<summary>원본 JSON에서 지표 찾기</summary>
+
 ### bench JSON 필드
 
 | 필드 | 의미 |
@@ -112,11 +122,13 @@ scripts/ops/bench.sh 64     # more requests per pool
 
 `eval_*`, `speedup_median`, `ref_ms_median`은 `ok`인 결과만으로 계산합니다. 실패한 요청은 지연 통계에서 제외됩니다.
 
+</details>
+
 ## 평가 지연에 포함되는 과정
 
 `eval_p50_s`와 `eval_p95_s`는 샌드박스가 요청을 맡은 뒤 채점과 프로세스 정리에 쓴 시간으로 계산합니다. 클라이언트가 빈 pod를 기다리고 요청을 보내는 데 걸린 시간은 풀 처리량에 반영됩니다.
 
-??? note "상세 설명"
+??? note "평가 지연에 포함되는 과정"
     `duration_s`는 서버가 요청 하나를 맡은 뒤 verdict를 낼 때까지 걸린 시간으로, 커널 실행 외의 과정도 모두 들어갑니다. 클라이언트가 pod를 기다린 시간은 들어가지 않습니다.
 
     서버는 요청마다 새 프로세스 트리를 만들고 아래 과정을 실행합니다. golden에 따라 실행하는 과정이 다릅니다.
@@ -137,6 +149,8 @@ scripts/ops/bench.sh 64     # more requests per pool
     warmup 3번과 timed 20번은 서버 기본값(`HARNESS_WARMUP`, `HARNESS_ITERS`)입니다.
 
 ## 해석하는 방법
+
+표에서 gVisor는 한 건을 채점하는 데 p50이 9.984초이고 Kata QEMU는 10.789초입니다. 풀 전체 처리량은 Kata QEMU가 초당 0.349건으로 더 높습니다. 동시에 일한 pod가 각각 두 개와 네 개이고 GPU도 달랐기 때문에, 처리량만으로 런타임 하나의 속도를 판단하기 어렵습니다.
 
 속도 표를 읽기 전에 런타임별로 제출이 성공했는지 확인하세요. 실패 요청이 많거나 GPU 종류가 다르면 p50이 낮아도 런타임 차이로 해석하기 어렵습니다. 같은 GPU와 입력으로 성공한 평가의 지연을 비교하세요.
 
@@ -171,6 +185,9 @@ scripts/ops/bench.sh 64     # more requests per pool
 
 ![벤치마크가 출력한 각 v1 pod의 생성부터 Ready까지의 초 단위 시간](../images/terminal/bench-ready-replay.png)
 
+<details class="note" markdown="1">
+<summary>선택 실습 · pod 시작 시간을 다시 재려면</summary>
+
 ## cold start를 다시 측정하는 방법
 
 스크립트가 출력하는 cold start(pod 생성부터 마지막으로 Ready가 된 시각까지)에는 정의상 다음 시간이 모두 포함됩니다. pod가 노드보다 먼저 만들어졌다면 노드가 준비되기를 기다린 시간까지 들어갑니다.
@@ -199,6 +216,8 @@ scripts/ops/bench.sh
 `maxSurge: 0`이라서 pod가 하나씩 교체됩니다. gVisor처럼 노드당 pod가 하나인 풀에서는 이전 pod가 GPU를 반환한 뒤에 새 pod가 시작됩니다. 다른 풀을 측정하려면 Deployment 이름의 `kata-qemu`를 그 런타임 이름(예: `gvisor`)으로 바꾸세요.
 
 **문제가 생기면:** 둘째 명령이 timeout으로 끝나면 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목과, Kata라면 "Kata" 항목을 보세요.
+
+</details>
 
 ## 첫 배포와 이미지 캐시 후 비교 { #results-20261118 }
 
@@ -302,17 +321,21 @@ scripts/ops/bench.sh
     kubectl -n rl-trainer logs "job/$job"
     ```
 
+<details class="note" markdown="1">
+<summary>다른 환경에서 발표한 참고 수치</summary>
+
 ## 공개된 참고 수치
 
-??? note "상세 설명"
-    | 출처 | 수치 | 조건과 한계 |
-    |---|---|---|
-    | Kata metrics CI (3.28.0) | boot to workload: CLH 0.39 s, QEMU 0.71 s | 다른 머신, 넓은 허용 범위. VM 부팅부터 workload 시작까지의 구간만 측정합니다 |
-    | AWS China 블로그 (2026-07, `c5.metal`, Kata 3.31.0 + CLH, OpenSandbox, Karpenter 1.12.1) | cold start 약 3 s, pool claim 약 230 ms | 블로그 저자가 bare metal CPU 샌드박스에서 측정한 값입니다. pool claim은 미리 띄워 둔 풀에서 샌드박스를 할당받는 시간으로 보이며 cold start와 다릅니다 |
-    | 같은 블로그의 메모리 수치 | CLH 약 130 MB, QEMU 약 160 MB | Kata 3.31.0의 `overhead.podFixed` 기본값과 같아서 측정값이 아닐 가능성이 큽니다 |
-    | Kata 4.3.1 RuntimeClass `overhead.podFixed` | clh 130Mi/250m, qemu 320Mi/250m, qemu-nvidia-gpu 10240Mi/1 CPU | 스케줄러가 pod마다 추가로 예약하는 값입니다. 실제 사용량 측정이 아닙니다 |
+| 출처 | 수치 | 조건과 한계 |
+|---|---|---|
+| Kata metrics CI (3.28.0) | boot to workload: CLH 0.39 s, QEMU 0.71 s | 다른 머신, 넓은 허용 범위. VM 부팅부터 workload 시작까지의 구간만 측정합니다 |
+| AWS China 블로그 (2026-07, `c5.metal`, Kata 3.31.0 + CLH, OpenSandbox, Karpenter 1.12.1) | cold start 약 3 s, pool claim 약 230 ms | 블로그 저자가 bare metal CPU 샌드박스에서 측정한 값입니다. pool claim은 미리 띄워 둔 풀에서 샌드박스를 할당받는 시간으로 보이며 cold start와 다릅니다 |
+| 같은 블로그의 메모리 수치 | CLH 약 130 MB, QEMU 약 160 MB | Kata 3.31.0의 `overhead.podFixed` 기본값과 같아서 측정값이 아닐 가능성이 큽니다 |
+| Kata 4.3.1 RuntimeClass `overhead.podFixed` | clh 130Mi/250m, qemu 320Mi/250m, qemu-nvidia-gpu 10240Mi/1 CPU | 스케줄러가 pod마다 추가로 예약하는 값입니다. 실제 사용량 측정이 아닙니다 |
 
-    이 핸즈온은 Deployment로 pod를 미리 띄워 둡니다. 그래서 블로그의 pool claim에 해당하는 값은 cold start가 아니라 클라이언트가 비어 있는 pod를 할당받는 시간입니다.
+이 핸즈온은 Deployment로 pod를 미리 띄워 둡니다. 그래서 블로그의 pool claim에 해당하는 값은 cold start가 아니라 클라이언트가 비어 있는 pod를 할당받는 시간입니다.
+
+</details>
 
 ## 적용 범위와 한계
 

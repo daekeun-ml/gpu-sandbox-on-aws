@@ -1,11 +1,10 @@
 # 11 multi-turn 에피소드 실습
 
-!!! info "TL;DR"
-    에피소드마다 warm pool에서 샌드박스를 하나 빌립니다. 여러 턴의 제출이 같은 샌드박스로 가는지 확인합니다. 채점 서버는 제출마다 작업 디렉터리를 정리합니다.
+한 문제에 세 번 답을 제출하면 어느 샌드박스가 그 답들을 받을까요? 이 실습에서는 에피소드(한 문제를 푸는 한 번의 시도)마다 샌드박스 하나를 빌립니다. 스크립트가 정해진 답을 차례로 보내므로 모델 없이 턴과 자원 반납을 살펴볼 수 있습니다.
 
-    **완료 기준** 여러 턴에서 같은 인스턴스를 사용하고 에피소드가 끝나면 claim이 삭제되는지 확인하세요.
-
-**시작 전에** [10 c8i 단독 저비용 경로](10_cpu_only.md)의 시나리오 C 클러스터가 필요하고, 개념은 [초심자 06 multi-turn 에이전트와 Agent Sandbox](../beginner/06_multi_turn_agent.md)와 [개념 06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에 있습니다.
+1. [10편의 CPU 클러스터](10_cpu_only.md)를 정리하기 전에 [준비](#준비)와 [Agent Sandbox 설치](#1단계-agent-sandbox-설치-extensionsagent_sandboxsh-install)를 진행하세요.
+2. [대기 풀 만들기](#2단계-cpu-warm-pool-만들기-extensionsagent_sandboxsh-pool)에서 `readyReplicas`가 올라온 뒤 [에피소드 실행](#3단계-multi-turn-에피소드-실행-extensionsagent_sandboxsh-episodes)으로 갑니다. 한 에피소드의 `turn` 로그들이 같은 `claim`과 `pod`를 쓰는지 대조하세요.
+3. `episode_end`의 `released`가 `true`인지 확인하고 [대기 풀을 정리](#정리)하세요. claim을 반납한 뒤에도 풀은 다음 에피소드용 pod를 채웁니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **에피소드(episode)**: 모델이 과제 하나를 여러 turn에 걸쳐 푸는 한 번의 시도입니다. 이 실습의 과제는 `relu_bias`입니다.
@@ -19,14 +18,14 @@
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
-!!! note "검증 상태"
+??? note "실습 계정에서 확인한 범위"
     이 페이지의 `install`, `pool`, `episodes`는 시나리오 C 클러스터의 `kata-clh-cpu` warm pool로 실행해 3단계의 다섯 조건을 확인했습니다. `gvisor-cpu` warm pool, GPU 절, veRL 절은 실행하지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 에피소드 하나의 흐름
 
 실행기는 에피소드마다 `SandboxClaim`을 만들고, 턴을 같은 샌드박스로 보낸 뒤 claim을 지웁니다. [Agent Sandbox 개념](../concepts/06_agent_sandbox.md)에서 claim과 warm pool의 관계를 볼 수 있습니다.
 
-??? note "상세 설명"
+??? note "에피소드 하나의 흐름"
     Job `episodes-<unix 시각>`은 `rl-trainer` 네임스페이스에서 ServiceAccount `sandbox-episode`로 실행되고, 에피소드를 하나씩 차례로 실행합니다. 에피소드 하나는 다음 순서로 진행됩니다.
 
     ```mermaid
@@ -125,6 +124,8 @@ kubectl auth can-i get pods -n sandbox --as=system:serviceaccount:rl-trainer:san
 
 ## 2단계: CPU warm pool 만들기 (`extensions/agent_sandbox.sh pool`)
 
+아래 명령은 `gvisor-cpu`를 예로 듭니다. 실행 화면과 같은 Kata VM을 쓰려면 여기서부터 풀 생성, 에피소드 실행, 정리까지 런타임 이름을 `kata-clh-cpu`로 맞추세요.
+
 `gvisor-cpu` 프로필로 SandboxTemplate과 SandboxWarmPool `kernel-eval-gvisor-cpu`를 만들고 대기 샌드박스 2개를 실행합니다. 3단계에서 에피소드 2개를 실행하므로 2개로 맞춥니다.
 
 ```bash
@@ -165,6 +166,8 @@ scripts/extensions/agent_sandbox.sh pool gvisor-cpu 2
     - **10의 9단계에서 만든 `kernel-eval-kata-clh-cpu` pool이 있다면**: `pool kata-clh-cpu 2`를 다시 실행해 template과 replica 수를 갱신하세요.
 
 ## 3단계: multi-turn 에피소드 실행 (`extensions/agent_sandbox.sh episodes`)
+
+같은 `claim`과 `pod`가 세 턴에 반복돼도 이전 제출의 파일은 남지 않습니다. 채점 서버는 매번 작업 디렉터리를 비웁니다. 여기서 턴 사이에 유지하는 것은 샌드박스 할당입니다.
 
 에피소드 2개를 실행하고, 에피소드마다 최대 3 turn까지 제출합니다. 이 단계는 이벤트의 필드(`claim`, `address`, `feedback`, `released` 등)를 직접 대조하므로, 터미널 요약 대신 원래 JSON이 나오도록 `GPUSANDBOX_LOG=json`을 붙여 실행합니다.
 
@@ -291,6 +294,9 @@ GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1
 
 multi-turn 에피소드는 피드백을 받은 뒤 다시 제출할 수 있으므로 마지막 제출의 점수를 받습니다. 다만 scripted policy는 피드백을 읽지 않고 정해진 순서로 제출하므로, 이 차이는 에피소드 채점 방식에서 생긴 것이며 모델이 학습한 결과가 아닙니다. single-turn 기준선도 에피소드마다 claim을 하나씩 만들므로 `claims`와 `distinct_sandboxes`는 2입니다.
 
+<details class="note" markdown="1">
+<summary>선택 실습 · EC2 GPU로 대기 풀 구성하기</summary>
+
 ## 선택: GPU warm pool에서 실행 (시나리오 A)
 
 GPU 쿼터가 있다면 시나리오 A의 gVisor GPU 노드(`g5.xlarge`, A10G)에서 같은 명령을 실행할 수 있습니다. 이 절도 클러스터에서 실행하지 않았습니다.
@@ -349,6 +355,11 @@ kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=2
 
 Kata GPU 프로필(`kata-qemu`, `g4dn.metal`의 T4)도 같은 명령으로 실행할 수 있지만, SandboxTemplate 안의 Kata GPU 설정(`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`)은 검증하지 않았습니다. T4 하나는 `g4dn.metal`(시간당 7.824 USD, T4 8개)을 단순 나눗셈하면 시간당 약 0.978 USD입니다(us-east-1과 us-west-2 온디맨드 요금).
 
+</details>
+
+<details class="note" markdown="1">
+<summary>veRL과 연결할 때의 구현과 검증 범위</summary>
+
 ## 선택: veRL multi-turn rollout에 연결
 
 !!! warning "veRL로 실행하지 않았습니다"
@@ -398,6 +409,8 @@ reward.custom_reward_function.name=compute_score
     - sandbox audience 토큰(지금의 `SANDBOX_TOKEN_FILE`은 gateway audience 토큰)
 
     worker에는 이미 label `gpusandbox/client=true`가 있고, `grpo-trainer`는 warm pool의 기본 허용 목록에 들어 있습니다.
+
+</details>
 
 ## 정리
 

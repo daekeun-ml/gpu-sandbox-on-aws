@@ -25,7 +25,7 @@ New to sandboxes? Follow one answer from code to score in the [beginner guide](b
 
 Read chapters 1–4 of the [beginner guide](beginner/index.md). In the [public demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#try), select **Missing ReLU** and replay the grading run. You'll see what happened when gVisor and Kata each ran the same code in isolation. Allow 1–2 hours for the reading and demo.
 
-Why did both return `wrong_answer`? The code adds two numbers but leaves negative sums unchanged. The task requires replacing those with zero. The sandbox runs the code, the grader compares its output with the expected answer, and the trainer uses the result to update the model.
+Why do both runs show **wrong answer** (`wrong_answer`)? The code adds two numbers but leaves negative sums unchanged. The task requires replacing those with zero. The sandbox runs the code, the grader compares its output with the expected answer, and the trainer uses the result to update the model.
 
 ??? note "Read more about isolation and training"
     - Which tasks need grading on a GPU? [When the sandbox needs a GPU](concepts/01_why_gpu_sandbox.md)

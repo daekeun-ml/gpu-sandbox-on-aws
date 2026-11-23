@@ -1,11 +1,10 @@
 # 99 Cleanup
 
-!!! info "TL;DR"
-    Delete resources in dependency order. If you used HyperPod, delete it before the EKS stack.
+Check the AWS account, `AWS_REGION`, `CLUSTER_NAME` and your current `kubectl` context against the lab cluster you intend to remove. Leave the tunnel open. Follow the steps for the resources you created.
 
-    **Completion check** Check for remaining stacks, instances, and resources created outside the stack.
-
-**Before you start:** check what you created. The cluster and images come from [01 Cluster and images](01_cluster_and_images.md), HyperPod from [07 HyperPod scenario](07_hyperpod.md), the demo site from [09 Demo site (CloudFront)](09_demo_site.md), and the Agent Sandbox extension from [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
+1. **If you ran episodes**, clean up remaining [claims and warm pools](#0-agent-sandbox-extension-only-if-you-used-it). **If you used HyperPod**, [delete its cluster](#1-hyperpod-first-scenario-b) while EKS is still available.
+2. When you [delete the EKS stack](#2-eks-cluster-cdk-stack-and-the-rest), choose whether to keep its images. A [demo site you deployed](#demo-site-only-if-you-built-09) has its own stack.
+3. [Check remaining resources](#3-check-what-remains), including tagged instances and resources created outside the stack. If you [scale nodes to zero](#pausing-scale-node-groups-to-zero) between labs, EKS and NAT gateway charges continue.
 
 ??? note "Terms (expand if a word is new to you)"
     - **CloudFormation stack**: a unit that creates and deletes several AWS resources together. The CDK stack from cluster creation (`02_create_cluster.sh`, `<CLUSTER_NAME>-cdk`) and the demo site are separate stacks.
@@ -88,9 +87,9 @@ Delete the demo stack and every file in its bucket (table below). The CloudFront
 
 ```bash
 demo/teardown.sh
-# if you deployed with another stack name
-DEMO_STACK_NAME=<stack-name> demo/teardown.sh
 ```
+
+If you deployed under a custom stack name, set `DEMO_STACK_NAME` to that name when running this command.
 
 The script does not read `scripts/config.env` and, like `demo/deploy.sh`, fixes the Region to `us-east-1`. It ignores `AWS_REGION` in your shell.
 
@@ -146,17 +145,19 @@ The script works in this order.
 2. It deletes the CDK stack (cluster, node groups, launch templates, VPC, NAT gateway, access instance, log groups).
 3. It asks whether to delete the AMIs.
 
-Run only one of the two commands.
+Choose one tab. The default keeps ECR images. With `--images`, cleanup deletes the `sandbox`, `trainer` and `control` repositories under `ECR_REPO_PREFIX`, including their images. Check what uses those repositories if the prefix is shared.
 
-- **To keep the ECR images**: run the first line.
-- **To delete the ECR images too**: run the second line from the start. Running both in turn makes the second call start again from the cluster and AMI steps.
+=== "Keep ECR images"
 
-**Caution with `--images`:** `--images` deletes all three repositories with the prefix, `sandbox`, `trainer` and `control`, whether or not this lab created them. If you share `ECR_REPO_PREFIX` with another lab, check what uses the three repositories first.
+    ```bash
+    scripts/08_cleanup.sh
+    ```
 
-```bash
-scripts/08_cleanup.sh            # pools, Jobs, the CDK stack, AMIs (asks); keeps ECR
-scripts/08_cleanup.sh --images   # the same, plus the ECR repositories
-```
+=== "Also delete ECR images"
+
+    ```bash
+    scripts/08_cleanup.sh --images
+    ```
 
 | Order | Prompt | Word to type | What it deletes |
 |---|---|---|---|
@@ -195,6 +196,9 @@ The script then skips that AMI step. You do not need to change `WITH_KATA_GPU`: 
 
 !!! question "❓ Misconception: deleting the CDK stack removes everything from the hands-on"
     The CDK stack deletes only what it created (cluster, node groups, launch templates, VPC, NAT gateway, access instance, KMS key, the stack's log groups). The IOMMU AMI and the B2 AMI with their snapshots, the ECR repositories (created by `03_build_push_images.sh`), HyperPod's S3 bucket and IAM role, the demo stack and `CDKToolkit` are outside the stack, so other steps on this page handle them.
+
+<details class="note" markdown="1">
+<summary>Scale down nodes between lab sessions</summary>
 
 ## Pausing: scale node groups to zero
 
@@ -243,7 +247,11 @@ Keep the following in mind while you pause.
 
     These commands do not stop HyperPod instances either. The `CreateCluster` API allows 0 as the minimum `InstanceCount` of an instance group, but this repository neither scripts nor verifies that path, so when you are not using HyperPod, deleting it with `hyperpod/delete.sh` is the recommended option.
 
+</details>
+
 ## 3. Check what remains
+
+The final instance table queries EC2 instances with the lab tag. Once it is empty, use the checks below for any separately created volumes, snapshots or log buckets you used.
 
 After deletion, query the account for remaining resources. Check separately created deployments such as HyperPod and the demo site, along with AMIs and snapshots.
 

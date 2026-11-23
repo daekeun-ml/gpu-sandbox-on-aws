@@ -1,11 +1,10 @@
 # 05 On-policy GRPO training
 
-!!! info "TL;DR"
-    Grade model-generated Triton code in a sandbox and use the scores to run GRPO updates.
+GRPO compares scores for several answers to the same prompt and uses those differences to update the model. The `gvisor/v1` pool you [verified in chapter 04](04_sandbox_pools.md) now grades code the model has just generated.
 
-    **Completion check** Look for `routing`, `reward_batch`, and progressing optimizer steps.
-
-**Before you start:** finish [04 Deploy and verify sandbox pools](04_sandbox_pools.md). GRPO and version pinning are in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), the reward design in [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md), and terms in the [Glossary](../reference/glossary.md).
+1. [Check the trainer node and image](#before-you-begin), then [submit one training job](#run). For HyperPod training, start in [chapter 07](07_hyperpod.md).
+2. In the [logs](#reading-the-logs), `routing` identifies the pool, `batch` reports grading, and `train` reports a model update. Read the first batch's verdicts alongside the next `train` line.
+3. To switch pools during training, open [chapter 06](06_sandbox_update.md) in another terminal while the job is running. For training alone, check the [completed job and submission counts](#trainer-complete).
 
 ??? note "Terms (expand if a word is new to you)"
     - **GRPO**: an RL algorithm that generates several answers (a group) per prompt and reinforces the answers that beat the group average.
@@ -19,7 +18,7 @@
     - **Job, emptyDir**: a Kubernetes workload that completes when done, and a scratch volume that disappears with the pod.
     - **OOM**: a process failure because GPU memory ran out (out of memory).
 
-!!! warning "Validation status"
+??? note "What the practice-account run covered"
     The default 60-step run (`scripts/07_run_grpo.sh`) and a 5-step run ran in the practice account, and both Jobs ended Complete. The memory and cost figures are calculations, not measurements. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Before you begin
@@ -30,12 +29,21 @@
 
 ## Run
 
-Create the training Job and follow its logs. Run only one of the two commands below; pasting both submits a separate 20-step Job after the 60-step Job.
+Five steps are enough to inspect generation, grading and an update on a first run. For a live pool switch in chapter 06, choose the default 60 steps to leave time for the rollout. Submit one job.
 
-```bash
-scripts/07_run_grpo.sh        # 60 optimizer steps (default)
-scripts/07_run_grpo.sh 20     # or: a shorter run
-```
+=== "First run · 5 steps"
+
+    ```bash
+    scripts/07_run_grpo.sh 5
+    ```
+
+=== "Pool switch · 60 steps"
+
+    ```bash
+    scripts/07_run_grpo.sh
+    ```
+
+To choose another length, pass the step count, for example `scripts/07_run_grpo.sh 20`.
 
 | Order | What the script does |
 |---|---|
@@ -101,6 +109,8 @@ The Job reached `Complete`. The trainer recorded 16 batches and 207 submissions,
 ![Completed Job, verdict counts aggregated from reward batches, and the done event](../images/terminal/grpo-completed-replay.png)
 
 ## Reading the logs
+
+A `wrong_answer` means the grader found an output that differs from the reference. A `sandbox_error` means the submission could not be graded, so this GRPO implementation excludes it from the group mean. If that repeats, [verify the pool](04_sandbox_pools.md) again.
 
 `routing` confirms that the trainer loaded a pool. Check the verdicts in `reward_batch` alongside the optimizer step. A batch full of `sandbox_error` still requires a pool check.
 
@@ -184,86 +194,89 @@ Diagnose in this order.
 
 See [training troubleshooting](../reference/troubleshooting.md#training) for GPU memory and startup issues.
 
+<details class="note" markdown="1">
+<summary>Trainer job manifest and training parameters</summary>
+
 ## What to look at in the Job manifest
 
-??? note "Details"
-    | Field | Value | Reason |
-    |---|---|---|
-    | Pod label | `gpusandbox/client: "true"` | the NetworkPolicy `allow-clients-to-sandbox-api` in the sandbox namespace admits on port 8000 only pods with this label from the `rl-trainer` namespace. |
-    | `automountServiceAccountToken` | `false` | no Kubernetes API token. The trainer does not call the API and receives only the sandbox token. |
-    | Projected token | audience `${SANDBOX_AUDIENCE}`, `expirationSeconds: 3600`, `/var/run/secrets/gpusandbox/token` | sandbox pods accept only this audience and allowed subjects (`system:serviceaccount:rl-trainer:grpo-trainer` and others). |
-    | Routing ConfigMap | `sandbox-routing` mounted as the directory `/etc/gpusandbox/routing` (not subPath) | a subPath mount does not receive ConfigMap updates. |
-    | Resources | CPU 7, memory 28Gi, `nvidia.com/gpu: 1` | leaves room for the system on `g5.2xlarge` (8 vCPU, 32 GiB). |
-    | `/dev/shm` | memory emptyDir 8Gi | the container's default shared memory is small, so it is set separately. |
-    | `/outputs`, `/cache` | emptyDir | checkpoints (every 20 steps, at most 2) and the HF cache disappear with the pod. |
-    | `backoffLimit`, `ttlSecondsAfterFinished` | `0`, `86400` | no retry on failure, and a finished Job is deleted after 24 hours. |
-    | `PYTORCH_CUDA_ALLOC_CONF` | `expandable_segments:True` | reduces memory fragmentation. |
+| Field | Value | Reason |
+|---|---|---|
+| Pod label | `gpusandbox/client: "true"` | the NetworkPolicy `allow-clients-to-sandbox-api` in the sandbox namespace admits on port 8000 only pods with this label from the `rl-trainer` namespace. |
+| `automountServiceAccountToken` | `false` | no Kubernetes API token. The trainer does not call the API and receives only the sandbox token. |
+| Projected token | audience `${SANDBOX_AUDIENCE}`, `expirationSeconds: 3600`, `/var/run/secrets/gpusandbox/token` | sandbox pods accept only this audience and allowed subjects (`system:serviceaccount:rl-trainer:grpo-trainer` and others). |
+| Routing ConfigMap | `sandbox-routing` mounted as the directory `/etc/gpusandbox/routing` (not subPath) | a subPath mount does not receive ConfigMap updates. |
+| Resources | CPU 7, memory 28Gi, `nvidia.com/gpu: 1` | leaves room for the system on `g5.2xlarge` (8 vCPU, 32 GiB). |
+| `/dev/shm` | memory emptyDir 8Gi | the container's default shared memory is small, so it is set separately. |
+| `/outputs`, `/cache` | emptyDir | checkpoints (every 20 steps, at most 2) and the HF cache disappear with the pod. |
+| `backoffLimit`, `ttlSecondsAfterFinished` | `0`, `86400` | no retry on failure, and a finished Job is deleted after 24 hours. |
+| `PYTORCH_CUDA_ALLOC_CONF` | `expandable_segments:True` | reduces memory fragmentation. |
 
-    - **Without the pod label**: connections are blocked and the completions that must go to the sandbox become sandbox_error. Completions with no code block or caught by the trainer-side policy check never reach the sandbox and are scored as usual.
-    - **Projected token rotation**: kubelet replaces the file in place, and the client rereads it on every request.
-    - **Routing ConfigMap mount**: for the version switch in [06](06_sandbox_update.md) to reach a running pod, it must be a directory mount.
+- **Without the pod label**: connections are blocked and the completions that must go to the sandbox become sandbox_error. Completions with no code block or caught by the trainer-side policy check never reach the sandbox and are scored as usual.
+- **Projected token rotation**: kubelet replaces the file in place, and the client rereads it on every request.
+- **Routing ConfigMap mount**: for the version switch in [06](06_sandbox_update.md) to reach a running pod, it must be a directory mount.
 
-    !!! note "Keeping the training results"
-        The LoRA adapter and `sandbox_metrics.jsonl` live on an emptyDir, so once the container ends not even `kubectl cp` can retrieve them (fine for a pipeline check). The JSON events also go to stdout: save them with the command below before the Job is deleted (24 hours after completion). To keep the adapter, attach shared storage to `/outputs` ([Production 06 Scaling with veRL](../production/06_scaling_with_verl.md)).
+!!! note "Keeping the training results"
+    The LoRA adapter and `sandbox_metrics.jsonl` live on an emptyDir, so once the container ends not even `kubectl cp` can retrieve them (fine for a pipeline check). The JSON events also go to stdout: save them with the command below before the Job is deleted (24 hours after completion). To keep the adapter, attach shared storage to `/outputs` ([Production 06 Scaling with veRL](../production/06_scaling_with_verl.md)).
 
-        ```bash
-        kubectl -n rl-trainer logs "job/grpo-<RUN_ID>" | grep '"event"' > grpo-events.jsonl
-        ```
+    ```bash
+    kubectl -n rl-trainer logs "job/grpo-<RUN_ID>" | grep '"event"' > grpo-events.jsonl
+    ```
 
-        **What to look for:** `wc -l grpo-events.jsonl` prints a line count above 0, and the first line is `{"event": "routing", ...}`.
+    **What to look for:** `wc -l grpo-events.jsonl` prints a line count above 0, and the first line is `{"event": "routing", ...}`.
 
 ## train_grpo.py defaults
 
-??? note "Details"
-    | Argument | Default | Meaning |
-    |---|---|---|
-    | `--model` | `Qwen/Qwen2.5-Coder-1.5B-Instruct` | Apache-2.0, not gated |
-    | `--max-level` | `2` | the 9 tasks of levels 0 to 2 |
-    | `--repeats` | `64` | dataset rows per task (9 × 64 = 576 rows) |
-    | `--num-generations` | `8` | completions per prompt (GRPO group size) |
-    | `--per-device-batch` | `4` | completions per micro-batch |
-    | `--grad-accum` | `4` | micro-batches per optimizer step |
-    | `--max-completion-length` | `768` | longer than TRL's default 512 (kernel code plus explanation) |
-    | `--learning-rate` | `1e-5` | the value recommended for LoRA (TRL's GRPOConfig default is 1e-6) |
-    | `--lora-r`, `--lora-alpha` | `32`, `64` | `target_modules="all-linear"` |
-    | `--vllm-gpu-memory-utilization` | `0.35` | TRL's default is 0.3 |
-    | `--vllm-max-model-length` | `2048` | prompt and completion together |
-    | `--reward-weights` | `0.1,1.0,0.5` | format, correctness, speedup |
-    | `--allow-torch-only` | off | when on, correct answers without Triton also get correctness 1.0 and the speedup |
-    | `--runtime` | none | a runtime to use instead of the routing table's active runtime |
-    | `--save-steps`, `--seed` | `20`, `42` | checkpoint interval; seed for the dataset shuffle and GRPOConfig |
+| Argument | Default | Meaning |
+|---|---|---|
+| `--model` | `Qwen/Qwen2.5-Coder-1.5B-Instruct` | Apache-2.0, not gated |
+| `--max-level` | `2` | the 9 tasks of levels 0 to 2 |
+| `--repeats` | `64` | dataset rows per task (9 × 64 = 576 rows) |
+| `--num-generations` | `8` | completions per prompt (GRPO group size) |
+| `--per-device-batch` | `4` | completions per micro-batch |
+| `--grad-accum` | `4` | micro-batches per optimizer step |
+| `--max-completion-length` | `768` | longer than TRL's default 512 (kernel code plus explanation) |
+| `--learning-rate` | `1e-5` | the value recommended for LoRA (TRL's GRPOConfig default is 1e-6) |
+| `--lora-r`, `--lora-alpha` | `32`, `64` | `target_modules="all-linear"` |
+| `--vllm-gpu-memory-utilization` | `0.35` | TRL's default is 0.3 |
+| `--vllm-max-model-length` | `2048` | prompt and completion together |
+| `--reward-weights` | `0.1,1.0,0.5` | format, correctness, speedup |
+| `--allow-torch-only` | off | when on, correct answers without Triton also get correctness 1.0 and the speedup |
+| `--runtime` | none | a runtime to use instead of the routing table's active runtime |
+| `--save-steps`, `--seed` | `20`, `42` | checkpoint interval; seed for the dataset shuffle and GRPOConfig |
 
-    ```text
-    generation batch = per-device batch 4 x processes 1 x steps_per_generation 4 = 16 completions
-    16 completions / num_generations 8      = 2 prompts (2 GRPO groups) per optimizer step
-    60 steps x 2 prompts                    = 120 prompts out of 576 dataset rows
-    ```
+```text
+generation batch = per-device batch 4 x processes 1 x steps_per_generation 4 = 16 completions
+16 completions / num_generations 8      = 2 prompts (2 GRPO groups) per optimizer step
+60 steps x 2 prompts                    = 120 prompts out of 576 dataset rows
+```
 
-    TRL refuses to start if the generation batch is not divisible by `num_generations`.
+TRL refuses to start if the generation batch is not divisible by `num_generations`.
 
-    ??? note "Where the arguments go"
-        The argument table above lists the command-line defaults of `train_grpo.py`.
+??? note "Where the arguments go"
+    The argument table above lists the command-line defaults of `train_grpo.py`.
 
-        - **`GRPOConfig`**: gets the learning rate, batch size, gradient accumulation, number of generations, maximum length, reward weights, save interval, seed and vLLM memory settings. The script also sets `use_vllm=True`, `vllm_mode="colocate"`, `vllm_enable_sleep_mode=True`, `logging_steps=1`, `save_total_limit=2` and `report_to="none"` there.
-        - **Dataset**: shaped by `--max-level` and `--repeats`.
-        - **`LoraConfig`**: set by `--lora-r` and `--lora-alpha`.
-        - **Reward functions (`KernelRewards`)**: configured by `--allow-torch-only` and `--runtime`.
+    - **`GRPOConfig`**: gets the learning rate, batch size, gradient accumulation, number of generations, maximum length, reward weights, save interval, seed and vLLM memory settings. The script also sets `use_vllm=True`, `vllm_mode="colocate"`, `vllm_enable_sleep_mode=True`, `logging_steps=1`, `save_total_limit=2` and `report_to="none"` there.
+    - **Dataset**: shaped by `--max-level` and `--repeats`.
+    - **`LoraConfig`**: set by `--lora-r` and `--lora-alpha`.
+    - **Reward functions (`KernelRewards`)**: configured by `--allow-torch-only` and `--runtime`.
 
-    The items in the table below are not set on the GPU training path, so they keep TRL's defaults. These defaults were checked with a `GRPOConfig` from the local TRL 1.18.0; re-check them if you change the TRL version.
+The items in the table below are not set on the GPU training path, so they keep TRL's defaults. These defaults were checked with a `GRPOConfig` from the local TRL 1.18.0; re-check them if you change the TRL version.
 
-    | TRL default | Value | Meaning |
-    |---|---|---|
-    | `steps_per_generation`, `num_iterations` | `gradient_accumulation_steps`, `1` | a generated batch is used for one optimizer step only |
-    | `beta` | `0.0` | no reference model is loaded (no KL term) |
-    | `loss_type`, `scale_rewards` | `"dapo"`, `"group"` | rewards are normalized within the group |
-    | `vllm_importance_sampling_correction` | `True` | corrects numerical differences between vLLM and the training model with importance sampling |
-    | `gradient_checkpointing`, `bf16` | `True`, `True` | defaults GRPOConfig sets differently from TrainingArguments |
+| TRL default | Value | Meaning |
+|---|---|---|
+| `steps_per_generation`, `num_iterations` | `gradient_accumulation_steps`, `1` | a generated batch is used for one optimizer step only |
+| `beta` | `0.0` | no reference model is loaded (no KL term) |
+| `loss_type`, `scale_rewards` | `"dapo"`, `"group"` | rewards are normalized within the group |
+| `vllm_importance_sampling_correction` | `True` | corrects numerical differences between vLLM and the training model with importance sampling |
+| `gradient_checkpointing`, `bf16` | `True`, `True` | defaults GRPOConfig sets differently from TrainingArguments |
+
+</details>
 
 ## Flow of one step
 
 The current model generates answers, the sandbox grades them, and the trainer uses the batch for one optimizer step.
 
-??? note "Details"
+??? note "Flow of one step"
     ```mermaid
     sequenceDiagram
         participant V as vLLM (colocate, same A10G)
@@ -295,7 +308,7 @@ The current model generates answers, the sandbox grades them, and the trainer us
 
 Partial credit distinguishes answers when correct kernels are rare. TRL leaves ungraded answers out of the group baseline.
 
-??? note "Details"
+??? note "Reward components"
     The three components in `src/gpusandbox/rewards.py`:
 
     - **format**: 1.0 if the chosen code parses and has a top-level `ModelNew` class, else 0.0. The extractor chooses the code in this order.
@@ -335,6 +348,9 @@ Partial credit distinguishes answers when correct kernels are rare. TRL leaves u
 
     With partial credit, the gap between code that runs but is wrong (0.3) and code that does not even run (0.1) becomes a learning signal too. As the TRL documentation describes, a `None` removes that function from the calculation.
 
+<details class="note" markdown="1">
+<summary>Changing models and estimating GPU memory</summary>
+
 ## Changing options
 
 Use only openly licensed models for `MODEL_ID` (`Qwen2.5-Coder-3B-Instruct` has a non-commercial license, qwen-research, and is not used; 7B is in the production track). The GPU path was designed around the default model, so check others with a short run first.
@@ -362,23 +378,24 @@ MODEL_ID=<open-license-model-id> scripts/07_run_grpo.sh 20
 
 ## A10G 24 GB memory budget
 
-??? note "Details"
-    The table below is an estimate calculated from the settings.
+The table below is an estimate calculated from the settings.
 
-    | Item | Rough size | Basis |
-    |---|---|---|
-    | Policy model weights (bf16) | about 3 GB | 1.5B parameters × 2 bytes |
-    | vLLM share | up to about 8.4 GB | `vllm_gpu_memory_utilization` 0.35 × 24 GB: vLLM's own copy of the weights (about 3 GB) plus the KV cache |
-    | LoRA adapter, gradients, optimizer state | under 1 GB (estimate) | only the rank-32 adapter trains; the base weights are frozen |
-    | Activations, logits, headroom | the remaining about 12 GB | per-device batch 4 × (prompt + up to 768 tokens), gradient checkpointing on by default |
+| Item | Rough size | Basis |
+|---|---|---|
+| Policy model weights (bf16) | about 3 GB | 1.5B parameters × 2 bytes |
+| vLLM share | up to about 8.4 GB | `vllm_gpu_memory_utilization` 0.35 × 24 GB: vLLM's own copy of the weights (about 3 GB) plus the KV cache |
+| LoRA adapter, gradients, optimizer state | under 1 GB (estimate) | only the rank-32 adapter trains; the base weights are frozen |
+| Activations, logits, headroom | the remaining about 12 GB | per-device batch 4 × (prompt + up to 768 tokens), gradient checkpointing on by default |
 
-    The backward pass uses the vLLM weights and cache that sleep mode releases, at the cost of host-to-device transfer time when vLLM wakes up (TRL documentation). On an OOM, reduce in this order:
+The backward pass uses the vLLM weights and cache that sleep mode releases, at the cost of host-to-device transfer time when vLLM wakes up (TRL documentation). On an OOM, reduce in this order:
 
-    1. `--per-device-batch 2 --grad-accum 8`: keeps the product at 16, so prompts per step stay the same.
-    2. `--max-completion-length 512`: watch whether the cut ratio (`completions/clipped_ratio`) rises.
-    3. `--vllm-gpu-memory-utilization 0.3`: a smaller KV cache can slow generation.
+1. `--per-device-batch 2 --grad-accum 8`: keeps the product at 16, so prompts per step stay the same.
+2. `--max-completion-length 512`: watch whether the cut ratio (`completions/clipped_ratio`) rises.
+3. `--vllm-gpu-memory-utilization 0.3`: a smaller KV cache can slow generation.
 
-    For 7B the bf16 weights alone are about 15 GB, and in colocate mode the training model and vLLM each hold a copy, so it would not fit on one A10G 24 GB (inference).
+For 7B the bf16 weights alone are about 15 GB, and in colocate mode the training model and vLLM each hold a copy, so it would not fit on one A10G 24 GB (inference).
+
+</details>
 
 ## Scope and limits
 

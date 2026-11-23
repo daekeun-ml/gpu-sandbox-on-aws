@@ -1,11 +1,10 @@
 # 11 Multi-turn episodes
 
-!!! info "TL;DR"
-    Assign one sandbox from a warm pool to each episode. The same sandbox handles all turns, and the scoring server clears its working directory after each submission.
+When an agent submits three answers to one problem, which sandbox gets them? In this exercise each episode (one attempt at a problem) borrows one sandbox. A script submits answers in a fixed order so you can inspect each turn and how resources are released without running a model.
 
-    **Completion check** Check that the turns share one sandbox and that the claim is deleted at episode end.
-
-**Before you start:** you need the scenario C cluster from [10 CPU-only path on c8i](10_cpu_only.md); the concepts are in [Beginner 06 Multi-turn agents and Agent Sandbox](../beginner/06_multi_turn_agent.md) and [Concepts 06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
+1. Before cleaning up [chapter 10's CPU cluster](10_cpu_only.md), complete the [prerequisites](#preparation) and [install Agent Sandbox](#step-1-install-agent-sandbox-extensionsagent_sandboxsh-install).
+2. [Create a warm pool](#step-2-create-a-cpu-warm-pool-extensionsagent_sandboxsh-pool), wait for `readyReplicas`, then [run the episodes](#step-3-run-multi-turn-episodes-extensionsagent_sandboxsh-episodes). Compare the `claim` and `pod` on the `turn` events for one episode.
+3. Check that `released` is `true` in `episode_end`, then [clean up the warm pool](#cleanup). After a claim is released, the pool replenishes pods for new episodes.
 
 ??? note "Terms (expand if a word is new)"
     - **Episode**: one attempt by a model to solve one task over several turns. The task in this lab is `relu_bias`.
@@ -19,14 +18,14 @@
 
     More terms are in the [Glossary](../reference/glossary.md).
 
-!!! note "Verification status"
+??? note "What the practice-account run covered"
     `install`, `pool` and `episodes` on this page ran with the `kata-clh-cpu` warm pool on a scenario C cluster, and the five conditions of step 3 held. The `gvisor-cpu` warm pool, the GPU section and the veRL section were not run. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## One episode, step by step
 
 The runner creates a claim, sends each turn to the same sandbox, and deletes the claim at episode end.
 
-??? note "Details"
+??? note "One episode, step by step"
     The Job `episodes-<unix time>` runs in the `rl-trainer` namespace as the ServiceAccount `sandbox-episode` and runs its episodes one after another. One episode goes like this.
 
     ```mermaid
@@ -125,6 +124,8 @@ kubectl auth can-i get pods -n sandbox --as=system:serviceaccount:rl-trainer:san
 
 ## Step 2: Create a CPU warm pool (`extensions/agent_sandbox.sh pool`)
 
+The commands below use `gvisor-cpu`. To follow the Kata run in the screenshots, use `kata-clh-cpu` consistently for pool creation, episodes and cleanup.
+
 Create the SandboxTemplate and SandboxWarmPool `kernel-eval-gvisor-cpu` from the `gvisor-cpu` profile and start 2 waiting sandboxes. Step 3 runs 2 episodes, so the pool has 2.
 
 ```bash
@@ -165,6 +166,8 @@ The default allowed subjects include `system:serviceaccount:rl-trainer:sandbox-e
     - **If you created the `kernel-eval-kata-clh-cpu` pool in step 9 of 10**: run `pool kata-clh-cpu 2` again to update the template and the replica count.
 
 ## Step 3: Run multi-turn episodes (`extensions/agent_sandbox.sh episodes`)
+
+Even when three turns share a `claim` and `pod`, each submission starts with a clean working directory. What carries across turns in this lab is the sandbox allocation.
 
 Run 2 episodes with up to 3 turns each. This step compares event fields (`claim`, `address`, `feedback`, `released` and others) directly, so run it with `GPUSANDBOX_LOG=json` to get the raw JSON instead of the terminal summary.
 
@@ -291,6 +294,9 @@ Below is the shape expected from the code and the tests.
 
 A multi-turn episode can submit again after reading the feedback, so it gets the score of its final submission. The scripted policy does not read the feedback and submits in a fixed order, though, so this difference comes from how episodes are graded, not from anything a model learned. The single-turn baseline still creates one claim per episode, so `claims` and `distinct_sandboxes` are 2.
 
+<details class="note" markdown="1">
+<summary>Optional lab · use an EC2 GPU warm pool</summary>
+
 ## Optional: Run it on a GPU warm pool (scenario A)
 
 With GPU quota you can run the same commands on the gVisor GPU nodes of scenario A (`g5.xlarge`, A10G). This section was not run on a cluster either.
@@ -349,9 +355,14 @@ kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=2
 
 The Kata GPU profile (`kata-qemu`, a T4 of `g4dn.metal`) takes the same commands, but the Kata GPU settings inside the SandboxTemplate (`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`) are not verified. One T4 comes to about 0.978 USD per hour by simple division of `g4dn.metal` (7.824 USD per hour, 8 T4s, On-Demand pricing in us-east-1 and us-west-2).
 
+</details>
+
+<details class="note" markdown="1">
+<summary>veRL integration and what has been tested</summary>
+
 ## Optional: Connect to veRL multi-turn rollouts
 
-!!! warning "Never run with veRL"
+!!! note "veRL integration has not been run end to end"
     `rl/verl/sandbox_tool.py` and `rl/verl/sandbox_tool_config.yaml` in this section were written against the veRL v0.9.1 source (github.com/verl-project/verl, tag v0.9.1) but have never been run with veRL. The local tests, without veRL installed, cover only how the tool class keeps and releases claims and how it computes the reward.
 
 `KernelSandboxTool` is the tool `submit_kernel(code=...)` that the model calls.
@@ -398,6 +409,8 @@ Not confirmed (`# TODO verify` in the code):
     - a sandbox-audience token (the current `SANDBOX_TOKEN_FILE` is a gateway-audience token)
 
     The workers already have the label `gpusandbox/client=true`, and `grpo-trainer` is on the warm pool's default allowlist.
+
+</details>
 
 ## Cleanup
 

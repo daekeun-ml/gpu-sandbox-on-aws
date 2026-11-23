@@ -1,11 +1,10 @@
 # 10 c8i 단독 저비용 경로 (시나리오 C)
 
-!!! info "TL;DR"
-    c8i 노드에서 세 런타임을 띄우고, 모델 대신 정해진 입력으로 채점 흐름을 실행합니다. GPU를 빌리기 전에 풀 검증과 버전 교체를 연습할 수 있습니다.
+이 실습은 GPU나 모델 없이 EKS에서 채점 풀을 교체하는 과정입니다. `c8i.2xlarge` 한 대에서 세 런타임을 비교하고, 시뮬레이터가 같은 답안을 보내는 동안 v1에서 v2로 바꿉니다.
 
-    **완료 기준** 검증을 통과한 뒤 시뮬레이터 로그의 채점 버전이 v1에서 v2로 바뀌는지 확인하세요.
-
-**시작 전에** [00 전체 흐름](00_overview.md)의 아키텍처와 [시작하기](../getting_started.md)의 로컬 smoke test를 먼저 보세요. 런타임 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), 버전 교체의 원리는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에 있습니다.
+1. [로컬 설정과 CDK 준비](#준비)부터 [이미지 빌드](#3단계-이미지-두-개만-빌드-03_build_push_imagessh)까지 진행하세요. CPU 경로는 trainer 이미지가 필요 없어 `--no-trainer`로 빌드합니다.
+2. [세 런타임 설치](#4단계-c8i-노드에-세-런타임-설치-katacpu_nodessh) 후 각 pod의 커널을 호스트와 비교하세요. 이어서 라우팅을 설정하고 [세 풀에 시험 답안](#6단계-풀-세-개-배포와-검증-06_deploy_sandboxessh-opsverifysh)을 보내세요.
+3. [두 작업 터미널에서 교체](#7단계-모델-없는-reward-루프와-버전-교체-opssimulatesh-opsrolloutsh)합니다. `SWITCH` 다음 배치가 v2에서 `ok`와 `wrong_answer`를 냈는지 확인하면 됩니다. 기본 실습을 마쳤다면 [클러스터 정리](#정리-08_cleanupsh)로 가세요.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **nested virtualization**: VM 안에서 다시 VM을 띄우는 기능입니다. EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에 `/dev/kvm`을 제공합니다. Kata는 이 장치로 pod마다 작은 VM을 만듭니다.
@@ -18,14 +17,14 @@
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
-!!! note "검증 상태"
+??? note "실습 계정에서 확인한 범위"
     이 페이지의 모든 단계를 저자의 실습 계정에서 실행했습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 아키텍처
 
 c8i 노드 한 대에서 gVisor와 Kata를 실행합니다. `ops/simulate.sh`는 모델 대신 정해진 입력을 채점 풀로 보내고, `ops/rollout.sh`는 활성 풀을 v2로 바꿉니다.
 
-??? note "상세 설명"
+??? note "아키텍처"
     [![시나리오 C: GPU 없이 c8i.2xlarge 한 대에 세 런타임의 CPU 풀이 있는 구성](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
     *그림 요약: AWS 리소스로 보면 GPU 노드가 없고, c8i.2xlarge 한 대가 샌드박스 노드 그룹을 맡습니다.*
@@ -228,6 +227,8 @@ done
 
 ## 7단계: 모델 없는 reward 루프와 버전 교체 (`ops/simulate.sh`, `ops/rollout.sh`)
 
+시뮬레이터는 교체 전후에 같은 답을 보냅니다. 새 풀에서도 정답과 오답의 판정이 유지되면, 답이 달라져서 생긴 변화와 버전 교체를 혼동하지 않고 로그를 읽을 수 있습니다.
+
 `ops/simulate.sh`가 모델 대신 정해진 제출물을 보냅니다. 이 단계에서 확인하는 것은 학습 성능이 아니라 채점과 라우팅입니다. 전환 전후 로그에서 판정과 실제 채점 버전을 함께 비교하세요.
 
 2단계에서 SSM 터널을 연 터미널은 그대로 두고, 작업 터미널 두 개를 더 씁니다. 첫 번째 작업 터미널의 reward 루프는 30배치를 차례로 채점하고, 배치 사이에 20초씩 쉽니다. 2026-11-17 c8i 노드에서는 약 16분 걸렸습니다.
@@ -292,6 +293,9 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 - **`ops/rollout.sh`가 parity에서 멈추면**: v2는 트래픽을 받지 않고 v1이 그대로 active로 남습니다(자세한 내용은 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)).
 - **speedup 차이로 parity가 실패하면**: CPU 풀은 측정 노이즈가 커서, 정답 제출물의 speedup이 크게 흔들리면 parity가 `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365`처럼 실패할 수 있습니다(2026-11-20 실행). 판정(`status`)이 같다면 같은 명령을 다시 실행하세요.
 
+<details class="note" markdown="1">
+<summary>이 클러스터에서 더 해 보기 · 벤치마크와 Agent Sandbox</summary>
+
 ## 8단계 (선택): 세 런타임(gVisor, Kata + Cloud Hypervisor, Kata + QEMU) 비교 (`ops/bench.sh`)
 
 6단계에서 배포한 세 풀(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)에 같은 정답 코드를 보내 비교합니다. 세 풀이 같은 노드, 같은 CPU, 같은 커널 위에 있어서 측정 차이를 런타임 차이로 보기 쉽습니다. v1 풀마다 cold start(pod 생성에서 Ready까지)와 평가 지연을 측정합니다.
@@ -325,6 +329,8 @@ scripts/extensions/agent_sandbox.sh claim kata-clh-cpu     # borrow it, print it
 ![agent_sandbox.sh 실행 화면: install이 controller와 CRD 네 개, claim 권한을 만들고, pool kata-clh-cpu 1이 SandboxTemplate과 SandboxWarmPool을 만들고, claim이 샌드박스 kernel-eval-kata-clh-cpu-6bdp7의 주소를 출력한 뒤 claim을 지우고, 마지막 kubectl get에서 warm pool READY 1과 새 샌드박스 kernel-eval-kata-clh-cpu-qnwbh가 True](../images/terminal/agent-sandbox-claim.png)
 
 빌린 샌드박스로 실제 multi-turn 에피소드를 돌리는 실습은 [11 multi-turn 에피소드 실습](11_multi_turn.md)에 있습니다. 같은 warm pool을 쓸 수 있습니다(`episodes kata-clh-cpu 2 3`). 개념 설명은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)을 참고하세요.
+
+</details>
 
 ## 정리 (`08_cleanup.sh`)
 

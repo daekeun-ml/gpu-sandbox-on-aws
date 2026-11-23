@@ -1,11 +1,10 @@
 # 10 CPU-only path on c8i (scenario C)
 
-!!! info "TL;DR"
-    Run three sandbox runtimes on a c8i node and grade prepared inputs without a model or GPU.
+Practice a grading pool switch on EKS without a GPU or model. Compare three runtimes on one `c8i.2xlarge`, then switch from v1 to v2 while a simulator keeps sending the same answers.
 
-    **Completion check** Verify the pools, then check the simulator log for the change from v1 to v2.
-
-**Before you start:** read the architecture in [00 Overview](00_overview.md) and run the local smoke test in [Getting started](../getting_started.md). Runtime differences are in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and why version pinning matters is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
+1. Work from [local and CDK setup](#preparation) through [image build](#step-3-build-only-two-images-03_build_push_imagessh). The CPU path uses `--no-trainer` because it needs only the sandbox and control images.
+2. [Install the three runtimes](#step-4-three-runtimes-on-the-c8i-node-katacpu_nodessh) and compare each pod's kernel with the host. Configure routing, then [send test answers to all three pools](#step-6-deploy-and-verify-three-pools-06_deploy_sandboxessh-opsverifysh).
+3. [Switch using two work terminals](#step-7-a-reward-loop-without-a-model-and-a-version-swap-opssimulatesh-opsrolloutsh). Look for a batch on v2 returning `ok` and `wrong_answer` after `SWITCH`. Once the base lab is complete, [clean up the cluster](#cleanup-08_cleanupsh).
 
 ??? note "Terms (expand if a word is new)"
     - **Nested virtualization**: running a VM inside a VM. Since 2026-02, EC2 exposes `/dev/kvm` on some virtual instances such as C8i, M8i and R8i. Kata uses it to start a small VM per pod.
@@ -18,14 +17,14 @@
 
     More terms are in the [Glossary](../reference/glossary.md).
 
-!!! note "Verification status"
+??? note "What the practice-account run covered"
     Every step on this page ran in the author's practice account. The dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
 
 ## Architecture
 
 The c8i node runs gVisor and Kata; the simulator sends prepared submissions and the rollout script changes the pool.
 
-??? note "Details"
+??? note "Architecture"
     [![Scenario C: CPU pools of three runtimes on one c8i.2xlarge, no GPU](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
     *Takeaway: In AWS resources there is no GPU node, and one c8i.2xlarge serves as the sandbox node group.*
@@ -228,6 +227,8 @@ done
 
 ## Step 7: A reward loop without a model, and a version swap (`ops/simulate.sh`, `ops/rollout.sh`)
 
+The simulator sends the same answers on both sides of the switch. Check that the new pool still recognizes the correct and incorrect submissions as you follow the version change in the log.
+
 `ops/simulate.sh` sends the prepared submissions. Compare verdicts and the actual pool version before and after changing routing.
 
 Keep the terminal with the SSM tunnel from step 2 open, and use two more work terminals. The reward loop in the first work terminal scores 30 batches one after another and waits 20 seconds between batches. On the c8i node on 2026-11-17 it took about 16 minutes.
@@ -292,6 +293,9 @@ To go back, `scripts/ops/rollout.sh kata-clh-cpu v2 v1` brings the v1 pods back,
 - **If `ops/rollout.sh` stops at parity**: v2 receives no traffic and v1 stays active (more in [06 Updating the sandbox during training](06_sandbox_update.md)).
 - **If parity fails on a speedup difference**: CPU pools measure with a lot of noise, so when the speedup of the correct submission swings far, parity can fail like `FAIL relu_bias_torch_only ... speedup moved 0.8979 -> 0.5365` (2026-11-20 run). If the verdicts (`status`) match, run the same command again.
 
+<details class="note" markdown="1">
+<summary>Optional labs on this cluster · benchmarks and Agent Sandbox</summary>
+
 ## Step 8 (optional): Compare the three runtimes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU) (`ops/bench.sh`)
 
 Send the same correct code to the three pools from step 6 (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) and compare them. The three pools share one node, one CPU type and one kernel, so differences in the measurements are easy to read as runtime differences. Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool.
@@ -325,6 +329,8 @@ scripts/extensions/agent_sandbox.sh claim kata-clh-cpu     # borrow it, print it
 ![agent_sandbox.sh output: install creates the controller, four CRDs and the claim permissions, pool kata-clh-cpu 1 creates the SandboxTemplate and SandboxWarmPool, claim prints the address of sandbox kernel-eval-kata-clh-cpu-6bdp7 and deletes the claim, and the final kubectl get shows the warm pool READY 1 and a new sandbox kernel-eval-kata-clh-cpu-qnwbh True](../images/terminal/agent-sandbox-claim.png)
 
 Running real multi-turn episodes on borrowed sandboxes is in [11 Multi-turn episodes](11_multi_turn.md), and the same warm pool works there (`episodes kata-clh-cpu 2 3`). The concepts are in [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md).
+
+</details>
 
 ## Cleanup (`08_cleanup.sh`)
 

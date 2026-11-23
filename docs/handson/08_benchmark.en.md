@@ -1,13 +1,12 @@
 # 08 Runtime benchmark
 
-!!! info "TL;DR"
-    Send the same input to each runtime to compare evaluation latency. Compare GPU results on the same GPU type.
+Sending the same code repeatedly answers two questions. How long does one evaluation take, and how many evaluations can the whole pool finish per second? You can read the [EKS results](#runtime-results) and [HyperPod B1 results](#hyperpod-b1) without a cluster.
 
-    **Completion check** Read cold and warm measurements separately. The warm p50 describes typical latency, and p95 gives a view of slower requests.
+To run a comparison, [check that v1 pools are ready and training has stopped](#before-you-begin), then [send 32 requests per pool](#running-it). Look for `ok 32/32` before reading p50, p95 and requests per second. Record the GPU type and pod count alongside the results.
 
 ## Scoring latency and throughput across five EKS pools { #runtime-results }
 
-On November 22, 2026, in `us-west-2` on EKS 1.36, we ran `scripts/ops/bench.sh 32` with image `a20261120b` after scenario A training and rollback finished. **All 160 evaluations passed**, 32 per pool. GPU pools evaluated `relu_bias_triton` and CPU pools evaluated `relu_bias_torch_only`.
+**All 160 requests succeeded**, 32 on each of five v1 pools. For example, the two-pod EC2 gVisor pool took about 10 seconds per evaluation at p50 and completed 0.198 evaluations per second across both pods.
 
 | v1 pool | Node | Ready pods | OK / requests | Eval p50 (s) | Eval p95 (s) | Pool throughput (eval/s) |
 |---|---|---:|---:|---:|---:|---:|
@@ -17,7 +16,14 @@ On November 22, 2026, in `us-west-2` on EKS 1.36, we ran `scripts/ops/bench.sh 3
 | `kata-clh-cpu` | `c8i.2xlarge` | 1 | 32/32 | 4.043 | 4.120 | 0.244 |
 | `kata-qemu-cpu` | `c8i.2xlarge` | 1 | 32/32 | 3.819 | 3.958 | 0.258 |
 
-The p50 and p95 measure server time per successful evaluation. Throughput includes the client waiting for a free pod and covers the whole pool. The GPU rows use different replica counts and different GPUs (A10G and T4).
+Sort the successful requests by server grading time. **p50** marks the halfway point and **p95** the point by which 95% have finished. Throughput includes the client waiting for a free pod and covers the whole pool. The GPU rows use different replica counts and different GPUs (A10G and T4).
+
+<details class="note" markdown="1">
+<summary>Run conditions and the GPU and CPU submissions</summary>
+
+After scenario A training and rollback, we ran `scripts/ops/bench.sh 32` in `us-west-2` on EKS 1.36 with image `a20261120b`. GPU pools received `relu_bias_triton` and CPU pools received `relu_bias_torch_only`. [Run metadata](data/runtime-benchmark-2026-11-22.meta.json)
+
+</details>
 
 ![Success counts, latency, throughput and kernel timings from the benchmark JSONL](../images/terminal/bench-results-replay.png)
 
@@ -61,12 +67,13 @@ Measure while training is stopped. A sandbox pod evaluates one request at a time
 
 ## Running it
 
-Print the cold start of every deployed v1 pool and append the evaluation results to a JSONL file.
+Print pod readiness timings, send the same submission 32 times to each available v1 pool, then read the results file path from the last line.
 
 ```bash
-scripts/ops/bench.sh        # 32 evaluations per pool (default)
-scripts/ops/bench.sh 64     # more requests per pool
+scripts/ops/bench.sh 32
 ```
+
+For a 64-request comparison, change the argument to `64` on a subsequent run.
 
 | Order | What the script does |
 |---|---|
@@ -98,6 +105,9 @@ scripts/ops/bench.sh 64     # more requests per pool
 - **If `ok` is smaller than `requests`**: the bench JSON does not keep the status or error of the failed requests.
 - **To find the cause**: run `scripts/ops/verify.sh <runtime> v1` on the same pool. If the golden requests reproduce the problem, the `FAIL` lines show the status and error; look those strings up in the "Viewing /info with the probe tool" and "Sandbox pools and readiness" sections of [Troubleshooting](../reference/troubleshooting.md).
 
+<details class="note" markdown="1">
+<summary>Find each metric in the raw JSON</summary>
+
 ### bench JSON fields
 
 | Field | Meaning |
@@ -112,11 +122,13 @@ scripts/ops/bench.sh 64     # more requests per pool
 
 `eval_*`, `speedup_median` and `ref_ms_median` are computed from `ok` results only (failed requests stay out of the latency statistics).
 
+</details>
+
 ## What goes into evaluation latency
 
 The sandbox times evaluation and process cleanup after it accepts a request. These timings feed `eval_p50_s` and `eval_p95_s`. Pool throughput also accounts for the client's wait for a free pod and the request round trip.
 
-??? note "Details"
+??? note "What goes into evaluation latency"
     `duration_s` is the time from when the server takes a request until it returns the verdict; the kernel run is only part of it. Time the client spent waiting for a pod is not included.
 
     The server creates a fresh process tree per request and goes through the stages below. The stages depend on the golden.
@@ -137,6 +149,8 @@ The sandbox times evaluation and process cleanup after it accepts a request. The
     The 3 warmup and 20 timed iterations are the server defaults (`HARNESS_WARMUP`, `HARNESS_ITERS`).
 
 ## How to interpret the results
+
+In the EKS table, one evaluation took 9.984 seconds at p50 on gVisor and 10.789 on Kata QEMU. The whole Kata QEMU pool completed more requests per second (0.349). The pools had two and four pods respectively and used different GPUs, so throughput alone cannot establish a per-runtime speed ranking.
 
 Check which submissions succeeded before comparing latencies. A lower p50 is hard to interpret if many requests failed or the pools use different GPUs.
 
@@ -171,6 +185,9 @@ The benchmark reads each v1 pod’s creation time and last Ready transition. Ima
 
 ![Per-pod creation-to-Ready times printed by the benchmark](../images/terminal/bench-ready-replay.png)
 
+<details class="note" markdown="1">
+<summary>Optional exercise for timing pod startup</summary>
+
 ## Measuring cold start again
 
 The script's cold start (pod creation to the last time it became Ready) includes, by definition, all of the following, plus the wait for the node if the pod was created before its node existed:
@@ -199,6 +216,8 @@ The values in the results table below (pass 2) were measured after restarting ev
 With `maxSurge: 0`, pods are replaced one at a time, and in a pool with one pod per node, such as gVisor, the new pod starts only after the old one releases the GPU. To measure another pool, replace `kata-qemu` in the Deployment name with that runtime's name (for example `gvisor`).
 
 **If it fails:** if the second command times out, see the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md), and for Kata also the "Kata" section.
+
+</details>
 
 ## First deployment and cached images { #results-20261118 }
 
@@ -302,17 +321,21 @@ The sandbox pods reached Ready in 15, 120 seconds respectively. The p50 and p95 
     kubectl -n rl-trainer logs "job/$job"
     ```
 
+<details class="note" markdown="1">
+<summary>Reference numbers published for other environments</summary>
+
 ## Published reference numbers
 
-??? note "Details"
-    | Source | Numbers | Conditions and limits |
-    |---|---|---|
-    | Kata metrics CI (3.28.0) | Boot to workload: CLH 0.39 s, QEMU 0.71 s | Different machines, wide tolerance. Measures only the window until the VM is up and the workload starts |
-    | AWS China blog (2026-07, `c5.metal`, Kata 3.31.0 + CLH, OpenSandbox, Karpenter 1.12.1) | Cold start about 3 s, pool claim about 230 ms | Measured by the blog authors on bare-metal CPU sandboxes. Pool claim appears to be the time to get a sandbox from a pre-warmed pool and differs from cold start |
-    | Memory numbers from the same blog | CLH about 130 MB, QEMU about 160 MB | They equal the `overhead.podFixed` defaults of Kata 3.31.0, so they are probably not measurements |
-    | Kata 4.3.1 RuntimeClass `overhead.podFixed` | clh 130Mi/250m, qemu 320Mi/250m, qemu-nvidia-gpu 10240Mi/1 CPU | What the scheduler reserves on top of each pod. Not a measurement of actual usage |
+| Source | Numbers | Conditions and limits |
+|---|---|---|
+| Kata metrics CI (3.28.0) | Boot to workload: CLH 0.39 s, QEMU 0.71 s | Different machines, wide tolerance. Measures only the window until the VM is up and the workload starts |
+| AWS China blog (2026-07, `c5.metal`, Kata 3.31.0 + CLH, OpenSandbox, Karpenter 1.12.1) | Cold start about 3 s, pool claim about 230 ms | Measured by the blog authors on bare-metal CPU sandboxes. Pool claim appears to be the time to get a sandbox from a pre-warmed pool and differs from cold start |
+| Memory numbers from the same blog | CLH about 130 MB, QEMU about 160 MB | They equal the `overhead.podFixed` defaults of Kata 3.31.0, so they are probably not measurements |
+| Kata 4.3.1 RuntimeClass `overhead.podFixed` | clh 130Mi/250m, qemu 320Mi/250m, qemu-nvidia-gpu 10240Mi/1 CPU | What the scheduler reserves on top of each pod. Not a measurement of actual usage |
 
-    This hands-on starts pods in advance with Deployments, so the counterpart of the blog's pool claim is not the cold start but the time the client takes to get a free pod.
+This hands-on starts pods in advance with Deployments, so the counterpart of the blog's pool claim is not the cold start but the time the client takes to get a free pod.
+
+</details>
 
 ## Scope and limits
 

@@ -1,11 +1,10 @@
 # 06 학습 중 샌드박스 업데이트
 
-!!! info "TL;DR"
-    학습을 켜 둔 채 v2 풀을 따로 배포합니다. 같은 입력에 대한 채점 결과를 비교한 뒤 라우팅을 바꿉니다.
+한 문제에 낸 답들을 비교할 때 채점 기준까지 바뀌면 점수 차이를 해석하기 어렵습니다. 그래서 trainer는 한 배치에 쓸 풀 버전을 한 번 정합니다. 여기서는 [05편의 학습](05_grpo_training.md)을 계속 돌리면서 **다음 배치부터 v2로 보내는 과정**을 확인합니다.
 
-    **완료 기준** 전환 후 v2가 실제로 평가를 처리했는지 `reward_batch`에서 확인하세요. 확인이 끝나면 v1을 정리합니다.
-
-**시작 전에** [05 On-policy GRPO 학습](05_grpo_training.md)의 학습이 실행 중이어야 합니다. 버전을 group 단위로 고정하는 이유는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
+1. [두 풀이 함께 쓸 GPU를 준비](#준비-bluegreen에-필요한-gpu)하세요. gVisor에서는 채점 노드 네 대가 `Ready`여야 합니다.
+2. 다른 작업 터미널에서 [v2로 전환](#실행)합니다. 같은 시험 답을 v1과 v2에 보낸 결과가 [parity 검사](#rollout-parity)를 통과하면 라우팅이 바뀝니다.
+3. trainer 로그의 `SWITCH` 뒤에 [v2 배치의 판정](#switch-batches)이 나오는지 확인하세요. 실제로 채점한 결과가 있으면 [v1을 축소](#전환-확인-후-v1-정리)합니다. 모두 `sandbox_error`라면 v1을 유지하고 [롤백](#rollback)하세요.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **blue/green**: 새 버전(green)을 기존 버전(blue)과 별도로 띄워 검증한 뒤 트래픽을 한 번에 옮기는 배포 방식입니다.
@@ -15,7 +14,7 @@
     - **draining, recycler**: 새 요청을 받지 않고 교체를 기다리는 pod 상태와, 그런 pod를 지워 새 pod로 바꾸는 Production gateway의 기능입니다.
     - **rollback**: 문제가 생겼을 때 이전 버전으로 되돌리는 작업입니다.
 
-!!! warning "검증 상태"
+??? note "실습 계정에서 확인한 범위"
     시나리오 A의 GRPO 학습 중 gVisor 풀을 v1에서 v2로 전환했습니다. 첫 v2 채점은 배치 5였습니다. v1을 `--finish`로 축소하고, 학습이 끝난 뒤 v1으로 롤백했습니다.
 
 ## v1과 v2의 차이
@@ -177,7 +176,7 @@ A10G 샌드박스 노드를 네 대로 늘려 v1과 v2에 두 대씩 배정했�
 
 trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용합니다. 전환 후에는 로그의 버전과 실제 평가 상태를 함께 확인하세요. [On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 배치 단위로 버전을 고정하는 이유를 설명합니다.
 
-??? note "상세 설명"
+??? note "Trainer가 전환을 받는 과정"
     ```mermaid
     sequenceDiagram
         autonumber
@@ -226,38 +225,44 @@ trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용�
 
 ### trainer가 v2를 사용한 배치 { #switch-batches }
 
+`SWITCH`는 trainer가 새 경로를 읽었다는 신호입니다. 바로 뒤 `batch`에서 v2가 돌려준 판정까지 보세요. 한 배치 안의 답은 모두 같은 기준으로 비교해야 하므로 원본 `served_versions`에는 버전 하나만 나와야 합니다.
+
 배치 1~4은 v1, 5~16은 v2가 채점했습니다. 각 `reward_batch`의 `served_versions`를 확인했을 때 두 버전이 섞인 배치는 0개였습니다. [배치별 채점 기록](data/grpo-rollout-2026-11-22.json)
 
 ![trainer가 기록한 버전 전환 이벤트와 버전별 배치·제출 건수](../images/terminal/rollout-batches-replay.png)
+
+<details class="note" markdown="1">
+<summary>v2 pod가 요청을 다 처리하면 어떻게 교체할까?</summary>
 
 ## v2 pod 재활용 (SANDBOX_MAX_EVALS=200)
 
 v2 pod는 평가를 200번 수행한 뒤 draining 상태가 되어 Ready에서 제외됩니다. 전환 전 2, 3단계에서 보낸 golden 요청도 이 200번에 포함됩니다.
 
-??? note "상세 설명"
-    - **Production에서는**: gateway의 recycler가 이런 pod를 지웁니다([03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md)).
-    - **핸즈온의 direct 모드에서는**: pod가 Ready가 아닌 채로 남습니다.
+- **Production에서는**: gateway의 recycler가 이런 pod를 지웁니다([03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md)).
+- **핸즈온의 direct 모드에서는**: pod가 Ready가 아닌 채로 남습니다.
 
-    v2 pod 2개의 한도는 합계 400번입니다. golden 요청 12번을 빼고 step마다 completion 16개를 한 번씩 평가하면 약 24 step분이 남습니다.
+v2 pod 2개의 한도는 합계 400번입니다. golden 요청 12번을 빼고 step마다 completion 16개를 한 번씩 평가하면 약 24 step분이 남습니다.
 
-    - **캐시 덕분에 `n`이 작으면**: 더 오래 씁니다.
-    - **다른 풀로 캐시된 결과를 다시 보내거나 batch 전체를 다시 보내면**: 더 빨리 소진됩니다.
-    - **두 pod가 모두 draining 상태이면**: 요청이 `sandbox_error`가 되어 reward 계산에서 빠집니다.
+- **캐시 덕분에 `n`이 작으면**: 더 오래 씁니다.
+- **다른 풀로 캐시된 결과를 다시 보내거나 batch 전체를 다시 보내면**: 더 빨리 소진됩니다.
+- **두 pod가 모두 draining 상태이면**: 요청이 `sandbox_error`가 되어 reward 계산에서 빠집니다.
 
-    학습을 오래 실행할 때는 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod를 직접 지우세요. 아래 pod도 `0/1`로 보이니 구분하세요.
+학습을 오래 실행할 때는 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod를 직접 지우세요. 아래 pod도 `0/1`로 보이니 구분하세요.
 
-    - **시작 중인 pod나 GPU probe, egress 검사에 실패한 pod**: `0/1`로 보입니다.
-    - **평가 중 `gpu_fault`가 난 pod**: `0/1`이 되지만, liveness probe가 30초 안팎에 컨테이너를 다시 시작하므로 `RESTARTS`가 늘어납니다.
-    - **egress 검사에 실패하는 pod**: 실패하는 동안 서버는 5초마다 검사하고 실패할 때마다 `egress is open, refusing work`를 기록합니다. `kubectl -n sandbox logs <pod> --since=1m`처럼 최근 로그에 이 줄이 계속 나오면 지우지 말고 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목부터 보세요.
+- **시작 중인 pod나 GPU probe, egress 검사에 실패한 pod**: `0/1`로 보입니다.
+- **평가 중 `gpu_fault`가 난 pod**: `0/1`이 되지만, liveness probe가 30초 안팎에 컨테이너를 다시 시작하므로 `RESTARTS`가 늘어납니다.
+- **egress 검사에 실패하는 pod**: 실패하는 동안 서버는 5초마다 검사하고 실패할 때마다 `egress is open, refusing work`를 기록합니다. `kubectl -n sandbox logs <pod> --since=1m`처럼 최근 로그에 이 줄이 계속 나오면 지우지 말고 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목부터 보세요.
 
-    아래 첫 명령으로 v2 pod를 확인하고, 둘째 명령은 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod에만 실행하세요.
+아래 첫 명령으로 v2 pod를 확인하고, 둘째 명령은 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod에만 실행하세요.
 
-    ```bash
-    kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v2
-    kubectl -n sandbox delete pod <READY-0/1-pod-name>
-    ```
+```bash
+kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v2
+kubectl -n sandbox delete pod <READY-0/1-pod-name>
+```
 
-    **확인할 것:** 지운 뒤 Deployment가 새 pod를 만들고, 몇 분 뒤 첫 명령의 결과가 다시 모두 `1/1`이 됩니다.
+**확인할 것:** 지운 뒤 Deployment가 새 pod를 만들고, 몇 분 뒤 첫 명령의 결과가 다시 모두 `1/1`이 됩니다.
+
+</details>
 
 ## 전환 확인 후 v1 정리
 

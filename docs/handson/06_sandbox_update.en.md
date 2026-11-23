@@ -1,11 +1,10 @@
 # 06 Updating the sandbox during training
 
-!!! info "TL;DR"
-    Deploy a separate v2 pool while training is running. Compare verdicts on the same inputs before switching routing.
+When answers to one prompt are compared, changing the grader halfway through makes the score difference hard to interpret. The trainer therefore selects one pool version for a whole batch. Keep [chapter 05's training](05_grpo_training.md) running to see **the next batch start on v2**.
 
-    **Completion check** Verify that v2 has graded a submission before scaling down v1.
-
-**Before you start:** the training from [05 On-policy GRPO training](05_grpo_training.md) should be running. Why versions are pinned per group is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and terms are in the [Glossary](../reference/glossary.md).
+1. [Provide GPU capacity for both pools](#preparation-gpus-for-bluegreen). For gVisor, wait for four grading nodes to become `Ready`.
+2. In another work terminal, [start the switch](#run). Routing changes after the [parity check](#rollout-parity) compares the same test submissions on both versions.
+3. After `SWITCH`, check the [verdicts from a v2 batch](#switch-batches) in the trainer log. Once it has graded submissions, [scale down v1](#finish-after-confirming-v2). If every request returned `sandbox_error`, keep v1 and [roll back](#rollback).
 
 ??? note "Terms (expand if a word is new to you)"
     - **Blue/green**: a deployment method that starts the new version (green) separately next to the current one (blue), verifies it, then moves traffic in one switch.
@@ -15,7 +14,7 @@
     - **Draining, recycler**: a pod state in which it takes no new requests and waits to be replaced, and the production gateway feature that deletes such pods so new ones replace them.
     - **Rollback**: going back to the previous version when something goes wrong.
 
-!!! warning "Validation status"
+??? note "What the practice-account run covered"
     We switched gVisor from v1 to v2 during scenario A GRPO training. Batch 5 was the first scored on v2. We scaled down v1 with `--finish` and rolled back to v1 after training.
 
 ## How v1 and v2 differ
@@ -179,7 +178,7 @@ We scaled to four A10G sandbox nodes, two per version. Once the golden verdicts 
 
 The trainer pins routing for a batch. Check the version and verdicts after the switch.
 
-??? note "Details"
+??? note "How the trainer picks up the switch"
     ```mermaid
     sequenceDiagram
         autonumber
@@ -228,38 +227,44 @@ The trainer pins routing for a batch. Check the version and verdicts after the s
 
 ### The batch where training switched { #switch-batches }
 
+`SWITCH` tells you the trainer read the new route. Check the next `batch` for verdicts from v2. Because answers in one batch must be compared on the same terms, the raw `served_versions` should contain one version.
+
 Batches 1–4 used v1 and batches 5–16 used v2. Every `reward_batch` had only one entry in `served_versions`. [Per-batch record](data/grpo-rollout-2026-11-22.json)
 
 ![The trainer’s switch event and per-version counts from its reward batches](../images/terminal/rollout-batches-replay.png)
 
+<details class="note" markdown="1">
+<summary>How is a v2 pod replaced after it reaches its evaluation limit?</summary>
+
 ## Recycling v2 pods (SANDBOX_MAX_EVALS=200)
 
-??? note "Details"
-    After 200 evaluations a v2 pod turns draining and leaves Ready. The golden requests sent in steps 2 and 3 before the switch count toward the 200.
+After 200 evaluations a v2 pod turns draining and leaves Ready. The golden requests sent in steps 2 and 3 before the switch count toward the 200.
 
-    - **In production**: the gateway's recycler deletes such pods ([03 Gateway and pools](../production/03_gateway_and_pools.md)).
-    - **In the hands-on's direct mode**: the pod just stays, not Ready.
+- **In production**: the gateway's recycler deletes such pods ([03 Gateway and pools](../production/03_gateway_and_pools.md)).
+- **In the hands-on's direct mode**: the pod just stays, not Ready.
 
-    The two v2 pods have 400 evaluations in total. After the 12 golden requests, evaluating 16 completions once per step leaves about 24 steps.
+The two v2 pods have 400 evaluations in total. After the 12 golden requests, evaluating 16 completions once per step leaves about 24 steps.
 
-    - **When the cache keeps `n` small**: they last longer.
-    - **When cached verdicts from another pool, or the whole batch, are sent again**: they run out sooner.
-    - **When both are draining**: requests become `sandbox_error` and drop out of the reward.
+- **When the cache keeps `n` small**: they last longer.
+- **When cached verdicts from another pool, or the whole batch, are sent again**: they run out sooner.
+- **When both are draining**: requests become `sandbox_error` and drop out of the reward.
 
-    For long runs, delete v2 pods that served evaluations at `1/1` for a while and then turned READY `0/1`. Tell them apart from the pods below, which also show `0/1`.
+For long runs, delete v2 pods that served evaluations at `1/1` for a while and then turned READY `0/1`. Tell them apart from the pods below, which also show `0/1`.
 
-    - **A pod that is still starting, or that failed the GPU probe or the egress check**: it also shows `0/1`.
-    - **A pod that hit a `gpu_fault` during an evaluation**: it also turns `0/1`, but the liveness probe restarts its container within about 30 seconds, so `RESTARTS` goes up.
-    - **A pod failing the egress check**: while the check fails, the server re-checks every 5 seconds and logs `egress is open, refusing work` each time. If recent logs, such as `kubectl -n sandbox logs <pod> --since=1m`, keep showing that line, do not delete the pod; start with the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md).
+- **A pod that is still starting, or that failed the GPU probe or the egress check**: it also shows `0/1`.
+- **A pod that hit a `gpu_fault` during an evaluation**: it also turns `0/1`, but the liveness probe restarts its container within about 30 seconds, so `RESTARTS` goes up.
+- **A pod failing the egress check**: while the check fails, the server re-checks every 5 seconds and logs `egress is open, refusing work` each time. If recent logs, such as `kubectl -n sandbox logs <pod> --since=1m`, keep showing that line, do not delete the pod; start with the "Sandbox pools and readiness" section of [Troubleshooting](../reference/troubleshooting.md).
 
-    The first command below lists the v2 pods. Run the second one only for a v2 pod that served evaluations at `1/1` for a while and then turned READY `0/1`.
+The first command below lists the v2 pods. Run the second one only for a v2 pod that served evaluations at `1/1` for a while and then turned READY `0/1`.
 
-    ```bash
-    kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v2
-    kubectl -n sandbox delete pod <READY-0/1-pod-name>
-    ```
+```bash
+kubectl -n sandbox get pods -l gpusandbox/runtime=gvisor,gpusandbox/version=v2
+kubectl -n sandbox delete pod <READY-0/1-pod-name>
+```
 
-    **What to look for:** after the deletion the Deployment creates a new pod, and a few minutes later the first command shows every pod at `1/1` again.
+**What to look for:** after the deletion the Deployment creates a new pod, and a few minutes later the first command shows every pod at `1/1` again.
+
+</details>
 
 ## Finish after confirming v2
 

@@ -1,11 +1,12 @@
 # 07 HyperPod scenario
 
-!!! info "TL;DR"
-    Run GRPO on HyperPod. In B1 the trainer moves to HyperPod and the sandboxes stay on EC2. B2 tests sandboxes on a separate HyperPod instance group.
+In B1 the model trains on a SageMaker HyperPod node and its generated code is graded by a gVisor pool on EC2. Check **both the training node's identity and the grading results** to trace work across the two.
 
-    **Completion check** Confirm trainer placement and look for `routing` and `reward_batch` events.
+1. [Check the Region and quotas](#before-you-begin), then follow the [B1 steps](#b1-steps). This path provisions its own EKS cluster and EC2 grading nodes.
+2. Once the HyperPod trainer is `Schedulable` and the EC2 pool passes verification, [submit one step](#6-training).
+3. In the [run and its logs](#how-to-verify), find the trainer pod's node, the verdicts in `reward_batch`, and the job's `Completed` status. [Delete HyperPod first](#cleanup) during cleanup.
 
-**Before you start:** read scenario A's [00 Hands-on overview](00_overview.md), [04 Deploy and verify sandbox pools](04_sandbox_pools.md) and [05 On-policy GRPO training](05_grpo_training.md) first. When to choose HyperPod is in [Platforms and instances](../concepts/04_platforms_and_instances.md), and terms are in the [Glossary](../reference/glossary.md).
+[B2](#b2) is a separate experimental deployment for putting grading nodes on HyperPod as well.
 
 ??? note "Terms (expand if a word is new to you)"
     - **SageMaker HyperPod**: an AWS managed cluster for long-running training. With EKS as the orchestrator, it attaches groups of nodes to an existing EKS cluster.
@@ -32,6 +33,9 @@
 
 *Takeaway: In AWS resources, only the trainer sits on a HyperPod instance group and the rest is the same as scenario A.*
 
+<details class="note" markdown="1">
+<summary>B1 network path and authentication</summary>
+
 ```mermaid
 flowchart LR
     subgraph EKS["Same EKS cluster"]
@@ -49,6 +53,8 @@ flowchart LR
 ```
 
 *Takeaway: the sandboxes stay on EC2 nodes in the same cluster, so the NetworkPolicy and token authentication of scenario A apply unchanged.*
+
+</details>
 
 | Configuration | Training | Sandboxes | Status |
 |---|---|---|---|
@@ -277,45 +283,51 @@ See the [HyperPod training script](../reference/scripts.md#scriptshyperpodrun_gr
 - **If the pod is Pending or cannot find `hyperpodrun`**: see the "HyperPod" section of [Troubleshooting](../reference/troubleshooting.md).
 - **If no events appear**: see the "Training" section of the same page.
 
+<details class="note" markdown="1">
+<summary>Training job template and node placement</summary>
+
 ## The HyperPodPyTorchJob template
 
 The template sets placement, the trainer command, and log patterns used to detect a stalled job.
 
-??? note "Details"
-    The HyperPod-specific settings in `k8s/trainer/hyperpod-job-grpo.yaml.tpl`:
+The HyperPod-specific settings in `k8s/trainer/hyperpod-job-grpo.yaml.tpl`:
 
-    | Field | Value | Meaning (per the AWS documentation) |
-    |---|---|---|
-    | command | `hyperpodrun --nproc_per_node=1 --nnodes=1 /opt/gpusandbox/rl/trl/train_grpo.py ...` | Launcher of the HyperPod elastic agent, an extension of the PyTorch ElasticAgent |
-    | `runPolicy.jobMaxRetryCount` | 3 | Maximum number of restarts at the process level |
-    | `restartPolicy.numRestartBeforeFullJobRestart` | 1 | Process-level restarts allowed before the operator restarts at the job level |
-    | `restartPolicy.evalPeriodSeconds` | 3600 | Period, in seconds, over which the restart limit is evaluated |
-    | `restartPolicy.maxFullJobRestarts` | 2 | Maximum full job restarts before the job fails |
-    | `cleanPodPolicy` | All | Which pods the operator cleans up |
-    | log rule `JobStart` | `.*"event": "routing".*`, `expectedStartCutOffInSeconds: 1200` | HANGING if no routing event appears within 20 minutes of the start |
-    | log rule `RewardStalled` | `.*"event": "reward_batch".*`, `expectedRecurringFrequencyInSeconds: 1800` | HANGING if more than 30 minutes pass between reward_batch lines |
-    | nodeAffinity | `node.kubernetes.io/instance-type In [ml.g5.2xlarge]`, `sagemaker.amazonaws.com/node-health-status In [Schedulable]` | Only healthy HyperPod nodes |
-    | pod labels | `app: grpo-trainer`, `gpusandbox/client: "true"` | Admitted by the same NetworkPolicy as in scenario A |
-    | `/outputs` | emptyDir | Pod Security `baseline` in the `rl-trainer` namespace forbids hostPath |
+| Field | Value | Meaning (per the AWS documentation) |
+|---|---|---|
+| command | `hyperpodrun --nproc_per_node=1 --nnodes=1 /opt/gpusandbox/rl/trl/train_grpo.py ...` | Launcher of the HyperPod elastic agent, an extension of the PyTorch ElasticAgent |
+| `runPolicy.jobMaxRetryCount` | 3 | Maximum number of restarts at the process level |
+| `restartPolicy.numRestartBeforeFullJobRestart` | 1 | Process-level restarts allowed before the operator restarts at the job level |
+| `restartPolicy.evalPeriodSeconds` | 3600 | Period, in seconds, over which the restart limit is evaluated |
+| `restartPolicy.maxFullJobRestarts` | 2 | Maximum full job restarts before the job fails |
+| `cleanPodPolicy` | All | Which pods the operator cleans up |
+| log rule `JobStart` | `.*"event": "routing".*`, `expectedStartCutOffInSeconds: 1200` | HANGING if no routing event appears within 20 minutes of the start |
+| log rule `RewardStalled` | `.*"event": "reward_batch".*`, `expectedRecurringFrequencyInSeconds: 1800` | HANGING if more than 30 minutes pass between reward_batch lines |
+| nodeAffinity | `node.kubernetes.io/instance-type In [ml.g5.2xlarge]`, `sagemaker.amazonaws.com/node-health-status In [Schedulable]` | Only healthy HyperPod nodes |
+| pod labels | `app: grpo-trainer`, `gpusandbox/client: "true"` | Admitted by the same NetworkPolicy as in scenario A |
+| `/outputs` | emptyDir | Pod Security `baseline` in the `rl-trainer` namespace forbids hostPath |
 
-    Per the AWS documentation, when a rule evaluates to HANGING, the HyperPod elastic agent treats the container as stuck and restarts the job with the training operator. Log monitoring reads stdout, where this repository prints its events with a flush.
+Per the AWS documentation, when a rule evaluates to HANGING, the HyperPod elastic agent treats the container as stuck and restarts the job with the training operator. Log monitoring reads stdout, where this repository prints its events with a flush.
 
-    A step that sends no answer to a sandbox leaves no `reward_batch` line, so if every answer has no code or fails the trainer-side policy for more than 30 minutes, `RewardStalled` can classify the job as hanging.
+A step that sends no answer to a sandbox leaves no `reward_batch` line, so if every answer has no code or fails the trainer-side policy for more than 30 minutes, `RewardStalled` can classify the job as hanging.
 
-    !!! note "Checkpoints after a restart"
-        On start, `train_grpo.py` resumes from the latest checkpoint in `/outputs/grpo` (saved every 20 steps). An emptyDir lives as long as its pod, though.
+!!! note "Checkpoints after a restart"
+    On start, `train_grpo.py` resumes from the latest checkpoint in `/outputs/grpo` (saved every 20 steps). An emptyDir lives as long as its pod, though.
 
-        - **After a full job restart that recreates the pod, or a node replacement**: the directory is empty and training starts over.
-        - **A process-level restart**: the result depends on whether the pod is reused.
+    - **After a full job restart that recreates the pod, or a node replacement**: the directory is empty and training starts over.
+    - **A process-level restart**: the result depends on whether the pod is reused.
 
-        To resume after a node replacement, mount a shared storage PVC such as FSx for Lustre at `/outputs` ([06 Scaling with veRL](../production/06_scaling_with_verl.md)).
+    To resume after a node replacement, mount a shared storage PVC such as FSx for Lustre at `/outputs` ([06 Scaling with veRL](../production/06_scaling_with_verl.md)).
 
-    HyperPod nodes have two limits.
+HyperPod nodes have two limits.
 
-    - **Pods per node**. Kubernetes reported a limit of 14 pods on the `ml.g5.2xlarge` trainer in this run. Check `.status.allocatable.pods` on your node. The limit depends on the AMI and VPC CNI version.
-    - **IMDS access**: only hostNetwork pods reach IMDS by default, so the trainer pod cannot read node credentials.
+- **Pods per node**. Kubernetes reported a limit of 14 pods on the `ml.g5.2xlarge` trainer in this run. Check `.status.allocatable.pods` on your node. The limit depends on the AMI and VPC CNI version.
+- **IMDS access**: only hostNetwork pods reach IMDS by default, so the trainer pod cannot read node credentials.
+
+</details>
 
 ## How to verify
+
+`InService` describes the HyperPod cluster. To check the path in the [B1 diagram](#layout), use steps 4–5 below to match the trainer pod to its node and find verdicts from the EC2 gVisor pool.
 
 The AWS console showed `InService` while the trainer instance was still `Pending`. Check its status with `list-cluster-nodes`, then check node placement and trainer logs in Kubernetes.
 
@@ -371,6 +383,9 @@ aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPO
 Load `$AWS_REGION`, `$CLUSTER_NAME` and `$HYPERPOD_CLUSTER_NAME` with `source scripts/config.env` first. If a check fails, see the "HyperPod" section of [Troubleshooting](../reference/troubleshooting.md).
 
 A separate fixed-kernel benchmark sent 32 requests from the HyperPod trainer node to the two EC2 sandboxes. All 32 passed. Server-side p50 was 9.937 s and pool throughput was 0.199 eval/s. [Benchmark, screenshot and run data](08_benchmark.md#hyperpod-b1)
+
+<details class="note" markdown="1">
+<summary>B2 experiment · host the grading pool on HyperPod</summary>
 
 ## B2 (experimental): gVisor on a HyperPod instance group { #b2 }
 
@@ -597,41 +612,46 @@ A version swap during training is `scripts/ops/rollout.sh gvisor-hyperpod v1 v2`
 
 ### Managing the custom AMI
 
-??? note "Details"
-    | Situation | What to do |
-    |---|---|
-    | HyperPod releases a new base AMI | The custom AMI does not follow it. Switch the sandbox group's AMI with the steps below the table |
-    | You move gVisor to a new release | Build a new AMI and apply it to the sandbox group with the steps below the table |
-    | You finish the hands-on | `scripts/08_cleanup.sh` asks whether to delete the AMI in `HYPERPOD_B2_AMI_ID` and its snapshot |
+| Situation | What to do |
+|---|---|
+| HyperPod releases a new base AMI | The custom AMI does not follow it. Switch the sandbox group's AMI with the steps below the table |
+| You move gVisor to a new release | Build a new AMI and apply it to the sandbox group with the steps below the table |
+| You finish the hands-on | `scripts/08_cleanup.sh` asks whether to delete the AMI in `HYPERPOD_B2_AMI_ID` and its snapshot |
 
-    **When HyperPod releases a new base AMI:**
+**When HyperPod releases a new base AMI:**
 
-    1. Run step 2 again.
-    2. Set `HYPERPOD_B2_AMI_ID` in `scripts/config.env` to the new AMI ID, and reload it with `source scripts/config.env`.
-    3. Switch only the sandbox group with `aws sagemaker update-cluster-software --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" --instance-groups InstanceGroupName=sandbox --image-id "$HYPERPOD_B2_AMI_ID"`. Without `--instance-groups`, every instance group moves to this image.
+1. Run step 2 again.
+2. Set `HYPERPOD_B2_AMI_ID` in `scripts/config.env` to the new AMI ID, and reload it with `source scripts/config.env`.
+3. Switch only the sandbox group with `aws sagemaker update-cluster-software --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" --instance-groups InstanceGroupName=sandbox --image-id "$HYPERPOD_B2_AMI_ID"`. Without `--instance-groups`, every instance group moves to this image.
 
-    **When you move gVisor to a new release:**
+**When you move gVisor to a new release:**
 
-    1. Change `GVISOR_RELEASE` and run step 2 again. The build checks that the new release supports the driver.
-    2. Save the new AMI ID, reload the config and switch only the sandbox group with `update-cluster-software`, as in the steps above. Do not run step 3 (`create.sh --b2`): it calls `create-cluster` again on the existing cluster.
+1. Change `GVISOR_RELEASE` and run step 2 again. The build checks that the new release supports the driver.
+2. Save the new AMI ID, reload the config and switch only the sandbox group with `update-cluster-software`, as in the steps above. Do not run step 3 (`create.sh --b2`): it calls `create-cluster` again on the existing cluster.
+
+</details>
+
+<details class="note" markdown="1">
+<summary>Node requirements for Kata VMs</summary>
 
 ## Why Kata cannot run on HyperPod nodes
 
-??? note "Details"
-    Kata starts a small VM per pod, so the node needs `/dev/kvm` (the KVM virtualization device). HyperPod nodes do not meet this condition.
+Kata starts a small VM per pod, so the node needs `/dev/kvm` (the KVM virtualization device). HyperPod nodes do not meet this condition.
 
-    | Condition | What Kata needs | HyperPod nodes |
-    |---|---|---|
-    | `/dev/kvm` | QEMU and Cloud Hypervisor use KVM. On AWS that means bare metal or an instance with nested virtualization | There is no `ml.*.metal` instance type (`CreateCluster` instance type list) |
-    | Nested virtualization | On EC2 it is turned on with a CPU option on C8i, M8i, R8i and others | The instance group settings have no such CPU option, and the G and P families are not nested-virtualization capable anyway |
-    | GPU passthrough | An IOMMU, and the host must own the GPU through `vfio-pci` | The HyperPod AMI loads the NVIDIA driver on the host |
+| Condition | What Kata needs | HyperPod nodes |
+|---|---|---|
+| `/dev/kvm` | QEMU and Cloud Hypervisor use KVM. On AWS that means bare metal or an instance with nested virtualization | There is no `ml.*.metal` instance type (`CreateCluster` instance type list) |
+| Nested virtualization | On EC2 it is turned on with a CPU option on C8i, M8i, R8i and others | The instance group settings have no such CPU option, and the G and P families are not nested-virtualization capable anyway |
+| GPU passthrough | An IOMMU, and the host must own the GPU through `vfio-pci` | The HyperPod AMI loads the NVIDIA driver on the host |
 
-    A custom AMI does not change this: an AMI only changes software, while `/dev/kvm` depends on the instance type (bare metal or nested virtualization).
+A custom AMI does not change this: an AMI only changes software, while `/dev/kvm` depends on the instance type (bare metal or nested virtualization).
 
-    If you need Kata sandboxes, keep them on EC2 node groups in the same cluster (`g4dn.metal`, `c8i`), as in B1.
+If you need Kata sandboxes, keep them on EC2 node groups in the same cluster (`g4dn.metal`, `c8i`), as in B1.
 
-    !!! question "❓ Misconception: with HyperPod, the GPU sandboxes have to run on HyperPod nodes too"
-        HyperPod on EKS attaches instance groups to an existing EKS cluster, so the sandboxes can stay on EC2 node groups in the same cluster with the same NetworkPolicy and token authentication. Here HyperPod handles node recovery and job restarts for the long-running trainer. B2 means maintaining a custom AMI yourself, so choose it when the sandbox nodes also need HyperPod's node recovery.
+!!! question "❓ Misconception: with HyperPod, the GPU sandboxes have to run on HyperPod nodes too"
+    HyperPod on EKS attaches instance groups to an existing EKS cluster, so the sandboxes can stay on EC2 node groups in the same cluster with the same NetworkPolicy and token authentication. Here HyperPod handles node recovery and job restarts for the long-running trainer. B2 means maintaining a custom AMI yourself, so choose it when the sandbox nodes also need HyperPod's node recovery.
+
+</details>
 
 ## Scope and limits
 
