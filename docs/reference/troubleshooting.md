@@ -41,7 +41,7 @@ kubectl -n sandbox logs <pod> --previous       # after a restart (for example a 
 kubectl get events -A --sort-by=.lastTimestamp | tail -30
 ```
 
-readiness 문제는 서버 로그의 두 줄로 대부분 분류할 수 있습니다. 샌드박스 서버는 시작할 때 `device probe ok=<True|False> info=<...>`를 남깁니다. egress 대상에 연결되면 `egress is open, refusing work: <대상 목록>`을 ERROR 로그로 남깁니다.
+readiness가 실패하면 다음 두 로그를 먼저 확인하세요. 샌드박스 서버는 시작할 때 `device probe ok=<True|False> info=<...>`를 남깁니다. egress 대상에 연결되면 `egress is open, refusing work: <대상 목록>`을 ERROR 로그로 남깁니다.
 
 ### 샌드박스 안에서 확인 (kubectl exec)
 
@@ -170,7 +170,7 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 | Kata GPU 노드 추가(`scripts/kata/gpu_nodes.sh`)가 `add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 to scripts/config.env, run scripts/02_create_cluster.sh again, then re-run this script`로 끝남 | 정상 동작: 첫 실행은 AMI만 빌드(스크립트 안내 기준 약 10분) | 출력된 AMI ID와 `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh` 재실행(`metal` 입력), 그다음 `kata/gpu_nodes.sh` 재실행 |
 | Kata GPU 노드 추가의 첫 실행(`infra/kata/build-iommu-ami.sh`)이 `Waiter InstanceStopped failed ... "pending"`으로 바로 실패 | 이전 스크립트의 `aws ec2 wait instance-stopped`는 `pending` 상태를 terminal failure로 처리함(2026-11-18 실행에서 확인) | 스크립트에서 고쳤습니다. 이전 버전으로 실패했다면 `<CLUSTER_NAME>-iommu-ami-builder` 인스턴스를 terminate한 뒤 최신 스크립트로 다시 실행 |
 | `scripts/kata/gpu_nodes.sh`가 `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`로 멈춤 | AMI는 있지만 `WITH_KATA_GPU=1`로 `02_create_cluster.sh`를 다시 실행하지 않음 | `WITH_KATA_GPU=1`을 넣고 `02_create_cluster.sh` 재실행, 그다음 `kata/gpu_nodes.sh` 재실행 |
-| `03_build_push_images.sh`를 다시 실행하자 push가 태그 중복으로 실패 | ECR 저장소를 IMMUTABLE 태그로 만듦 | `IMAGE_TAG`를 새 값(예: `v1-hp`)으로 바꾸고 재실행, 출력된 URI로 config.env 갱신 |
+| `03_build_push_images.sh`를 다시 실행하자 push가 태그 중복으로 실패 | 실습용 ECR 리포지토리에서는 IMMUTABLE 설정으로 태그 덮어쓰기를 차단함 | `IMAGE_TAG`를 새 값(예: `v1-hp`)으로 바꾸고 재실행, 출력된 URI로 config.env 갱신 |
 | `03_build_push_images.sh`의 빌드가 매우 느리거나 디스크가 부족함 | arm64 PC에서 linux/amd64를 에뮬레이션, 큰 베이스 이미지(PyTorch, vLLM) | x86_64 호스트에서 디스크 100 GB 이상으로 빌드(스크립트 주석 기준) |
 
 - **`cpu_nodes.sh`의 `no sandbox-kata-cpu node group`**
@@ -188,7 +188,7 @@ aws ec2 get-console-output --instance-id <instance-id> --latest --output text --
 | `cdk deploy`가 `SSM parameter /cdk-bootstrap/hnb659fds/version not found. Has the environment been bootstrapped?`로 실패 | 그 계정과 리전에 CDK bootstrap을 하지 않음 | `cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"`를 한 번 실행 |
 | synth 중 cdk-nag `AwsSolutions-...` 지적과 함께 `ValidationFailed`로 배포가 멈춤 | 예외 처리되지 않은 cdk-nag 지적이 있음(스택 코드나 cdk-nag 버전이 바뀜) | 출력의 규칙 ID와 리소스를 보고 고칩니다. 의도적으로 따르지 않는 규칙이라면 `cdk/gpusandbox_cdk/stack.py`의 `_suppress`에 이유를 적어 예외 처리하고, 이유 없이 예외 처리하지 않기 |
 | `python3 cannot import aws_cdk` 또는 `ModuleNotFoundError: No module named 'aws_cdk'` | 가상 환경이 활성화되지 않은 터미널에서 CDK 앱(`python3 app.py`)을 실행함 | `source .venv/bin/activate` 후 다시 실행. 가상 환경이 없으면 `uv pip install -r cdk/requirements.txt`. `08_cleanup.sh`는 아무것도 지우기 전에 이 조건을 확인함 |
-| `Cloud assembly schema version mismatch` | CDK CLI가 `cdk/requirements.txt`의 `aws-cdk-lib`보다 오래됨 | `npm install -g aws-cdk`로 CLI를 2.1148.1 이상으로 올리기. 이 저장소는 CLI 2.1148.2가 필요한 `aws-cdk-lib` 2.277.0 대신 2.276.0에 고정(2026-11-14 기준) |
+| `Cloud assembly schema version mismatch` | CDK CLI가 `cdk/requirements.txt`의 `aws-cdk-lib`보다 오래됨 | `npm install -g aws-cdk`로 CLI를 2.1148.1 이상으로 올리기. 실습 환경의 `aws-cdk-lib`는 2.276.0으로 고정. 2.277.0은 CLI 2.1148.2가 필요함(2026-11-14 기준) |
 | `ADMIN_PRINCIPAL_ARN must list IAM role or user ARNs, not sts assumed-role ARNs` | STS 세션 ARN(`arn:aws:sts::...:assumed-role/...`)을 넣음 | `aws iam get-role --role-name <역할> --query Role.Arn --output text`로 얻은 역할 ARN을 넣거나 비워 두기 |
 | `EKS_PUBLIC_ACCESS_CIDR must be a single IPv4 address in /32 form` | `0.0.0.0/0`이나 /24 같은 범위를 넣음 | 비워 두거나(private만) 작업 PC 주소 하나를 `/32`로 |
 | `cdk/tunnel.sh`가 `stack <CLUSTER_NAME>-cdk has no outputs; run cdk/deploy.sh first`로 멈춤 | 스택이 아직 없거나, `CLUSTER_NAME`, `AWS_REGION`이 배포할 때와 다름 | config.env 값을 확인하고 `02_create_cluster.sh` 실행 |
@@ -214,7 +214,7 @@ while sleep 60; do kubectl get --raw /healthz >/dev/null || echo "$(date +%T) AP
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | 노드 그룹 생성 실패, health나 scaling activity에 vCPU 한도 오류(`VcpuLimitExceeded` 류) | "Running On-Demand G and VT instances" quota(vCPU 기준) 부족. 신규 계정은 기본값이 0일 수 있음 | Service Quotas에서 증가 요청. trainer 8 + gVisor 2 x 4 = 16 vCPU, `g4dn.metal`은 96 vCPU 추가 |
-| 노드 그룹 생성 실패, 요청한 AZ에서 인스턴스 유형을 지원하지 않는다는 오류 | 클러스터 서브넷의 AZ가 그 유형(특히 `g4dn.metal`)을 제공하지 않음 | `scripts/01_check_prereqs.sh`의 AZ별 offering 확인. 선택된 AZ가 그 유형을 제공하지 않으면 다른 리전을 쓰거나 `cdk/gpusandbox_cdk/stack.py`의 subnet 선택을 고쳐야 합니다(이 저장소에는 그 옵션이 없음) |
+| 노드 그룹 생성 실패, 요청한 AZ에서 인스턴스 유형을 지원하지 않는다는 오류 | 클러스터 서브넷의 AZ가 그 유형(특히 `g4dn.metal`)을 제공하지 않음 | `scripts/01_check_prereqs.sh`의 AZ별 offering 확인. 선택된 AZ가 그 유형을 제공하지 않으면 다른 리전을 쓰거나 `cdk/gpusandbox_cdk/stack.py`의 subnet 선택을 고쳐야 합니다. 현재 배포 스크립트에는 서브넷 선택 옵션이 없습니다 |
 | 노드 그룹 생성이 용량 부족 오류(`InsufficientInstanceCapacity` 류)로 실패 | 그 AZ에 On-Demand 용량이 일시적으로 부족함(일반적인 EC2 동작) | 다른 AZ를 쓰거나 시간을 두고 재시도. 용량이 있는 인스턴스 유형으로 바꾸려면 아래 "GPU 용량이 없을 때" 참고 |
 | 첫 클러스터 생성이 약 30분 동안 멈춘 뒤 전체가 롤백됨 | GPU 노드 그룹을 시작하지 못하면(`InsufficientInstanceCapacity`) CloudFormation이 약 30분을 기다린 뒤 첫 생성 전체를 롤백함 | GPU 노드 그룹 없이 클러스터를 먼저 만들고 update로 추가(아래 "GPU 용량이 없을 때"). 실패한 update는 그 update만 롤백됨 |
 | 노드 그룹은 있는데 노드가 `kubectl get nodes`에 나타나지 않음(health에 노드 생성 실패) | user data(`infra/eks/userdata.py`가 만든 NodeConfig와 셸 part) 오류, gVisor tarball 다운로드나 sha512 검사 실패, 잘못된 커스텀 AMI | 위 "AWS 쪽 확인"으로 인스턴스를 찾아 `/var/log/cloud-init-output.log`와 `journalctl -u nodeadm-config -u nodeadm-run` 확인 |
@@ -233,7 +233,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 용량은 인스턴스를 하나 시작했다가 바로 종료해서 확인합니다. On-Demand Capacity Reservation 요청은 실제 시작이 성공하는 상황에서도 용량이 없다고 응답할 수 있습니다.
 
-인스턴스 유형은 실행마다 `scripts/config.env`에서 바꿀 수 있습니다. 예를 들어 `g6`에 용량이 있으면 `GVISOR_INSTANCE_TYPE`과 `TRAINER_INSTANCE_TYPE`을 `g6.xlarge`, `g6.2xlarge`로 지정하세요.
+다른 유형으로 실행하려면 `scripts/config.env`에서 인스턴스 유형을 바꾸세요. 예를 들어 `g6`에 용량이 있으면 `GVISOR_INSTANCE_TYPE`과 `TRAINER_INSTANCE_TYPE`을 `g6.xlarge`, `g6.2xlarge`로 지정하세요.
 
 ## gVisor
 
@@ -244,7 +244,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 | `04_install_gpu_stack.sh`의 gVisor smoke pod에 `cuda ok:` 줄이 없고 torch 오류, 또는 샌드박스 로그에 `torch.cuda.is_available() is False` | device plugin이 그 노드에 없거나 `cdi-cri` 모드가 아님. OCI spec에 NVIDIA 장치가 없으면 nvproxy가 켜지지 않음 | 아래 명령으로 노드의 `nvidia.com/gpu` allocatable, device plugin pod, `deviceListStrategy: cdi-cri` 확인 |
 | gVisor GPU pod가 `StartError`로 끝나고 이벤트에 `OCI runtime start failed: starting container: reading mounts file: error unmarshaling mounts: unexpected end of JSON input` | AMI의 nvidia-container-toolkit 1.20.1이 `disable-device-node-modification` CDI hook을 추가함. runsc는 CDI hook을 컨테이너에 `/proc`이 생기기 전에 gofer에서 실행하므로 hook이 실패함 | `04_install_gpu_stack.sh`가 device plugin에서 이 hook을 끄는 env를 설정함(표 아래). 아래 명령의 마지막 줄로 확인 |
 | `nvidia.com/gpu`는 보이는데 CUDA 초기화가 실패하고, 노드 `cloud-init-output.log`에 `WARNING: NVIDIA driver ... is not supported by gVisor ... nvproxy` | 노드 드라이버가 고정한 gVisor 릴리스의 nvproxy 목록에 없음. 목록에 없는 unknown 버전은 항상 실패 | 노드에서 `runsc nvproxy list-supported-drivers`로 확인. 지원 드라이버의 AMI를 쓰거나, 그 드라이버를 지원 목록에 포함한 릴리스로 `GVISOR_RELEASE`를 올림 |
-| `g4dn` 같은 T4 노드에서 gVisor GPU가 동작하지 않음 | gVisor에서 T4 사용은 이 저장소에서 테스트하지 않아 미검증(드라이버 조건은 표 아래) | 이 저장소의 기본값인 g5(A10G)나 대안인 g6(L4)를 사용. T4를 쓰려면 노드에서 `runsc nvproxy list-supported-drivers`, smoke test, `scripts/ops/verify.sh`로 직접 검증 |
+| `g4dn` 같은 T4 노드에서 gVisor GPU가 동작하지 않음 | 실습에서는 gVisor와 T4 조합을 테스트하지 않음(드라이버 조건은 표 아래) | 실습의 기본 인스턴스인 g5(A10G)나 대안인 g6(L4)를 사용. T4를 쓰려면 노드에서 `runsc nvproxy list-supported-drivers`, smoke test, `scripts/ops/verify.sh`로 직접 검증 |
 | `runsc.toml`을 고쳤는데 반영되지 않음 | shim은 runtime 옵션의 `ConfigPath` 파일만 읽고, 이미 실행 중인 pod는 이전 설정을 씀 | NodeConfig의 `ConfigPath = '/etc/containerd/runsc.toml'` 확인 후 pod를 다시 만듦 |
 
 - **gVisor GPU pod의 `StartError`(`reading mounts file`)**
@@ -330,7 +330,7 @@ kubectl delete -n default pod/<name>
 |---|---|---|
 | Kata CPU smoke pod가 실패하고 이벤트나 로그에 KVM을 열 수 없다는 류의 오류, 노드에 `/dev/kvm` 없음 | 노드에 nested virtualization이 적용되지 않음(표 아래), 그 리전에서 인스턴스 유형이 nested virtualization을 지원하지 않음 | 아래 명령으로 실행 중인 인스턴스의 `CpuOptions`와 인스턴스 유형의 `SupportedFeatures`(`nested-virtualization`) 확인 |
 | `scripts/kata/cpu_nodes.sh`가 `kata runtime classes missing`으로 멈춤 | kata-deploy DaemonSet이 Kata 노드에서 실행되지 않음(nodeSelector `gpusandbox/role=sandbox-kata`, taint toleration) 또는 설치 실패 | kata-deploy pod 상태와 로그, `kubectl get runtimeclass` |
-| 나중에 추가한 Kata 노드에 런타임이 설치되지 않음 | kata-deploy chart의 기본 `deploymentMode: job`은 설치 시점의 노드만 처리 | 이 저장소 값처럼 `deploymentMode: daemonset` |
+| 나중에 추가한 Kata 노드에 런타임이 설치되지 않음 | kata-deploy chart의 기본 `deploymentMode: job`은 설치 시점의 노드만 처리 | 실습용 Helm 설정처럼 `deploymentMode: daemonset`으로 지정 |
 | 노드 재부팅 뒤 Kata pod가 시작되지 않음(추정) | nodeadm이 부팅할 때마다 `/etc/containerd/config.toml`을 다시 써서 kata-deploy가 추가한 handler가 사라짐 | NodeConfig의 `imports = ["/etc/containerd/conf.d/*.toml"]` 유지(`infra/eks/userdata.py`에 포함, 효과는 미검증) |
 | `scripts/kata/gpu_nodes.sh`가 `no passthrough GPUs advertised; see docs/reference/troubleshooting.md`로 멈춤, `nvidia.com/pgpu` 없음 | 가능한 원인 다섯 가지(표 아래, 다섯째의 영향은 추정) | 아래 명령으로 `/proc/cmdline`, IOMMU group 수, `lsmod`, `lspci -nnk`, 노드 라벨, `gpu-operator` pod 확인. `KATA_IOMMU_AMI_ID`가 `build-iommu-ami.sh`가 만든 AMI인지 확인 |
 | Kata GPU pod가 Pending, 이벤트에 node affinity나 selector 불일치 | RuntimeClass `kata-qemu-nvidia-gpu`의 `scheduling.nodeSelector`(`nvidia.com/cc.ready.state=false`)가 pod에 합쳐짐. 노드에 이 라벨이 없음(cc-manager가 설정하지 않았거나 `ccManager.defaultMode`가 `on`) | 노드 라벨 확인. GPU Operator 값 `ccManager.defaultMode: "off"` 확인 후 `kata/gpu_nodes.sh` 재실행 |
@@ -488,7 +488,7 @@ kubectl -n rl-trainer create token sandbox-probe --audience gpu-sandbox --durati
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | probe Job이나 trainer 요청이 연결 timeout(`ConnectTimeout`)으로 실패하고 probe에 FAIL | 호출 pod에 `gpusandbox/client: "true"` 라벨이 없음, 또는 `rl-trainer` 밖의 namespace에서 호출 | `kubectl -n rl-trainer get pods --show-labels`. 직접 만든 Job이면 pod template에 라벨 추가 |
-| Production에서 gateway를 배포한 뒤 `ops/verify.sh`의 probe와 `ops/rollout.sh`의 parity가 실패 | `k8s/production/gateway.yaml.tpl`이 같은 이름의 `allow-clients-to-sandbox-api`를 gateway만 허용하도록 덮어씀 | 아래처럼 `rl-trainer`에서 `app: sandbox-probe` 라벨이 붙은 pod만 허용하는 정책을 추가(저장소에 없는 예시) |
+| Production에서 gateway를 배포한 뒤 `ops/verify.sh`의 probe와 `ops/rollout.sh`의 parity가 실패 | `k8s/production/gateway.yaml.tpl`이 같은 이름의 `allow-clients-to-sandbox-api`를 gateway만 허용하도록 덮어씀 | 아래처럼 `rl-trainer`에서 `app: sandbox-probe` 라벨이 붙은 pod만 허용하는 정책을 따로 작성해 추가 |
 | 다른 namespace에서 gateway로 연결되지 않음 | `allow-trainers-to-gateway`는 `rl-trainer` namespace의 pod만 TCP 8080에 허용 | 호출 위치를 `rl-trainer`로 옮기거나 정책 추가 |
 
 - **gateway 배포 뒤 probe와 parity 실패**: 이 라벨은 probe, parity, bench, simulate Job에 모두 붙습니다. 검증할 때만 적용하고 끝나면 지우는 방법도 있습니다.
@@ -554,7 +554,7 @@ spec:
     - **(3) 다른 namespace**: 다른 namespace의 ConfigMap을 바꿨습니다.
     - **(4) gateway 모드**: gateway에 마운트된 routing 표가 기준인데 `sandbox-gateway`의 ConfigMap이 갱신되지 않았습니다. TRL trainer는 gateway가 응답한 버전이 이전 batch와 다를 때 이 이벤트를 남깁니다.
     - **(5) JSON 오류**: 마지막으로 정상적으로 읽은 라우팅 표를 유지합니다.
-- **`sandbox_version_switch`가 나오지 않음, 요청이 있었는데도 전환이 보이지 않을 때**: 마운트 방식과 pod 안 파일을 확인하세요(direct 모드는 trainer, gateway 모드는 gateway). 이 저장소 템플릿은 디렉터리로 마운트하므로 템플릿을 고쳤다면 되돌리세요.
+- **`sandbox_version_switch`가 나오지 않음, 요청이 있었는데도 전환이 보이지 않을 때**: 마운트 방식과 pod 안 파일을 확인하세요(direct 모드는 trainer, gateway 모드는 gateway). 기본 배포 템플릿은 디렉터리로 마운트합니다. 이 부분을 고쳤다면 원래 설정으로 되돌리세요.
 - **`RoutingError: no pool`**
     - **기본 표**: 7개 런타임의 `v1`, `v2`가 모두 있습니다. 주소는 있는데 Ready pod가 없으면 이 오류가 아니라 `no free sandbox`가 나옵니다.
     - **배포한 pool의 주소가 표에 없을 때**: `routing.json.tpl`의 `pools`에 추가하고, 현재 active 런타임과 버전으로 렌더링한 표를 ConfigMap에 적용합니다.
@@ -597,7 +597,7 @@ kubectl -n sandbox-gateway exec deploy/gateway -- cat /etc/gpusandbox/routing/ro
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | `agent-sandbox CRDs not found: run scripts/extensions/agent_sandbox.sh install` | Agent Sandbox controller와 CRD(`sandboxclaims`, `sandboxwarmpools`)가 클러스터에 없음 | `scripts/extensions/agent_sandbox.sh install` 실행 후 `episodes`를 다시 실행 |
-| `ServiceAccount rl-trainer/sandbox-episode not found: run scripts/extensions/agent_sandbox.sh install` 또는 `system:serviceaccount:rl-trainer:sandbox-episode may not create SandboxClaims: run scripts/extensions/agent_sandbox.sh install` | multi-turn Job이 쓰는 ServiceAccount `sandbox-episode`가 없거나, 이 계정에 claim 권한을 주는 RoleBinding `sandbox-claims`에 이 계정이 없음. 이 계정이 저장소에 추가되기 전에 `05_setup_namespaces_auth.sh`나 `install`을 실행한 경우에 생김 | `install`을 다시 실행. `k8s/base/trainer-rbac.yaml`과 `trainer-claims-rbac.yaml`을 다시 적용하며, 여러 번 실행해도 안전함 |
+| `ServiceAccount rl-trainer/sandbox-episode not found: run scripts/extensions/agent_sandbox.sh install` 또는 `system:serviceaccount:rl-trainer:sandbox-episode may not create SandboxClaims: run scripts/extensions/agent_sandbox.sh install` | multi-turn Job이 쓰는 ServiceAccount `sandbox-episode`가 없거나, 이 계정에 claim 권한을 주는 RoleBinding `sandbox-claims`에 이 계정이 없음. 이 계정의 정의가 포함되기 전 버전에서 `05_setup_namespaces_auth.sh`나 `install`을 실행한 경우에 생김 | `install`을 다시 실행. `k8s/base/trainer-rbac.yaml`과 `trainer-claims-rbac.yaml`을 다시 적용하며, 여러 번 실행해도 안전함 |
 | `warm pool kernel-eval-<runtime> not found: run scripts/extensions/agent_sandbox.sh pool <runtime>` | 그 런타임의 SandboxTemplate과 SandboxWarmPool을 만들지 않음 | `scripts/extensions/agent_sandbox.sh pool <runtime> [n]` 실행 |
 | `warm pool kernel-eval-<runtime> has no Ready sandbox (kubectl -n sandbox get sandboxwarmpool kernel-eval-<runtime>)` | warm pool의 `status.readyReplicas`가 0: 샌드박스 pod가 아직 시작 중이거나 readiness(GPU probe, egress 차단 확인)를 통과하지 못함 | 메시지의 명령과 `kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox`로 상태 확인. pod가 `0/1`에 머물면 위 "샌드박스 pool과 readiness" 표를 따름 |
 | `sandboxes started without system:serviceaccount:rl-trainer:sandbox-episode in their allowlist: <이름 목록>. Run scripts/extensions/agent_sandbox.sh pool <runtime>, then delete them ...` | warm 샌드박스는 시작할 때 받은 env를 계속 씀(`updateStrategy` `OnReplenish`). `sandbox-episode`가 allowlist에 들어가기 전에 시작한 샌드박스는 에피소드 요청에 403(`subject '...' is not allowed`)으로 응답함 | allowlist를 고치고 `pool`을 다시 실행한 뒤, 대기 중인 Sandbox만 삭제(순서는 표 아래) |
@@ -629,7 +629,7 @@ kubectl -n sandbox-gateway exec deploy/gateway -- cat /etc/gpusandbox/routing/ro
 | B2 `create-cluster`가 `Failed`, lifecycle 로그에 `runsc missing` 또는 `NVIDIA driver ... is not supported` | sandbox 그룹이 custom AMI로 시작되지 않았거나, AMI를 다른 `B2_NVIDIA_DRIVER_VERSION`이나 `GVISOR_RELEASE`로 빌드함 | `scripts/hyperpod/build_b2_ami.sh`를 다시 실행해 새 `HYPERPOD_B2_AMI_ID`로 클러스터를 만듦 |
 | B2 lifecycle 로그에 `unsupported or missing config version` 또는 `containerd rejected the edited` | containerd 설정 파일 위치나 schema가 예상과 다름 | 노드에서 `ps -o args= -C containerd`로 `--config` 경로를 확인하고, `on_create_sandbox.sh`의 `HYPERPOD_CONTAINERD_CONFIG`를 그 값으로 고친 뒤 lifecycle 스크립트를 다시 업로드 |
 | `scripts/hyperpod/build_b2_ami.sh`가 `customization failed` | 드라이버 교체나 gVisor 확인이 builder에서 실패 | 출력된 `get-console-output` 명령으로 `GPUSANDBOX-B2-BUILD: FAILED ...` 줄과 그 앞 로그를 보고, 정지된 builder를 `terminate-instances`로 종료 |
-| 클러스터는 `InService`인데 trainer 인스턴스는 `Pending` | B1 실습에서는 trainer가 EKS에 합류하기 전에 클러스터가 먼저 준비됨 | `list-cluster-nodes`로 인스턴스 상태를 본 뒤 Kubernetes 노드가 `Ready`이고 `Schedulable`인지 확인. [명령과 실행 화면](../handson/07_hyperpod.md#확인-방법) |
+| 클러스터는 `InService`인데 trainer 인스턴스는 `Pending` | B1 실습에서는 trainer가 EKS에 합류하기 전에 클러스터가 먼저 준비됨 | `list-cluster-nodes`로 인스턴스 상태를 본 뒤 Kubernetes 노드가 `Ready`이고 `Schedulable`인지 확인. [명령과 실행 화면](../handson/07_hyperpod_b1.md#확인-방법) |
 | CreateCluster 뒤 상태가 `Failed` | 스크립트가 출력하는 `FailureMessage` 참고. 사전 요구사항(EKS 인증 모드 API 또는 API_AND_CONFIG_MAP, VPC CNI 1.18.3 이상, private subnet, 지원 Kubernetes 버전), lifecycle 스크립트 S3 읽기 권한 | [HyperPod EKS 사전 요구사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html)과 비교. 버킷 이름의 `sagemaker-` 접두사 유지 |
 | Worker가 `Pending`이며 `Insufficient cpu` 또는 `Insufficient memory` 이벤트가 나타남 | `ml.g5.2xlarge` 한 대에서 controller, job별 pod manager, 시스템 pod가 CPU 2.75개와 메모리 3,272 MiB를 요청함 | B1 템플릿의 CPU 5개, 24 GiB를 사용하고 `kubectl describe node`의 할당량과 스케줄러 이벤트를 비교 |
 | HyperPodPyTorchJob pod가 Pending | 노드 라벨 `sagemaker.amazonaws.com/node-health-status`가 `Schedulable`이 아님(deep health check 중 등), instance type 불일치 | `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status,node.kubernetes.io/instance-type` |
@@ -650,7 +650,7 @@ kubectl -n sandbox-gateway exec deploy/gateway -- cat /etc/gpusandbox/routing/ro
     - **`08_cleanup.sh --images`를 다시 실행할 때**: 매번 `cdk/destroy.sh`부터 실행하고, 이미 지운 AMI의 ID가 `config.env`에 남아 있으면 ECR 단계 전에 멈출 수 있습니다.
 
 > ❓ **오해: pod가 Running이면 샌드박스가 준비된 것이다.**
-> 이 저장소에서 Running은 컨테이너가 시작됐다는 뜻일 뿐입니다. readiness는 GPU probe와 egress 차단 확인까지 통과해야 하고, Ready가 아닌 pod는 headless Service DNS에 나타나지 않아 요청을 받지 않습니다. "Running인데 요청이 가지 않는다"는 증상은 대부분 readiness 문제이니, `kubectl -n sandbox get pods`의 READY 열(`0/1`)과 서버 로그를 먼저 보세요.
+> pod 상태가 Running이면 컨테이너가 시작된 것입니다. readiness는 GPU probe와 egress 차단 확인까지 통과해야 하고, Ready가 아닌 pod는 headless Service DNS에 나타나지 않아 요청을 받지 않습니다. "Running인데 요청이 가지 않는다"는 증상은 대부분 readiness 문제이니, `kubectl -n sandbox get pods`의 READY 열(`0/1`)과 서버 로그를 먼저 보세요.
 
 > ❓ **오해: 학습이 계속 진행되면 샌드박스도 정상이다.**
 > 인프라 오류(`sandbox_error`)는 학습을 멈추지 않습니다. 오류가 계속돼도 학습은 진행됩니다.

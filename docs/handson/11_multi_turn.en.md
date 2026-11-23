@@ -450,14 +450,12 @@ The warm pool and the Job run on the nodes created in [10](10_cpu_only.md), so u
 - Items not in the total (access instance, KMS key, CloudWatch logs, NAT gateway, EBS, data transfer, ECR storage) are listed in the cost section of 10. Images rebuilt under a new tag add to the ECR storage.
 - For a GPU warm pool, see the warning in "Optional: Run it on a GPU warm pool" above.
 
-## Scope and limits
+<span id="scope-and-limits"></span>
 
-- **This is not training.** The scripted policy does not read the feedback and submits fixed golden submissions in order. The lab checks only that one claim, feedback between turns, early stop, final-submission grading and claim deletion work.
-- **No GPU and no Triton.** The CPU path grades with `require_triton=False`, and the speedup is CPU timing. The GPU path has to be checked yourself in the optional section above.
-- **Episodes run one after another.** The Job runs one episode at a time, so contention between concurrent episodes (waiting for claims, short node resources) is not reproduced here. Keep as many warm sandboxes as the episodes you want to start at once without waiting. On GPU pools each running sandbox holds one GPU, so the GPU count is the upper bound.
-- **Only this Job mounts a Kubernetes API token.** The `sandbox-claims` RoleBinding lists both `sandbox-episode` and `grpo-trainer`, but the default trainer Job turns off the automatic token mount. The default GRPO trainer already has the sandbox-audience token and the claim permission.
-    - **To use `EpisodeSandbox` from a trainer**: mount a Kubernetes API token and provide the `kubernetes` package; the `.[client]` extra that the trainer image installs does not include it (the requirements table in [Concepts 06](../concepts/06_agent_sandbox.md)).
-    - **The comment in the RBAC file**: it recommends a small broker that handles only claims over giving the GPU trainer API access.
+??? note "Moving from single episodes to a trainer"
+    The scripted policy submits known answers. The CPU run checks claims, turn feedback, stopping, final grading and release, with `require_triton=False`. It does not test GPU timing or concurrent episodes. To start several episodes without waiting, provision one warm sandbox per concurrent episode; each active GPU sandbox holds one GPU.
+
+    `sandbox-episode` and `grpo-trainer` both have claim permissions, but only the episode Job mounts a Kubernetes API token. To use `EpisodeSandbox` from a trainer, supply the API token and `kubernetes` package (`.[client]` omits it), or let a broker handle claims as the RBAC example recommends. [Trainer requirements](../concepts/06_agent_sandbox.md)
 
 ## Next steps
 

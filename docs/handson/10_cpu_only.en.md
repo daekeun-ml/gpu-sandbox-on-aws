@@ -1,10 +1,10 @@
-# 10 CPU-only path on c8i (scenario C)
+# 10 Hands-on lab with CPUs only
 
-Practice a grading pool switch on EKS without a GPU or model. Compare three runtimes on one `c8i.2xlarge`, then switch from v1 to v2 while a simulator keeps sending the same answers.
+<span id="10-cpu-only-path-on-c8i-scenario-c"></span>
 
-1. Work from [local and CDK setup](#preparation) through [image build](#step-3-build-only-two-images-03_build_push_imagessh). The CPU path uses `--no-trainer` because it needs only the sandbox and control images.
-2. [Install the three runtimes](#step-4-three-runtimes-on-the-c8i-node-katacpu_nodessh) and compare each pod's kernel with the host. Configure routing, then [send test answers to all three pools](#step-6-deploy-and-verify-three-pools-06_deploy_sandboxessh-opsverifysh).
-3. [Switch using two work terminals](#step-7-a-reward-loop-without-a-model-and-a-version-swap-opssimulatesh-opsrolloutsh). Look for a batch on v2 returning `ok` and `wrong_answer` after `SWITCH`. Once the base lab is complete, [clean up the cluster](#cleanup-08_cleanupsh).
+In scenario C, practice a grading pool switch on EKS without a GPU or model. Compare three runtimes on one `c8i.2xlarge`, then switch from v1 to v2 while a simulator keeps sending the same answers.
+
+Start with [Preparation](#preparation) and follow steps 1–7. The core lab is complete when a v2 batch after `SWITCH` reports both `ok` and `wrong_answer`. You can then run the optional benchmark or try multi-turn episodes. [Choose a hands-on path](00_overview.md)
 
 ??? note "Terms (expand if a word is new)"
     - **Nested virtualization**: running a VM inside a VM. Since 2026-02, EC2 exposes `/dev/kvm` on some virtual instances such as C8i, M8i and R8i. Kata uses it to start a small VM per pod.
@@ -58,12 +58,12 @@ The c8i node runs gVisor and Kata; the simulator sends prepared submissions and 
 
 ## Preparation
 
-1. Create `scripts/config.env` as in "Preparation 1" of [01 Cluster and images](01_cluster_and_images.md), and do the one-time CDK preparation (Node.js, CDK CLI, Session Manager plugin, `cdk/requirements.txt`, `cdk bootstrap`) as in "Preparation 2" of 01.
-    - **Values needed**: `AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`, `GVISOR_RELEASE`, `KATA_VERSION`, `KATA_CPU_INSTANCE_TYPE` (default `c8i.2xlarge`) and `SANDBOX_AUDIENCE`. GPU-related values can stay as they are.
-    - **With `export SCENARIO="C"`**: rerunning cluster creation (`02_create_cluster.sh`) without an option still deploys scenario C.
-2. Add this line to `scripts/config.env`. With one replica per pool, the v2 pool fits on the same node too.
+1. Complete [preparation 1 and 2 in chapter 01](01_cluster_and_images.md#preparation-1-scriptsconfigenv) to configure your AWS account and region, set up the project's Python environment, install CDK and the Session Manager plugin, and run `cdk bootstrap`. Return here before creating a cluster in chapter 01.
+2. Set the following values in `scripts/config.env`. Keep the default `KATA_CPU_INSTANCE_TYPE` of `c8i.2xlarge`. If you are reusing a configuration, check `AWS_REGION` and `CLUSTER_NAME`. Choose a separate cluster name for C if you plan to keep an existing cluster.
 
     ```bash
+    export SCENARIO="C"
+    export WITH_KATA_GPU="0"
     export KATA_CPU_REPLICAS="1"
     ```
 
@@ -105,7 +105,7 @@ scripts/02_create_cluster.sh --cpu-only
 
 What each part means is in the cluster creation (`02_create_cluster.sh`) section of [01 Cluster and images](01_cluster_and_images.md).
 
-Keep the tunnel running in a second terminal. From the Kata CPU node add (`kata/cpu_nodes.sh`) in step 4 on, kubectl and helm all go through it.
+Open a separate terminal in the project’s top-level directory and leave the following command running. `kubectl` and Helm in your original work terminal will reach the cluster API through this tunnel.
 
 ```bash
 cdk/tunnel.sh
@@ -142,7 +142,7 @@ Build and push only the sandbox and control images, skipping the trainer image (
 scripts/03_build_push_images.sh --no-trainer
 ```
 
-**What to look for:** two export lines at the end. Paste them into `scripts/config.env`.
+**What to look for:** save the two `export` lines printed by the build, with their actual URIs, in `scripts/config.env`. If the same ECR repositories already have images with that tag, set `IMAGE_TAG` to a new value before building.
 
 ```text
 Add to scripts/config.env:
@@ -227,18 +227,16 @@ done
 
 ## Step 7: A reward loop without a model, and a version swap (`ops/simulate.sh`, `ops/rollout.sh`)
 
-The simulator sends the same answers on both sides of the switch. Check that the new pool still recognizes the correct and incorrect submissions as you follow the version change in the log.
+The simulator keeps sending the same submissions while routing switches pools. Compare the verdicts and pool version before and after the switch.
 
-`ops/simulate.sh` sends the prepared submissions. Compare verdicts and the actual pool version before and after changing routing.
-
-Keep the terminal with the SSM tunnel from step 2 open, and use two more work terminals. The reward loop in the first work terminal scores 30 batches one after another and waits 20 seconds between batches. On the c8i node on 2026-11-17 it took about 16 minutes.
+Leave the SSM tunnel running. In your original work terminal, start the simulator. It runs 30 batches, waiting 20 seconds between them. The recorded run on c8i took about 16 minutes.
 
 ```bash
 # work terminal 1
 scripts/ops/simulate.sh 30 20
 ```
 
-A few batches in, swap `kata-clh-cpu` from v1 to v2 in the second work terminal. `ops/rollout.sh` runs these in order.
+After a few v1 batches appear, open one more work terminal in the project’s top-level directory and switch `kata-clh-cpu` from v1 to v2. `ops/rollout.sh` runs these in order.
 
 1. Starts the v2 pool next to v1
 2. Verifies it
@@ -277,15 +275,15 @@ The whole run looks like this.
 
 There are 4 submissions but only 3 are scored, because the trainer-side AST check rejects the one that reads a host file before it reaches a sandbox (`n` is 3 in the raw JSON). The speedup (`mean_speedup`) moves from batch to batch with CPU timing noise (between 0.66 and 1.65 in the local run), so do not compare runtimes with it.
 
-Once v2 is active, scale v1 to zero with the command below. The v1 Deployment stays, but with 0 replicas it cannot take requests.
-
-- **To compare the three runtimes in step 8**: run the `v1 v2 --finish` command below after the benchmark.
+Once you see v2 return actual verdicts for the correct and incorrect submissions, use the command below to scale v1 to zero. **If you plan to benchmark in step 8**, postpone this command. Let the simulator finish, then measure while all three v1 pools are `Ready`.
 
 ```bash
 scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 ```
 
 To go back, `scripts/ops/rollout.sh kata-clh-cpu v2 v1` brings the v1 pods back, runs the verification and parity, and then switches the routing.
+
+If you are done with the core lab, go straight to [cleanup](#cleanup-08_cleanupsh). Keep the cluster and tunnel running if you plan to continue to [chapter 11 on multi-turn episodes](11_multi_turn.md).
 
 **If it fails:**
 
@@ -298,7 +296,7 @@ To go back, `scripts/ops/rollout.sh kata-clh-cpu v2 v1` brings the v1 pods back,
 
 ## Step 8 (optional): Compare the three runtimes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU) (`ops/bench.sh`)
 
-Send the same correct code to the three pools from step 6 (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) and compare them. The three pools share one node, one CPU type and one kernel, so differences in the measurements are easy to read as runtime differences. Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool.
+Send the same correct code to the three pools from step 6 (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) and compare them. All three pools use the same CPU node and image. The kernel reported inside each pod depends on its runtime. Measure cold start (pod creation to Ready) and evaluation latency for each v1 pool.
 
 `ops/bench.sh` skips pools with no v1 pod. If `--finish` in step 7 scaled `kata-clh-cpu` v1 to zero, that pool is missing from the results, so run it while all three v1 pools are Ready.
 
@@ -306,11 +304,11 @@ Send the same correct code to the three pools from step 6 (`gvisor-cpu`, `kata-c
 scripts/ops/bench.sh 16
 ```
 
-**What to look for:** one `bench` summary line per pool (p50, p95, evaluations per second, speedup); the raw JSON with every field is appended to `bench-<timestamp>.jsonl`. How to read the numbers is in [08 Runtime benchmark](08_benchmark.md).
+**What to look for:** one `bench` summary line per pool (p50, p95, evaluations per second, speedup); the raw JSON with every field is appended to `bench-<timestamp>.jsonl`. After saving the results, run `scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish` if you postponed it in step 7. [08 Runtime benchmark](08_benchmark.md)
 
 ## Step 9 (optional): Use Agent Sandbox to borrow one sandbox per episode
 
-The pools in steps 1 to 8 pick any free pod for each request, score once, and are done. In multi-turn training the model submits code, reads the feedback, fixes it and submits again, so it must keep the same sandbox until the episode ends.
+The grading pools you deployed earlier pick a free pod for each request, score once, and are done. In multi-turn training the model submits code, reads the feedback, fixes it and submits again, so it must keep the same sandbox until the episode ends.
 
 This step checks only the basic mechanics of that approach: sandboxes are started ahead of time (warm pool), one is borrowed (claim), and it is given back when the work is done.
 
@@ -334,13 +332,13 @@ Running real multi-turn episodes on borrowed sandboxes is in [11 Multi-turn epis
 
 ## Cleanup (`08_cleanup.sh`)
 
-Delete the pools, Jobs and the CDK stack (cluster, node groups, VPC, access instance). The script proceeds only after you type the cluster name. Add `--images` to delete the ECR repositories too, after the confirmation word `images`.
+Keep the cluster and SSM tunnel running if you are continuing to [chapter 11](11_multi_turn.md). Otherwise, delete the pools, Jobs and the CDK stack (cluster, node groups, VPC, access instance). The script proceeds only after you type the cluster name. Add `--images` to delete the ECR repositories too, after the confirmation word `images`.
 
 ```bash
 scripts/08_cleanup.sh
 ```
 
-**What to look for:** the last table (instances tagged `project=gpu-sandbox-on-aws`) is empty. More in [99 Cleanup](99_cleanup.md).
+**What to look for:** the last table (instances tagged `project=gpu-sandbox-on-aws`) is empty. You can then close the tunnel terminal. More in [99 Cleanup](99_cleanup.md).
 
 ## Cost
 
@@ -357,15 +355,14 @@ These are **estimates** from On-Demand list prices, not measured bills (us-east-
 - Not included above: the access instance (`t4g.nano`), the secrets KMS key, CloudWatch logs, NAT gateway (hourly and per-GB charges), EBS volumes (system 50 GB x2, c8i 100 GB), data transfer and ECR storage.
 - That is about one sixth of the compute of scenario A's minimal path (about 3.42 USD per hour).
 
-## Scope and limits
+<span id="scope-and-limits"></span>
 
-- **No GPU and no Triton.** nvproxy, VFIO passthrough, GPU timing (device-wide synchronize) and Triton compilation are covered only by the GPU paths ([02](02_gvisor.md), [03](03_kata.md)).
-- **This is not training.** The reward loop simulation (`ops/simulate.sh`) has no model generation and no gradients; the reward path and version pinning are the trainer's own code, but the timing of real training, where vLLM generation sets the gap between batches, is not reproduced.
-- **Nested virtualization performance does not represent bare metal.** The Kata VM starts inside a VM, so boot time and latency can be longer than on bare metal, and AWS also recommends bare metal for performance-sensitive virtualization workloads (per the official documentation). Use the numbers only to compare runtimes on the same node.
+??? note "What the CPU exercise can verify"
+    The CPU simulator exercises the trainer’s reward path and version pinning with fixed submissions. It has no model generation or gradient updates and does not reproduce vLLM batch timing. nvproxy, VFIO passthrough, GPU timing and Triton compilation need the GPU exercises. Compare nested-VM timings only across runtimes on the same CPU node; AWS recommends bare metal for performance-sensitive virtualization. [gVisor GPU](02_gvisor.md) · [Kata GPU](03_kata.md)
 
 ## Next steps
 
-- Once you have GPU quota, move to scenario A in [00 Overview](00_overview.md) and run real GRPO training (`07_run_grpo.sh`). Change to `export SCENARIO="A"` and `export WITH_KATA_CPU="1"` and run `CHANGE_SCENARIO=1 scripts/02_create_cluster.sh`: the c8i node stays as the CPU pool and the trainer and gVisor node groups are added. Without `CHANGE_SCENARIO=1` the deploy stops so that a scenario never changes by accident.
+- If you kept the C cluster and now have GPU quota, move to scenario A in [00 Overview](00_overview.md) and run real GRPO training (`07_run_grpo.sh`). Change to `export SCENARIO="A"` and `export WITH_KATA_CPU="1"` and run `CHANGE_SCENARIO=1 scripts/02_create_cluster.sh`: the c8i node stays as the CPU pool and the trainer and gVisor node groups are added. Without `CHANGE_SCENARIO=1` the deploy stops so that a scenario never changes by accident.
 - Using the CPU tier in production is covered in [Production 01 Capacity and nodes](../production/01_capacity_and_nodes.md).
 
 ??? note "References"

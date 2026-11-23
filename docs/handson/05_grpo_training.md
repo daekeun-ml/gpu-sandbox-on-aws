@@ -3,7 +3,7 @@
 모델이 같은 문제에 답을 여러 개 내면 GRPO는 그 답들의 점수를 비교해 모델을 업데이트합니다. [04편](04_sandbox_pools.md)에서 검증한 `gvisor/v1` pool이 이번에는 모델이 막 작성한 코드를 채점합니다.
 
 1. [trainer 노드와 이미지 확인](#시작-전-확인) 후 [학습 Job 하나를 제출](#실행)하세요. HyperPod로 학습하려면 [07편](07_hyperpod.md)에서 시작합니다.
-2. [로그](#로그-읽는-법)에서 `routing` 줄에는 선택한 pool, `batch` 줄에는 코드 채점 결과, `train` 줄에는 모델 업데이트 기록이 나옵니다. 첫 `batch`의 판정과 다음 `train` 줄을 함께 읽으세요.
+2. [로그](#로그-읽는-법)에서 `routing` 줄에는 선택한 pool, `batch` 줄에는 코드 채점 결과, `train` 줄에는 모델 업데이트 기록이 나옵니다. 첫 `batch`에서 정답 수를 확인한 뒤, 다음 `train` 줄에서 모델 업데이트가 진행됐는지 확인하세요.
 3. 학습 중 pool을 바꿔 보려면 Job이 진행되는 동안 다른 터미널에서 [06편](06_sandbox_update.md)을 여세요. 이번에는 학습만 한다면 [완료된 Job과 채점 건수](#trainer-complete)를 확인합니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -18,9 +18,6 @@
     - **Job, emptyDir**: 작업이 끝나면 완료 상태가 되는 Kubernetes 리소스와, pod가 삭제되면 함께 삭제되는 임시 볼륨입니다.
     - **OOM**: GPU 메모리가 부족해 프로세스가 실패하는 것(out of memory)입니다.
 
-??? note "실습 계정에서 확인한 범위"
-    실습 계정에서 기본값인 60 step run(`scripts/07_run_grpo.sh`)과 5 step run을 실행해 둘 다 Job이 Complete로 끝났습니다. 메모리와 비용 수치는 측정값이 아니라 계산값입니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
-
 ## 시작 전 확인
 
 - [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에서 `scripts/ops/verify.sh gvisor`가 통과했습니다. routing table의 active 기본값은 `gvisor/v1`입니다.
@@ -29,7 +26,7 @@
 
 ## 실행
 
-첫 실행은 5스텝으로 생성·채점·업데이트를 확인할 수 있습니다. 이어서 06편의 pool 교체를 연습하려면 기본 60스텝을 선택해 교체할 시간을 확보하세요. 둘 중 하나만 실행합니다.
+처음에는 5스텝을 실행해 답안 생성과 채점, 모델 업데이트를 확인하세요. 이어서 06편의 pool 교체를 연습하려면 기본 60스텝을 선택해 교체할 시간을 확보하세요. 둘 중 하나만 실행합니다.
 
 === "첫 실행 · 5스텝"
 
@@ -82,11 +79,11 @@ CUDA Error: invalid argument at /workspace/csrc/cumem_allocator.cpp:249
 
 ![07_run_grpo.sh 60 step 실행 화면: Job 제출과 routing 줄, batch 1부터 3까지와 train 줄, 중간 생략, batch 58부터 60까지와 train 줄, train done(train_runtime 2697), done(reward_batches 60), 마지막 vLLM 종료 메시지 CUDA Error](../images/terminal/grpo-train-a.png)
 
-`done` 뒤의 `CUDA Error` 줄은 학습이 끝난 뒤 vLLM이 종료하면서 출력합니다. 이 vLLM 버전은 기본값(`VLLM_ENABLE_V1_MULTIPROCESSING=1`)에서 엔진을 별도 자식 프로세스로 실행하고, sleep mode(`rl/trl/train_grpo.py`의 `vllm_enable_sleep_mode=True`)가 쓰는 cumem 할당기도 그 프로세스에 있습니다. 이 줄은 그 프로세스가 끝나면서 남기는 것으로 보입니다(학습 스크립트를 `done` 직후 `os._exit`로 끝내도 같은 줄이 나왔습니다). adapter 저장과 `done` 뒤에 나오고 Job은 그대로 Complete(exit 0)로 끝나므로, 이 줄이 보이면 Job 상태로 성공 여부를 판단하세요.
+`done` 뒤에 vLLM 종료 메시지 `CUDA Error`가 나올 수 있습니다. 이때는 어댑터가 저장됐는지와 Job 상태가 `Complete`인지 확인하세요. 위 실행에서 컨테이너의 종료 코드는 0이었습니다.
 
 **문제가 생기면:** pod가 Pending이거나 `status`가 대부분 `sandbox_error`이거나 OOM이 나면, 끝의 "확인 방법" 표와 [문제 해결](../reference/troubleshooting.md)의 "학습" 항목을 보세요.
 
-`RUN_ID`와 `MODEL_ID`는 `scripts/config.env`에 없는 변수라 환경 변수로 바꿀 수 있습니다. `RUN_ID`는 Job 이름에 들어가므로 소문자, 숫자, 하이픈만 쓰세요.
+`RUN_ID`와 `MODEL_ID`를 바꾸려면 실행 전에 환경 변수로 지정하세요. 두 값은 `scripts/config.env`에 정의돼 있지 않습니다. `RUN_ID`는 Job 이름에 들어가므로 소문자, 숫자, 하이픈만 쓰세요.
 
 로그를 다시 보려면 스크립트가 출력한 Job 이름으로 다음 명령을 실행합니다(필터 없는 전체 로그).
 
@@ -104,7 +101,7 @@ kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 
 ### 완료된 학습과 채점 건수 { #trainer-complete }
 
-Job이 `Complete`로 끝났습니다. trainer가 기록한 배치는 16개, 채점한 제출물은 207개, `ok` 판정은 15개였습니다. trainer가 보고한 `train_runtime`은 785.3초였고, 컨테이너는 종료 코드 0을 반환했습니다. 이 실행에서 학습 중 샌드박스를 바꾼 시점은 [6장 전환 기록](06_sandbox_update.md#switch-batches)에서 볼 수 있습니다.
+Job이 `Complete`로 끝났습니다. trainer가 기록한 배치는 16개, 채점한 제출물은 207개, `ok` 판정은 15개였습니다. trainer가 보고한 `train_runtime`은 785.3초였고, 컨테이너는 종료 코드 0을 반환했습니다. 실행 도중 몇 번째 배치에서 샌드박스가 바뀌었는지는 [6장 전환 기록](06_sandbox_update.md#switch-batches)에 나옵니다.
 
 ![완료된 Job, 배치별 합계에서 집계한 판정 수와 done 이벤트](../images/terminal/grpo-completed-replay.png)
 
@@ -132,7 +129,7 @@ completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라
 
 터미널 요약의 `train` 줄에는 이 중 `loss`, `reward`, `reward_std`, `grad_norm`, `learning_rate`와 `epoch`만 나옵니다. 나머지 지표는 원래 dict(pod 로그 또는 `GPUSANDBOX_LOG=json`)에서 보세요.
 
-둘째는 이 저장소 코드가 stdout에 출력하는 JSON 이벤트입니다. 그중 `reward_batch`와 버전이 바뀔 때의 `sandbox_version_switch`만 `/outputs/grpo/sandbox_metrics.jsonl`에도 기록됩니다. 시작 시점의 `routing`과 종료 시점의 `done`까지 보관하려면 Job 로그를 저장하세요(위 "학습 결과 보존"). 아래에서 pod 로그와 `GPUSANDBOX_LOG=json`에 표시되는 원래 JSON 형태를 볼 수 있습니다.
+둘째는 trainer가 표준 출력에 기록하는 JSON 이벤트입니다. 그중 `reward_batch`와 버전이 바뀔 때의 `sandbox_version_switch`만 `/outputs/grpo/sandbox_metrics.jsonl`에도 기록됩니다. 시작 시점의 `routing`과 종료 시점의 `done`까지 보관하려면 Job 로그를 저장하세요(위 "학습 결과 보존"). 아래는 pod 로그나 `GPUSANDBOX_LOG=json` 출력에 기록된 JSON 이벤트의 예시입니다.
 
 ```text
 {"event": "routing", "mode": "direct", "runtime": "gvisor", "version": "v1", "address": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000"}
@@ -164,7 +161,7 @@ completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라
 
 ## 1.5B 모델에서 기대할 것
 
-이 저장소는 on-policy 루프가 끝까지 실행되는지 확인하는 용도이고, 학습 곡선이 개선된다고 보장하지 않습니다.
+이 실습에서는 모델이 답안을 만들고, 샌드박스가 채점하고, 그 결과로 가중치가 바뀌는 과정을 확인합니다. 모델 성능의 변화는 더 긴 학습과 별도의 평가가 필요합니다.
 
 | level | task |
 |---|---|
@@ -190,7 +187,7 @@ tasks 모듈 주석에 따르면 level 0은 기본 동작을 점검하는 단계
 ## 자주 막히는 지점
 
 - **pod가 `Pending`**이면 `kubectl describe pod`의 이벤트에서 GPU를 기다리는지 확인하세요. 같은 trainer 노드에 이전 Job이 남아 있으면 새 Job도 대기할 수 있습니다.
-- **`sandbox_error`가 반복**되면 먼저 `scripts/ops/verify.sh gvisor`로 pool을 확인하세요. 이 상태는 샌드박스가 채점에 실패했다는 뜻입니다. 모델이 틀린 답을 낸 경우와 로그에서 구분할 수 있습니다.
+- **`sandbox_error`가 반복**되면 먼저 `scripts/ops/verify.sh gvisor`로 pool을 확인하세요. `sandbox_error`는 샌드박스가 채점을 마치지 못했다는 뜻입니다. 모델의 답을 채점해 오답으로 판정한 경우에는 `wrong_answer`가 기록됩니다.
 
 OOM이나 첫 로그가 나오지 않는 경우는 [학습 문제 해결](../reference/troubleshooting.md#학습)을 참고하세요.
 
@@ -272,11 +269,11 @@ GPU 학습 설정에서는 아래 항목을 따로 지정하지 않으므로 TRL
 
 </details>
 
-## 한 step의 흐름
+## GRPO 한 스텝에서 답안을 생성하고 채점하는 순서 { #한-step의-흐름 }
 
-현재 모델이 답을 생성하면 샌드박스가 채점하고, trainer는 그 배치로 optimizer step을 한 번 실행합니다. [On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 학습 방식의 의미를 볼 수 있습니다.
+현재 모델이 답을 생성하면 샌드박스가 채점하고, trainer는 그 배치로 optimizer step을 한 번 실행합니다. 같은 배치 안에서 점수를 비교하는 이유는 [On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 설명합니다.
 
-??? note "한 step의 흐름"
+??? note "vLLM과 샌드박스를 호출하는 순서"
     ```mermaid
     sequenceDiagram
         participant V as vLLM (colocate, 같은 A10G)
@@ -378,7 +375,7 @@ MODEL_ID=<open-license-model-id> scripts/07_run_grpo.sh 20
 
 ## A10G 24 GB 메모리 계산
 
-아래 표는 설정값으로 계산한 추정치입니다.
+아래 표는 모델과 vLLM 설정으로 추정한 GPU 메모리 사용량입니다.
 
 | 항목 | 대략의 크기 | 근거 |
 |---|---|---|
@@ -397,9 +394,7 @@ sleep mode가 vLLM의 가중치와 cache를 해제해 확보한 메모리는 bac
 
 </details>
 
-## 적용 범위와 한계
-
-GPU 메모리 사용량은 측정하지 않았습니다. step 시간과 step별 reward, loss 기록은 위의 5 step run 한 번에서 나온 것입니다.
+<span id="적용-범위와-한계"></span>
 
 ## 소요 시간과 비용
 
@@ -457,7 +452,7 @@ EKS control plane, NAT gateway, EBS 요금은 별도입니다. `g4dn.metal` 노�
     | 주제 | 링크 |
     |---|---|
     | TRL GRPO Trainer (지표, colocate, sleep mode, None reward) | https://huggingface.co/docs/trl/grpo_trainer |
-    | TRL 저장소 | https://github.com/huggingface/trl |
+    | TRL 소스 코드 | https://github.com/huggingface/trl |
     | 기본 모델 (Apache-2.0) | https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct |
     | KernelBench (ModelNew 계약) | https://github.com/ScalingIntelligence/KernelBench |
     | Amazon EC2 가속 컴퓨팅 인스턴스 (A10G, T4) | https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html |

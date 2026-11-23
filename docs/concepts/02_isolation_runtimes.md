@@ -1,7 +1,7 @@
 # 격리 런타임 비교
 
 !!! info "TL;DR"
-    gVisor는 시스템 호출을 사용자 공간 커널에서 처리하고, Kata는 pod마다 별도의 커널이 있는 VM을 띄웁니다. 이 저장소에서 Kata로 GPU를 쓸 때는 QEMU로 VM을 띄우고, CPU 격리 실습에서는 Cloud Hypervisor와 QEMU를 비교합니다.
+    gVisor는 시스템 호출을 사용자 공간 커널에서 처리하고, Kata는 pod마다 별도의 커널이 있는 VM을 띄웁니다. Kata GPU 실습에서는 QEMU로 VM을 띄웁니다. CPU 격리 실습에서는 Cloud Hypervisor와 QEMU를 비교합니다.
 
 ## 시스템 호출은 어디에서 처리될까?
 
@@ -9,7 +9,7 @@
 
 파일을 열거나 GPU를 사용하려면 프로그램이 운영체제에 요청을 보냅니다. 모델이 만든 코드도 마찬가지입니다. 격리 런타임을 고를 때는 그 요청을 어디서 받아 처리할지 정합니다.
 
-| 런타임 | 요청을 처음 받는 곳 | 이 저장소에서 쓰는 곳 |
+| 런타임 | 요청을 처음 받는 곳 | 실습에서 맡는 역할 |
 |---|---|---|
 | runc | 노드의 Linux 커널 | trainer와 시스템 pod |
 | gVisor | 사용자 공간 커널(Sentry) | CPU 및 GPU 샌드박스 |
@@ -43,11 +43,13 @@ Kata GPU 실습에서는 pod가 `nvidia.com/pgpu`로 물리 GPU를 요청합니�
 
 ## AWS에서 각 런타임을 실행할 수 있는 위치
 
+<span id="적용-범위와-한계"></span>
+
 | 실습 | 노드 | 확인할 조건 |
 |---|---|---|
-| gVisor GPU | EC2 `g5.xlarge` | 노드 드라이버가 nvproxy 지원 목록에 있음 |
-| Kata + QEMU GPU | EC2 `g4dn.metal` | GPU passthrough용 AMI와 IOMMU 설정 |
-| Kata CPU (QEMU, Cloud Hypervisor) | EC2 `c8i.2xlarge` | 중첩 가상화 활성화 |
+| gVisor GPU | EC2 `g5.xlarge` | 노드 드라이버가 nvproxy 지원 목록에 있어야 함. T4에서 gVisor를 실행하는 구성은 이 실습에서 검증하지 않음 |
+| Kata + QEMU GPU | EC2 `g4dn.metal` | GPU passthrough용 AMI와 IOMMU 필요. 실습 환경은 AL2023과 T4이며, NVIDIA의 EKS 검증 환경(Ubuntu)과 Kata CI 대상 GPU(A100, H100)와 다름 |
+| Kata CPU (QEMU, Cloud Hypervisor) | EC2 `c8i.2xlarge` | 중첩 가상화 필요. 실습의 HyperPod GPU 노드에서는 Kata CPU도 실행하기 어려울 것으로 보이며 직접 검증하지 않음 |
 
 런타임을 선택한 뒤에는 누가 pool에 요청을 보낼 수 있는지, 샌드박스에서 나가는 연결은 어디까지 허용되는지도 확인해야 합니다. 직접 비교하려면 [gVisor 핸즈온](../handson/02_gvisor.md)과 [Kata 핸즈온](../handson/03_kata.md)을 보세요.
 
@@ -76,7 +78,7 @@ runc에서는 컨테이너가 host 커널을 공유합니다. gVisor에서는 �
 | NVIDIA 드라이버 위치 | host | host | guest (host에는 NVIDIA 드라이버를 설치하지 않음) | 해당 없음 |
 | GPU 경로 | device node 직접 접근 | nvproxy가 허용된 ioctl만 host 드라이버로 전달 | QEMU로 VFIO passthrough (cold-plug) | 없음 |
 | `/dev/kvm` | 불필요 | 불필요 (systrap) | 필요 | 필요 |
-| 이 저장소에서 | trainer와 시스템 pod | `gvisor` RuntimeClass (handler `runsc`) | `kata-qemu-nvidia-gpu`, `kata-qemu`, `kata-clh` | 사용하지 않음 (Kata의 hypervisor로도 쓰임) |
+| 실습 구성 | trainer와 시스템 pod | `gvisor` RuntimeClass (handler `runsc`) | `kata-qemu-nvidia-gpu`, `kata-qemu`, `kata-clh` | 사용하지 않음 (Kata의 hypervisor로도 쓰임) |
 
 세 런타임의 샌드박스 이미지는 동일합니다. 이미지에는 NVIDIA 커널 드라이버가 없고, PyTorch wheel에 포함된 CUDA 사용자 공간 라이브러리만 들어 있습니다.
 
@@ -85,20 +87,20 @@ runc에서는 컨테이너가 host 커널을 공유합니다. gVisor에서는 �
 | 항목 | QEMU | Cloud Hypervisor (CLH) |
 |---|---|---|
 | Kata CPU pod | 지원 (`kata-qemu`) | 지원 (`kata-clh`) |
-| Kata NVIDIA GPU pod | 지원 (`kata-qemu-nvidia-gpu`) | Kata 지원표에서 미지원. 저장소의 실험용 `kata-clh-nvidia-gpu`는 EKS에서 VM 부팅 실패 |
+| Kata NVIDIA GPU pod | 지원 (`kata-qemu-nvidia-gpu`) | Kata 지원표에서 미지원. 실험용 `kata-clh-nvidia-gpu`는 EKS에서 VM 부팅 실패 |
 | RuntimeClass `overhead.podFixed` (Kata 4.3.1) | 320Mi, 250m. GPU class는 10240Mi, 1 CPU | 130Mi, 250m. 실험용 `kata-clh-nvidia-gpu`는 10240Mi, 1 CPU |
 | boot to workload (Kata metrics CI, 3.28.0) | 0.71 s | 0.39 s |
 
 `overhead.podFixed`는 RuntimeClass에 지정된 설정값이며 측정값이 아닙니다. 스케줄러는 이 값을 VM 자체가 사용하는 메모리와 CPU로 보고 pod 요청량에 합산합니다.
 
-Kata의 Go 런타임에는 Cloud Hypervisor VM을 띄우기 전에 VFIO 장치를 연결하는 코드가 있습니다. 저장소의 GPU 실험은 이 코드를 사용했습니다. Kata의 Rust 런타임(`runtime-rs`)도 일반 VFIO 장치를 처리하며, 새 VFIO 인터페이스의 장치를 Cloud Hypervisor에 전달하는 데 남은 작업은 별도 이슈에 정리돼 있습니다. [Go 런타임 코드](https://github.com/kata-containers/kata-containers/blob/4.3.1/src/runtime/virtcontainers/clh.go#L1173-L1209) [Kata 4.3.1 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [Kata 이슈 #13992](https://github.com/kata-containers/kata-containers/issues/13992)
+Kata의 Go 런타임에는 Cloud Hypervisor VM을 띄우기 전에 VFIO 장치를 연결하는 코드가 있습니다. EKS에서 이 조합을 시험할 때도 Go 런타임의 해당 코드를 사용했습니다. Kata의 Rust 런타임(`runtime-rs`)도 일반 VFIO 장치를 처리하며, 새 VFIO 인터페이스의 장치를 Cloud Hypervisor에 전달하는 데 남은 작업은 별도 이슈에 정리돼 있습니다. [Go 런타임 코드](https://github.com/kata-containers/kata-containers/blob/4.3.1/src/runtime/virtcontainers/clh.go#L1173-L1209) [Kata 4.3.1 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [Kata 이슈 #13992](https://github.com/kata-containers/kata-containers/issues/13992)
 
 !!! warning "오버헤드 수치를 읽는 법"
     - **위 boot 시간**: Kata metrics CI(3.28.0)가 서로 다른 머신에서 넓은 허용 오차로 측정한 값이며 AWS 측정값이 아닙니다.
     - **AWS China 블로그의 "CLH 약 130 MB, QEMU 약 160 MB"**: Kata 3.31.0의 `podFixed` 기본값과 같아서 측정값이 아닐 가능성이 높습니다(추론). 같은 글에 실린 측정값은 cold start 약 3 s, 미리 시작해 둔 pool에서 가져올 때 약 230 ms입니다.
     - **AWS 실습 계정에서 측정한 값**: [08 런타임 벤치마크](../handson/08_benchmark.md)에 있습니다. 그 표의 cold start는 pod 생성부터 Ready까지의 시간이라 위 표의 boot to workload와 측정 구간이 다릅니다. `g4dn.metal`에서 GPU 프로필 `kata-qemu`(RuntimeClass `kata-qemu-nvidia-gpu`)로 띄운 pod 4개는 중앙값 30.5초였습니다.
 
-`kata-qemu-nvidia-gpu`의 VM 크기는 `default_memory` 8192 MiB에 컨테이너 limit을 더한 값입니다. VFIO type1은 guest RAM 전체를 pin하므로 메모리를 overcommit할 수 없습니다. 이 저장소의 프로필은 T4 pod마다 8 CPU, 16 GiB를 할당합니다. 8 x (16 + 10) GiB = 208 GiB이므로 `g4dn.metal`의 384 GiB 안에 들어갑니다.
+`kata-qemu-nvidia-gpu`의 VM 크기는 `default_memory` 8192 MiB에 컨테이너 limit을 더한 값입니다. VFIO type1은 guest RAM 전체를 pin하므로 메모리를 overcommit할 수 없습니다. 실습용 GPU 프로필은 T4 pod마다 CPU 8개와 메모리 16 GiB를 할당합니다. 8 x (16 + 10) GiB = 208 GiB이므로 `g4dn.metal`의 384 GiB 안에 들어갑니다.
 
 ## 런타임별 격리 범위와 한계
 
@@ -119,12 +121,6 @@ Kata의 Go 런타임에는 Cloud Hypervisor VM을 띄우기 전에 VFIO 장치�
 
 GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권고합니다. 보안 경계 전체와 위협 모델은 [Production 02 보안](../production/02_security.md)에서 다룹니다.
 
-## 적용 범위와 한계
-
-- **T4 on gVisor:** 위 AMI 조건 때문에 검증하지 않은 조합입니다.
-- **Kata + GPU on `g4dn.metal`:** upstream에서 검증되지 않은 구성입니다. NVIDIA CI는 A100과 H100을 테스트하고 T4는 테스트하지 않습니다. NVIDIA가 검증한 EKS 구성은 Ubuntu 기반입니다(AL2023 없음).
-- **HyperPod 노드의 Kata CPU:** 직접 확인하지는 않았으나 이 구성에서는 실행할 수 없을 것으로 판단했습니다.
-
 ??? note "참고 자료"
     | 주제 | 링크 |
     |---|---|
@@ -132,6 +128,6 @@ GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권�
     | EC2 가속 컴퓨팅 인스턴스 사양 | https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html |
     | gVisor 설치, GPU 지원, GitHub | https://gvisor.dev/docs/user_guide/install/ , https://gvisor.dev/docs/user_guide/gpu/ , https://github.com/google/gvisor |
     | Kata NVIDIA GPU passthrough (4.3.1) | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md |
-    | 이 저장소의 런타임 설정 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml |
+    | gVisor와 Kata 런타임 설정 파일 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml |
 
     [관련 대표 자료](../reference/references.md#ref-concepts-02-isolation-runtimes)

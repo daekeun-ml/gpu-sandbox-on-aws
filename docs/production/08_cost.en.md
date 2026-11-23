@@ -37,6 +37,10 @@ Size the pool for bursts, then check how long unused nodes remain between runs. 
 
 ## Cost model
 
+<span id="scope-and-limits"></span>
+
+The figures below are estimates. Totals exclude EKS control plane, NAT gateway, EBS, FSx for Lustre, ECR and CloudWatch charges. Use your own `t_generate`, `t_update` and `t_eval` when calculating cost per step.
+
 Allocated GPU time includes idle time between evaluations. Check idle node counts and warm-pool GPU reservations alongside instance rates.
 
 ```text
@@ -141,7 +145,7 @@ Decide the runtime from your isolation requirement first, and for Kata size the 
 
 ### CPU tier and Spot
 
-- **Kata CPU tier (c8i)**: nested virtualization runs Kata without `.metal`. In the hands-on it is a cheap way to practice Kata before turning on `g4dn.metal`; in production it can filter work that needs no GPU (static checks, nvcc compilation) in front of the GPU tier. The CPU pools (`gvisor-cpu`, `kata-*-cpu`) are in the routing table and the reward loop of scenario C ([10 CPU-only path on c8i](../handson/10_cpu_only.md)) uses them, but this two-stage setup is not wired.
+- **Kata CPU tier (c8i)**: nested virtualization runs Kata without `.metal`. In the hands-on it is a cheap way to practice Kata before turning on `g4dn.metal`; in production it can filter work that needs no GPU (static checks, nvcc compilation) in front of the GPU tier. The CPU pools (`gvisor-cpu`, `kata-*-cpu`) are in the routing table and the reward loop of scenario C ([10 Hands-on lab with CPUs only](../handson/10_cpu_only.md)) uses them, but this two-stage setup is not wired.
 - **Savings already built in**: the three reward functions of `KernelRewards` share one sandbox result.
     - **Not sent**: completions already in the cache, and completions without code or rejected by the static policy, are not sent to a sandbox.
     - **Identical completions in one call**: they are sent once.
@@ -226,12 +230,6 @@ aws ec2 describe-instances --region "${AWS_REGION}" \
 **If it fails:** if billing continues after cleanup, see the cleanup and cost table in [Troubleshooting](../reference/troubleshooting.md).
 
 When you finish the hands-on, run [99 Cleanup](../handson/99_cleanup.md) (for scenario B, run `scripts/hyperpod/delete.sh` first). Related pages: [04 Platforms and instances](../concepts/04_platforms_and_instances.md), [01 Capacity and nodes](01_capacity_and_nodes.md), [06 Scaling with veRL](06_scaling_with_verl.md).
-
-## Scope and limits
-
-- **Every amount is a calculation.** This repository has no usage or billing measured on AWS.
-- **Some items are left out.** The EKS control plane, NAT gateway, EBS, FSx for Lustre, ECR and CloudWatch charges are not in the totals.
-- **Measure step times yourself.** The cost-per-step formula in "Levers" assumes you know `t_generate`, `t_update` and `t_eval`, which differ per run.
 
 ??? note "References"
     | Topic | Link |

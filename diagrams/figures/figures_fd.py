@@ -164,7 +164,7 @@ def card(fig: Figure, x, y, w, h, label, subs, *, icon=None, fill=GREY_FILL, str
 
 
 def handson_07(lang: str) -> Figure:
-    """docs/handson/07_hyperpod: node failure, a silent hang and the HyperPod AMI driver, and what HyperPod adds."""
+    """docs/handson/07_hyperpod_b1: node failure, a silent hang and the HyperPod AMI driver, and what HyperPod adds."""
     t = T[lang]
     fig = Figure(760, 540)
     ex, ew, ox, ow = 16, 230, 494, 250
@@ -218,7 +218,7 @@ def handson_08(lang: str) -> Figure:
 
 
 def handson_09(lang: str) -> Figure:
-    """docs/handson/09_demo_site: live demo, bucket bypass and HTML injection, and replay, OAC and text-only insert."""
+    """docs/reference/demo_site: live demo, bucket bypass and HTML injection, and replay, OAC and text-only insert."""
     t = T[lang]
     fig = Figure(760, 516)
     lx, lw, rx, rw = 16, 196, 544, 200

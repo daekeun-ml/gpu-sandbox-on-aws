@@ -1,9 +1,9 @@
 # 스크립트 레퍼런스
 
 !!! info "TL;DR"
-    표에서 하려는 작업을 고르세요. 각 항목에서 실행 방법과 성공했을 때의 출력을 확인할 수 있습니다. 같은 명령을 다시 실행하면 어떻게 동작하는지도 설명합니다.
+    표에서 하려는 작업을 고르세요. 각 항목에는 실행 방법, 성공했을 때의 출력, 같은 명령을 다시 실행했을 때의 동작을 정리했습니다.
 
-명령은 저장소 루트에서 실행하세요. CDK로 만든 클러스터에 `kubectl`이나 Helm으로 접속할 때는 별도 터미널에서 `cdk/tunnel.sh`를 실행하고 터널을 열어 두세요. 처음부터 실습한다면 [핸즈온 전체 흐름](../handson/00_overview.md)에서 시나리오를 고르세요.
+명령은 프로젝트 최상위 폴더에서 실행하세요. CDK로 만든 클러스터에 `kubectl`이나 Helm으로 접속할 때는 별도 터미널에서 `cdk/tunnel.sh`를 실행하고 터널을 열어 두세요. 처음부터 실습한다면 [핸즈온 전체 흐름](../handson/00_overview.md)에서 시나리오를 고르세요.
 
 | 하려는 작업 | 스크립트 |
 |---|---|
@@ -50,7 +50,7 @@
 
 ### `scripts/03_build_push_images.sh`
 
-- **하는 일**: sandbox, trainer, control 이미지를 `linux/amd64`로 빌드해 ECR의 `<ECR_REPO_PREFIX>/<이름>:<IMAGE_TAG>`로 push하고, `config.env`에 넣을 `export` 줄을 출력합니다. ECR 저장소가 없으면 IMMUTABLE 태그와 scan on push로 만듭니다.
+- **하는 일**: sandbox, trainer, control 이미지를 `linux/amd64`로 빌드해 ECR의 `<ECR_REPO_PREFIX>/<이름>:<IMAGE_TAG>`로 push하고, `config.env`에 넣을 `export` 줄을 출력합니다. ECR 리포지토리가 없으면 새로 만들고 태그 변경을 막는 IMMUTABLE 설정과 push 시 이미지 검사를 켭니다.
 - **사용법**: `scripts/03_build_push_images.sh`, trainer 이미지를 건너뛰려면 `--no-trainer`. 시나리오 B는 `HYPERPOD=1 scripts/03_build_push_images.sh`로 trainer에 `hyperpodrun`을 넣습니다.
 - **실행 시점**: CDK 경로에서는 `02_create_cluster.sh` 다음에, 관리형 B2에서는 클러스터를 만드는 동안 이미지를 준비할 수 있습니다. `04_install_gpu_stack.sh`를 실행하는 시나리오는 그 전에 빌드를 마치세요. A는 기본 설정으로, B1과 B2는 `HYPERPOD=1`로, C는 `--no-trainer`로 빌드합니다.
 - **시간과 과금**: 빌드 호스트와 네트워크에 따라 다릅니다. ECR 저장 용량이 과금됩니다.
@@ -84,7 +84,7 @@
 - **사용법**: `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]`. runtime은 `gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`(실험), `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`이고, version은 `v1`(기본) 또는 `v2`, replicas를 생략하면 프로필에 지정한 수만큼 pod를 배포합니다.
 - **실행 시점**: `05_setup_namespaces_auth.sh` 다음에 pool마다 실행합니다. A와 B1은 `gvisor`, B2는 `gvisor-hyperpod`, C는 CPU pool 세 개를 배포합니다.
 - **시간과 과금**: rollout timeout은 30분입니다. 기존 노드를 쓰므로 새로 과금되는 리소스는 없습니다.
-- **다시 실행할 때**: `kubectl apply`라 매니페스트가 같으면 바뀌지 않고, 이미지나 설정이 바뀌었으면 Deployment가 pod를 새로 만듭니다. replica 수가 인자나 프로필 값으로 돌아가므로, 0으로 줄인 pool(`ops/rollout.sh --finish`, `04_install_gpu_stack.sh`의 안내)을 다시 시작할 때도 같은 명령을 실행할 수 있습니다.
+- **다시 실행할 때**: `kubectl apply`라 매니페스트가 같으면 바뀌지 않고, 이미지나 설정이 바뀌었으면 Deployment가 pod를 새로 만듭니다. replica 수가 인자나 프로필 값으로 돌아가므로, 0으로 줄인 pool(`ops/rollout.sh --finish`, `04_install_gpu_stack.sh`의 안내)을 다시 시작하려면 같은 명령을 실행하세요.
 - **성공 여부 확인**: rollout이 끝나고 pod가 `1/1 Running`입니다.
 - **막히면**: [문제 해결: 샌드박스 pool과 readiness](troubleshooting.md#샌드박스-pool과-readiness), [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)
 
@@ -101,7 +101,7 @@
 ### `scripts/08_cleanup.sh`
 
 - **하는 일**: 클러스터 이름을 입력받은 뒤 `cdk/destroy.sh --yes`로 pool, Job, CDK 스택을 지우고, `config.env`에 ID가 있는 AMI(`KATA_IOMMU_AMI_ID`, `HYPERPOD_B2_AMI_ID`)와 스냅샷을 하나씩 확인한 뒤 지웁니다. 마지막에 남은 인스턴스를 조회합니다.
-- **사용법**: `scripts/08_cleanup.sh`, ECR 저장소까지 지우려면 `--images`. B1과 기존 CDK 방식의 B2는 먼저 `scripts/hyperpod/delete.sh`를 실행합니다.
+- **사용법**: `scripts/08_cleanup.sh`, ECR 리포지토리까지 지우려면 `--images`. B1과 기존 CDK 방식의 B2는 먼저 `scripts/hyperpod/delete.sh`를 실행합니다.
 - **실행 시점**: CDK로 만든 클러스터를 정리할 때 실행합니다. 터널을 켜 두면 클러스터 안의 워크로드부터 지웁니다. 관리형 B2는 [마법사 스택 정리 절차](../handson/07_hyperpod_b2.md#cleanup)를 따르세요.
 - **시간과 과금**: 기록 없음(CloudFormation 삭제를 기다림). CDK 스택 리소스의 과금이 끝나고, secrets용 KMS 키는 7일 삭제 대기에 들어갑니다.
 - **다시 실행할 때**: 실행할 때마다 확인 단어를 묻고 `cdk/destroy.sh`부터 다시 실행합니다. 이미 지운 AMI의 ID가 `config.env`에 남아 있으면 AMI 단계에서 멈출 수 있으니, `--images`로 다시 실행하기 전에 그 ID를 지우세요.
@@ -122,7 +122,7 @@
 
 ### `cdk/destroy.sh`
 
-- **하는 일**: 클러스터 API에 접속되면 `rl-trainer`의 Job과 `sandbox`의 Deployment, Service를 먼저 지우고, `cdk destroy --force`로 스택을 지운 뒤 스택 밖에 남은 Lambda 로그 그룹을 지웁니다. ECR 저장소는 지우지 않고 삭제 명령만 안내합니다.
+- **하는 일**: 클러스터 API에 접속되면 `rl-trainer`의 Job과 `sandbox`의 Deployment, Service를 먼저 지우고, `cdk destroy --force`로 스택을 지운 뒤 스택 밖에 남은 Lambda 로그 그룹을 지웁니다. ECR 리포지토리는 남겨 두고 별도의 삭제 명령을 안내합니다.
 - **사용법**: `cdk/destroy.sh [--yes]` (`--yes`는 확인을 건너뜀). 보통은 `08_cleanup.sh`가 실행합니다.
 - **실행 시점**: CDK로 만든 스택을 정리할 때 실행합니다.
 - **시간과 과금**: 기록 없음(CloudFormation 삭제를 기다림). 스택 리소스의 과금이 끝납니다.
@@ -182,7 +182,7 @@
 - **시간과 과금**: 기본 30배치에 배치 사이 20초 대기가 29회입니다. 2026-11-17 실행(`kata-clh-cpu`)은 약 16분 걸렸습니다. 과금되는 리소스는 없습니다.
 - **다시 실행할 때**: 실행할 때마다 새 Job(`simulate-<시각>`)을 만들고 그 시점의 active pool을 읽습니다. 여러 개를 동시에 실행하면 같은 pool에 요청이 겹칩니다.
 - **성공 여부 확인**: 배치마다 `batch <n>  <runtime>/<version>  ...` 줄이 나옵니다. 버전 교체 뒤에는 `SWITCH ...` 한 줄과 `MIXED VERSIONS`가 없는 `batch` 줄이 이어집니다.
-- **막히면**: [문제 해결: 버전 전환 (routing)](troubleshooting.md#버전-전환-routing), [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)
+- **막히면**: [문제 해결: 버전 전환 (routing)](troubleshooting.md#버전-전환-routing), [10 GPU 없이 CPU로 실습하기](../handson/10_cpu_only.md)
 
 ### `scripts/ops/bench.sh`
 
@@ -225,19 +225,19 @@ EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다
 - **사용법**: `scripts/hyperpod/create.sh` (B1) 또는 `--b2` (기존 CDK 방식의 B2, `HYPERPOD_B2_AMI_ID` 필요). `git`과 `jq`가 있어야 합니다.
 - **실행 시점**: B1은 `02_create_cluster.sh --hyperpod`, `HYPERPOD=1 03_build_push_images.sh`, `04_install_gpu_stack.sh` 다음에 실행합니다. 기존 CDK 방식의 B2에서는 `hyperpod/build_b2_ami.sh` 다음에 실행합니다.
 - **시간과 과금**: InService까지 15~30분(안내값). HyperPod `ml.g5.2xlarge`(시간당 1.515 USD)의 과금이 시작되고, B2는 `ml.g5.xlarge` x2가 더해집니다.
-- **다시 실행할 때**: 1, 2단계(Helm chart, Block Public Access, lifecycle 업로드)는 다시 적용되고, 버킷과 역할은 없을 때만 만듭니다. 4단계 `create-cluster`는 같은 이름의 클러스터가 있으면 실패할 것으로 보며(추론), 5단계 add-on 생성도 이미 있으면 실패하니 5단계만 실패했다면 [07](../handson/07_hyperpod.md)에 있는 두 명령만 실행하세요.
+- **다시 실행할 때**: 1, 2단계(Helm chart, Block Public Access, lifecycle 업로드)는 다시 적용되고, 버킷과 역할은 없을 때만 만듭니다. 4단계 `create-cluster`는 같은 이름의 클러스터가 있으면 실패할 것으로 보며(추론), 5단계 add-on 생성도 이미 있으면 실패하니 5단계만 실패했다면 [07](../handson/07_hyperpod_b1.md)에 있는 두 명령만 실행하세요.
 - **성공 여부 확인**: `status`가 `InService`이고 `failure`가 비어 있으며, 마지막 노드 표에 HyperPod 노드가 보입니다(B2는 `ml.g5.xlarge` 두 대가 `Schedulable`).
-- **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [07 HyperPod 시나리오](../handson/07_hyperpod.md)
+- **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [B1 · HyperPod 학습과 EC2 채점](../handson/07_hyperpod_b1.md)
 
 ### `scripts/hyperpod/build_b2_ami.sh`
 
 - **하는 일**: HyperPod EKS base AMI를 `m6i.large` 빌더로 띄워 NVIDIA 드라이버를 `B2_NVIDIA_DRIVER_VERSION`(580.178.04)으로 바꾸고 gVisor를 넣은 custom AMI를 만듭니다. 빌더 전용 security group(outbound HTTPS만)은 빌더와 함께 지웁니다.
-- **사용법**: `scripts/hyperpod/build_b2_ami.sh` (인자 없음). base AMI는 `HYPERPOD_BASE_AMI_ID`로 직접 지정할 수 있습니다.
+- **사용법**: `scripts/hyperpod/build_b2_ami.sh` (인자 없음). base AMI를 직접 고르려면 `HYPERPOD_BASE_AMI_ID`를 지정하세요.
 - **실행 시점**: 기존 CDK 방식의 B2에서 `02_create_cluster.sh --hyperpod-b2` 다음, `hyperpod/create.sh --b2` 전에 실행합니다.
 - **시간과 과금**: 20~40분(추정). 빌드 중의 `m6i.large`와 그 뒤의 AMI 스냅샷이 과금됩니다.
 - **다시 실행할 때**: 기존 `HYPERPOD_B2_AMI_ID`를 확인하지 않고 실행할 때마다 새 AMI를 만들며, `08_cleanup.sh`는 `config.env`에 있는 AMI 하나만 지우니 이전 AMI와 스냅샷은 직접 지우세요. 빌드가 실패하면 정지된 빌더가 남으므로(EBS 요금) 출력된 명령으로 정리한 뒤 다시 실행합니다.
 - **성공 여부 확인**: `GPUSANDBOX-B2-BUILD: OK ...` 로그 뒤에 `export HYPERPOD_B2_AMI_ID="ami-..."`가 나옵니다.
-- **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)
+- **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [기존 CDK의 custom AMI 절차](hyperpod_custom_ami.md)
 
 ### `scripts/hyperpod/check_gvisor.sh`
 
@@ -246,13 +246,13 @@ EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다
 - **실행 시점**: pool을 배포하기 전에 드라이버를 확인할 때 실행합니다. 관리형 B2에서는 채점 노드를 재부팅한 뒤, 기존 CDK 방식에서는 `hyperpod/create.sh --b2` 다음에 확인하세요.
 - **시간과 과금**: 소요 시간은 기록하지 않았습니다. 워커에 지정한 버전의 gVisor가 없으면 스크립트가 내려받습니다. 과금되는 리소스는 없습니다.
 - **성공 여부 확인**: sandbox 노드 두 대에서 `driver 580.178.04: SUPPORTED by gVisor ...`이 나옵니다. trainer에서 `NOT supported`가 나와도 학습에는 문제가 없습니다. 예를 들어 595.91.07 드라이버는 이 gVisor 릴리스에서 지원하지 않습니다.
-- **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)
+- **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [기존 CDK의 custom AMI 절차](hyperpod_custom_ami.md)
 
 ### `scripts/hyperpod/run_grpo.sh` { #scriptshyperpodrun_grposh }
 
 B1과 B2에서 **HyperPod trainer에 GRPO Job을 제출**합니다. 기존 샌드박스 pool은 모델이 생성한 코드를 채점하고, trainer는 그 점수로 모델을 업데이트합니다.
 
-**준비**　[HyperPod 실습](../handson/07_hyperpod.md)에서 training operator, trainer 노드, 샌드박스 pool을 준비하세요. `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드한 이미지에는 Job의 실행 명령인 `hyperpodrun`이 들어 있습니다. `scripts/config.env`에 `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, `HYPERPOD_TRAINER_INSTANCE_TYPE`이 필요합니다.
+**준비**　[HyperPod 실습](../handson/07_hyperpod_b1.md)에서 training operator, trainer 노드, 샌드박스 pool을 준비하세요. `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드한 이미지에는 Job의 실행 명령인 `hyperpodrun`이 들어 있습니다. `scripts/config.env`에 `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, `HYPERPOD_TRAINER_INSTANCE_TYPE`이 필요합니다.
 
 ```bash
 scripts/hyperpod/run_grpo.sh 5
@@ -264,11 +264,11 @@ scripts/hyperpod/run_grpo.sh 5
 |---|---|
 | `HyperPodPyTorchJob grpo-<RUN_ID> submitted` | API가 Job을 받았습니다. pod 상태는 별도로 확인하세요. |
 | `routing` 이벤트 | trainer가 샌드박스 경로를 읽었습니다. 템플릿은 시작 후 20분 안에 이 이벤트를 기대합니다. |
-| `reward_batch` 이벤트와 학습 step | 샌드박스 평가 요청이 처리되고 학습이 진행되는지 확인할 수 있습니다. `sandbox_error`가 반복되면 pool을 점검하세요. |
+| `reward_batch` 이벤트와 학습 step | 샌드박스가 요청을 채점하고 학습 step이 진행되는지 확인하세요. `sandbox_error`가 반복되면 pool을 점검하세요. |
 
-B1 trainer가 GRPO 한 스텝을 완료했고, EC2 gVisor 샌드박스 두 개가 제출 코드 12개를 채점했습니다. [Job 상태와 학습 로그](../handson/07_hyperpod.md#확인-방법)
+B1 trainer가 GRPO 한 스텝을 완료했고, EC2 gVisor 샌드박스 두 개가 제출 코드 12개를 채점했습니다. [Job 상태와 학습 로그](../handson/07_hyperpod_b1.md#확인-방법)
 
-스크립트가 출력한 Job 이름을 `HPJob` 라벨 값에 넣으면 이번 실행의 pod를 찾을 수 있습니다.
+이번 실행의 pod를 찾으려면 스크립트가 출력한 Job 이름을 `HPJob` 라벨 값에 넣으세요.
 
 ```bash
 kubectl -n rl-trainer get pods -l 'HPJob=grpo-<RUN_ID>' -o wide
@@ -284,7 +284,7 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](troubleshooting.md
 - **하는 일**: HyperPod 클러스터 이름을 입력받은 뒤 HyperPodPyTorchJob, HyperPod 클러스터(사라질 때까지 대기), execution role을 지우고, 한 번 더 확인한 뒤 lifecycle 버킷을 비우고 지웁니다. EKS 클러스터는 남습니다.
 - **사용법**: `scripts/hyperpod/delete.sh` (인자 없음)
 - **실행 시점**: B1과 기존 CDK 방식의 B2를 정리할 때 `08_cleanup.sh`보다 먼저 실행합니다. 관리형 B2는 [마법사 스택 정리 절차](../handson/07_hyperpod_b2.md#cleanup)를 따르세요.
-- **시간과 과금**: 문서에 기록 없음([07](../handson/07_hyperpod.md) 참고). HyperPod 리소스의 과금이 끝납니다.
+- **시간과 과금**: 문서에 기록 없음([07](../handson/07_hyperpod_b1.md) 참고). HyperPod 리소스의 과금이 끝납니다.
 - **다시 실행할 때**: HyperPod 클러스터가 이미 없으면 `delete-cluster`가 실패해 역할과 버킷을 삭제하기 전에 멈춥니다. 첫 실행을 버킷 확인에서 멈췄다면 남은 버킷은 직접 지우세요.
 - **성공 여부 확인**: `waiting for the cluster to disappear`, `deleted role <이름>-execution` 뒤에 마지막 줄 `HyperPod resources deleted`가 나옵니다.
 - **막히면**: [문제 해결: 정리와 비용](troubleshooting.md#정리와-비용), [99 정리](../handson/99_cleanup.md)
@@ -295,7 +295,7 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](troubleshooting.md
 
 - **하는 일**: Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 빌려 씁니다. `install`은 controller와 CRD(기본 v1.0.11), claim RBAC를, `pool`은 SandboxTemplate과 SandboxWarmPool을 만들고, `claim`은 샌드박스 하나를 빌려 주소를 출력한 뒤 돌려주며, `episodes`는 모델 없이 multi-turn 에피소드를 실행하는 Job을 만듭니다.
 - **사용법**: `scripts/extensions/agent_sandbox.sh install`, `pool <runtime> [n]` (기본 1, 버전 파일은 `VERSION_FILE`, 기본 `v1`), `claim <runtime>`, `episodes <runtime> [episodes] [max_turns]` (기본 2와 3, `max_turns` 1은 single-turn). 버전은 `AGENT_SANDBOX_VERSION`으로 바꿉니다.
-- **실행 시점**: 어느 시나리오에서든 pool을 검증한 뒤 선택해서 진행할 수 있습니다. 실습 기록은 시나리오 C의 `kata-clh-cpu`에서 얻었습니다([11](../handson/11_multi_turn.md)).
+- **실행 시점**: 어느 시나리오에서든 선택 사항입니다. 실행하려면 pool을 먼저 검증하세요. 실습 기록은 시나리오 C의 `kata-clh-cpu`에서 얻었습니다([11](../handson/11_multi_turn.md)).
 - **시간과 과금**: 시나리오 C의 `kata-clh-cpu`에서 에피소드 두 개를 각각 3턴씩 실행하는 데 약 25초 걸렸습니다. 새 노드는 없지만 대기 중인 warm sandbox도 가속기를 하나씩 점유합니다.
 - **다시 실행할 때**: `install`은 `kubectl apply`라 안전합니다. `pool`은 템플릿을 다시 적용하지만 이미 떠 있는 warm sandbox는 시작할 때의 env를 유지하고(`OnReplenish`), 인자를 생략하면 replica 1과 `v1`로 다시 써집니다. `claim`과 `episodes`는 실행할 때마다 새 claim과 새 Job(`episodes-<시각>`)을 만들고, 쓴 샌드박스는 돌려주며 지워집니다.
 - **성공 여부 확인**: `install`은 CRD 4개, `pool`은 `warm pool kernel-eval-<runtime>: <n> sandbox(es); ...` 로그, `claim`은 `sandbox: ...  address: ...`, `episodes`는 `summary  solved <n>/<n> ...` 줄과 종료 코드 0입니다.
@@ -307,11 +307,11 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](troubleshooting.md
 
 - **하는 일**: 녹화 기록(`recording.json`과, 있으면 `extras.json`)에 IP, 노드 이름, 계정 ID, ARN, 토큰이 없는지 검사한 뒤 us-east-1에 private S3, CloudFront, WAF 스택을 배포하고 정적 사이트를 올립니다. 끝으로 WAF 연결, S3 직접 접근 403, CSP와 HSTS 헤더, `http://` 요청의 301 리다이렉트를 확인합니다.
 - **사용법**: `demo/deploy.sh`. 다른 기록은 `RECORDING=<파일>`, `EXTRAS=<파일>`로, 스택 이름은 `DEMO_STACK_NAME`으로, custom domain은 `DEMO_DOMAIN`과 `DEMO_CERT_ARN`으로 지정합니다.
-- **실행 시점**: 클러스터와 독립된 선택 단계입니다. 저장소에 있는 녹화 기록으로 바로 배포할 수 있습니다.
+- **실행 시점**: 클러스터와 독립된 선택 단계입니다. 기본 녹화 파일을 선택하면 새로 녹화하지 않아도 됩니다.
 - **시간과 과금**: 대부분 스택 생성과 CloudFront 전파를 기다리는 시간이고, 200 응답 대기는 최대 약 10분입니다(실제 시간은 측정하지 않음). S3, CloudFront 요청과 전송, AWS WAF(방문자가 없어도 월 약 10 USD)가 과금됩니다.
 - **다시 실행할 때**: 스택은 `aws cloudformation deploy`(바뀐 것이 없어도 실패하지 않음)로, 파일은 덮어쓰기와 `s3 sync --delete`로 다시 올리고 invalidation을 새로 만듭니다. `EXTRAS` 파일 없이 실행하면 이전에 올린 `data/extras.json`은 S3에 그대로 남습니다.
 - **성공 여부 확인**: 마지막 줄이 `[demo] live: <URL>`입니다. 200 응답이 오지 않아도 헤더 검사로 넘어가므로 URL을 브라우저로 직접 열어 보세요.
-- **막히면**: [09 데모 사이트 (CloudFront)](../handson/09_demo_site.md)
+- **막히면**: [CloudFront 데모 배포](demo_site.md)
 
 ### `demo/teardown.sh`
 
@@ -321,7 +321,7 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](troubleshooting.md
 - **시간과 과금**: 기록 없음(스택 삭제를 기다림). S3, CloudFront, WAF의 과금이 끝나고, 로그 버킷은 지울 때까지 남습니다(로그 객체는 90일 뒤 만료).
 - **다시 실행할 때**: 스택이 이미 없으면 출력값 조회가 실패해 아무것도 지우지 않고 멈춥니다. 남은 로그 버킷은 첫 실행이 안내한 `aws s3 rb s3://<로그 버킷> --force`로 지웁니다.
 - **성공 여부 확인**: `deleted gpu-sandbox-demo` 다음에 `kept the access log bucket <로그 버킷>; ...`이 나옵니다.
-- **막히면**: [99 정리](../handson/99_cleanup.md), [09 데모 사이트 (CloudFront)](../handson/09_demo_site.md)
+- **막히면**: [99 정리](../handson/99_cleanup.md), [CloudFront 데모 배포](demo_site.md)
 
 ## 공통 파일
 
@@ -330,7 +330,7 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](troubleshooting.md
 - **하는 일**: 표준 입력으로 받은 JSON 이벤트(`reward_batch`, `sandbox_version_switch`, parity, 에피소드, bench, trainer 지표)를 터미널에서 색을 입힌 한 줄 요약으로 바꿉니다. pod 로그와 metrics 파일은 바꾸지 않습니다.
 - **사용법**: `... | python3 scripts/logview.py`. `GPUSANDBOX_LOG=json`이면 원본 JSON을 그대로 보여 주고, `NO_COLOR`가 있으면 색을 끕니다. 출력이 파이프나 파일이면 받은 줄을 바꾸지 않고 넘깁니다.
 - **실행 시점**: `07_run_grpo.sh`와 `lib_jobs.sh`를 쓰는 스크립트(`ops/verify.sh`, `ops/rollout.sh`, `ops/simulate.sh`, `ops/bench.sh`, `agent_sandbox.sh episodes`)가 로그를 출력할 때 자동으로 호출합니다.
-- **다시 실행할 때**: 상태를 저장하지 않는 필터라 언제든 다시 실행할 수 있습니다.
+- **다시 실행할 때**: 이 필터는 상태를 저장하지 않으므로 재실행하기 전에 초기화할 작업이 없습니다.
 - **성공 여부 확인**: `batch`, `SWITCH`, `PARITY PASS`, `bench` 같은 요약 줄이 나옵니다. JSON이 아닌 줄은 그대로 나오고 PASS, FAIL, 오류에만 색이 붙습니다.
 - **막히면**: [00 핸즈온 전체 흐름](../handson/00_overview.md)의 "확인 방법"
 

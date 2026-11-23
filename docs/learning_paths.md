@@ -23,7 +23,7 @@
 
 ### 1. 샌드박스가 코드를 채점하는 과정 { #course-1 }
 
-[초심자 가이드 1~4편](beginner/index.md)을 읽고 [공개 데모](https://dohbsn4kn34ya.cloudfront.net/#try)에서 **ReLU 빠뜨린 오답**을 골라 채점 기록을 재생해 보세요. gVisor와 Kata가 같은 코드를 각자의 격리 환경에서 실행한 결과를 볼 수 있습니다. 읽고 둘러보는 데 1~2시간 정도 잡으세요.
+[초심자 가이드 1~4편](beginner/index.md)을 읽고 [공개 데모](https://dohbsn4kn34ya.cloudfront.net/#try)에서 **ReLU 빠뜨린 오답**을 골라 채점 기록을 재생해 보세요. gVisor와 Kata가 같은 코드를 실행한 결과를 비교해 보세요. 읽고 둘러보는 데 1~2시간 정도 잡으세요.
 
 두 환경에 모두 **오답**(`wrong_answer`)이 표시됩니다. 코드에서 어떤 연산이 빠졌을까요? 덧셈 뒤 음수를 0으로 바꾸는 연산이 빠져서 계산 결과가 달라졌습니다. 여기서 샌드박스는 코드를 실행하고, 채점기는 기대한 답과 대조하며, trainer는 그 결과를 학습 보상에 반영합니다.
 
@@ -84,15 +84,15 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
 
 ### 4. EC2 GPU에서 GRPO 학습하기 · 시나리오 A { #course-4 }
 
-[클러스터와 이미지 준비](handson/01_cluster_and_images.md)에서 시작해 [gVisor의 GPU 연결](handson/02_gvisor.md)과 [채점 pool](handson/04_sandbox_pools.md)을 확인하세요. [GRPO 학습](handson/05_grpo_training.md)에서는 모델이 여러 답을 만들고 샌드박스가 매긴 점수로 모델을 업데이트합니다.
+[시나리오 A 실습](handson/scenario_a.md)에서 클러스터와 이미지를 준비한 뒤 [gVisor의 GPU 연결](handson/02_gvisor.md)과 [채점 pool](handson/04_sandbox_pools.md)을 확인하세요. [GRPO 학습](handson/05_grpo_training.md)에서는 모델이 여러 답을 만들고 샌드박스가 매긴 점수로 모델을 업데이트합니다.
 
-[학습 중 pool 교체](handson/06_sandbox_update.md)까지 따라가면 한 배치 안의 답은 같은 버전에서 채점되고 다음 배치부터 v2를 쓰는 모습을 볼 수 있습니다. [교체 전후의 배치 로그](handson/06_sandbox_update.md#switch-batches)
+[학습 중 pool 교체](handson/06_sandbox_update.md)에서는 한 배치의 답안을 같은 버전에서 채점하는 이유와 v2를 처음 사용한 배치를 확인하세요. [교체 전후의 배치 로그](handson/06_sandbox_update.md#switch-batches)
 
 ### 5. HyperPod에서 GRPO 학습하기 · 시나리오 B1 { #course-5 }
 
-[HyperPod 실습](handson/07_hyperpod.md)에서 B1을 고르세요. 모델은 SageMaker HyperPod에서 학습하고 코드는 EC2의 gVisor pool에서 채점합니다. trainer가 HyperPod 노드에 배치됐는지, `reward_batch`에 채점 결과가 남았는지, 학습 Job이 `Completed`로 끝났는지 차례로 확인하세요.
+[HyperPod 실습](handson/07_hyperpod_b1.md)에서 B1의 준비 단계부터 진행하세요. 모델은 SageMaker HyperPod에서 학습하고 코드는 EC2의 gVisor pool에서 채점합니다. trainer가 HyperPod 노드에 배치됐는지, `reward_batch`에 채점 결과가 남았는지, 학습 Job이 `Completed`로 끝났는지 차례로 확인하세요.
 
-가이드에는 한 스텝에서 보낸 코드 12개의 판정과, 학습을 마친 뒤 고정 커널을 32번 보내 얻은 벤치마크가 있습니다. [B1 실행 화면과 학습 로그](handson/07_hyperpod.md#확인-방법) · [B1 벤치마크 결과](handson/08_benchmark.md#hyperpod-b1)
+실습 로그를 보면 학습 한 스텝에서 모델이 작성한 코드 12개 중 1개가 정답 판정을 받았습니다. 벤치마크에서는 같은 테스트 코드를 사용해 EKS 시스템 노드와 HyperPod 학습 노드에서 각각 32회 채점을 요청했습니다. [B1 실행 화면과 학습 로그](handson/07_hyperpod_b1.md#확인-방법) · [B1 벤치마크 결과](handson/08_benchmark.md#hyperpod-b1)
 
 ??? note "채점 노드도 HyperPod에 두고 싶다면"
     [관리형 B2](handson/07_hyperpod_b2.md)는 시스템 CPU 한 대, 학습 GPU 한 대, 채점 GPU 두 대를 HyperPod EKS에서 함께 구성합니다. B1과 B2는 서로 다른 클러스터를 사용합니다.
@@ -111,4 +111,4 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
 ??? note "클러스터를 잠시 남겨 둘 때의 비용"
     쓰지 않는 EC2 실습 노드 그룹은 0대로 줄이세요. pod 수만 줄이면 노드 요금은 계속 나갑니다. 시스템 노드 두 대와 EKS, NAT gateway는 클러스터를 남겨 둔 동안에도 과금됩니다. [리소스 정리 절차](handson/99_cleanup.md)
 
-<span id="다음-단계"></span><span id="문제가-생기면"></span>실습 중 낯선 단어는 [용어 사전](reference/glossary.md), 오류 메시지는 [문제 해결](reference/troubleshooting.md)에서 찾을 수 있습니다. [자주 하는 질문](reference/faq.md) · [설정 값](reference/configuration.md)
+<span id="다음-단계"></span><span id="문제가-생기면"></span>실습 중 낯선 단어는 [용어 사전](reference/glossary.md), 오류 메시지는 [문제 해결](reference/troubleshooting.md)에서 찾아보세요. [자주 하는 질문](reference/faq.md) · [설정 값](reference/configuration.md)

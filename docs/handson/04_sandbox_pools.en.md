@@ -305,6 +305,13 @@ A pod starts draining in the two cases below. In production the gateway deletes 
 
 ## The four checks: `ops/verify.sh`
 
+<span id="scope-and-limits"></span>
+
+??? note "Results from the recorded pools"
+    In scenario A a gVisor v1 grader on `g5.xlarge` blocked all four egress targets and traffic from `default`. On the Kata cluster, verification passed for four `kata-qemu` pods on `g4dn.metal` (T4, guest `6.18.56-nvidia-gpu`) and three CPU pools. With the image cached, the four GPU pods took 30, 30, 31 and 36 seconds to reach Ready. The experimental Cloud Hypervisor GPU VM did not start. [Kata run](03_kata.md) · [Benchmark](08_benchmark.md)
+
+    CPU tests cover audience, expiry and subject rejection, egress-dependent readiness, golden probes and parity across two servers, and rendering every runtime/version profile.
+
 Deployment readiness checks whether pods can take work. This script sends real reference submissions from the trainer side and also checks that disallowed connections fail.
 
 Run `scripts/ops/verify.sh <runtime> [version]` (version defaults to `v1`) for each pool you deployed with `06_deploy_sandboxes.sh`.
@@ -396,13 +403,6 @@ We ran `scripts/ops/verify.sh` on `gvisor v1` and `kata-qemu v1`. Each PASS mean
 
 ![Golden checks and verification completion from both GPU pools](../images/terminal/pools-verify-replay.png)
 
-## Scope and limits
-
-- **Checked by local tests:** fail-closed authentication (wrong audience, expired token, subject not allowed), readiness that turns Ready only after egress denial is verified, the golden probe and parity against two CPU servers, and manifest rendering for every profile and version.
-- **Checked in the practice account (scenario A cluster):** the pool verification (`scripts/ops/verify.sh`) passed on the `gvisor` pool (v1, 1 replica, `g5.xlarge`). The 4 egress targets, including the node kubelet, were blocked, and the NetworkPolicy blocked connections from the `default` namespace.
-- **Checked in the practice account (Kata cluster):** the pool verification passed on the `kata-qemu` GPU pool (`g4dn.metal`, 4 pods, `Tesla T4`, guest kernel `6.18.56-nvidia-gpu`) and the three CPU pools. With the image already cached, the four `kata-qemu` pods took 30, 30, 31 and 36 seconds from creation to Ready ([03](03_kata.md), [08](08_benchmark.md)).
-- **Not checked on AWS:** the experimental `kata-clh` GPU pool (its VM did not start, [03](03_kata.md)).
-
 ## Time and cost
 
 | Script | Expected duration (guidance or timeout) | Newly billed resources |
@@ -432,7 +432,7 @@ Scaling the Kata node groups to zero is in [03 Kata sandboxes](03_kata.md), and 
 
 ## Next step
 
-For an EC2 trainer, continue to [05 GRPO training](05_grpo_training.md). For a HyperPod trainer, continue to [07 B1 training](07_hyperpod.md). On a CPU-only cluster, use the [simulator in chapter 10](10_cpu_only.md) to send submissions.
+For an EC2 trainer, continue to [05 GRPO training](05_grpo_training.md). For a HyperPod trainer, continue to [07 B1 training](07_hyperpod_b1.md). On a CPU-only cluster, use the [simulator in chapter 10](10_cpu_only.md) to send submissions.
 
 ??? note "References"
     | Topic | Link |

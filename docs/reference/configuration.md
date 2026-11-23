@@ -12,7 +12,7 @@
 
 수정한 값이 적용되지 않으면 [값이 전달되는 경로](#값이-전달되는-경로)에서 설정 파일과 실행 중인 프로세스 사이를 확인하세요.
 
-## 값이 전달되는 경로
+## 설정 파일에서 pod의 환경 변수와 실행 인자까지 { #값이-전달되는-경로 }
 
 ```mermaid
 flowchart LR
@@ -30,7 +30,7 @@ flowchart LR
 
 `scripts/config.env`를 source 한 셸에서 스크립트를 실행하므로 config.env에 `export`로 적은 값은 템플릿의 `${VAR}`에 그대로 쓰입니다.
 
-- **config.env에 없는 변수**: `ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh`처럼 명령 앞에 붙여 한 번만 바꿀 수 있습니다.
+- **config.env에 없는 변수**: `ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh`처럼 명령 앞에 붙이면 해당 실행에만 적용됩니다.
 - **config.env에 `export`로 적은 변수**: 스크립트가 그 파일을 나중에 읽어 명령 앞의 값을 덮어쓰므로, 파일의 값을 고칩니다.
 
 ## 1. scripts/config.env
@@ -51,8 +51,8 @@ flowchart LR
 | `EKS_PUBLIC_ACCESS_CIDR` | 없음 (주석 처리, private만) | public endpoint를 켤 때만, IPv4 /32 하나. 다른 범위는 설정 단계에서 거부 | `cdk/` |
 | `WITH_KATA_CPU` | `0` | `1`이면 어느 시나리오에든 `sandbox-kata-cpu`(c8i) 노드 그룹을 추가. 시나리오 C에는 항상 있음 | `02_create_cluster.sh`, `cdk/` |
 | `WITH_KATA_GPU` | `0` | `1`이고 `KATA_IOMMU_AMI_ID`가 있으면 `sandbox-kata-gpu`(`g4dn.metal`) 노드 그룹을 추가. `cdk/deploy.sh`가 `metal` 입력으로 한 번 더 확인 | `02_create_cluster.sh`, `cdk/` |
-| `ECR_REPO_PREFIX` | `gpu-sandbox` | ECR 저장소 접두사(`<prefix>/sandbox`, `/trainer`, `/control`) | `03_build_push_images.sh`, `08_cleanup.sh` |
-| `IMAGE_TAG` | `v1` | 세 이미지 공통 태그. 저장소가 IMMUTABLE이라 같은 태그로 다시 push 할 수 없음 | `03_build_push_images.sh` |
+| `ECR_REPO_PREFIX` | `gpu-sandbox` | ECR 리포지토리 이름 앞에 붙일 값(`<prefix>/sandbox`, `/trainer`, `/control`) | `03_build_push_images.sh`, `08_cleanup.sh` |
+| `IMAGE_TAG` | `v1` | 세 이미지의 공통 태그. ECR 태그 변경 설정이 IMMUTABLE이므로 같은 태그로 다시 push할 수 없음 | `03_build_push_images.sh` |
 | `SYSTEM_INSTANCE_TYPE` | `m6i.large` | system 노드 그룹(2대) | `cdk/` |
 | `TRAINER_INSTANCE_TYPE` | `g5.2xlarge` | 시나리오 A trainer 노드(A10G 24 GB 1개, 8 vCPU, 32 GiB). `g6.2xlarge`(L4)도 지정할 수 있음 | `cdk/`, `01_check_prereqs.sh` |
 | `GVISOR_INSTANCE_TYPE` | `g5.xlarge` | gVisor 노드. 노드당 A10G 1개, 샌드박스 pod 1개. `g6.xlarge`(L4)도 지정할 수 있음([04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)) | `cdk/`, `01_check_prereqs.sh` |
@@ -253,7 +253,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 
 ## 4. harness CLI
 
-서버는 평가마다 `python -I -m gpusandbox.harness.evaluate`를 새로 실행합니다. 디버깅할 때는 같은 명령을 직접 실행할 수 있습니다.
+서버는 평가마다 `python -I -m gpusandbox.harness.evaluate`를 새로 실행합니다. 직접 디버깅하려면 같은 명령을 실행하세요.
 
 | 플래그 | 기본값 | 서버 env | 뜻 |
 |---|---|---|---|
@@ -336,7 +336,7 @@ python -m json.tool /tmp/gs-eval/result.json
 주소 형식은 세 가지입니다.
 
 - **`host:port`**: headless Service의 DNS 이름을 조회하고 결과를 10초간 보관합니다. 조회에 실패하면 마지막으로 확인한 주소 목록을 유지합니다.
-- **쉼표로 구분한 목록**: 로컬 테스트에서는 연결할 주소를 직접 나열할 수 있습니다.
+- **쉼표로 구분한 목록**: 로컬 테스트에서 주소를 직접 지정하려면 쉼표로 구분해 나열하세요.
 - **`static:` 접두사가 붙은 값**: 로컬 테스트에서 접두사 뒤의 주소를 고정된 목록으로 처리합니다.
 
 direct 모드의 trainer와 gateway는 모두 pool 클라이언트를 통해 샌드박스 pod에 요청을 보냅니다. 아래 표는 이 클라이언트의 설정값입니다.

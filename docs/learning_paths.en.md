@@ -84,15 +84,15 @@ Read the `batch` line after `SWITCH`. When `kata-clh-cpu/v2` returns `ok` and `w
 
 ### 4. Train with GRPO on EC2 GPUs · scenario A { #course-4 }
 
-Start with [cluster and image setup](handson/01_cluster_and_images.md), then check [GPU access in gVisor](handson/02_gvisor.md) and [deploy the grading pool](handson/04_sandbox_pools.md). In the [GRPO lab](handson/05_grpo_training.md), the model generates several answers and uses their scores to update its weights.
+Begin with [the scenario A walkthrough](handson/scenario_a.md), then check [GPU access in gVisor](handson/02_gvisor.md) and [deploy the grading pool](handson/04_sandbox_pools.md). In the [GRPO lab](handson/05_grpo_training.md), the model generates several answers and uses their scores to update its weights.
 
 [Switch pools during training](handson/06_sandbox_update.md) to see one batch finish on a single grader version and the next start on v2. [Batch logs before and after the switch](handson/06_sandbox_update.md#switch-batches)
 
 ### 5. Train with GRPO on HyperPod · scenario B1 { #course-5 }
 
-Start with B1 in the [HyperPod lab](handson/07_hyperpod.md). SageMaker HyperPod runs the trainer, and a gVisor pool on EC2 grades the code. Check that the trainer ran on a HyperPod node, that `reward_batch` recorded grading outcomes, and that the training job reached `Completed`.
+Start with B1 in the [HyperPod lab](handson/07_hyperpod_b1.md). SageMaker HyperPod runs the trainer, and a gVisor pool on EC2 grades the code. Check that the trainer ran on a HyperPod node, that `reward_batch` recorded grading outcomes, and that the training job reached `Completed`.
 
-The guide includes the verdicts for 12 submissions from one training step and a separate benchmark that sent a fixed kernel 32 times after training. [B1 run and training logs](handson/07_hyperpod.md#how-to-verify) · [B1 benchmark results](handson/08_benchmark.md#hyperpod-b1)
+The guide includes the verdicts for 12 submissions from one training step and a separate benchmark that sent a fixed kernel 32 times after training. [B1 run and training logs](handson/07_hyperpod_b1.md#how-to-verify) · [B1 benchmark results](handson/08_benchmark.md#hyperpod-b1)
 
 ??? note "Run the grading nodes on HyperPod too"
     [Managed B2](handson/07_hyperpod_b2.md) puts the CPU worker, the GPU trainer and both GPU graders in the HyperPod EKS workflow. B1 and B2 use separate clusters.

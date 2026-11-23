@@ -79,6 +79,15 @@ with EpisodeSandbox("kernel-eval-kata-clh-cpu", token_file=token_file) as episod
 
 ## Agent Sandbox follows the RuntimeClass
 
+<span id="scope-and-limits"></span>
+
+??? note "Version changes, GPU errors and tested paths"
+    With `VERSION_FILE=v2`, `pool` updates the existing `kernel-eval-<runtime>` template. Upstream’s `OnReplenish` behavior leaves waiting sandboxes in place until claimed or deleted, so claims during a transition may get either version. The CLI records the version in each `turn`; the veRL tool omits it from both the episode summary and `compute_score`. If a GRPO group needs one version, record it yourself or route that group to a separately named template and pool per version.
+
+    The template has no liveness probe. After a GPU fault, a draining sandbox returns `sandbox_error` for the rest of the episode. Discard the episode and take a new claim. When constructing many `EpisodeSandbox` instances, pass a shared `BackgroundLoop` as `loop`; otherwise each creates a thread that outlives it. The CLI and veRL tool already share one.
+
+    Scenario C verified the `kata-clh-cpu` claim and release, warm-pool replenishment and two episodes. Local tests exercise the seven rendered profiles, claim and episode cleanup, a fake Kubernetes API and two loopback CPU servers. The GPU Kata template and the veRL integration with a live job remain untested. API fields follow `sandboxclaim_types.go` in v1.0.11. [CPU warm pool](../handson/10_cpu_only.md) · [Episode run](../handson/11_multi_turn.md)
+
 Agent Sandbox decides the lifetime and assignment of pods; the `runtimeClassName` in the podTemplate decides the isolation. Rendering the same template with a different runtime profile therefore gives you gVisor or Kata (Cloud Hypervisor or QEMU), as long as the nodes can run that RuntimeClass. The profile sets the node selector and the GPU resource name (`nvidia.com/gpu` or `nvidia.com/pgpu`) along with the RuntimeClass.
 
 | Combination | Evidence | Status |
@@ -202,20 +211,6 @@ None of this has run with veRL, so the following items are unconfirmed (`# TODO 
     - **For agent sandboxes that need no GPU and allow outbound connections only to allowed domains**: the AI on EKS solution applies.
     - **If you measure the reward on a GPU inside the sandbox**: use this repository's GPU profiles.
     - **Nitro Sandboxes (`isolated-sandbox`)**: they do not support GPU passthrough at launch ([Verified facts and sources](../reference/sources.md)), so they cannot be used for GPU kernel grading.
-
-## Scope and limits
-
-- **Verified by local tests:** the claim body, address resolution, claim then release, release when Ready never comes (fake Kubernetes API), and template rendering with hardened values (empty egress, `runtimeClassName`, `automountServiceAccountToken: false`, `dnsPolicy: None`) for all seven profiles.
-- **Local tests of the multi-turn path:** one claim per episode, the stop rules, `sandbox_error` handling, claim release when the policy fails, feedback length and the `multiturn` CLI, with a fake Kubernetes API. For the veRL tool, without veRL: one sandbox per trajectory, release of abandoned trajectories, release at the end of a trajectory, a failed claim, and the config file matching the tool. The episode Job manifest (API token and hardening, claim permissions, allowed subject) is checked too, and two episodes ran end to end against two loopback sandbox servers (CPU harness).
-- **Run on a cluster:** `install`, `pool kata-clh-cpu 1` and `claim kata-clh-cpu` on scenario C. The claim got a sandbox address and released it, and the warm pool refilled with a new sandbox (step 9 of [10 c8i-only low-cost path](../handson/10_cpu_only.md)). Then `episodes kata-clh-cpu 2 3` ran two episodes through `EpisodeSandbox` inside a pod, with one claim and one sandbox per episode, and the claims were released ([11 Multi-turn episodes](../handson/11_multi_turn.md)).
-- **Not run on a cluster:** Kata GPU inside a SandboxTemplate (`kata-qemu-nvidia-gpu` + `nvidia.com/pgpu`) is not verified either. The veRL tool has not been run with veRL ("Not confirmed" above).
-- **Using it from the trainer needs more preparation.** Decide the API token, the `kubernetes` package and whether to use a broker (requirements table above).
-- **The template name has no version.** Re-applying `pool` with `VERSION_FILE=v2` changes the same `kernel-eval-<runtime>` template. `OnReplenish` leaves waiting stale sandboxes in place until they are claimed or deleted, so during a transition claims can get v1 or v2 (inferred from the upstream comments).
-    - **In the `multiturn` CLI**: it shows as `version` in each `turn` event.
-    - **In the veRL tool**: the veRL tool does not put the version in the episode summary or in the `compute_score` result, so if versions must not mix within a GRPO group in veRL training, record that value yourself, or keep a separately named template and pool per version and send the group's claims to one pool (neither is in this repository).
-- **The template has no livenessProbe.** Unlike the Deployment pools, kubelet does not restart a sandbox that went draining after a GPU error. The remaining evaluations of that episode become `sandbox_error` (from the code), so discard the episode and take a new claim.
-- **Without `loop`, `EpisodeSandbox` starts one event-loop thread per instance and never stops it.** If one process runs a very large number of episodes the threads pile up, so pass one `BackgroundLoop` as `loop` (found in code review). The `multiturn` CLI and the veRL tool share one loop.
-- **Upstream moves fast.** Field names follow `sandboxclaim_types.go` in v1.0.11.
 
 ??? note "References"
     | Topic | Link |

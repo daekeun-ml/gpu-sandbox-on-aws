@@ -17,6 +17,6 @@ EKS는 Kubernetes API와 스케줄러를 제공합니다. `us-east-1`에서 이 
 
 기본 HyperPod 이미지의 NVIDIA 드라이버 `595.112.07`은 gVisor `20261109.0`의 지원 목록에 없었습니다. 채점 노드 두 대에 `580.178.04`를 설치하고 HyperPod API로 재부팅했습니다. 재부팅 후 gVisor Pod 안에서 A10G의 CUDA 연산을 확인했습니다. 학습 워커는 기본 드라이버를 사용했습니다.
 
-학습이 끝난 뒤 `system`과 `trainer`가 같은 고정 커널을 각각 32번씩 제출해 모두 성공했습니다. 두 번 모두 같은 채점 pool을 사용했습니다. [배포 순서와 실행 화면](../docs/handson/07_hyperpod_b2.md) · [요청별 채점 시간과 처리량](../docs/handson/08_benchmark.md#hyperpod-b2) · [편집용 draw.io 파일](scenario-b2.drawio)
+학습이 끝난 뒤 `system` 노드에서 테스트 코드 하나로 채점을 32회 요청했습니다. 이어서 `trainer` 노드에서도 같은 코드로 32회 요청했습니다. 두 번 모두 같은 pool이 채점했고 모든 요청이 정답 판정을 받았습니다. [배포 순서와 실행 화면](../docs/handson/07_hyperpod_b2.md) · [요청별 채점 시간과 처리량](../docs/handson/08_benchmark.md#hyperpod-b2) · [편집용 draw.io 파일](scenario-b2.drawio)
 
 [기존 워커 중심 구성도](variants/b2-worker-overview/scenario-b2.drawio.png) · [해당 그림의 편집 원본](variants/b2-worker-overview/scenario-b2.drawio)

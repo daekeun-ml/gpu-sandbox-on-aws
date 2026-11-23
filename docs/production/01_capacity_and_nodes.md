@@ -40,14 +40,18 @@ metal 노드의 부팅을 기다리느라 첫 배치가 늦어진다면, 한 대
 
 ## Karpenter 설치와 적용
 
-이 저장소에는 Karpenter 설치(IAM role, interruption queue, Helm) 스크립트가 없으니 [공식 Getting Started 가이드](https://karpenter.sh/docs/getting-started/getting-started-with-karpenter/)를 따르세요. 공식 가이드는 Karpenter 1.15.2(LTS는 1.14.3)를 쓰고, API 버전은 `karpenter.sh/v1`과 `karpenter.k8s.aws/v1`입니다.
+<span id="적용-범위와-한계"></span>
+
+아래 매니페스트는 운영 구성 예시입니다. 처음 배포할 때는 샌드박스 pod를 배치하기 전에 EC2NodeClass와 NodePool의 상태를 확인하세요.
+
+Karpenter 설치는 별도로 진행해야 합니다. IAM 역할과 interruption queue를 준비하고 Helm으로 설치하는 절차는 [공식 Getting Started 가이드](https://karpenter.sh/docs/getting-started/getting-started-with-karpenter/)를 따르세요. 공식 가이드는 Karpenter 1.15.2(LTS는 1.14.3)를 쓰고, API 버전은 `karpenter.sh/v1`과 `karpenter.k8s.aws/v1`입니다.
 
 EC2NodeClass는 subnet과 security group을 `karpenter.sh/discovery: <CLUSTER_NAME>` 태그로 찾습니다(`subnetSelectorTerms`, `securityGroupSelectorTerms`). 핸즈온 CDK 스택([`cdk/gpusandbox_cdk/stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py))은 private subnet에만 이 태그를 붙입니다. 노드가 사용하는 cluster security group(EKS가 생성)에는 Karpenter를 설치할 때 문서대로 직접 태그를 붙이세요. 태그가 없으면 Karpenter가 노드의 security group을 찾지 못합니다.
 
 !!! note "id로 AMI를 고르는 EC2NodeClass에는 `amiFamily`가 필요합니다"
     Karpenter v1.15.2 CRD는 `amiSelectorTerms`에 alias가 없으면 `amiFamily`를 요구합니다(검증 메시지 `must specify amiFamily if amiSelectorTerms does not contain an alias`). `id: ${KATA_IOMMU_AMI_ID}`를 쓰는 `sandbox-kata-gpu` 템플릿에는 `amiFamily: AL2023`이 있고 로컬 테스트(`tests/test_manifests.py`)가 이를 확인합니다.
 
-Karpenter 설치를 마친 뒤 저장소 루트에서 다음 명령을 실행합니다.
+Karpenter 설치를 마친 뒤 프로젝트 최상위 폴더에서 다음 명령을 실행합니다.
 
 ```bash
 source scripts/config.env   # CLUSTER_NAME, GVISOR_RELEASE, KATA_IOMMU_AMI_ID
@@ -99,15 +103,15 @@ kubectl get ec2nodeclass,nodepool
     - `gpusandbox/role`은 RuntimeClass `gvisor`의 scheduling 규칙과 kata-deploy, 샌드박스 Deployment의 nodeSelector가 모두 사용합니다.
 - **taint로 전용 노드를 만듭니다.** toleration이 있는 pod만 배치되므로, 신뢰할 수 없는 코드가 다른 워크로드와 같은 노드에서 실행되지 않습니다.
 - **gVisor 노드를 만들 때는 GPU가 한 장인 인스턴스만 선택합니다.** 노드당 샌드박스가 하나이므로 한 샌드박스에서 GPU 실행 시간을 잴 때 다른 샌드박스가 간섭하지 않습니다.
-    - **인스턴스는 g5(A10G)로 한정**: AMI는 g5에서 proprietary 커널 모듈(GSP 꺼짐)을 로드하고, 이 조합은 gVisor 문서가 아니라 이 저장소에서 검증했습니다.
-    - **대안**: g6(L4, open 드라이버)도 NodePool에 넣을 수 있습니다.
+    - **인스턴스는 g5(A10G)로 한정**: AMI는 g5에서 proprietary 커널 모듈(GSP 꺼짐)을 로드합니다. gVisor 공식 문서에는 이 조합이 나오지 않아 실습 환경에서 동작을 확인했습니다.
+    - **대안**: L4와 open 드라이버가 필요하면 NodePool의 인스턴스 유형에 g6를 추가하세요.
     - **다른 GPU 계열을 쓰려면**: nvproxy의 드라이버 지원 여부부터 확인하세요.
 - **GPU pool의 노드 회수 정책은 `WhenEmpty`입니다.** 평가 중에 노드를 회수하면 진행 중인 평가를 다른 pod에서 처음부터 다시 실행해야 하고, 재시도까지 실패하면 `sandbox_error`가 됩니다. 그래서 빈 노드만 회수합니다. 노드를 다시 띄우는 비용이 낮은 CPU 계층은 `WhenEmptyOrUnderutilized`와 spot을 허용합니다.
 - **metal 노드는 빈 상태로 30분이 지나야 회수 대상이 됩니다.** 비자마자 반납하면 다음 요청 때 부팅과 준비가 끝날 때까지 몇 분을 다시 기다려야 하기 때문입니다. 30분 대기 비용은 7.824 USD/시간 기준 약 3.9 USD이고, 요금은 노드가 실제로 종료될 때까지 붙습니다.
-- **`expireAfter`에 따라 노드를 주기적으로 교체합니다.** Karpenter v1.15 문서에 따르면 만료는 forceful 동작이라 `karpenter.sh/do-not-disrupt`로 만료를 막을 수 없고, drain은 PDB와 `terminationGracePeriod`를 따릅니다. 중단된 평가는 gateway가 다른 pod로 다시 보냅니다.
+- **`expireAfter`에 따라 노드를 주기적으로 교체합니다.** Karpenter v1.15에서는 `karpenter.sh/do-not-disrupt`가 있어도 노드 만료를 막을 수 없습니다. 만료된 노드에서 pod를 내릴 때는 PDB와 `terminationGracePeriod`를 따릅니다. 중단된 평가는 gateway가 다른 pod로 다시 보냅니다.
 
-!!! note "trainer 노드의 중단 보호"
-    `trainer` NodePool 주석과 달리 현재 [`raycluster-verl.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/raycluster-verl.yaml.tpl)의 RayCluster pod에는 `do-not-disrupt` annotation이 없습니다. consolidation과 drift로 학습 pod가 중단되지 않게 하려면 학습 pod에 `karpenter.sh/do-not-disrupt: "true"`를 붙이세요. 이 annotation으로 막을 수 없는 만료(`expireAfter`)에 대비해, 출력 경로를 공유 저장소에 두고 checkpoint에서 재개하세요.
+!!! note "학습 pod의 노드 교체와 체크포인트"
+    [`raycluster-verl.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/raycluster-verl.yaml.tpl)의 RayCluster pod에는 `do-not-disrupt` annotation이 없습니다. consolidation과 drift로 학습 pod가 중단되지 않게 하려면 학습 pod에 `karpenter.sh/do-not-disrupt: "true"`를 붙이세요. 이 annotation으로 막을 수 없는 만료(`expireAfter`)에 대비해, 학습 결과를 공유 스토리지에 저장하고 노드가 바뀌면 체크포인트에서 학습을 재개하세요.
 
 ## EC2NodeClass와 userData 병합
 
@@ -118,11 +122,11 @@ kubectl get ec2nodeclass,nodepool
 | `sandbox-kata-cpu` | `alias: al2023@latest`, `cpuOptions.nestedVirtualization: enabled` | 100 GiB gp3, 암호화 | NodeConfig(containerd `imports`) + `/etc/containerd/conf.d` 생성 + node guard |
 | `trainer` | `alias: al2023@latest` | 500 GiB gp3, 암호화 | 없음 |
 
-userData는 MIME multipart 형식입니다. Karpenter는 클러스터 정보, label, taint, `spec.kubelet` 값을 담은 자체 NodeConfig를 추가하고, 값이 겹치면 Karpenter 쪽 값이 우선합니다(Karpenter 문서). 그래서 이 저장소의 NodeConfig에는 Karpenter가 만들지 않는 값(containerd runtime handler, drop-in `imports`, `runtimeRequestTimeout`)만 넣습니다. IMDS는 기본값(IMDSv2, hop limit 1)만으로도 pod가 노드 자격 증명을 읽을 수 없습니다.
+userData는 MIME multipart 형식입니다. Karpenter는 클러스터 정보, label, taint, `spec.kubelet` 값을 담은 자체 NodeConfig를 추가하고, 값이 겹치면 Karpenter 쪽 값이 우선합니다(Karpenter 문서). 그래서 실습용 NodeConfig에는 Karpenter가 만들지 않는 값(containerd runtime handler, drop-in `imports`, `runtimeRequestTimeout`)만 넣습니다. IMDS는 기본값(IMDSv2, hop limit 1)만으로도 pod가 노드 자격 증명을 읽을 수 없습니다.
 
-shell 스크립트 부분은 `scripts/render.py`가 `@@include path@@` 줄 위치에 같은 들여쓰기로 그대로 삽입하고, 그 안의 `${...}`는 치환하지 않습니다. 그래서 [`install-gvisor.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh)와 [`node-guard.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/eks/node-guard.sh)를 독립된 스크립트로 읽고 수정할 수 있습니다. gVisor 버전은 템플릿의 `export GVISOR_RELEASE="${GVISOR_RELEASE}"` 한 줄로 고정합니다.
+shell 스크립트 부분은 `scripts/render.py`가 `@@include path@@` 줄 위치에 같은 들여쓰기로 그대로 삽입하고, 그 안의 `${...}`는 치환하지 않습니다. [`install-gvisor.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh)와 [`node-guard.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/eks/node-guard.sh)는 템플릿과 별개의 파일이므로 스크립트 자체를 열어 수정하세요. gVisor 버전은 템플릿의 `export GVISOR_RELEASE="${GVISOR_RELEASE}"` 한 줄로 고정합니다.
 
-병합 후에도 이 저장소의 값이 적용됐는지, Karpenter가 만든 Kata GPU 노드 하나의 실제 kubelet 설정(`configz`)을 API server로 읽어 확인합니다.
+Karpenter가 두 설정을 병합한 뒤에도 지정한 값이 남아 있는지 확인하세요. 아래 명령은 API 서버를 통해 Karpenter가 만든 Kata GPU 노드 하나의 kubelet 설정(`configz`)을 조회합니다.
 
 - **새 클러스터라면**: placeholder와 PDB, ResourceQuota는 `sandbox` namespace에 만들어지므로, `kubectl apply -f k8s/base/namespaces.yaml`(또는 `scripts/05_setup_namespaces_auth.sh`)로 namespace를 먼저 만드세요.
 - **metal 노드 준비**: metal 노드는 배치할 pod가 있어야 생성되므로, 아래 "부팅이 느린 metal 노드를 미리 확보하는 방법" 절의 placeholder를 적용하고 `sandbox-kata-gpu` NodePool의 노드가 Ready가 된 뒤 실행하세요.
@@ -136,7 +140,7 @@ kubectl get --raw "/api/v1/nodes/${node}/proxy/configz" | grep -o '"runtimeReque
 확인할 것:
 
 - `"runtimeRequestTimeout":"20m0s"` 한 줄이 출력됩니다.
-- **다른 값이면**: 이 저장소의 NodeConfig가 병합되지 않은 것이니, [문제 해결](../reference/troubleshooting.md)의 "노드에서 확인" 절차로 노드의 user data 로그를 보세요.
+- **다른 값이면**: 지정한 NodeConfig가 병합되지 않은 것이니, [문제 해결](../reference/troubleshooting.md)의 "노드에서 확인" 절차로 노드의 user data 로그를 보세요.
 
 ## GPU 스택과 런타임 설치
 
@@ -244,10 +248,10 @@ Karpenter 문서도 production에서는 `latest`를 권장하지 않습니다.
 운영 환경에서는 아래 순서로 버전을 고정하세요.
 
 - **alias 고정**: alias를 버전으로 고정하고(예: `alias: al2023@v20261107`, 버전 표기는 Karpenter 문서에서 재확인), AMI와 `GVISOR_RELEASE`를 같은 변경에서 함께 업그레이드하세요.
-- **바꾼 뒤 다시 검증**: 드라이버, AMI, gVisor 버전을 바꾼 뒤에는 `04_install_gpu_stack.sh`의 smoke test와 `scripts/ops/verify.sh`를 다시 실행합니다. g5의 proprietary 모듈 조합은 gVisor 문서가 아니라 이 저장소의 검증에 근거하기 때문입니다.
+- **바꾼 뒤 다시 검증**: 드라이버, AMI, gVisor 버전을 바꾼 뒤에는 `04_install_gpu_stack.sh`의 smoke test와 `scripts/ops/verify.sh`를 다시 실행합니다. g5의 proprietary 모듈은 실습 당시의 조합에서 동작을 확인했고, gVisor 문서에는 이 조합의 지원 여부가 나와 있지 않습니다.
 - **샌드박스 pool이 노드의 GPU를 모두 쓰고 있으면**: smoke pod가 `Pending`으로 남으니, pool의 replica를 하나 줄여 GPU를 비운 뒤 실행하세요.
 
-업그레이드 전에 CI에서 후보 gVisor 릴리스의 체크섬과 nvproxy 지원 목록을 확인할 수 있습니다. 아래는 저장소에 포함된 스크립트가 아니라, `install-gvisor.sh`와 같은 URL과 검사를 사용한 예시입니다.
+다음은 업그레이드 전에 CI에서 후보 gVisor 릴리스의 체크섬과 nvproxy 지원 목록을 검사하는 예시입니다. `install-gvisor.sh`와 같은 URL에서 파일을 받습니다. CI에 추가할 때는 x86_64 Linux 러너의 실행 권한으로 `runsc nvproxy list-supported-drivers`가 동작하는지 먼저 확인하세요.
 
 ```bash
 # CI gate (example): fail if the pinned gVisor release does not know the AMI's driver.
@@ -318,7 +322,7 @@ kubectl apply -f k8s/production/warm-capacity.yaml
 
 [`pool-hardening.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/pool-hardening.yaml)은 자발적 중단과 리소스 사용량 급증을 제한합니다.
 
-- **PDB `gpu-sandbox-pools` (`maxUnavailable: 1`).** selector가 `app.kubernetes.io/name: gpu-sandbox` 하나라서 모든 pool(모든 runtime과 version)을 통틀어 한 번에 pod 하나만 eviction됩니다(파일 주석의 "pool마다"와 다릅니다). PDB는 NotReady pod를 이미 unavailable로 계산하므로, draining pod가 NotReady로 남아 있으면 PDB가 다른 eviction을 거부할 수 있습니다.
+- **PDB `gpu-sandbox-pools` (`maxUnavailable: 1`)**: `sandbox` 네임스페이스에서 `app.kubernetes.io/name: gpu-sandbox` 라벨이 붙은 pod 전체에 하나의 예산이 적용됩니다. 런타임이나 버전이 달라도 한도를 공유하므로, draining 상태의 pod 하나가 NotReady이면 다른 pod의 eviction도 막힐 수 있습니다.
 - **PDB가 적용되지 않는 경우.** PDB는 eviction API에만 적용되므로, pod를 직접 삭제하는 gateway의 recycling은 PDB의 영향을 받지 않습니다(Kubernetes 문서: "deleting deployments or pods bypasses Pod Disruption Budgets").
 - **ResourceQuota `gpu-sandbox-quota`.** `requests.nvidia.com/gpu: 16`은 `sandbox-gvisor` 상한과 같고, `requests.nvidia.com/pgpu: 8`은 `g4dn.metal` 한 대의 T4 수입니다(metal NodePool이 허용하는 2대 중 나머지 한 대는 warm 예비용). `pods: 64`는 pod 수를 제한합니다.
 - **blue/green과의 관계.** 새 버전 pool을 기존 pool과 함께 실행하는 동안에는 두 pool의 사용량이 모두 quota에 합산됩니다. Kata pool의 이전 버전이 pgpu를 많이 점유하고 있으면 새 버전 pod가 quota 초과로 생성되지 않습니다. 이전 pool을 먼저 줄이거나 quota를 늘리세요. ([05 샌드박스 버전 관리](05_sandbox_updates.md))
@@ -334,24 +338,16 @@ EC2 On-Demand quota는 인스턴스 수가 아니라 vCPU 기준입니다. 아�
 | Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 5 | `sandbox-kata-cpu`(on-demand), system 노드, SSM 접속 인스턴스 | CPU NodePool 상한 256 vCPU에 system 노드(기본 `m6i.large` 2대)와 SSM 접속 인스턴스(`t4g.nano`) 사용량 추가 |
 | All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests | 5 | `sandbox-kata-cpu`(spot) | 최대 256 vCPU |
 
-`g4dn.metal`은 리전과 AZ에 따라 용량을 확보하기 어려울 수 있습니다. 필요한 기간이 분명하면 On-Demand Capacity Reservation을 검토하세요. 특정 AZ에서 필요한 인스턴스 타입의 용량을 미리 예약할 수 있습니다.
+`g4dn.metal`은 리전과 AZ에 따라 용량을 확보하기 어려울 수 있습니다. 필요한 기간이 분명하면 On-Demand Capacity Reservation을 검토하세요. 이 서비스로 원하는 인스턴스 유형과 AZ를 지정해 용량을 미리 예약하는 방식입니다.
 
 - **즉시 시작하는 예약**: 약정이 없지만, 취소하기 전까지 과금되고 On-Demand quota 사용량에도 포함됩니다.
 - **미래 날짜 예약**: C, G, I, M, R, T, U, X 계열에서 최소 32 vCPU부터 가능합니다.
 - **Karpenter의 `capacityReservationSelectorTerms`**: Karpenter 문서 기준 Beta이고, 사용하려면 기능을 활성화해야 합니다.
 
-## 적용 범위와 한계
-
-- **AWS에서 실행하지 않았습니다.** 이 페이지의 Karpenter, AMI 파이프라인, warm capacity 절차가 모두 해당합니다. 각 절의 "확인할 것"으로 직접 검증하세요.
-- **로컬 테스트 범위.** 로컬 테스트는 `infra/karpenter/` 템플릿을 렌더링해 AMI 선택 규칙, nested virtualization 옵션, node guard 포함 여부, NodePool과 EC2NodeClass의 연결만 확인하고 API server에는 적용하지 않습니다. 처음 적용할 때 `kubectl get ec2nodeclass`의 상태 조건을 확인하세요.
-- **CI 예시는 검증하지 않았습니다.** x86_64 Linux 러너에서 root 없이 `runsc nvproxy list-supported-drivers`가 동작하는지 확인하지 않았습니다.
-- **Karpenter 동작은 문서 기준입니다.** drift, expiration, `do-not-disrupt`에 관한 설명은 Karpenter v1.15 문서에서 가져왔으니 설치한 버전의 문서로 재확인하세요.
-- **알려진 불일치:** `pool-hardening.yaml`의 PDB 주석과 `nodepools.yaml`의 trainer 주석은 실제 동작과 다릅니다(위 "PDB와 ResourceQuota"와 "trainer 노드의 중단 보호" 참고).
-
 ## ❓ 오해
 
 !!! question "❓ 오해: `al2023@latest`는 자동으로 패치되니 gVisor 노드에도 더 안전하다"
-    gVisor GPU 노드에서는 반대일 수 있습니다. nvproxy가 새 드라이버를 인식하지 못하면 노드는 생성돼도 샌드박스가 하나도 Ready가 되지 않습니다. AMI와 `GVISOR_RELEASE`를 함께 고정하고, CI로 확인한 뒤에 업그레이드하세요.
+    gVisor GPU 노드는 드라이버 호환성도 확인해야 합니다. nvproxy가 새 드라이버를 인식하지 못하면 노드는 생성돼도 샌드박스가 하나도 Ready가 되지 않습니다. AMI와 `GVISOR_RELEASE`를 함께 고정하고, CI로 확인한 뒤에 업그레이드하세요.
 
 !!! question "❓ 오해: warm placeholder가 GPU를 예약해 둔다"
     placeholder는 CPU와 메모리만 요청하고 GPU(`nvidia.com/pgpu`)는 요청하지 않습니다. 노드를 점유하고 있다가 샌드박스 pod를 배치해야 할 때 선점되어 바로 종료됩니다.

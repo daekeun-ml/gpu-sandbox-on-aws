@@ -397,9 +397,7 @@ For 7B the bf16 weights alone are about 15 GB, and in colocate mode the training
 
 </details>
 
-## Scope and limits
-
-GPU memory use was not measured. The step times and the per-step reward and loss come from the single 5-step run above.
+<span id="scope-and-limits"></span>
 
 ## Time and cost
 

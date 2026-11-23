@@ -103,6 +103,10 @@ flowchart LR
 
 ## RuntimeClass and smoke pod
 
+<span id="scope-and-limits"></span>
+
+Check that the sandbox kernel differs from the node’s and that `dmesg` starts with `Starting gVisor...`. Kernel strings can change across releases. The AWS smoke test, pool verification and five-step run used `g5.xlarge` with A10G and the proprietary GSP-off module. A separate [benchmark](08_benchmark.md) used `g5.2xlarge`. The g6 and T4 gVisor combinations were not exercised.
+
 Compare two parts of the output. `Starting gVisor...` comes from the runtime. The value `2048.0` is the sum of a 1,024-element vector of ones after multiplying each element by two.
 
 An advertised GPU confirms device registration. `cuda ok:` confirms a CUDA calculation completed inside gVisor. If the first succeeds and the latter fails, check pod events.
@@ -254,11 +258,6 @@ Despite the nvproxy ioctl allowlist, the gVisor documentation states that it is 
     EKS isolated pods, launched on 2026-11-09 (`runtimeClassName: isolated-sandbox` and others, Kubernetes 1.36+), do not support GPU or device passthrough at launch, so treat them as a CPU-only managed alternative.
 
 </details>
-
-## Scope and limits
-
-- On AWS only `g5` (A10G, the proprietary GSP-off module the gVisor documentation does not cover) has been run. The smoke test, `ops/verify.sh` and the 5-step training used `g5.xlarge` sandboxes; the benchmark on another cluster (`ops/bench.sh`, [08](08_benchmark.md)) used a gVisor pool on `g5.2xlarge`. `g6` and T4 have not been run with gVisor.
-- The kernel string and dmesg lines can change between gVisor releases, so the test is not the value but whether the kernel differs from the node's and the first dmesg line is `Starting gVisor...`.
 
 ## Time and cost
 

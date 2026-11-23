@@ -1,14 +1,14 @@
 # 05 직접 해 보기
 
-내 PC에서 `relu_bias` 과제의 답안을 채점합니다. 입력에 보정값을 더한 뒤 음수인 결과만 0으로 바꾸는 문제입니다. 예를 들어 입력 `[-3, 2]`에 `[1, 1]`을 더하면 `[-2, 3]`이므로 기대 출력은 `[0, 3]`입니다. 테스트는 준비된 답안을 두 로컬 서버에 보냅니다. 모델 학습과 AWS 배포 없이 정답, 오답, 정책 위반이 각각 예상한 판정을 받는지 확인할 수 있습니다.
+내 PC에서 `relu_bias` 과제의 답안을 채점합니다. 입력에 보정값을 더한 뒤 음수인 결과만 0으로 바꾸는 문제입니다. 예를 들어 입력 `[-3, 2]`에 `[1, 1]`을 더하면 `[-2, 3]`이므로 기대 출력은 `[0, 3]`입니다. 테스트는 준비된 답안을 두 로컬 서버에 보냅니다. 이 실습에서는 모델 학습이나 AWS 배포 없이 정답, 오답, 정책 위반 사례를 하나씩 채점합니다.
 
 ![시험용 답안을 로컬 CPU 서버 두 개에서 채점하고 pytest가 예상 판정과 대조하는 흐름](../images/figures/beginner-05_hands_on--local-scoring.ko.svg)
 
-로컬 테스트에서는 **채점기가 틀린 답을 구별하는지** 확인합니다. AWS 실습까지 진행하면 **같은 노드에 있는 각 pod의 커널**도 비교할 수 있습니다. [AWS 커널 비교로 이동](#aws-cpu)
+로컬 테스트에서는 **채점기가 틀린 답을 구별하는지** 확인합니다. AWS 실습에서는 **같은 노드에 있는 각 pod의 커널**도 비교합니다. [AWS 커널 비교로 이동](#aws-cpu)
 
 ## 1. 설치하기
 
-Git과 `uv`가 필요합니다. 아래 명령은 저장소를 받고 전용 Python 환경에 채점 서버와 테스트를 설치합니다.
+Git과 `uv`가 필요합니다. 아래 명령으로 실습 코드를 내려받고 전용 Python 환경에 채점 서버와 테스트를 설치하세요.
 
 ```bash
 git clone https://github.com/daekeun-ml/gpu-sandbox-on-aws.git
@@ -37,14 +37,14 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
 
 ![로컬 CPU pool 두 개를 확인한 pytest의 완료 출력](../images/learning/local-cpu-grading.png)
 
-`ModuleNotFoundError`가 나오면 저장소 루트에서 `.venv`를 활성화했는지 확인하고 설치 명령을 다시 실행하세요.
+`ModuleNotFoundError`가 나오면 `gpu-sandbox-on-aws` 폴더에서 `.venv`를 활성화했는지 확인하고 설치 명령을 다시 실행하세요.
 
 ??? note "macOS에서 서버를 직접 띄워 판정 보기"
     Linux 호스트에서는 위의 pytest 명령으로 테스트를 실행하세요. 서버를 직접 띄울 때의 차이는 [로컬 실행 환경](../getting_started.md)에 설명돼 있습니다.
 
     ### 서버 두 개 띄우기
 
-    터미널 두 개를 열고, 각각 저장소 폴더로 이동한 뒤 실행합니다. 두 서버는 포트와 작업 디렉터리(`SANDBOX_WORK_ROOT`)만 다릅니다.
+    터미널 두 개를 열어 각각 `gpu-sandbox-on-aws` 폴더로 이동하세요. 두 서버는 포트와 작업 디렉터리(`SANDBOX_WORK_ROOT`)만 다릅니다.
 
     ```bash
     # Terminal 1
@@ -70,7 +70,7 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
 
     ### 시험용 답안 채점하기
 
-    세 번째 터미널에서 저장소 폴더로 이동한 뒤, 시험용 답안(golden) 네 개를 두 서버에 보냅니다.
+    세 번째 터미널도 같은 폴더에서 열고 시험용 답안(golden) 네 개를 두 서버에 보냅니다.
 
     ```bash
     source .venv/bin/activate
@@ -103,7 +103,7 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
 
 ### 설정과 클러스터 준비
 
-로컬 실습에 쓴 저장소와 가상 환경에서 시작합니다. 다음 명령은 설정 파일이 이미 있으면 그대로 둡니다.
+로컬 실습을 진행한 폴더에서 같은 가상 환경을 활성화하세요. 다음 명령은 설정 파일이 이미 있으면 그대로 둡니다.
 
 ```bash
 test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
@@ -128,7 +128,7 @@ scripts/02_create_cluster.sh --cpu-only
 
 ### 터널을 열고 노드 확인
 
-두 번째 터미널에서 저장소 루트로 이동해 `cdk/tunnel.sh`를 실행하고 열어 둡니다. 첫 번째 터미널에서 다음 명령을 실행하세요. 터널은 로컬의 `kubectl` 요청을 VPC 안에 있는 EKS API에 전달합니다.
+두 번째 터미널에서 `gpu-sandbox-on-aws` 폴더로 이동해 `cdk/tunnel.sh`를 실행하고 열어 둡니다. 첫 번째 터미널에서 다음 명령을 실행하세요. 터널은 로컬의 `kubectl` 요청을 VPC 안에 있는 EKS API에 전달합니다.
 
 ```bash
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type

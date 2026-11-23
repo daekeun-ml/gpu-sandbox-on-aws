@@ -13,7 +13,7 @@ Kata는 pod마다 가상 머신(VM)을 띄웁니다. [클러스터와 이미지]
     - **QEMU, Cloud Hypervisor(CLH)**: Kata가 VM을 만들 때 쓰는 hypervisor 두 가지입니다. 업스트림은 QEMU에서만 GPU passthrough를 지원합니다.
     - **KVM, `/dev/kvm`**: Linux의 하드웨어 가상화 기능과 그 장치 파일입니다. 이것이 있어야 노드에서 VM을 실행할 수 있습니다.
     - **nested virtualization**: VM 안에서 다시 VM을 실행하는 기능입니다. EC2에서는 일부 인스턴스 계열에 `/dev/kvm`을 제공합니다.
-    - **launch template, CpuOptions**: EC2 인스턴스의 시작 설정 묶음과, 그 안의 CPU 관련 옵션(여기서는 nested virtualization 활성화)입니다. 이 저장소에서는 CDK 스택이 노드 그룹마다 하나씩 만듭니다.
+    - **launch template, CpuOptions**: EC2 인스턴스의 시작 설정 묶음과, 그 안의 CPU 관련 옵션(여기서는 nested virtualization 활성화)입니다. CDK 스택이 노드 그룹마다 launch template을 하나씩 만듭니다.
     - **IOMMU**: 장치가 직접 메모리에 접근(DMA)할 수 있는 범위를 제한하는 하드웨어입니다. GPU를 VM에 직접 할당할 때 접근 범위를 그 VM의 메모리로 한정합니다.
     - **VFIO, vfio-pci**: 물리 장치를 VM에 안전하게 직접 할당하는 Linux 프레임워크와, 그 장치에 바인딩되는 드라이버입니다.
     - **cold-plug**: VM을 시작하기 전에 장치를 연결하는 방식입니다.
@@ -22,9 +22,6 @@ Kata는 pod마다 가상 머신(VM)을 띄웁니다. [클러스터와 이미지]
     - **GPU Operator, vfio-manager, `nvidia.com/pgpu`**: NVIDIA GPU 구성 요소를 관리하는 operator, 그중 GPU를 vfio-pci에 바인딩하는 구성 요소, 그리고 VM에 직접 할당할 수 있는 GPU를 나타내는 리소스 이름입니다.
     - **NVRC**: kata-deploy가 함께 배포하는 NVIDIA guest 스택의 초기화 프로그램입니다.
     - **`overhead.podFixed`**: VM 자체가 쓰는 메모리와 CPU를 scheduler가 pod 요청에 더하도록 RuntimeClass에 지정한 값입니다.
-
-??? note "실습 계정에서 확인한 범위"
-    이 페이지의 Kata CPU 경로(`scripts/kata/cpu_nodes.sh`, CDK 시나리오 C)와 Kata GPU 경로(IOMMU AMI 빌드, `scripts/kata/gpu_nodes.sh`, `g4dn.metal` 노드 그룹, `kata-qemu` pool)는 실습 계정(EKS 1.36)에서 실행했습니다. 아래 smoke pod 출력과 2단계의 출력, 소요 시간은 그 실행에서 관찰한 값이고, 그 실행에서 찾은 `vfio_iommu_type1` 모듈 문제와 AMI 빌더 문제는 스크립트에서 고쳤습니다(2단계). 업스트림에서 검증된 조합은 아니며(아래 "적용 범위와 한계"), 실험용 CLH GPU는 VM이 시작되지 않았습니다(3단계). 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 <details class="note" markdown="1">
 <summary>런타임별 장치 요청과 VM 자원 비교</summary>
@@ -38,7 +35,7 @@ Kata는 pod마다 가상 머신(VM)을 띄웁니다. [클러스터와 이미지]
 | `kata-qemu-nvidia-gpu` | QEMU (Go shim) | T4 1개 (VFIO cold-plug) | `sandbox-kata-gpu` (`g4dn.metal`) | 10240Mi, 1 CPU | 지원 (T4는 업스트림 CI 대상 아님) |
 | `kata-clh-nvidia-gpu` | Cloud Hypervisor (실험) | T4 1개 | `sandbox-kata-gpu` | 10240Mi, 1 CPU (values 파일) | 미지원 |
 
-`overhead.podFixed`는 Kata 4.3.1 기준 값입니다. 업스트림 metrics CI(3.28.0)는 workload 시작까지의 부팅 시간을 CLH 0.39초, QEMU 0.71초로 보고합니다. 업스트림 측정은 장비가 다르고 허용 오차가 큽니다. 이 저장소의 측정값과 측정 방법은 [08 런타임 벤치마크](08_benchmark.md)에 있습니다.
+`overhead.podFixed`는 Kata 4.3.1 기준 값입니다. 업스트림 metrics CI(3.28.0)는 workload 시작까지의 부팅 시간을 CLH 0.39초, QEMU 0.71초로 보고합니다. 업스트림 측정은 장비가 다르고 허용 오차가 큽니다. 실습 환경의 측정값과 방법은 [08 런타임 벤치마크](08_benchmark.md)에 있습니다.
 
 </details>
 
@@ -88,9 +85,9 @@ scripts/kata/cpu_nodes.sh    # kata-deploy, the gvisor-cpu RuntimeClass, smoke p
 | 노드 그룹 | desired 1, min 0, max 2, label `gpusandbox/role=sandbox-kata`와 `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | Kata 샌드박스 전용. smoke pod와 CPU pool은 `gpusandbox/kata-gpu=false`로 이 노드를 선택함 |
 
 - **`CpuOptions`의 코어 수와 스레드 수**: API가 다른 CPU 옵션과 함께 코어 수와 스레드 수를 요구합니다. 값은 `cdk/gpusandbox_cdk/config.py`의 표에서 읽습니다.
-- **`UserData`의 gVisor**: 같은 노드에서 세 런타임을 비교하려고 함께 설치합니다([10 c8i 단독 저비용 경로](10_cpu_only.md)).
+- **`UserData`의 gVisor**: 같은 노드에서 세 런타임을 비교하려고 함께 설치합니다([10 GPU 없이 CPU로 실습하기](10_cpu_only.md)).
 
-관리형 노드 그룹이 launch template의 `NestedVirtualization`을 노드에 전달하는지는 EKS 문서에 나와 있지 않습니다. 실습 계정(2026-11-14)에서는 전달됐지만(노드에 `/dev/kvm` 있음) 동작이 바뀔 수 있으니, 처음 배포한 뒤 확인하세요. 아래 명령은 현재 kubectl context(터널)의 Kata CPU 노드에서 인스턴스 ID를 읽으므로, 같은 리전에 이 저장소로 만든 다른 클러스터가 있어도 그 노드를 읽지 않습니다.
+관리형 노드 그룹이 launch template의 `NestedVirtualization`을 노드에 전달하는지는 EKS 문서에 나와 있지 않습니다. 실습 계정(2026-11-14)에서는 전달됐지만(노드에 `/dev/kvm` 있음) 동작이 바뀔 수 있으니, 처음 배포한 뒤 확인하세요. 아래 명령은 현재 kubectl 컨텍스트(터널)에 연결된 Kata CPU 노드의 인스턴스 ID를 조회합니다.
 
 ```bash
 provider_id="$(kubectl get nodes -l gpusandbox/kata-gpu=false -o jsonpath='{.items[0].spec.providerID}')"
@@ -211,6 +208,9 @@ scripts/kata/gpu_nodes.sh
 - `kata/gpu_nodes.sh`의 두 번째 실행은 이 노드 그룹을 조회하지 못하면 `no sandbox-kata-gpu node group: set WITH_KATA_GPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again ...`으로 멈춥니다. 조회 권한이 없어도 같은 메시지가 나오니, `aws eks describe-nodegroup ... --nodegroup-name sandbox-kata-gpu`를 직접 실행해 원인을 확인하세요.
 - Kata CPU 노드 추가(`kata/cpu_nodes.sh`)를 건너뛰어도 `kata/gpu_nodes.sh`가 kata-deploy를 설치합니다.
 
+<details class="note" markdown="1">
+<summary>AMI 빌드 과정과 VFIO 커널 모듈 설정</summary>
+
 ### IOMMU를 켠 AMI 빌드 (build-iommu-ami.sh)
 
 ```mermaid
@@ -239,6 +239,8 @@ flowchart LR
 
 !!! note "이전 버전 스크립트로 실패했다면"
     이전 버전에서 `Waiter InstanceStopped failed ... "pending"`으로 멈췄다면 빌더가 남아 있을 수 있습니다. `<CLUSTER_NAME>-iommu-ami-builder` 이름의 인스턴스가 있는지 확인하고 terminate하세요.
+
+</details>
 
 <details class="note" markdown="1">
 <summary>metal 노드, GPU Operator와 QEMU VM 설정</summary>
@@ -344,6 +346,9 @@ kata-qemu-nvidia-gpu   kata-qemu-nvidia-gpu   2m
 
 **문제가 생기면:** `pgpu`가 비어 있거나 0이면 스크립트가 `no passthrough GPUs advertised; see docs/reference/troubleshooting.md`를 출력하고 멈춥니다. 이때 아래처럼 노드에서 IOMMU와 vfio-pci 바인딩을 확인하고, [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목도 함께 보세요.
 
+<details class="note" markdown="1">
+<summary>GPU가 등록되지 않을 때 IOMMU와 vfio-pci 바인딩 확인하기</summary>
+
 Kata GPU 노드(`kubectl get nodes -l gpusandbox/kata-gpu=true`로 찾음)에서 debug pod 셸을 엽니다.
 
 ```bash
@@ -371,14 +376,20 @@ grep vfio_iommu_type1 /proc/modules    # expect one line: QEMU needs this VFIO I
 - **첫째 명령 출력에 커널 인자가 없으면**: 노드가 IOMMU AMI로 부팅되지 않은 것입니다.
 - **넷째 명령이 아무것도 출력하지 않으면**: [Kata 문제 해결](../reference/troubleshooting.md#kata)을 보세요.
 
-확인이 끝나면 debug pod를 [02 gVisor](02_gvisor.md)의 "노드에서 직접 확인하기"와 같은 방법으로 삭제하세요.
+확인이 끝나면 [노드 점검 절차](../reference/troubleshooting.md#노드에서-직접-확인하기)에 따라 debug pod를 삭제하세요.
 
-실제 GPU VM은 [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에서 `scripts/06_deploy_sandboxes.sh kata-qemu`로 실행하고 pool 검증(`scripts/ops/verify.sh`)으로 확인합니다. 2026-11-18 실행에서는 `kata-qemu` pod 4개가 Ready가 되었고, `scripts/ops/verify.sh kata-qemu v1`의 결과는 다음과 같았습니다.
+</details>
+
+<span id="적용-범위와-한계"></span>
+
+실제 GPU VM은 [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에서 `scripts/06_deploy_sandboxes.sh kata-qemu`로 실행하고 pool 검증(`scripts/ops/verify.sh`)으로 확인합니다. AL2023과 `g4dn.metal`을 사용한 EKS 1.36 실습에서 `kata-qemu` pod 4개가 Ready가 됐습니다. `vfio_iommu_type1` 수정 뒤 `scripts/ops/verify.sh kata-qemu v1`에서 확인한 결과입니다. [실행 기록](../reference/sources.md#aws-실행-기록)
 
 - GPU `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`
 - egress 대상 4개 모두 차단
 - golden verdict 6개 PASS(`vector_add_triton`, `relu_bias_triton` 포함)
 - NetworkPolicy가 `default` namespace에서 온 호출을 차단
+
+NVIDIA의 Kata CI는 A100과 H100을 테스트하며 T4는 대상에서 빠집니다. NVIDIA가 EKS에서 검증한 OS는 Ubuntu입니다. 위 결과는 AL2023을 사용한 실습 환경에서 확인한 값입니다.
 
 ### 자주 막히는 지점
 
@@ -386,7 +397,7 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
 
 ### Kata VM 안에서 확인한 T4 { #gpu-run }
 
-같은 클러스터에 IOMMU를 켠 `g4dn.metal`을 추가했습니다. 노드가 광고한 `nvidia.com/pgpu` 개수, QEMU pool의 Ready replica 4개, guest 안에서 PyTorch가 읽은 GPU 이름을 순서대로 확인할 수 있습니다.
+같은 클러스터에 IOMMU를 켠 `g4dn.metal`을 추가했습니다. 아래 화면에서 노드가 광고한 `nvidia.com/pgpu` 개수, QEMU pool의 Ready replica 4개, 게스트 안에서 PyTorch가 읽은 GPU 이름을 차례로 확인하세요.
 
 ![g4dn.metal의 passthrough GPU와 Kata QEMU guest의 커널 및 T4](../images/terminal/kata-gpu-replay.png)
 
@@ -403,8 +414,8 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
 - **drop-in**: `baseConfig: "clh"`에 NVIDIA guest 커널과 이미지, `cold_plug_vfio = "root-port"`, `default_memory = 8192`, `static_sandbox_resource_mgmt = true` 등을 추가합니다.
 - **RuntimeClass**: `kata-clh-nvidia-gpu`(overhead 10240Mi와 CPU 1, nodeSelector `nvidia.com/cc.ready.state: "false"`, label `gpusandbox/support: experimental`)를 만듭니다.
 
-!!! warning "2026-11-18 결과: VM이 시작되지 않았습니다"
-    아래 2번의 경로를 채운 values 파일로도 `kata-clh` pool의 pod는 `create container timeout`으로 실패했습니다. CLH VM이 socket을 만들지 않았고, 로그에서 더 구체적인 원인은 찾지 못했습니다. 그래서 [08 런타임 벤치마크](08_benchmark.md)에는 "측정 안 됨"으로 기록하고 pool을 0으로 줄였습니다.
+!!! warning "Cloud Hypervisor GPU 실험에서 VM이 시작되지 않았습니다"
+    아래 2번의 경로를 채운 values 파일로도 `kata-clh` pool의 pod는 `create container timeout`으로 실패했습니다. CLH VM이 socket을 만들지 않았고, 로그에서 더 구체적인 원인은 찾지 못했습니다. GPU 채점 시간을 측정할 수 없어 pool을 0으로 줄였습니다. [런타임별 벤치마크 결과](08_benchmark.md)
 
 1. **guest 자산 이름 확인 (다른 kata-deploy 버전일 때).** Kata GPU 노드에서 debug pod를 실행합니다.
 
@@ -459,14 +470,6 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
     | HyperPod 노드 (`ml.g5` 등) | 불가 | 불가 (추정, 미검증) |
 
 </details>
-
-## 적용 범위와 한계
-
-- **업스트림 검증 범위:** NVIDIA의 Kata CI는 A100과 H100을 테스트하고 T4는 테스트하지 않습니다. NVIDIA가 EKS에서 검증한 OS는 Ubuntu이고 AL2023은 목록에 없습니다. 그래서 `g4dn.metal` + AL2023으로 구성한 이 환경은 업스트림에서 검증되지 않은 조합입니다.
-- **이 저장소의 실행:** Kata GPU 경로(`g4dn.metal` + AL2023 + `kata-qemu-nvidia-gpu`)는 실습 계정(EKS 1.36)에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). `vfio_iommu_type1` 수정 뒤 `kata-qemu` pod 4개가 Ready가 되었고 `ops/verify.sh kata-qemu v1`이 통과했습니다. 이 구성에서 한 차례 확인한 결과입니다.
-- **제3자 보고:** Ubuntu 24.04의 `g4dn.metal`에서 `intel_iommu=on iommu=pt`로 T4 8개가 vfio-pci에 바인딩되고 IOMMU 그룹도 passthrough에 쓸 수 있었다는 보고가 있습니다. 이 저장소는 AL2023에서 같은 바인딩(T4 8개, IOMMU group 257개)을 확인했고, Ubuntu는 확인하지 않았습니다.
-- **문서로 확인하지 않은 동작:** 재부팅 뒤 Kata handler 유지(containerd `imports`)와 `CpuOptions.NestedVirtualization` 전달은 바뀔 수 있으니, 1단계의 재부팅 확인과 `describe-instances` 확인을 건너뛰지 마세요.
-- **Cloud Hypervisor + GPU:** 실험 경로입니다. 이 저장소의 실행에서는 artifact 경로를 채운 뒤에도 VM이 시작되지 않았고(`create container timeout`), 동작하는 구성은 확인하지 못했습니다.
 
 ## 소요 시간과 비용
 

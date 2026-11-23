@@ -72,6 +72,13 @@ flowchart LR
 
 ## Prerequisites
 
+<span id="scope-and-limits"></span>
+
+??? note "Which veRL components have been exercised"
+    The data script produced 640 training rows and 10 validation rows locally. Tests cover the static policy, gateway pins and `compute_score` responses for passing code, missing code, policy violations and infrastructure failures using a fake gateway. The veRL image, RayCluster, live veRL training, authenticated Ray dashboard and resilient training were not exercised on AWS.
+
+    The `reward.*` keys follow veRL 0.9.1. Check reward-worker placement, concurrency and `reward_extra_info` against your installed version. The sizing examples use script defaults; measure `t_eval` for the workload you deploy.
+
 1. **KubeRay operator**: the latest release is v1.7.2 (API `ray.io/v1`). The commands below are the HyperPod documentation's install steps plus a pinned chart version.
 2. **Gateway**: deploy it as in [03 Gateway and pools](03_gateway_and_pools.md) and include `system:serviceaccount:rl-trainer:grpo-trainer` in `GATEWAY_ALLOWED_SUBJECTS`. The gateway's `/readyz` succeeds only when it can read the routing table, so the `sandbox-routing` ConfigMap must also exist in the `sandbox-gateway` namespace.
 3. **Shared PVC**: create a PVC in the `rl-trainer` namespace that the head and the workers mount together (the EKS documentation covers the FSx for Lustre CSI driver).
@@ -329,14 +336,6 @@ The Ray on HyperPod documentation also describes access through an authenticated
 - **Consistency within a group**: the value `compute_score` returns has no `group_key`, and samples decided locally (`no_code`, `policy_violation`) have an empty `sandbox_version`. Check consistency within a group in a record that lets you group samples by data row (`task_id`, `index`), comparing `sandbox_version` only across responses the sandbox actually scored. Validation data uses the same `task_id` and `index`, so group training and validation records separately.
 - `sandbox_error` in the reward extra info of the logs stays close to 0.
 - Every `save_freq` steps a checkpoint directory appears under `CKPT_DIR` (veRL's default name is `global_step_<N>`).
-
-## Scope and limits
-
-- **Verified locally:** a local run of `prepare_data.py` with the defaults wrote 640 train rows and 10 validation rows, and `pytest` covers the static policy the reward function uses (`harness/policy.py`) and the gateway's group pins. `pytest` also calls `compute_score` in `rl/verl/reward_fn.py` with a fake gateway client and checks the returned values and keys for a passing answer, no code, a policy violation and an infrastructure error. Integration with a real veRL job is not verified.
-- **Not executed:** the author did not build the veRL image or run the RayCluster or a veRL job on AWS; verify them with "How to verify" above.
-- **Based on documentation:** the `reward.*` keys follow the veRL 0.9.1 default config; reward worker placement, concurrent request count and the `reward_extra_info` log format can change between releases, so re-verify them.
-- **Features not tried:** this repository has not used the authenticated dashboard link or the resilient training features of Ray on HyperPod.
-- **Sizing values are arithmetic.** The formulas and numbers in "Sizing" are arithmetic on the script defaults, not measurements, so measure `t_eval` yourself.
 
 ## Cost and cleanup
 

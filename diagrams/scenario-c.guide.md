@@ -12,7 +12,7 @@ GPU가 필요 없어 실습 비용이 가장 낮은 구성입니다. EC2 nested 
 - **system nodes m6i.large x2**(EKS node group system): 여기서 simulate와 probe Job을 실행합니다. 이 시나리오에서는 해당 node group에서 trainer 대신 reward 루프를 실행하므로 그림에 표시했어요.
 - **sandbox-kata-cpu node c8i.2xlarge**(EKS node group sandbox-kata-cpu): 활성 pool kata-clh-cpu v1과 v2, 그리고 비교용 gvisor-cpu와 kata-qemu-cpu pool이 한 노드에 있습니다.
 - **Shared services**: CloudWatch Logs입니다. **Registry**: ECR repositories예요.
-- **선**: 실선은 동기 호출, 점선은 비동기 또는 보조 관계입니다. 화살표 라벨은 각 구간에서 오가는 요청이나 데이터를 나타냅니다. 아래 단계의 `라벨`로 그림에서 해당 화살표를 찾을 수 있습니다. 단계 번호는 브리프 관계표의 `#` 순서와 같습니다.
+- **선**: 실선은 동기 호출, 점선은 비동기 또는 보조 관계입니다. 화살표 라벨은 각 구간에서 오가는 요청이나 데이터를 나타냅니다. 아래 단계의 `라벨`과 같은 이름이 붙은 화살표를 따라가세요. 단계 번호는 브리프 관계표의 `#` 순서와 같습니다.
 - Operator workstation은 AWS Cloud 상자 밖에 있습니다. 모델 다운로드가 없어서 Hugging Face Hub와 NAT gateway는 그림에 없어요.
 
 ## 단계별 흐름
@@ -42,7 +42,7 @@ GPU가 필요 없어 실습 비용이 가장 낮은 구성입니다. EC2 nested 
 | kata-clh-cpu pool v2 | 다음 버전 pool, 평가 200회마다 pod VM을 새로 만듦, 전환 전에는 트래픽 없음 | |
 | gvisor-cpu pool v1 | nvproxy 없이 systrap으로 도는 gVisor pool | 노드 user data가 설치 |
 | kata-qemu-cpu pool v1 | pod마다 QEMU 위의 Kata microVM 하나 | 비교 기준선 |
-| ECR repositories | sandbox와 control 이미지의 비공개 저장소 | scripts/03_build_push_images.sh가 생성 |
+| ECR repositories | sandbox와 control 이미지를 비공개로 보관 | scripts/03_build_push_images.sh가 생성 |
 | CloudWatch Logs | control plane 로그와 VPC flow log | 보존 한 달 |
 | VPC | AZ 두 개, NAT만 있는 public subnet과 노드가 있는 private subnet | 그림에 없음 |
 | NAT gateway | 여전히 배포되어 이미지 pull과 부팅 때 다운로드의 출구가 되지만, 그려진 선 중에는 필요로 하는 것이 없음 | 그림에 없음 |
@@ -57,7 +57,7 @@ GPU가 필요 없어 실습 비용이 가장 낮은 구성입니다. EC2 nested 
 - 노드 `sim`은 모든 tool 실행(simulate, probe, parity, bench)이 쓰는 Job 템플릿 하나를 뜻합니다. 7번과 8번은 활성이 아닌 두 pool에 대한 probe와 bench 실행이고, 점선이지만 선이 없는 pool이 생기지 않도록 꼭 그렸어요.
 - Kubernetes workload(Job, pool Deployment)는 Containers 카테고리의 `container_1`로 그리고 workload 이름을 붙였습니다. `eks` 아이콘은 control plane만 뜻해요.
 - gVisor, Kata, Cloud Hypervisor, QEMU는 stencil이 없어서 pool 라벨(pool 이름이 곧 runtime)과 설명으로 드러냈습니다. c8i node group은 이름과 instance type을 제목에 단 role group이에요.
-- C의 EC2 system 노드 그룹에서는 reward driver가 실행됩니다. B2 그림에서는 CPU 작업을 담당하는 HyperPod `system` 인스턴스 그룹을 볼 수 있습니다.
+- C의 EC2 system 노드 그룹에서는 reward driver가 실행됩니다. B2 그림의 HyperPod `system` 인스턴스 그룹이 CPU 작업을 맡습니다.
 - kata-deploy DaemonSet은 AWS 리소스가 아니라 kube-system의 Helm release이고 독자가 봐야 할 관계가 없어서 그리지 않았습니다.
 - 그룹 제목은 node group 이름과 instance type만 적고 1열 카드에 두 줄로 들어가게 했습니다.
 - 샌드박스 egress 선은 일부러 없습니다. default-deny NetworkPolicy, IMDS와 API server와 kubelet에 닿지 않아야 하는 readiness, c8i 노드 user data의 node guard가 외부 연결을 제한합니다.

@@ -35,7 +35,7 @@ kubectl -n sandbox logs <pod>
 
 - **`[error] set <이름> in scripts/config.env`**: 그 값이 비어 있거나 `__SET_ME__`가 남아 있습니다. 이미지 주소(`SANDBOX_IMAGE_URI` 등)는 `03_build_push_images.sh`가 마지막에 출력하는 `export` 줄을 붙여 넣으면 됩니다.
 - **`[error] missing tool: <도구>`**: 그 도구를 설치한 뒤 `scripts/01_check_prereqs.sh`를 다시 실행하세요.
-- **`03_build_push_images.sh`를 다시 실행했더니 같은 태그가 있어 이미지를 push할 수 없음**: ECR 저장소는 같은 태그를 덮어쓰지 않습니다. `IMAGE_TAG`를 새 값으로 바꿔 다시 실행하고, 새로 출력된 주소로 `config.env`를 고치세요.
+- **`03_build_push_images.sh`를 다시 실행했더니 같은 태그가 있어 이미지를 push할 수 없음**: 실습용 ECR 리포지토리에서는 기존 태그를 덮어쓸 수 없습니다. `IMAGE_TAG`를 새 값으로 바꿔 다시 실행하고, 새로 출력된 주소로 `config.env`를 고치세요.
 - **이미지 빌드가 매우 느리거나 디스크가 부족**: arm64 PC에서 amd64 이미지를 만들면 에뮬레이션 때문에 느립니다. 디스크가 100 GB 이상인 x86_64 호스트에서 빌드하세요.
 
 자세히: [설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트)
@@ -82,7 +82,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 - **Kata CPU pod가 KVM을 열지 못함(노드에 `/dev/kvm` 없음)**: 노드에 nested virtualization이 켜져 있지 않습니다. 실행 중인 인스턴스의 `CpuOptions`와, 그 인스턴스 유형이 nested virtualization을 지원하는지(`SupportedFeatures`) 확인하세요.
 - **`scripts/kata/gpu_nodes.sh`가 `add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 ...`로 끝남**: 정상입니다. 첫 실행은 AMI만 만듭니다. 출력된 `KATA_IOMMU_AMI_ID`를 `scripts/config.env`에 넣고 `WITH_KATA_GPU`를 `"1"`로 바꾼 뒤, `scripts/02_create_cluster.sh`와 `scripts/kata/gpu_nodes.sh`를 차례로 다시 실행하세요.
-- **`no passthrough GPUs advertised`**: IOMMU가 꺼져 있거나 GPU Operator가 노드를 준비하지 못했습니다. 먼저 `KATA_IOMMU_AMI_ID`가 이 저장소의 스크립트로 만든 AMI인지 확인하세요. AMI가 맞다면 노드의 `nvidia.com/gpu.workload.config=vm-passthrough` 라벨과 GPU Operator pod 상태를 확인하세요.
+- **`no passthrough GPUs advertised`**: IOMMU가 꺼져 있거나 GPU Operator가 노드를 준비하지 못했습니다. 먼저 `KATA_IOMMU_AMI_ID`가 Kata용 AMI 빌드 스크립트로 만든 이미지인지 확인하세요. AMI가 맞다면 노드의 `nvidia.com/gpu.workload.config=vm-passthrough` 라벨과 GPU Operator pod 상태를 확인하세요.
 - **Kata GPU pod가 `ContainerCreating`에 머물고 노드 로그에 `No available IOMMU models`**: 이전 AMI에서 `vfio_iommu_type1` 모듈이 로드되지 않은 경우입니다.
     - **새 노드를 만들 때**: 지금 스크립트로 AMI를 다시 만들어 `KATA_IOMMU_AMI_ID`를 바꾸고 `scripts/02_create_cluster.sh`를 다시 실행하세요.
     - **현재 노드에서는**: `modprobe vfio_iommu_type1`을 실행하세요. 재부팅하면 다시 실행해야 합니다.
@@ -106,7 +106,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 ## 학습
 
 - **TRL trainer 로그에 `CUDA out of memory`**: vLLM의 답안 생성과 모델 학습이 같은 GPU 메모리를 공유합니다. Job 템플릿의 `args`에 `--per-device-batch=2`와 `--grad-accum=8`을 지정하세요. 이렇게 하면 배치 크기와 누적 횟수를 곱한 값은 16으로 유지됩니다. 그래도 부족하면 `--max-completion-length=512`, `--vllm-gpu-memory-utilization=0.3`을 차례로 넣어 보세요.
-- **`reward_batch`에 `sandbox_error`가 많음**: `scripts/ops/verify.sh <runtime> <version>`으로 같은 pool을 점검하세요. 실패한 단계와 오류 문구를 보면 인증, 네트워크, pod 부족, 평가 시간 초과 중 어디부터 점검할지 알 수 있습니다.
+- **`reward_batch`에 `sandbox_error`가 많음**: `scripts/ops/verify.sh <runtime> <version>`으로 같은 pool을 점검하세요. 실패한 단계와 오류 문구에 따라 인증, 네트워크, pod 부족, 평가 시간 초과 중 해당 항목부터 점검하세요.
 
 자세히: [학습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#학습)
 
@@ -122,7 +122,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 [재현 명령과 실행 화면, 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
 
-- **클러스터는 `InService`인데 trainer 인스턴스가 `Pending`입니다.** B1 실습에서는 클러스터가 먼저 준비됐습니다. `source scripts/config.env`를 실행하고 `aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME"`로 인스턴스 상태를 보세요. 이어서 `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status`에서 `Ready`와 `Schedulable`을 확인하세요. [B1 실행 화면](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/#확인-방법)
+- **클러스터는 `InService`인데 trainer 인스턴스가 `Pending`입니다.** B1 실습에서는 클러스터가 먼저 준비됐습니다. `source scripts/config.env`를 실행하고 `aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME"`로 인스턴스 상태를 보세요. 이어서 `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status`에서 `Ready`와 `Schedulable`을 확인하세요. [B1 실행 화면](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b1/#확인-방법)
 - **Worker가 `Pending`이고 이벤트에 `Insufficient cpu` 또는 `Insufficient memory`가 나옵니다.** `kubectl describe node <trainer-node>`에서 이미 할당된 자원을 확인하세요. B1의 `ml.g5.2xlarge`에서는 operator와 시스템 pod도 같은 노드를 사용했습니다. 템플릿이 worker에 요청하는 자원은 CPU 5개와 메모리 24 GiB입니다.
 
 - **pod가 `hyperpodrun`을 찾지 못함**: trainer 이미지를 `HYPERPOD=1` 없이 빌드했습니다. 새 `IMAGE_TAG`로 `HYPERPOD=1 scripts/03_build_push_images.sh`를 실행하고, 출력된 `TRAINER_IMAGE_URI`를 `scripts/config.env`에 넣은 뒤 학습을 다시 시작하세요.
@@ -135,11 +135,11 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 ## 정리와 비용
 
-리전을 확인하거나 아래 AWS CLI 명령을 쓰기 전에 저장소 루트에서 `source scripts/config.env`를 실행하세요.
+리전을 확인하거나 아래 AWS CLI 명령을 쓰기 전에 프로젝트 최상위 폴더에서 `source scripts/config.env`를 실행하세요.
 
 - **`08_cleanup.sh`를 실행한 뒤에도 요금이 계속 발생함**: 실행한 리전이 맞는지, AMI와 스냅샷이 남았는지 확인하세요.
     - **HyperPod를 만들었다면**: `08_cleanup.sh`는 HyperPod를 지우지 않습니다. `scripts/08_cleanup.sh`보다 먼저 `scripts/hyperpod/delete.sh`를 실행해야 합니다.
-    - **ECR만 남았다면**: `cdk/destroy.sh`가 출력한 ECR 삭제 명령의 저장소 이름을 확인한 뒤 실행하세요.
+    - **ECR만 남았다면**: `cdk/destroy.sh`가 출력한 ECR 삭제 명령이 가리키는 리포지토리 이름을 확인한 뒤 실행하세요.
     - **ECR까지 한 번에 지우려면**: 처음 정리할 때 `scripts/08_cleanup.sh --images`로 실행하세요.
 - **`g4dn.metal`을 쓰지 않는 동안에도 과금됨**: 노드 그룹을 0으로 줄이세요(아래 명령).
 

@@ -51,7 +51,7 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 | `GVISOR_RELEASE` | `20261109.0` | gVisor 노드에 설치할 릴리스 |
 | `GVISOR_NODES` | `2` | gVisor 노드 수 (노드당 샌드박스 1개) |
 
-- **09 데모 사이트**: `demo/deploy.sh`는 `AWS_REGION` 값과 관계없이 `us-east-1`에 배포합니다.
+- **CloudFront 데모 배포**: `demo/deploy.sh`는 `AWS_REGION` 값과 관계없이 `us-east-1`에 배포합니다.
 - **`ADMIN_PRINCIPAL_ARN`을 비우면**: `cdk/deploy.sh`는 IAM 사용자로 실행하면 현재 사용자 ARN을 선택합니다. 역할 세션에서는 세션 정보로 역할 ARN을 추정합니다.
 - **역할에 path가 있다면(예: IAM Identity Center가 만든 역할)**: 전체 ARN을 직접 지정합니다. `aws iam get-role --role-name <역할> --query Role.Arn --output text`로 얻은 ARN을 `ADMIN_PRINCIPAL_ARN`에 적으세요.
 
@@ -89,7 +89,7 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 
     **확인할 것:** `aws-cdk-lib`, `constructs`, `cdk-nag` 설치가 오류 없이 끝납니다.
 
-4. **bootstrap.** 계정과 리전마다 한 번, 스택 `CDKToolkit`(S3 버킷, ECR 저장소, IAM 역할)을 만듭니다.
+4. **bootstrap.** 계정과 리전마다 한 번, 스택 `CDKToolkit`(S3 버킷, ECR 리포지토리, IAM 역할)을 만듭니다.
 
     ```bash
     source scripts/config.env
@@ -99,9 +99,6 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
     **확인할 것:** CloudFormation 콘솔의 `AWS_REGION` 리전에서 `CDKToolkit` 스택이 `CREATE_COMPLETE`(이미 있었다면 기존 상태)로 표시됩니다.
 
     CDK 기본값에서는 CloudFormation 실행 역할에 `AdministratorAccess`가 연결됩니다(권한을 줄이는 방법은 [Production 09 CDK](../production/09_cdk.md)의 준비 절). 다음 배포에서도 `CDKToolkit`을 재사용하므로 정리 스크립트(`08_cleanup.sh`)는 이 스택을 삭제하지 않습니다.
-
-!!! warning "이 페이지의 AWS 단계"
-    이 페이지의 단계는 실습 계정에서 실행했습니다. `02_create_cluster.sh`의 Outputs, 터널 출력, 소요 시간은 시나리오 C(`--cpu-only`)를 실행했을 때의 기록입니다. 시나리오 A에서는 아래 "문제가 생기면"에 설명한 용량 부족 대처 절차에 따라 B2로 클러스터를 만든 뒤 B1, A 순서로 업데이트했습니다. 시나리오 A의 노드 목록 같은 나머지 "확인할 것"은 코드와 공식 문서 기준의 기대 출력이니 실제 출력과 비교하세요. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 사전 확인: `01_check_prereqs.sh`
 
@@ -169,20 +166,14 @@ scripts/01_check_prereqs.sh
     scripts/02_create_cluster.sh --cpu-only
     ```
 
-`scripts/02_create_cluster.sh`는 옵션으로 시나리오를 정한 뒤 `cdk/deploy.sh`를 호출합니다. `cdk/deploy.sh`는 다음 순서로 진행합니다.
-
-1. `scripts/config.env`를 읽습니다.
-2. `WITH_KATA_GPU=1`이면 `g4dn.metal` 비용을 안내하고 확인 단어 `metal`을 입력하도록 요청합니다.
-3. `cdk deploy <CLUSTER_NAME>-cdk --require-approval broadening`을 실행합니다. synth 단계에서 cdk-nag(AwsSolutions 규칙)가 CDK 앱(`cdk/app.py`)이 만든 템플릿을 검사합니다. 인정(acknowledge)되지 않은 지적이 하나라도 있으면 배포가 멈춥니다.
-4. IAM 역할이나 security group의 권한을 넓히는 변경(첫 배포라면 새 역할과 규칙)이 있으면 변경 목록을 출력하고 `Do you wish to deploy these changes (y/n)?`를 묻습니다.
-5. CloudFormation이 리소스를 만듭니다(20~30분).
+옵션을 고르면 `cdk/deploy.sh`가 `scripts/config.env`를 읽고 스택을 배포합니다. `WITH_KATA_GPU=1`이면 추가 비용을 안내한 뒤 `metal`을 입력해야 진행합니다. cdk-nag 검사에서 해결하지 않은 항목이 나오면 배포가 중단됩니다.
 
 **확인할 것:**
 
 1. `ADMIN_PRINCIPAL_ARN`을 비웠을 때는 실행한 주체에 따라 다릅니다.
     - **역할 세션(STS assumed-role)으로 실행하면**: 시작할 때 `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` 경고가 나옵니다.
     - **IAM 사용자로 실행하면**: 현재 사용자 ARN을 선택하며 경고는 표시하지 않습니다.
-    - **역할에 path가 있다면**: 4번 질문에 `n`으로 답하고, 경고에 나온 `aws iam get-role` 명령으로 얻은 ARN을 `ADMIN_PRINCIPAL_ARN`에 넣은 뒤 다시 실행하세요.
+    - **역할에 path가 있다면**: CDK의 권한 변경 승인 질문에 `n`으로 답하고, 경고에 나온 `aws iam get-role` 명령으로 얻은 ARN을 `ADMIN_PRINCIPAL_ARN`에 넣은 뒤 다시 실행하세요.
 2. IAM과 security group 변경 목록에서 inbound 규칙이 `0.0.0.0/0`에 열려 있지 않은지 확인하고 `y`를 입력합니다. 스택이 만드는 inbound 규칙은 access instance에서 control plane으로 향하는 443 포트 규칙 하나뿐입니다.
 3. 끝나면 `Outputs` 아래에 `ClusterName`, `ClusterEndpoint`, `AccessInstanceId`, `EndpointPublicAccess = false`가 나오고, 이어서 다음 안내가 출력됩니다.
 
@@ -200,14 +191,17 @@ EKS 콘솔의 클러스터 Networking 탭에서는 API server endpoint access가
 
 ![EKS 클러스터 Networking 탭: API server endpoint access Private](../images/console/eks-networking.png)
 
-**문제가 생기면:**
+배포 오류가 나면 아래에서 메시지별 대응 방법을 확인하세요.
+
+<details class="note" markdown="1">
+<summary>클러스터 배포 오류와 GPU 용량 부족 해결 방법</summary>
 
 - `Has the environment been bootstrapped?` 같은 bootstrap 오류는 준비 2의 4번으로 해결합니다.
 - `ValidationFailed`는 cdk-nag의 새 지적입니다. 출력된 규칙 ID와 리소스를 확인해 코드를 수정하고, 이유 없이 인정(acknowledge)하지 마세요.
 - `ADMIN_PRINCIPAL_ARN must list IAM role or user ARNs, not sts assumed-role ARNs`가 나오면 `arn:aws:iam::<계정>:role/<역할>` 형식으로 직접 적으세요.
 - `Cloud assembly schema version mismatch`는 CLI가 라이브러리보다 오래됐다는 뜻이니 준비 2의 1번으로 CLI를 업그레이드하세요.
 - vCPU 한도 오류, AZ 미지원, 노드 그룹 생성 실패는 [문제 해결](../reference/troubleshooting.md)의 "클러스터와 노드" 항목을 보세요.
-- 스택을 처음 만들 때 GPU 노드 그룹이 인스턴스를 시작하지 못하면(`InsufficientInstanceCapacity`), CloudFormation은 약 30분을 기다린 뒤 스택 생성 작업 전체를 롤백합니다. 이럴 때는 GPU 노드 그룹 없이 클러스터를 먼저 만들고 업데이트로 추가하세요. 업데이트가 실패하면 그 업데이트만 롤백됩니다. 마지막 줄은 config.env의 `SCENARIO`가 기본값 `A`일 때입니다.
+- 스택을 처음 만들 때 GPU 노드 그룹이 인스턴스를 시작하지 못하면(`InsufficientInstanceCapacity`), CloudFormation은 약 30분을 기다린 뒤 스택 생성 작업 전체를 롤백합니다. 이럴 때는 GPU 노드 그룹 없이 클러스터를 먼저 만들고 업데이트로 추가하세요. 업데이트가 실패하면 그 업데이트만 롤백됩니다. 아래는 실습 계정에서 A 클러스터를 만든 순서입니다. 마지막 명령은 `SCENARIO=A`일 때 실행하세요.
 
     ```bash
     scripts/02_create_cluster.sh --hyperpod-b2                  # system nodes only, no GPU node groups
@@ -215,29 +209,23 @@ EKS 콘솔의 클러스터 Networking 탭에서는 API server endpoint access가
     CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (A)
     ```
 
-    용량은 인스턴스 하나를 시작했다가 바로 종료해서 확인하세요. On-Demand Capacity Reservation 요청은 실제 시작이 성공하는 상황에서도 용량이 없다고 응답할 수 있습니다. 인스턴스 타입은 실행마다 `scripts/config.env`에서 바꿀 수 있습니다(예: 용량이 있을 때는 `g6`).
+    용량은 인스턴스 하나를 시작했다가 바로 종료해서 확인하세요. On-Demand Capacity Reservation 요청은 실제 시작이 성공하는 상황에서도 용량이 없다고 응답할 수 있습니다. 다른 인스턴스 타입으로 재시도하려면 `scripts/config.env`에서 지정하세요(예: 용량이 있을 때는 `g6`).
+
+</details>
 
 ### 터널 열기 (cdk/tunnel.sh)
 
-터널 터미널의 `Waiting for connections...`는 포트가 열려 있다는 뜻입니다. 이 창은 둔 채 **원래 작업 터미널**에서 `kubectl`을 실행하세요.
-
-kubectl이나 helm을 쓰는 동안 두 번째 터미널에서 실행해 둡니다. 스크립트는 다음 순서로 동작합니다.
-
-1. 스택 Outputs에서 endpoint와 access instance ID를 읽습니다.
-2. kubeconfig context `<CLUSTER_NAME>-tunnel`(서버 `https://127.0.0.1:8443`)을 만들어 그 context로 전환합니다.
-3. SSM 포트 포워딩 세션을 엽니다.
+두 번째 터미널에서 터널을 열고 `kubectl`과 Helm을 사용하는 동안 열어 두세요. 스크립트가 `<CLUSTER_NAME>-tunnel` 컨텍스트를 만들고 SSM 접속 인스턴스를 거쳐 EKS API에 연결합니다.
 
 ```bash
 cdk/tunnel.sh
 ```
 
-**확인할 것:** `kubectl context <CLUSTER_NAME>-tunnel -> 127.0.0.1:8443 -> <endpoint> (via i-...); Ctrl-C closes it` 로그 뒤에 `Waiting for connections...`가 나옵니다. 터널은 작업 PC의 `127.0.0.1`에서만 열립니다.
+**확인할 것:** `kubectl context <CLUSTER_NAME>-tunnel -> 127.0.0.1:8443 -> <endpoint> (via i-...); Ctrl-C closes it` 로그 뒤에 `Waiting for connections...`가 나옵니다. 터널은 작업 PC의 `127.0.0.1`에서만 열리며 `--tls-server-name`으로 실제 EKS endpoint의 인증서를 검증합니다.
 
 ![cdk/tunnel.sh 실행 화면: kubectl context gpu-sandbox-tunnel이 127.0.0.1:8443을 거쳐 클러스터 endpoint로 연결된다는 로그, 세션 시작, Port 8443 opened, Waiting for connections...](../images/terminal/tunnel.png)
 
-*프롬프트로 돌아오지 않고 이 상태로 멈춰 있으면 정상입니다.*
-
-첫 번째 터미널에서 노드를 확인합니다.
+첫 번째 터미널로 돌아가 노드를 확인하세요.
 
 ```bash
 kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
@@ -249,7 +237,8 @@ kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 
 B1(`--hyperpod`)은 trainer 줄이 없고, 기존 CDK B2는 system 두 대, C는 system 두 대와 `sandbox-kata` 한 대(`c8i.2xlarge`, 실습 계정에서 확인)입니다.
 
-**문제가 생기면:**
+<details class="note" markdown="1">
+<summary>터널이 열리지 않거나 kubectl 접속이 실패할 때</summary>
 
 - `TargetNotConnected`는 access instance의 SSM agent가 아직 등록되지 않았다는 뜻입니다. 인스턴스 ID는 `tunnel.sh`가 출력하는 `via i-...` 값입니다.
     1. 배포 직후라면 몇 분 뒤 다시 실행하세요.
@@ -265,6 +254,8 @@ B1(`--hyperpod`)은 trainer 줄이 없고, 기존 CDK B2는 system 두 대, C는
 - `missing tool: session-manager-plugin`이면 준비 2의 2번을 진행하세요.
 - `stack <CLUSTER_NAME>-cdk has no outputs; run cdk/deploy.sh first`가 나오면 클러스터 생성(`02_create_cluster.sh`)을 먼저 끝내세요.
 - `Unable to connect to the server`라면 터널이 열려 있는지 확인하고, 다른 클러스터의 context를 쓰고 있었다면 `kubectl config use-context <CLUSTER_NAME>-tunnel`로 전환하세요.
+
+</details>
 
 <details class="note" markdown="1">
 <summary>노드 구성, 부팅 순서와 매니페스트 렌더링</summary>
@@ -286,7 +277,7 @@ B1(`--hyperpod`)은 trainer 줄이 없고, 기존 CDK B2는 system 두 대, C는
 | `system` 관리형 노드 그룹 | `m6i.large` x2 (최소 2, 최대 3), 50 GB, label `gpusandbox/role=system` | CoreDNS와 add-on |
 | 모든 노드의 launch template | IMDSv2 필수, hop limit 1, 암호화된 gp3 root 볼륨, 인스턴스 태그 `project=gpu-sandbox-on-aws` | pod가 노드 자격 증명을 읽지 못하게 함. 정리 스크립트(`08_cleanup.sh`)가 이 태그로 남은 인스턴스를 찾음 |
 
-- **private subnet의 태그**: `kubernetes.io/role/internal-elb=1`, `karpenter.sh/discovery=<CLUSTER_NAME>` 태그가 붙습니다. HyperPod 스크립트([07](07_hyperpod.md))는 internal-elb 태그로, Production의 Karpenter EC2NodeClass는 discovery 태그로 subnet을 찾습니다.
+- **private subnet의 태그**: `kubernetes.io/role/internal-elb=1`, `karpenter.sh/discovery=<CLUSTER_NAME>` 태그가 붙습니다. HyperPod 스크립트([07](07_hyperpod_b1.md))는 internal-elb 태그로, Production의 Karpenter EC2NodeClass는 discovery 태그로 subnet을 찾습니다.
 - **add-on의 self-managed 사본**: 같은 구성 요소의 self-managed 사본은 설치하지 않습니다(`BootstrapSelfManagedAddons: false`).
 
 ### 시나리오별 노드 그룹
@@ -399,11 +390,11 @@ iptables -w -C INPUT -i eni+ -j GPUSANDBOX-GUARD 2>/dev/null \
 
 `04_install_gpu_stack.sh` 이후 스크립트는 `scripts/render.py`로 `k8s/` 아래 템플릿(`*.tpl`)에 값을 채운 뒤 적용합니다. `${VAR}`는 환경변수와 `KEY=VALUE` 인자 값으로 치환됩니다.
 
-- **템플릿이 참조한 변수 이름이 환경이나 인자에 없으면**: envsubst와 달리 렌더링이 중단됩니다. 따라서 변수 이름을 잘못 입력한 채 이미지 이름이나 네임스페이스가 빈 매니페스트를 배포하는 일을 막을 수 있습니다.
+- **템플릿이 참조한 변수 이름이 환경이나 인자에 없으면**: envsubst와 달리 렌더링이 중단됩니다. 따라서 변수 이름에 오타가 있으면 이미지 이름이나 네임스페이스가 빈 매니페스트를 배포하기 전에 오류가 납니다.
 - **이미 정의된 빈 문자열(예: `ACTIVE_RUNTIME=`)**: 그대로 들어갑니다.
-- **`$$`(리터럴 `$`)와 `@@include path@@` 문법**: 설명은 [저장소 구조](../reference/repository_map.md)에 있습니다.
+- **`$$`(리터럴 `$`)와 `@@include path@@` 문법**: 설명은 [프로젝트 구조](../reference/repository_map.md)에 있습니다.
 
-렌더링 결과는 AWS 접속 없이 로컬에서 확인할 수 있습니다.
+아래 명령으로 작업 PC에서 렌더링 결과를 확인하세요. AWS 접속은 필요 없습니다.
 
 ```bash
 source scripts/config.env
@@ -501,9 +492,7 @@ Dockerfile은 `pip freeze` 출력에서 torch, transformers, vllm, triton 버전
 
 ## 확인 방법
 
-클러스터 생성과 이미지 빌드는 다음 단계에 서로 다른 입력을 넘깁니다. `kubectl get nodes`로 배치할 노드를 확인하고, 빌드가 출력한 이미지 URI를 `scripts/config.env`에 넣으세요. 다음 단계의 smoke pod는 여기서 지정한 샌드박스 이미지를 가져옵니다.
-
-sandbox 리포지토리의 태그를 읽기 전용으로 조회해 push를 확인합니다.
+ECR에 이미지가 올라갔는지 확인하세요.
 
 ```bash
 source scripts/config.env
@@ -511,13 +500,9 @@ aws ecr describe-images --region "$AWS_REGION" --repository-name "$ECR_REPO_PREF
   --query 'imageDetails[].imageTags' --output text
 ```
 
-**확인할 것:** `IMAGE_TAG` 값(기본 `v1`)이 출력됩니다. 리포지토리 이름의 `sandbox`를 `trainer`, `control`로 바꿔 나머지도 확인하세요.
+**확인할 것:** `IMAGE_TAG` 값(기본 `v1`)이 출력됩니다. `sandbox`를 `control`로 바꿔 확인하고, trainer 이미지도 빌드했다면 `trainer` 태그까지 확인하세요.
 
-!!! question "❓ 오해: private endpoint만 활성화하면 작업 PC에서 kubectl을 쓸 수 없다"
-    `cdk/tunnel.sh`로 연 터널을 거치면 쓸 수 있습니다. kubectl은 `127.0.0.1`에 연결하지만 API 서버 인증서는 실제 endpoint 이름으로 검증하므로(`--tls-server-name`) TLS 검증을 끄지 않습니다. 노드와 control plane 사이의 요청은 기존과 같이 VPC 안의 private endpoint를 통해 전달됩니다.
-
-!!! question "❓ 오해: NVIDIA AMI 타입을 선택하면 GPU 설정이 끝난다"
-    EKS AL2023 NVIDIA AMI(v20261107)에는 드라이버(기본 580.178.04), nvidia-container-toolkit 1.20.1, containerd 2.3.7이 들어 있지만 device plugin은 없습니다. GPU를 `nvidia.com/gpu` 리소스로 등록하려면 `04_install_gpu_stack.sh`가 설치하는 device plugin이 필요합니다. gVisor로 GPU 워크로드를 실행하려면 이 페이지의 `runsc` 설치와 같은 스크립트가 등록하는 RuntimeClass도 있어야 합니다.
+다음 단계의 gVisor smoke pod가 ECR의 샌드박스 이미지를 받습니다. GPU 노드에 드라이버가 설치돼 있어도 `nvidia.com/gpu`가 표시되려면 [02편의 device plugin 설치](02_gvisor.md)가 필요합니다.
 
 ## 소요 시간과 비용
 
@@ -554,8 +539,9 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 터널을 열어 둔 상태로 시나리오에 맞는 페이지로 이어 갑니다.
 
 - **A**: [02 gVisor GPU 샌드박스](02_gvisor.md)의 `04_install_gpu_stack.sh`를 실행합니다.
-- **B1과 B2**: [07 HyperPod 시나리오](07_hyperpod.md)로 이어 갑니다. 이 장에서 `--hyperpod`(B2는 `--hyperpod-b2`)로 클러스터를 만들고 `HYPERPOD=1`로 올린 이미지의 `export` 세 줄을 `config.env`에 넣었다면, B1은 "B1 단계"의 3단계부터, B2는 [B2 절차](07_hyperpod.md#b2) 1단계의 `scripts/04_install_gpu_stack.sh`부터 실행하세요. 같은 `IMAGE_TAG`로 이미지를 다시 빌드하면 IMMUTABLE 태그라 push가 거부될 수 있습니다.
-- **C**: [10 c8i 단독 저비용 경로](10_cpu_only.md)의 `kata/cpu_nodes.sh`로 진행하세요.
+- **B1**: `--hyperpod`로 클러스터를 만들고 `HYPERPOD=1`로 빌드한 이미지 URI를 설정했다면 [B1의 GPU 스택 설치](07_hyperpod_b1.md#3-gpu-stack과-런타임)로 가세요. 같은 `IMAGE_TAG`로 이미지를 다시 빌드할 필요는 없습니다.
+- **기존 CDK B2**: `--hyperpod-b2`로 만든 클러스터는 [custom AMI 절차](../reference/hyperpod_custom_ami.md)에서 `scripts/04_install_gpu_stack.sh`부터 이어갑니다. 관리형 B2는 [별도 가이드](07_hyperpod_b2.md)를 따르세요.
+- **C**: [10 GPU 없이 CPU로 실습하기](10_cpu_only.md)의 `kata/cpu_nodes.sh`로 진행하세요.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

@@ -39,6 +39,11 @@ The TRL exercise records a grading failure as `sandbox_error` and excludes that 
 
 ## Read a version switch in one `reward_batch`
 
+<span id="scope-and-limits"></span>
+
+??? note "Local tests and cluster runs"
+    Local tests cover routing revisions, `sandbox_error` handling, group pins and parity between two CPU pools. A single-process TRL dry run checked the wiring. On AWS, one verified gVisor v1 pool served five GRPO steps on `g5.2xlarge`. In the switch run, v1 graded batches 1–4 and v2 graded batches 5–16. Routing returned to v1 after training. [Run record](../reference/sources.md#aws-run-record) · [Switch and rollback](../handson/06_sandbox_update.md#rollback-run)
+
 These fields come from batch 5 of the 16-step scenario A run. `global_step` identifies the trainer step at the time. `batch` counts calls to the grader.
 
 ```json
@@ -128,12 +133,6 @@ The hands-on procedure is in [06 Updating the sandbox during training](../handso
 
 !!! question "❓ Misconception: passing parity means v1 and v2 give the same reward"
     Parity checks only that the golden submissions get the same verdicts and speedups within tolerance. v2 changes the seed count and the speedup cap on purpose, so some completions get a different reward. That is why the switch is aligned to a batch boundary and logged as `sandbox_version_switch`, to tell whether a change in the reward curve comes from the version switch.
-
-## Scope and limits
-
-- **Checked by local tests:** pytest checks the routing table reload and `revision` bump, the reward that turns `sandbox_error` into `None`, the golden probe and parity between two CPU pools, and the gateway's group pinning across a routing switch; the TRL path was checked for wiring only, with a one-process dry run.
-- **Run on AWS:** in the practice account, a gVisor v1 pool was deployed and passed `scripts/ops/verify.sh gvisor v1`, and a `g5.2xlarge` trainer finished 5 GRPO steps ([run record](../reference/sources.md#aws-run-record)).
-- **Version change during training.** Batches 1–4 used v1 and batches 5–16 used v2. After training the operator rolled back to v1. [Switch and rollback](../handson/06_sandbox_update.md#rollback-run)
 
 ??? note "References"
     | Topic | Link |

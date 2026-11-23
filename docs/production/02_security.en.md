@@ -172,6 +172,13 @@ If it fails, see the 401 and 403 table in [Troubleshooting](../reference/trouble
 
 ## How to verify
 
+<span id="scope-and-limits"></span>
+
+??? note "Which policies the checks exercise"
+    These checks passed with the hands-on NetworkPolicies for gVisor v1, Kata QEMU v1 and all three CPU pools. The production gateway-only policy and allowlist redeployment still require a cluster check: confirm that the verification Jobs can reach the pool and that other traffic is blocked. [Run record](../reference/sources.md#aws-run-record)
+
+    Local tests check audience, expiry and subject rejection, readiness, hardened manifests and the node guard. CDK tests inspect the synthesized private endpoint, inbound rules, IMDSv2, configured hop limits and encryption. The EKS signing-key rotation schedule, GuardDuty’s view of sandbox processes and GPU firmware state after a VM reset remain unverified.
+
 The command below checks isolation, egress denial, golden verdicts and denial from another namespace for the gVisor v1 pool, in order. Step 1 only prints the pod and node kernel versions and does not compare them. From step 2 on, the script stops at the first failure.
 
 ```bash
@@ -210,14 +217,6 @@ If it fails, see the sandbox pool and readiness table (step 2) and the NetworkPo
 
 !!! warning "After applying gateway-only ingress"
     The production NetworkPolicy blocks direct calls from `rl-trainer` to sandboxes, so the probe Job of step 3 is blocked too. A separate policy that admits the verification Jobs is in [03 Gateway and pools](03_gateway_and_pools.md).
-
-## Scope and limits
-
-- **Verified by local tests:** audience-bound authentication fails closed (wrong audience, expired token and a subject outside the allowlist are rejected), readiness requires verified egress denial, the manifest templates carry the hardening values, and the node user data (`infra/eks/userdata.py`) includes the node guard (`pytest`, CPU, no AWS). The CDK stack tests (`cdk/tests`) check the private endpoint, no `0.0.0.0/0` inbound rule, required IMDSv2 (the hop limit is checked for 1 only where it is set) and volume encryption in the synthesized template.
-- **Executed on AWS:** `ops/verify.sh` from "How to verify" passed in the practice account on `gvisor` v1, `kata-qemu` v1 and the three CPU pools ([run record](../reference/sources.md#aws-run-record)), with the hands-on NetworkPolicies.
-- **Not executed on AWS:** the production setup with the gateway-only NetworkPolicy, and the allowlist redeploy above. Run them to check that the verification Jobs can still connect and that traffic is actually blocked.
-- **Behavior not verified:** the EKS signing key rotation schedule, how processes inside gVisor and Kata appear to GuardDuty Runtime Monitoring, and whether GPU firmware state persists between VMs.
-- **Risks not stopped:** the shared host driver under gVisor, shared hardware on one node, possible leftover GPU firmware state and the rest of "What is not covered" above. For multi-tenant use, review Kata and per-tenant NodePools in "Production options".
 
 ## ❓ Misconceptions
 

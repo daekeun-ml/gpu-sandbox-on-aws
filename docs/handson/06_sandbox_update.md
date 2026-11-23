@@ -14,9 +14,6 @@
     - **draining, recycler**: 새 요청을 받지 않고 교체를 기다리는 pod 상태와, 그런 pod를 지워 새 pod로 바꾸는 Production gateway의 기능입니다.
     - **rollback**: 문제가 생겼을 때 이전 버전으로 되돌리는 작업입니다.
 
-??? note "실습 계정에서 확인한 범위"
-    시나리오 A의 GRPO 학습 중 gVisor pool을 v1에서 v2로 전환했습니다. 첫 v2 채점은 배치 5였습니다. v1을 `--finish`로 축소하고, 학습이 끝난 뒤 v1으로 롤백했습니다.
-
 ## v1과 v2의 차이
 
 `k8s/sandbox/versions/`의 두 파일은 같은 이미지(`SANDBOX_IMAGE_URI`)를 쓰고 harness 설정만 다릅니다. 실제 rollout에서는 v2의 이미지 태그(보안 패치, 새 Triton)도 바뀝니다(v2.env 주석 참고).
@@ -30,10 +27,8 @@
 - `HARNESS_MAX_SPEEDUP`의 10은 KernelBench의 `excessive_speedup_threshold` 10과 같은 기준입니다.
 - **Kata에서 pod를 교체하면**: VM도 새로 만들어집니다.
 
-speedup이 1.0으로 바뀐 completion은 정답 점수를 그대로 받습니다. 기본 GPU 채점에서 속도 항은 completion 종류에 따라 다릅니다.
-
-- **정답인 custom kernel**: 기본 GPU 채점에서 속도 점수를 받는 것은 정답인 custom kernel뿐입니다. 상한을 넘어 speedup이 1.0으로 바뀐 경우 speedup score는 baseline과 속도가 같을 때의 값인 0.5가 되고, 기본 가중치(0.5)를 곱하면 속도 항은 총점에 0.25를 더합니다. baseline보다 빠른 만큼의 점수는 받지 못합니다.
-- **PyTorch 연산만 쓴 정답**: 같은 기본 GPU 채점에서 상한과 관계없이 속도 항이 0점입니다.
+??? note "speedup 상한이 reward에 미치는 영향"
+    speedup이 1.0으로 조정돼도 정답 점수는 유지됩니다. 정답인 custom kernel은 기준 구현과 속도가 같을 때의 점수 0.5를 받습니다. 기본 가중치 0.5를 곱하면 총점에 0.25가 더해집니다. PyTorch 연산만 쓴 정답은 상한과 관계없이 속도 점수가 0입니다.
 
 v2는 v1보다 엄격해서 같은 completion이 v1에서는 `ok`, v2에서는 `wrong_answer`가 될 수 있습니다. 그래서 전환 시점을 로그에 남겨 학습 곡선에 표시합니다.
 
@@ -46,7 +41,7 @@ blue/green은 전환 동안 두 버전의 pool을 함께 띄우므로 GPU가 두
 | `gvisor` | 2 (`g5.xlarge` 2대, 노드당 pod 1개) | `g5.xlarge` 2대 추가 | 노드 그룹 `sandbox-gvisor`를 4대로 늘립니다 (maxSize 4) |
 | `kata-qemu` | 4 (T4 4개) | T4 4개 추가 | `g4dn.metal` 한 대(T4 8개)로 충분합니다. 실험용 `kata-clh` pod가 같은 노드에서 실행 중이면 GPU가 부족합니다 |
 
-gVisor라면 노드 그룹을 4대로 늘립니다.
+gVisor를 사용한다면 학습 노드 8 vCPU와 채점 노드 네 대 16 vCPU를 합쳐 G/VT On-Demand 쿼터 24 vCPU가 필요합니다. 다음 명령으로 노드 그룹을 늘리세요.
 
 ```bash
 source scripts/config.env
@@ -58,14 +53,12 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 이 명령은 CDK 스택을 거치지 않고 노드 수만 바꿉니다. 그러니 클러스터 생성(`02_create_cluster.sh`)을 다시 실행하기 전에 아래 "소요 시간과 비용" 절의 명령으로 노드 수를 2대로 되돌리세요.
 
-G/VT On-Demand vCPU 쿼터도 더 필요합니다. 시나리오 A에서는 trainer `g5.2xlarge` 8 vCPU와 `g5.xlarge` 4대 16 vCPU를 합쳐 24 vCPU입니다.
-
 용량이 없으면 Pending pod가 진행 없이 30분(Deployment `progressDeadlineSeconds` 1800초)을 넘길 때 1단계의 `rollout status`가 실패하고 스크립트가 중단됩니다. 이 경우 v1이 계속 traffic을 받습니다.
 
 **문제가 생기면:** 노드가 늘지 않으면 [문제 해결](../reference/troubleshooting.md)의 "클러스터와 노드" 항목(vCPU 한도, 용량 부족)을 보세요.
 
-!!! note "routing 템플릿에 v2가 있는 런타임"
-    `k8s/base/routing.json.tpl`에는 GPU 런타임(`gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`)과 CPU 프로필(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) 일곱 개 모두의 v1, v2 주소가 있습니다. 템플릿을 고치지 않고 어느 런타임이든 전환할 수 있습니다. CPU pool로 리허설하는 명령은 [10 c8i 단독 저비용 경로](10_cpu_only.md)의 7단계에 있습니다.
+??? note "다른 런타임에서 전환하기"
+    `k8s/base/routing.json.tpl`에는 GPU 런타임(`gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`)과 CPU 프로필(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) 일곱 개 모두의 v1, v2 주소가 있습니다. 템플릿을 고치지 않고 어느 런타임이든 전환할 수 있습니다. CPU pool로 리허설하는 명령은 [10 GPU 없이 CPU로 실습하기](10_cpu_only.md)의 7단계에 있습니다.
 
 ## 실행
 
@@ -75,11 +68,9 @@ G/VT On-Demand vCPU 쿼터도 더 필요합니다. 시나리오 A에서는 train
 scripts/ops/rollout.sh gvisor v1 v2
 ```
 
-첫 번째 인자는 active runtime으로도 쓰입니다. 그러니 학습 중인 runtime(여기서는 `gvisor`)을 넣으세요.
+첫 번째 인자에는 현재 학습에 쓰는 런타임(`gvisor`)을 넣으세요. 다른 런타임으로 바꾸면 GPU 종류와 speedup의 기준까지 달라질 수 있습니다. parity는 같은 런타임의 두 버전만 비교합니다.
 
-- **다른 runtime을 넣으면**: runtime까지 바뀌어 GPU 종류(A10G와 T4)와 speedup 척도가 달라집니다. parity는 같은 runtime의 두 버전만 비교하므로 이 차이를 검출하지 못합니다.
-
-| 단계 | 스크립트가 하는 일 | 증명하는 것 | 실패하면 |
+| 단계 | 스크립트가 하는 일 | 확인할 결과 | 실패하면 |
 |---|---|---|---|
 | 1 배포 | `06_deploy_sandboxes.sh gvisor v2`: Deployment와 Service `sandbox-gvisor-v2`를 만들고 `rollout status`를 최대 30분 기다립니다 | v2 pod가 모두 Ready입니다 | v2에 traffic 없음, v1 유지 |
 | 2 검증 | `ops/verify.sh gvisor v2`: 커널 비교, egress 차단 확인, 인증된 API를 통한 golden verdict 확인, `default` namespace에서 v2 pod로 들어오는 연결 차단 확인 | v2가 격리되어 있고 golden 제출물에 기대한 verdict를 냅니다 | 스크립트 중단, v1 유지 |
@@ -88,14 +79,12 @@ scripts/ops/rollout.sh gvisor v1 v2
 | 5 `--finish` | `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=0` | Deployment는 남아 있어서 rollback이 빠릅니다 | |
 
 - **1단계의 Ready**: GPU probe를 통과했고, pod 안에서 IMDS, API server, 노드 kubelet으로 가는 연결이 차단되어 있음을 확인했다는 뜻입니다.
-- **2단계의 범위**: v1과의 비교는 3단계에서 합니다.
 - **4단계에서 ConfigMap 전파가 늦으면**: v1 batch가 더 이어집니다.
 
-**확인할 것 (첫 명령):**
+**전환 로그에서 확인할 것**
 
 - 로그가 `1) deploying gvisor/v2`, `2) verifying gvisor/v2`, `3) parity v1 -> v2`, `4) switching the routing table to gvisor/v2` 순서로 나옵니다.
-- parity 줄이 모두 `PASS`입니다.
-- 마지막에 다음 안내가 출력됩니다.
+- 모든 제출물이 `PASS`이고 마지막에 `PARITY PASS`(JSON의 `"passed": true`)가 나오면 라우팅을 전환합니다. 그 뒤 아래 안내가 나옵니다.
 
 ```text
 The ConfigMap reaches mounted pods within about a minute (kubelet sync). Watch the trainer for
@@ -104,13 +93,7 @@ and a later batch line on gvisor/v2 with verdicts other than sandbox_error, then
   scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
 
-**확인할 것 (둘째 명령):** `scaling sandbox-gvisor-v1 to zero` 로그와 `deployment.apps/sandbox-gvisor-v1 scaled`가 나옵니다.
-
-`--finish`는 `sandbox_version_switch` 이벤트 다음의 `reward_batch`에서 `version`이 `v2`이고 `status`에 `sandbox_error` 말고 다른 판정이 있는지 확인한 뒤에 실행하세요.
-
-- **v2 요청이 모두 실패해도**: direct 모드의 클라이언트는 요청한 버전을 오류 결과에도 기록하므로, 전환 이벤트와 `served_versions` `{"v2": ...}`가 나옵니다.
-- **전부 `sandbox_error`이면**: v1을 줄이지 말고 [Rollback](#rollback)을 보세요.
-- **전환 이벤트 전에 v1을 줄이면**: 아직 v1 snapshot으로 채점 중인 batch의 요청이 실패하고 `sandbox_error`(학습에서 제외)가 됩니다.
+v1 축소는 [trainer의 채점 결과를 확인한 뒤](#전환-확인-후-v1-정리)에 진행하세요.
 
 **문제가 생기면:**
 
@@ -119,7 +102,10 @@ and a later batch line on gvisor/v2 with verdicts other than sandbox_error, then
 
 ## Parity 검사
 
-parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 pool에 동시에 보내 결과를 비교합니다. GPU pool(`--device cuda`)에서는 6개를 비교하고 CPU pool에서는 GPU 전용 2개를 제외한 4개를 비교합니다.
+parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 pool에 동시에 보내 결과를 비교합니다. GPU pool(`--device cuda`)에서는 6개, CPU pool에서는 GPU 전용 2개를 제외한 4개를 검사합니다. 두 버전의 판정이 일치하고 정답의 speedup 차이가 허용 범위 안에 있어야 전환합니다.
+
+<details class="note" markdown="1">
+<summary>시험용 제출물과 parity 통과 기준</summary>
 
 | golden | task | 기대 status | 확인하는 것 |
 |---|---|---|---|
@@ -135,17 +121,9 @@ parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 pool에 동시�
 - **정확성 seed가 3개인 v1**: timed 출력 checksum에서 걸립니다.
 - **정확성 seed가 5개인 v2**: 네 번째 정확성 비교에서 걸립니다.
 
-통과 조건은 네 가지입니다.
+두 버전은 각 제출물의 기대 status와, 지정된 경우 `custom_kernel` 값까지 맞혀야 합니다. 둘 다 `ok`이고 speedup이 있으면 두 값의 비율이 `|candidate / baseline - 1| <= 0.35`를 만족해야 합니다(`--speedup-tolerance` 기본값).
 
-1. 두 pool 모두 각 golden의 기대 status를 반환합니다.
-2. 기대값이 정해진 golden은 `custom_kernel` 여부도 일치합니다.
-3. baseline과 candidate의 status가 같습니다.
-4. 둘 다 `ok`이고 speedup이 있으면 `|candidate / baseline - 1| <= 0.35`입니다(스크립트가 쓰는 `--speedup-tolerance` 기본값).
-
-golden마다 `PASS` 또는 `FAIL` 줄이 나오고, 마지막에 parity 결과 줄이 출력됩니다(예시 형태).
-
-- **터미널에서**: 결과 줄이 `PARITY PASS` 또는 `PARITY FAIL`로 보입니다.
-- **`GPUSANDBOX_LOG=json`을 붙여 실행하면**: 결과 줄이 원래 JSON(`"event": "parity"`)으로 보입니다.
+터미널에는 제출물별 `PASS` 또는 `FAIL`과 마지막 `PARITY PASS` 또는 `PARITY FAIL`이 표시됩니다. `GPUSANDBOX_LOG=json`으로 실행하면 원본 JSON(`"event": "parity"`)이 출력됩니다.
 
 ```text
 PASS vector_add_triton            v1=ok v2=ok
@@ -159,7 +137,9 @@ PASS read_host_file               v1=policy_violation v2=policy_violation
 
 speedup은 같은 GPU 종류에서도 pod마다 달라지므로, 이 검사는 허용 범위를 넉넉히 두고 verdict 변화와 큰 timing 변화만 검출합니다.
 
-!!! tip "학습 중 parity가 `sandbox_error`로 실패할 때"
+</details>
+
+??? tip "학습 중 parity가 `sandbox_error`로 실패할 때"
     parity는 학습 중인 v1 pool에도 요청을 보냅니다.
 
     - **v1 pod가 바쁘면**: 503(busy) 응답이 옵니다. 클라이언트는 그 pod를 5초 동안 제외하고 다시 시도하며, 첫 시도를 포함해 요청당 최대 4번 보냅니다.
@@ -172,11 +152,11 @@ A10G 샌드박스 노드를 네 대로 늘려 v1과 v2에 두 대씩 배정했�
 
 ![v1과 v2 golden parity, 전환된 ConfigMap과 양쪽 pool의 Ready 상태](../images/terminal/rollout-parity-replay.png)
 
-## Trainer가 전환을 받는 과정
+## trainer가 새 버전에서 채점을 시작하는 시점 { #trainer가-전환을-받는-과정 }
 
 trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용합니다. 전환 후에는 로그의 버전과 실제 평가 상태를 함께 확인하세요. [On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 배치 단위로 버전을 고정하는 이유를 설명합니다.
 
-??? note "Trainer가 전환을 받는 과정"
+??? note "배치의 라우팅과 캐시 처리 순서"
     ```mermaid
     sequenceDiagram
         autonumber
@@ -223,11 +203,23 @@ trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용�
 
     그 뒤 `batch` 줄의 pool이 `gvisor/v2`가 됩니다. 원래 JSON에서는 `reward_batch`의 `version`이 `v2`, `served_versions`가 `{"v2": <int>}`입니다. 요약 줄에 `MIXED VERSIONS`가 붙으면 한 batch를 두 버전이 채점한 것입니다. `global_step`(요약의 `step`)으로 학습 곡선에 전환 시점을 표시하세요.
 
+<a id="확인-방법"></a>
+
+??? note "터미널에서 현재 라우팅과 전환 이벤트 확인하기"
+    첫 명령은 ConfigMap에서 현재 활성 버전을 읽습니다. 둘째 명령은 trainer 로그에서 전환 이벤트만 보여 줍니다. Ctrl-C로 로그 출력을 끝내세요.
+
+    ```bash
+    kubectl -n rl-trainer get configmap sandbox-routing -o jsonpath='{.data.routing\.json}' | head -3
+    kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>" | grep --line-buffered sandbox_version_switch
+    ```
+
+    v2 전환 후에는 ConfigMap의 `active`에 `gvisor`와 `v2`가 표시되고, trainer 로그에는 `"from": "gvisor/v1", "to": "gvisor/v2"`가 나옵니다.
+
 ### trainer가 v2를 사용한 배치 { #switch-batches }
 
 `SWITCH`가 기록되면 trainer가 새 경로를 읽은 것입니다. 이어지는 `batch`에서 v2의 판정도 확인하세요. 한 배치 안의 답은 모두 같은 기준으로 비교해야 하므로 원본 `served_versions`에는 버전 하나만 나와야 합니다.
 
-배치 1~4은 v1, 5~16은 v2가 채점했습니다. 각 `reward_batch`의 `served_versions`를 확인했을 때 두 버전이 섞인 배치는 0개였습니다. [배치별 채점 기록](data/grpo-rollout-2026-11-22.json)
+실습에서는 v1이 배치 1~4를, v2가 배치 5~16을 채점했습니다. 각 `reward_batch`의 `served_versions`를 확인했을 때 두 버전이 섞인 배치는 0개였습니다. [배치별 채점 기록](data/grpo-rollout-2026-11-22.json)
 
 ![trainer가 기록한 버전 전환 이벤트와 버전별 배치·제출 건수](../images/terminal/rollout-batches-replay.png)
 
@@ -266,13 +258,13 @@ kubectl -n sandbox delete pod <READY-0/1-pod-name>
 
 ## 전환 확인 후 v1 정리
 
-라우팅이 v2로 바뀐 것은 새 요청을 어느 pool로 보낼지 정했다는 뜻입니다. v1을 줄이기 전에는 v2가 실제 답안을 채점했는지 로그에서 확인합니다.
-
-trainer 로그에서 v2가 처리한 `reward_batch`에 `sandbox_error` 이외의 평가 결과가 하나 이상 있는지 확인하세요. 확인했다면 아래 명령으로 v1의 replica를 0으로 줄입니다.
+direct 모드에서는 실패한 요청에도 요청 버전이 기록됩니다. `SWITCH` 다음 `reward_batch`에 `version: v2`가 표시되고 `sandbox_error` 이외의 판정이 하나 이상 있는지 확인하세요. 모두 실패했다면 v1을 유지하고 [롤백](#rollback)하세요. 아직 v1에서 채점 중인 배치도 끝날 때까지 기다립니다.
 
 ```bash
 scripts/ops/rollout.sh gvisor v1 v2 --finish
 ```
+
+`scaling sandbox-gvisor-v1 to zero`와 `deployment.apps/sandbox-gvisor-v1 scaled`가 나오면 `kubectl -n sandbox get deploy`에서 v1이 `0/0`, v2가 `2/2`인지 확인하세요.
 
 ## Rollback
 
@@ -307,7 +299,7 @@ ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v1 scripts/05_setup_namespaces_auth.sh
 - 마지막 세 줄에 `"active": {"runtime": "gvisor", "version": "v1"}`이 보입니다.
 - 어느 방법이든 trainer 로그에 `"from": "gvisor/v2", "to": "gvisor/v1"`인 `sandbox_version_switch`가 나오면 rollback이 반영된 것입니다.
 
-!!! question "❓ 오해: Deployment rolling update로 버전을 바꾸면 충분하다"
+??? question "Deployment rolling update를 사용하면 어떻게 되나요?"
     rolling update(이 템플릿은 `maxSurge: 0`, `maxUnavailable: 1`)에는 아래 문제가 있어서 `deployment.yaml.tpl`은 새 버전을 별도 Deployment로 띄웁니다.
 
     - **두 버전이 섞인 채점**: pod를 하나씩 바꾸는 동안에는 Service 하나가 이전 pod와 새 pod를 함께 선택합니다. 그러면 GRPO group 하나의 completion 8개를 v1과 v2가 나눠 채점하게 되어, 두 버전의 측정 기준 차이가 advantage에 섞일 수 있습니다.
@@ -339,28 +331,6 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 ```
 
 **확인할 것:** 몇 분 뒤 `kubectl get nodes -l gpusandbox/role=sandbox-gvisor`에 노드가 2대 남습니다. GPU를 쓰지 않을 때는 [99 정리](99_cleanup.md)의 scale to zero나 삭제 절차를 따르세요.
-
-## 확인 방법
-
-1. rollout 스크립트 출력에 `1) deploying`부터 `4) switching`까지 순서대로 나옵니다. `3) parity`에서는 제출물마다 `PASS`가 나오고 마지막에 `PARITY PASS`(원래 JSON에서는 `"passed": true`)가 보인 뒤 `4) switching`으로 넘어갑니다.
-2. ConfigMap의 active가 v2입니다(routing.json의 앞 세 줄).
-
-    ```bash
-    kubectl -n rl-trainer get configmap sandbox-routing -o jsonpath='{.data.routing\.json}' | head -3
-    ```
-
-    **확인할 것:** 둘째 줄이 `"active": {"runtime": "gvisor", "version": "v2"},`입니다.
-
-3. trainer 로그에 전환 이벤트가 한 번 나옵니다. 아래 명령은 그 이벤트만 걸러 보여 주며, Ctrl-C로 멈춥니다.
-
-    ```bash
-    kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>" | grep --line-buffered sandbox_version_switch
-    ```
-
-    **확인할 것:** `{"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", ...}` 한 줄입니다.
-
-4. 이후 `reward_batch`의 `version`과 `served_versions`가 모두 v2입니다.
-5. `--finish` 뒤 `kubectl -n sandbox get deploy`에서 `sandbox-gvisor-v1`은 `0/0`, `sandbox-gvisor-v2`는 `2/2`입니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

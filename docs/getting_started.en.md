@@ -131,7 +131,7 @@ python -m pytest -q
 
 **What to look for:** the last line starts with `110 passed` (the duration after it depends on your machine).
 
-- **Breakdown**: the 110 tests are 69 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbox.md) and [multi-turn episode](handson/11_multi_turn.md) and 11 [demo site](handson/09_demo_site.md) tests.
+- **Breakdown**: the 110 tests are 69 core, 30 [Agent Sandbox extension](concepts/06_agent_sandbox.md) and [multi-turn episode](handson/11_multi_turn.md) and 11 [demo site](reference/demo_site.md) tests.
 - **Coverage**: the AST policy, the two-process harness on CPU (correct, wrong, crash, timeout, benchmark cheat, monkeypatch), fail-closed authentication, readiness after egress denial is verified, the client, the gateway's per-group version pinning, the operator tools, rendering of the manifest, node user data (`infra/eks/userdata.py`) and Karpenter templates, and the demo site's security properties. Per-file coverage is in [Repository map](reference/repository_map.md#tests).
 - **CDK stack tests**: the 18 CDK stack tests live separately in `cdk/tests`; after the CDK preparation in section 5, run them with `cd cdk && python -m pytest -q tests`.
 
@@ -276,7 +276,7 @@ python rl/trl/train_grpo.py --dry-run \
 ```
 
 - `--dry-run` runs 2 steps on CPU without vLLM and cuts completions at 32 tokens.
-- `--output-dir` must be writable (the default `/outputs/grpo` is a pod path).
+- `--output-dir` must be writable (the default `/outputs/grpo` is a pod path). `train_grpo.py` resumes from the latest `checkpoint-*` in this directory. Select a new output directory to start again.
 - `--allow-torch-only` gives a correctness score of 1.0 to correct answers without a Triton kernel. Without it, a correct PyTorch-only answer gets 0.3. CPU cannot run Triton kernels, so this dry run turns it on.
 - Locally, the comma-separated server addresses in `SANDBOX_ADDRESS` are used verbatim. The cluster Job does not set this variable; it reads the current pool's Service address from the routing table (ConfigMap) that `SANDBOX_ROUTING_FILE` points to.
 - LoRA trains small adapter matrices instead of all model weights. The trainer uses it by default.
@@ -294,6 +294,8 @@ python rl/trl/train_grpo.py --dry-run \
 
 !!! note "`reward_batches` can be 0"
     If the 135M model does not close a code block within 32 tokens, the trainer scores the sample as `no_code` and never calls a sandbox. This step checks the wiring between TRL and the reward functions (routing, function signatures, LoRA, saving); the probe in 4.2 and pytest check the sandbox path.
+
+When the dry run finishes, press Ctrl-C in each server terminal to stop the two local servers.
 
 ## 5. Create `scripts/config.env`
 
@@ -358,48 +360,16 @@ scripts/01_check_prereqs.sh
 
 ## 6. Choose your path
 
-| Path | When | First command | Next page |
-|---|---|---|---|
-| Scenario A (EC2 self-managed) | you want to control every component | `scripts/02_create_cluster.sh` | [Hands-on 00 Overview](handson/00_overview.md) |
-| Scenario B1 (HyperPod, default) | a long run needs HyperPod's automatic node replacement and job restarts | `scripts/02_create_cluster.sh --hyperpod`, then `scripts/hyperpod/create.sh` | [07 HyperPod scenario](handson/07_hyperpod.md) |
-| Scenario B2 (managed HyperPod) | Put the CPU worker, training worker and graders on HyperPod | `scripts/hyperpod/create_managed.sh` | [Managed B2 lab](handson/07_hyperpod_b2.md) |
-| Scenario C (c8i only, no GPU) | you have no GPU quota yet, or want to learn the runtime comparison and the version swap first for about 0.57 USD per hour | `scripts/02_create_cluster.sh --cpu-only` | [Hands-on 10 CPU-only path on c8i](handson/10_cpu_only.md) |
-| Production | you scale out with Karpenter NodePools, the sandbox gateway and veRL | after the hands-on | [Production 00 Architecture](production/00_architecture.md) |
+Pick a lab and follow it from the account checks through cleanup.
 
-When `02_create_cluster.sh` is done, keep `cdk/tunnel.sh` running in a second terminal. With a private-only EKS API endpoint, every step that uses kubectl or helm reaches the API through this SSM port forwarding (`127.0.0.1:8443`, kubectl context `<CLUSTER_NAME>-tunnel`).
+| Lab | What you will run |
+|---|---|
+| [A · Train and grade on EC2](handson/scenario_a.md) | Train on an EC2 GPU and grade on two EC2 GPU workers. |
+| [B1 · Train on HyperPod and grade on EC2](handson/07_hyperpod_b1.md) | Attach a HyperPod training node to an EKS cluster with EC2 graders. |
+| [B2 · Run all workers on HyperPod](handson/07_hyperpod_b2.md) | Provision the system CPU, training GPU and grading GPUs as HyperPod instance groups. |
+| [C · Hands-on lab with CPUs only](handson/10_cpu_only.md) | Compare three CPU runtimes and switch the simulator from v1 to v2 without a GPU. |
 
-If you have not chosen a runtime and instance types yet, read [05 Decision guide](concepts/05_decision_guide.md) and [04 Platforms and instances](concepts/04_platforms_and_instances.md) first.
-
-## Scope and limits
-
-- The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 110). On November 22, 2026, the full pytest suite and the CDK tests passed on Linux.
-- The author did not run `scripts/01_check_prereqs.sh` in section 5.
-- Of the later steps, the gVisor path of scenario A (`02` to `08`), scenario C, Kata GPU (`g4dn.metal`) and the runtime benchmark ran in a practice account. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record).
-- Scenario A completed a [gVisor version switch during training](handson/06_sandbox_update.md#switch-batches). Managed B2 completed training and 64 benchmark requests in Northern Virginia.
-- The dry run shows no training effect; real training runs on a GPU in [05 On-policy GRPO training](handson/05_grpo_training.md).
-
-## Time and cost
-
-- **Local steps (sections 1 to 4):** no AWS cost, and roughly 15 to 30 minutes depending on the PyTorch wheel and model downloads (an estimate, not a measurement).
-- **AWS steps:**
-    - **Cluster creation**: the CDK deploy of `02_create_cluster.sh` took about 20 minutes in the practice account (scenario C).
-    - **When a GPU node group cannot launch (`InsufficientInstanceCapacity`)**: CloudFormation waits about 30 minutes, then rolls back the whole initial create. The workaround order is in the cluster creation section of [01 Cluster and images](handson/01_cluster_and_images.md).
-    - **GRPO Job**: the 5-step GRPO Job run in the practice account on 2026-11-18 (`g5.2xlarge`) took about 12 minutes, including the image pull and model download.
-    - **Cost**: GPU instances bill while they run, and the scenario A gVisor minimal path costs about 3.42 USD per hour for compute alone (estimate). Hourly estimates per configuration are in [04 Platforms and instances](concepts/04_platforms_and_instances.md).
-
-## Cleanup
-
-Stop both servers with Ctrl-C in their terminals, then remove the local work directories.
-
-```bash
-# Stop both servers with Ctrl-C first, then remove the local work directories
-rm -rf /tmp/gpusandbox /tmp/grpo-dry-run
-```
-
-**What to look for:** no output.
-
-- **For a fresh dry run**: `train_grpo.py` resumes from the latest `checkpoint-*` in its output directory, so delete `/tmp/grpo-dry-run` first.
-- **AWS resources**: follow [99 Cleanup](handson/99_cleanup.md).
+[Compare the four labs](handson/00_overview.md#step-order) · [Production architecture](production/00_architecture.md)
 
 ??? note "References"
     | Topic | Link |

@@ -4,8 +4,8 @@ Send code to a sandbox and follow its verdict into a training step. You can also
 
 ## Choose an exercise
 
-- **[A · Train on EC2 GPUs](01_cluster_and_images.md)** Generate code, grade it with gVisor and update the model with GRPO.
-- **[B1 · Train on HyperPod](07_hyperpod.md)** Run the trainer on HyperPod and grade its code on an EC2 gVisor pool.
+- **[A · Train on EC2 GPUs](scenario_a.md)** Generate code, grade it with gVisor and update the model with GRPO.
+- **[B1 · Train on HyperPod](07_hyperpod_b1.md)** Run the trainer on HyperPod and grade its code on an EC2 gVisor pool.
 - **[B2 · Run all workers on HyperPod](07_hyperpod_b2.md)** Create EKS through HyperPod, then send code from the training GPU to two grading GPUs.
 - **[C · Switch pools without GPUs](10_cpu_only.md)** Compare three CPU runtimes and switch from v1 to v2 as the simulator sends submissions.
 
@@ -49,50 +49,65 @@ Check the **AWS account, Region and EC2 quota values** in the output against you
 
 ## Follow your scenario { #step-order }
 
-Creating the cluster starts charges for resources including nodes and the NAT gateway. <span id="main-path">Follow one tab</span> for the run order and <span id="aws-layout-per-scenario">its architecture diagram</span>. For the CDK paths A, B1 and C, keep `cdk/tunnel.sh` running in a separate terminal while you work with the cluster.
+Creating a cluster starts charges for nodes and the NAT gateway. Choose a tab for its <span id="main-path">steps</span> and expand the <span id="aws-layout-per-scenario">architecture diagram</span> at the end. Keep `cdk/tunnel.sh` open in a separate terminal for A, B1 and C. For managed B2, connect directly to the EKS API.
 
 === "A · EC2 GPU"
 
-    1. **[Create the cluster and images](01_cluster_and_images.md).** With `SCENARIO=A`, run `scripts/02_create_cluster.sh`. Open the tunnel and use `kubectl get nodes` to check that one trainer and two gVisor nodes are `Ready`. Save the three image URIs printed by `scripts/03_build_push_images.sh` in the configuration file.
-    2. **[Check GPU access](02_gvisor.md).** Run `scripts/04_install_gpu_stack.sh`. The gVisor smoke pod should print `cuda ok:` and the GPU name.
-    3. **[Deploy and verify the grading pool](04_sandbox_pools.md).** Set up namespaces and authentication with `scripts/05_setup_namespaces_auth.sh`, then run `scripts/06_deploy_sandboxes.sh gvisor v1`. Look for `pool sandbox-gvisor-v1 verified` at the end of `scripts/ops/verify.sh gvisor v1`.
-    4. **[Start GRPO training](05_grpo_training.md).** Run `scripts/07_run_grpo.sh`. The `routing` event identifies the selected pool. Look for verdicts in a `batch` line (`reward_batch` in raw JSON) and for the training step to advance.
-    5. **[Switch to v2 during training](06_sandbox_update.md).** Increase the sandbox node group to four nodes so v1 and v2 can hold GPUs at the same time. While training is running, run `scripts/ops/rollout.sh gvisor v1 v2` from another working terminal. Once a new batch has been graded on v2, use `--finish` to scale down v1.
+    **[Start A · Train on EC2 GPUs](scenario_a.md)**
 
-    ??? note "A diagram · Training and grading on EC2"
-        The `g5.2xlarge` trainer updates the model. The two `g5.xlarge` sandbox nodes each hold an A10G for grading. Select the diagram to enlarge it.
+    1. Create EKS with `SCENARIO=A`, open the tunnel and prepare all three images. Check `kubectl get nodes` for one `Ready` trainer and two `Ready` gVisor nodes.
+    2. Check CUDA in a gVisor pod and deploy the `gvisor` v1 pool. Check that `scripts/ops/verify.sh gvisor v1` ends with `verified`.
+    3. For a first run, train for five steps with `scripts/07_run_grpo.sh 5`. To practice switching versions, increase the grading node group to four before starting the 60-step run. Switch with `scripts/ops/rollout.sh gvisor v1 v2` during training, then [clean up the EC2 lab](99_cleanup.md).
+
+    **Check the result** Check `routing` for the pool, `batch` (`reward_batch` in raw JSON) for verdicts and `train` for model updates. If you switched versions, wait for a v2 verdict before scaling down v1 with `--finish`.
+
+    ??? note "A architecture diagram"
+        One `g5.2xlarge` trains the model. Two `g5.xlarge` nodes grade submissions in the base configuration.
 
         [![EC2 trainer sending submissions to two gVisor sandboxes in scenario A](../images/architecture/scenario-a.drawio.png)](../images/architecture/scenario-a.drawio.png)
 
 === "B1 · HyperPod + EC2"
 
-    1. **[Prepare the B1 cluster and images](07_hyperpod.md).** Run `scripts/02_create_cluster.sh --hyperpod` to create EKS and the EC2 grading nodes. Open the tunnel, then build the trainer with `HYPERPOD=1 scripts/03_build_push_images.sh` to include `hyperpodrun`. Save the printed image URIs in the configuration file.
-    2. **Connect the training node.** Check the EC2 GPU with `scripts/04_install_gpu_stack.sh`, then run `scripts/hyperpod/create.sh`. Verify that the HyperPod trainer node is `Ready` and its `node-health-status` is `Schedulable`.
-    3. **Verify the grading pool.** Run `scripts/05_setup_namespaces_auth.sh` and deploy the EC2 pool with `scripts/06_deploy_sandboxes.sh gvisor v1`. Look for `verified` in `scripts/ops/verify.sh gvisor v1`.
-    4. **[Follow one training step](07_hyperpod.md#how-to-verify).** Submit the Job with `scripts/hyperpod/run_grpo.sh 1`. Check that the trainer pod ran on the HyperPod node, `reward_batch` recorded verdicts from the EC2 pool and the Job reached `Completed`.
+    **[Start B1 · Train on HyperPod and grade on EC2](07_hyperpod_b1.md)**
 
-    ??? note "B1 diagram · HyperPod trainer and EC2 grading pool"
-        The trainer uses an `ml.g5.2xlarge`. The gVisor sandboxes run on two EC2 `g5.xlarge` nodes.
+    1. Create EKS and the EC2 grading nodes with `scripts/02_create_cluster.sh --hyperpod`. Build the images with `hyperpodrun` in the trainer image, check CUDA on EC2, then attach the training node with `scripts/hyperpod/create.sh`.
+    2. Once the HyperPod training node is `Ready` and `Schedulable`, deploy the EC2 `gvisor` v1 pool. Look for `verified` at the end of `scripts/ops/verify.sh gvisor v1`.
+    3. Run `scripts/hyperpod/run_grpo.sh 1` for one training step. During [cleanup](99_cleanup.md#1-hyperpod-first-scenario-b), delete HyperPod first, then the EKS stack.
+
+    **Check the result** Look for verdicts from the EC2 pool in `reward_batch` and `Completed` on the HyperPod Job.
+
+    ??? note "B1 architecture diagram"
+        One HyperPod `ml.g5.2xlarge` trains the model. Two EC2 `g5.xlarge` nodes grade submissions.
 
         [![A HyperPod training node using an EC2 grading pool in the same EKS cluster](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
 
 === "B2 · HyperPod"
 
-    1. **[Check the three groups and quotas](07_hyperpod_b2.md).** In `us-east-1`, check SageMaker quotas for one CPU worker, one training GPU worker and two grading GPU workers.
-    2. **Prepare the workers.** Run `scripts/hyperpod/create_managed.sh` to create EKS and HyperPod together. Wait for four `Ready` nodes, prepare the grading drivers and deploy the v1 pool.
-    3. **Train and benchmark.** Once the GRPO job is `Completed`, run `scripts/hyperpod/bench_b2.sh 32` against the same pool. [Compare both clients](08_benchmark.md#hyperpod-b2)
+    **[Start B2 · Run all system, training and grading workers on HyperPod](07_hyperpod_b2.md)**
 
-    [![EKS control plane and the three HyperPod instance groups](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
+    1. Check the three group quotas in `us-east-1` and set `SCENARIO=B2` and `K8S_VERSION=1.36` in `scripts/config.env`. Create EKS and its workers with `scripts/hyperpod/create_managed.sh` and prepare the three HyperPod images. Once EKS is `ACTIVE`, connect directly with `aws eks update-kubeconfig`.
+    2. When all four workers are `Ready`, apply driver `580.178.04` to the two grading workers. Prepare the training operator and `gvisor-hyperpod` runtime, then deploy and verify the v1 pool.
+    3. Submit one step with `scripts/hyperpod/run_grpo.sh 1`. When the Job reaches `Completed`, run `scripts/hyperpod/bench_b2.sh 32`. The system worker and then the training worker each send 32 submissions. Save the results and [delete the wizard stack](07_hyperpod_b2.md#cleanup).
+
+    **Check the result** Check `reward_batch` for v1 verdicts from `gvisor-hyperpod`. Compare success counts and grading times for both clients in the [benchmark results](08_benchmark.md#hyperpod-b2).
+
+    ??? note "B2 architecture diagram"
+        All four workers run on HyperPod. The `system` group has one `ml.m5.xlarge`, `trainer` has one `ml.g5.2xlarge`, and `sandbox` has two `ml.g5.xlarge` nodes.
+
+        [![EKS control plane and the three HyperPod instance groups](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
 === "C · CPU"
 
-    1. **[Prepare the CPU cluster](10_cpu_only.md).** Run `scripts/02_create_cluster.sh --cpu-only` to create EKS and its `c8i.2xlarge` sandbox node. Open the tunnel. Save the sandbox and control image URIs printed by `scripts/03_build_push_images.sh --no-trainer` in the configuration file.
-    2. **Check the runtimes.** `scripts/kata/cpu_nodes.sh` starts gVisor, Kata with Cloud Hypervisor, and Kata with QEMU smoke pods on the same node. Compare the kernel reported inside each pod with the host kernel printed at the end.
-    3. **Deploy and verify three pools.** Set `KATA_CPU_REPLICAS=1` in the configuration file and run `ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`. Deploy v1 of each CPU pool and verify each with `scripts/ops/verify.sh`. [Pool deployment commands](10_cpu_only.md)
-    4. **Switch grading versions.** Run `scripts/ops/simulate.sh 30 20` in one working terminal to send prepared submissions. Run `scripts/ops/rollout.sh kata-clh-cpu v1 v2` in another. Batches should use v1 before the switch and v2 afterward, with one version per batch.
+    **[Start C · Switch grading pools without GPUs](10_cpu_only.md)**
 
-    ??? note "C diagram · Three runtimes on a CPU node"
-        A simulator on a system node sends submissions to the grading pools. All three runtimes share one `c8i.2xlarge`.
+    1. Set `KATA_CPU_REPLICAS=1`, create EKS with `scripts/02_create_cluster.sh --cpu-only` and open the tunnel. Prepare the sandbox and control images.
+    2. Run `scripts/kata/cpu_nodes.sh` to compare the kernels of three runtimes on the `c8i.2xlarge` node. Set `kata-clh-cpu` as the active pool. Check `gvisor-cpu`, `kata-clh-cpu` and `kata-qemu-cpu` v1. Each should report `verified`.
+    3. Start `scripts/ops/simulate.sh 30 20` to send prepared submissions. Run `scripts/ops/rollout.sh kata-clh-cpu v1 v2` in another terminal. Check the batch logs, then [clean up the CPU lab](99_cleanup.md).
+
+    **Check the result** After `SWITCH`, check that the next graded `batch` has verdicts from `kata-clh-cpu` v2. Each batch should have one grading version.
+
+    ??? note "C architecture diagram"
+        A simulator on a system node sends the submissions. All three CPU runtimes run on the same `c8i.2xlarge`.
 
         [![Three CPU pools on a c8i node in scenario C](../images/architecture/scenario-c.drawio.png)](../images/architecture/scenario-c.drawio.png)
 
@@ -101,15 +116,10 @@ Creating the cluster starts charges for resources including nodes and the NAT ga
 - **[03 · Check GPU access in Kata](03_kata.md).** To compare gVisor and VM isolation, identify the T4 inside a Kata QEMU guest. Build the IOMMU AMI first, then add `g4dn.metal` with `WITH_KATA_GPU=1`. For a CPU comparison, use `WITH_KATA_CPU=1` and `c8i.2xlarge`.
 - **[08 · Benchmark the runtimes](08_benchmark.md#runtime-results).** Once training has stopped and the v1 pools have passed verification, grade the same submission repeatedly. Compare per-request latency with throughput across the pool.
 - **[11 · Revise code over multiple turns](11_multi_turn.md).** On the C path, claim one sandbox per episode. Check that the turns in an episode use the same pod and the claim is released when the episode ends.
-- **[09 · Replay a scoring run](09_demo_site.md).** Open the [public demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en) to see results before creating a cluster. Chapter 09 shows how to publish your own recording with S3 and CloudFront.
 
 ## Clean up the lab { #next-step }
 
-**For B2, follow [HyperPod wizard stack cleanup](07_hyperpod_b2.md#cleanup).** Delete the workers and EKS control plane together, then remove the lab bucket and ECR repositories.
-
-For A, B1 and C, keep the tunnel open and follow [99 Cleanup](99_cleanup.md). In B1, delete HyperPod first with `scripts/hyperpod/delete.sh`. If you used Agent Sandbox, release the claims and warm pools first. Then use `scripts/08_cleanup.sh` to remove the EKS stack and check for remaining lab nodes. A demo site you deployed has its own cleanup step.
-
-To delete the ECR images too, use the `--images` option during cleanup. Scaling sandbox pods to zero leaves EC2 nodes billable. To pause and resume later, see [Scaling node groups to zero](99_cleanup.md#pausing-scale-node-groups-to-zero).
+For A, B1 and C, follow [99 Cleanup](99_cleanup.md). For managed B2, use [HyperPod wizard stack cleanup](07_hyperpod_b2.md#cleanup). Nodes still incur charges after you scale pods to zero. To pause an EC2 lab, see [Scaling node groups to zero](99_cleanup.md#pausing-scale-node-groups-to-zero).
 
 ## Architecture and log details { #architecture }
 
@@ -139,6 +149,6 @@ The [deployment diagrams in the demo](https://dohbsn4kn34ya.cloudfront.net/archi
 ??? note "When a script is still waiting"
     - The gVisor smoke pod has a 15-minute deadline. The pool rollout allows up to 30 minutes. These are wait limits. To see why a pod is pending, inspect its events with `kubectl -n sandbox describe pod <pod-name>` for a grading pod.
     - Kata CPU setup took about 14 minutes in the practice account, mostly installing kata-deploy. Kata GPU setup has two runs. The first builds the AMI when `KATA_IOMMU_AMI_ID` is empty. After saving the ID, enable `WITH_KATA_GPU=1` and rerun cluster creation with the original scenario option. The second `scripts/kata/gpu_nodes.sh` run checks for `nvidia.com/pgpu` on the metal node.
-    - HyperPod can report `InService` while the trainer instance is still provisioning. Check `Ready` and `Schedulable` on the node before submitting training. [HyperPod checks](07_hyperpod.md#how-to-verify)
+    - HyperPod can report `InService` while the trainer instance is still provisioning. Check `Ready` and `Schedulable` on the node before submitting training. [HyperPod checks](07_hyperpod_b1.md#how-to-verify)
 
 The [script reference](../reference/scripts.md) lists arguments, timeouts and what happens on a second run. [Runtime comparison](../concepts/02_isolation_runtimes.md) · [Glossary](../reference/glossary.md) · [Run records](../reference/sources.md#aws-run-record) · [Further reading](../reference/references.md#ref-handson-00-overview)

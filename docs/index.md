@@ -101,7 +101,7 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 - trainer는 headless Service를 CoreDNS로 풀어 Ready 상태인 pod에 `POST /v1/evaluate`를 직접 보냅니다. 바쁜 pod는 `503`을 돌려주고, trainer는 다른 pod로 다시 시도합니다.
 - 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있습니다.
 
-노드 그룹과 네임스페이스, 화살표별 설명은 [핸즈온 00 전체 흐름](handson/00_overview.md)에, Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Production 00 아키텍처](production/00_architecture.md)에 있습니다. 그림 원본(`.drawio`)은 저장소의 `diagrams/`에서 볼 수 있습니다.
+노드 그룹과 네임스페이스, 화살표별 설명은 [핸즈온 00 전체 흐름](handson/00_overview.md)에, Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Production 00 아키텍처](production/00_architecture.md)에 있습니다. 그림 원본(`.drawio`)은 `diagrams/` 폴더에 있습니다.
 
 ## 시작하기
 
@@ -118,7 +118,7 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 | [핸즈온 (Getting Started)](handson/00_overview.md) | 하루 안에 세 런타임과 on-policy 루프를 직접 확인 | CDK 스택(private API endpoint)과 SSM 터널, TRL GRPO(1.5B, LoRA, vLLM colocate), 샌드박스 v1에서 v2로 무중단 교체 |
 | [Production Ready](production/00_architecture.md) | 운영 환경 설계와 확장 | Karpenter NodePool, sandbox gateway, 보안 위협 모델, reward 무결성, veRL on KubeRay, observability, 비용 |
 | [Agent Sandbox 확장](concepts/06_agent_sandbox.md) | multi-turn 에피소드마다 전용 샌드박스 | kubernetes-sigs/agent-sandbox의 SandboxTemplate, SandboxWarmPool, SandboxClaim. gVisor와 Kata 모두 RuntimeClass로 선택 |
-| [데모 사이트](handson/09_demo_site.md) | 실행 기록을 브라우저에서 재생 | 비공개 S3 + CloudFront(OAC, HTTPS, 보안 헤더). 방문자 요청은 클러스터나 GPU로 전달되지 않음 |
+| [CloudFront 데모 배포](reference/demo_site.md) | 실행 기록을 브라우저에서 재생 | 비공개 S3 + CloudFront(OAC, HTTPS, 보안 헤더). 방문자 요청은 클러스터나 GPU로 전달되지 않음 |
 
 ## 검증 상태
 
@@ -140,4 +140,4 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 
 ## License
 
-코드와 문서는 [MIT](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/LICENSE)이고, 모델 라이선스는 별개입니다. 기본 모델 `Qwen/Qwen2.5-Coder-1.5B-Instruct`와 Production 예시의 `Qwen/Qwen2.5-Coder-7B-Instruct`는 Apache-2.0이고, `Qwen2.5-Coder-3B-Instruct`는 비상업 라이선스라 이 저장소에서 쓰지 않습니다.
+코드와 문서는 [MIT](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/LICENSE)이고, 모델 라이선스는 별개입니다. 기본 모델 `Qwen/Qwen2.5-Coder-1.5B-Instruct`와 Production 예시의 `Qwen/Qwen2.5-Coder-7B-Instruct`는 Apache-2.0이고, `Qwen2.5-Coder-3B-Instruct`는 비상업 라이선스여서 실습 모델에서 제외했습니다.

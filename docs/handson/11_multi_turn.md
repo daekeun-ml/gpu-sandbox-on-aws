@@ -1,6 +1,6 @@
 # 11 multi-turn 에피소드 실습
 
-한 문제에 세 번 답을 제출하면 어느 샌드박스가 그 답들을 받을까요? 이 실습에서는 에피소드(한 문제를 푸는 한 번의 시도)마다 샌드박스 하나를 빌립니다. 스크립트가 정해진 답안을 차례로 제출합니다. 모델을 띄우지 않고도 매 턴 어느 샌드박스가 답안을 받는지, 마지막에 자원을 반납하는지 확인할 수 있습니다.
+한 문제에 세 번 답을 제출하면 어느 샌드박스가 그 답들을 받을까요? 이 실습에서는 에피소드(한 문제를 푸는 한 번의 시도)마다 샌드박스 하나를 빌립니다. 스크립트가 정해진 답안을 차례로 제출합니다. 모델 없이 이 스크립트를 실행해 매 턴 어느 샌드박스가 답안을 받는지, 마지막에 자원을 반납하는지 확인하세요.
 
 1. [10편의 CPU 클러스터](10_cpu_only.md)를 정리하기 전에 [준비](#준비)와 [Agent Sandbox 설치](#1단계-agent-sandbox-설치-extensionsagent_sandboxsh-install)를 진행하세요.
 2. [대기 pool 만들기](#2단계-cpu-warm-pool-만들기-extensionsagent_sandboxsh-pool)에서 `readyReplicas`가 1 이상이면 [에피소드를 실행](#3단계-multi-turn-에피소드-실행-extensionsagent_sandboxsh-episodes)하세요. 한 에피소드 안에서 `turn` 로그마다 `claim`과 `pod` 값이 같은지 비교해 보세요.
@@ -23,7 +23,7 @@
 
 ## 에피소드 하나의 흐름
 
-실행기는 에피소드마다 `SandboxClaim`을 만들고, 턴을 같은 샌드박스로 보낸 뒤 claim을 지웁니다. [Agent Sandbox 개념](../concepts/06_agent_sandbox.md)에서 claim과 warm pool의 관계를 볼 수 있습니다.
+실행기는 에피소드마다 `SandboxClaim`을 만들고, 턴을 같은 샌드박스로 보낸 뒤 claim을 지웁니다. claim과 warm pool의 관계는 [Agent Sandbox 개념](../concepts/06_agent_sandbox.md)에서 설명합니다.
 
 ??? note "에피소드 하나의 흐름"
     Job `episodes-<unix 시각>`은 `rl-trainer` 네임스페이스에서 ServiceAccount `sandbox-episode`로 실행되고, 에피소드를 하나씩 차례로 실행합니다. 에피소드 하나는 다음 순서로 진행됩니다.
@@ -75,7 +75,7 @@
 
     10의 6단계 Deployment pool은 이 실습에 필요하지 않습니다.
 
-2. **control 이미지:** Job은 control 이미지(`CONTROL_IMAGE_URI`)에서 `python -m gpusandbox.tools multiturn`을 실행합니다. `multiturn` 하위 명령이 추가되기 전에 이미지를 빌드했다면 다시 빌드하세요. ECR 저장소는 태그를 덮어쓸 수 없게(`IMMUTABLE`) 만들어지므로, 먼저 `scripts/config.env`의 `IMAGE_TAG`를 새 값으로 바꿉니다.
+2. **control 이미지:** Job은 control 이미지(`CONTROL_IMAGE_URI`)에서 `python -m gpusandbox.tools multiturn`을 실행합니다. `multiturn` 하위 명령이 추가되기 전에 이미지를 빌드했다면 다시 빌드하세요. ECR 리포지토리는 태그를 덮어쓸 수 없게(`IMMUTABLE`) 만들어지므로, 먼저 `scripts/config.env`의 `IMAGE_TAG`를 새 값으로 바꿉니다.
 
     ```bash
     # scripts/config.env: a new tag, because the ECR repositories reject an existing one
@@ -184,6 +184,9 @@ GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
 
 ![episodes kata-clh-cpu 2 3 실행 화면: 대기 샌드박스 1대 경고, 에피소드 1과 2가 각각 policy_violation, wrong_answer, ok 순서로 3 turn을 진행해 solved, reward 1.3268과 1.315231, 마지막 summary solved 2/2, mean reward 1.321](../images/terminal/agent-sandbox-episodes.png)
 
+<details class="note" markdown="1">
+<summary>스크립트의 사전 검사와 Job 종료 처리</summary>
+
 스크립트는 다음 순서로 실행됩니다.
 
 | 순서 | 하는 일 |
@@ -196,9 +199,11 @@ GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 3
 
 - **사전 검사의 세부**: claim 생성 권한은 `kubectl auth can-i ... --as`로, Ready 샌드박스 수는 `status.readyReplicas`로 확인합니다. Ready 샌드박스가 에피소드 수보다 적으면 경고를 출력합니다.
 
+</details>
+
 CPU에서 scripted policy는 `read_host_file`(정책 위반), `relu_bias_wrong`(오답), `relu_bias_torch_only`(정답) 순서로 제출하고, 정답이 나오면(`solved`) 에피소드를 끝냅니다. Job이 종료 신호(SIGTERM)를 받아도 정상 종료 경로로 빠져나가므로, 실행 중인 claim은 `shutdownTime`을 기다리지 않고 바로 삭제됩니다.
 
-10의 2단계에서 SSM 터널을 연 터미널은 그대로 두세요. `episodes`를 실행한 터미널과 별도로 작업 터미널을 하나 더 열면, claim이 하나씩 만들어지고 삭제되는 과정을 볼 수 있습니다.
+10의 2단계에서 SSM 터널을 연 터미널은 그대로 두세요. `episodes`가 실행되는 동안 작업 터미널을 하나 더 열고 아래 명령으로 claim이 하나씩 생성되고 삭제되는 과정을 확인하세요.
 
 ```bash
 # Episode claims appear and disappear one at a time; Ctrl-C to stop
@@ -243,11 +248,16 @@ kubectl -n sandbox get sandboxclaims -l gpusandbox/run=<Job 이름>
 - warm pool은 삭제된 샌드박스 대신 새 샌드박스를 시작하므로, 잠시 뒤 `readyReplicas`가 다시 대기 수(기본 2, `pool gvisor-cpu 1`로 줄였다면 1)가 됩니다.
 - 스크립트의 종료 코드는 `episodes` 명령이 끝난 터미널에서 다른 명령을 실행하기 전에 `echo $?`로 확인하세요. 0이어야 합니다. 위 claim 조회는 별도로 연 작업 터미널에서 실행하면 종료 코드를 덮어쓰지 않습니다.
 
+<details class="note" markdown="1">
+<summary>점수 계산식과 판정별 예시</summary>
+
 turn마다 기록되는 `single_turn_reward`는 `0.1 × format + 1.0 × correctness + 0.5 × speedup 점수`입니다.
 
 - **정책 위반**: 코드가 구문 오류 없이 `ModelNew`를 정의하면 format 점수 0.1만 받고, 그렇지 않으면 0점입니다.
 - **오답**: 0.1과 correctness 0.2를 합친 0.3을 받습니다.
 - **정답**: CPU 경로는 Triton을 요구하지 않으므로(`require_triton=False`) 정답의 correctness가 1.0이고, speedup 점수는 CPU 측정 노이즈 때문에 실행마다 달라집니다.
+
+</details>
 
 CLI는 다음 경우에 종료 코드 1로 끝납니다.
 
@@ -264,7 +274,7 @@ CLI는 다음 경우에 종료 코드 1로 끝납니다.
 - **turn의 `status`가 `sandbox_error`이면**: 피드백에 `infrastructure failure, not caused by your code`가 붙습니다. 401과 403 응답의 원인은 [문제 해결](../reference/troubleshooting.md)의 "401, 403 응답" 항목에 있습니다.
 - **스크립트를 Ctrl-C로 중단해도**: Job은 클러스터에서 계속 실행되고, 에피소드마다 claim을 삭제합니다. Job의 pod가 강제로 종료되어 claim이 남았다면 `kubectl -n sandbox delete sandboxclaim -l gpusandbox/run=<Job 이름>`으로 삭제하세요. 삭제하지 않아도 claim은 `shutdownTime`(생성 후 3600초)에 만료됩니다.
 
-## 4단계: single-turn 기준선 (`episodes gvisor-cpu 2 1`)
+## 4단계: 첫 답안만 채점해 여러 턴의 결과와 비교하기 { #4단계-single-turn-기준선-episodes-gvisor-cpu-2-1 }
 
 3단계에서는 동일 에피소드의 `claim`이 턴마다 유지되고, 종료 시 `released: true`가 나오는지 확인했습니다. 이번에는 답안을 제출하는 순서는 그대로 두고 첫 번째 턴에서 멈춥니다. 이 결과를 3단계와 비교하세요.
 
@@ -434,30 +444,22 @@ kubectl -n sandbox get sandboxclaims
 - 다른 런타임 pool의 대기 pod와 다른 실행의 claim은 그 런타임과 Job 이름으로 따로 확인하세요.
 - 완료된 Job `episodes-<unix 시각>`은 1시간 뒤 자동으로 삭제됩니다(`ttlSecondsAfterFinished: 3600`).
 
-클러스터를 더 쓰지 않는다면 [10](10_cpu_only.md)의 정리 절대로 `scripts/08_cleanup.sh`를 실행해 pool, Job, CDK 스택을 삭제합니다. 자세한 내용은 [99 정리](99_cleanup.md)에 있습니다.
+warm pool을 정리한 뒤 클러스터도 삭제하려면 [99 정리](99_cleanup.md)의 순서에 따라 `scripts/08_cleanup.sh`를 실행하세요.
 
 ## 비용
 
-warm pool과 Job은 [10](10_cpu_only.md)에서 만든 노드에서 실행되므로, 노드를 추가하지 않았다면 컴퓨트 비용은 10과 같습니다. 아래는 10의 비용 표이며, 온디맨드 요금을 합산한 **추정치**이고 측정한 청구 금액이 아닙니다(us-east-1과 us-west-2).
+노드를 추가하지 않았다면 CPU warm pool은 [10편의 기존 노드](10_cpu_only.md#비용)에서 실행됩니다. us-east-1과 us-west-2에서 컴퓨트는 시간당 약 0.57 USD, EKS 표준 지원 컨트롤 플레인은 시간당 0.10 USD로 추정합니다. NAT gateway, EBS, 데이터 전송 등의 비용은 별도이며 새 태그로 빌드한 이미지는 ECR 저장 용량에 추가됩니다. GPU warm pool은 대기 중에도 GPU를 점유합니다.
 
-| 리소스 | 수 | 단가 (USD/시간) | 소계 |
-|---|---|---|---|
-| `m6i.large` (system) | 2 | 0.096 | 0.192 |
-| `c8i.2xlarge` (세 런타임) | 1 | 0.37484 | 0.37484 |
-| **컴퓨트 합계** | | | **약 0.57** |
-| EKS 컨트롤 플레인 (표준 지원) | 1 | 0.10 | 0.10 |
+<details class="note" markdown="1">
+<summary>동시 에피소드나 trainer 연동을 계획한다면</summary>
 
-- 합계에 포함되지 않는 항목(access instance, KMS 키, CloudWatch 로그, NAT gateway, EBS, 데이터 전송, ECR 저장 용량)은 10의 비용 절에 있습니다. 새 태그로 다시 빌드한 이미지는 ECR 저장 용량에 추가됩니다.
-- GPU warm pool은 위 "선택: GPU warm pool에서 실행" 절의 경고를 보세요.
+<span id="적용-범위와-한계"></span>
 
-## 적용 범위와 한계
+Job은 에피소드를 하나씩 실행하므로 동시 요청 사이의 경합은 확인하지 않습니다. 여러 에피소드를 대기 없이 시작하려면 그 수만큼 샌드박스가 준비돼 있어야 합니다. CPU 실습의 speedup은 CPU에서 측정한 값입니다.
 
-- **학습이 아닙니다.** scripted policy는 피드백을 읽지 않고 정해진 golden 제출물을 순서대로 제출합니다. 이 실습은 claim 하나, turn 사이의 피드백, 조기 종료, 마지막 제출 채점, claim 삭제가 동작하는지만 확인합니다.
-- **GPU와 Triton은 확인하지 않습니다.** CPU 경로는 `require_triton=False`로 채점하고 speedup은 CPU timing입니다. GPU 경로의 동작은 위 선택 절에서 직접 확인해야 합니다.
-- **에피소드는 차례로 실행됩니다.** Job은 에피소드를 하나씩 실행하므로 동시 에피소드에서 생기는 경합(claim 대기, 노드 자원 부족)은 이 실습에서 재현되지 않습니다. 대기 없이 동시에 시작하려는 에피소드 수만큼 대기 샌드박스를 준비하세요. GPU pool에서는 실행 중인 샌드박스마다 GPU 하나를 점유하므로 GPU 수가 상한입니다.
-- **Kubernetes API 토큰은 이 Job만 마운트합니다.** `sandbox-claims` RoleBinding에는 `sandbox-episode`와 `grpo-trainer`가 모두 들어 있지만, 기본 trainer Job은 토큰 자동 마운트를 끕니다. 기본 GRPO trainer에는 sandbox audience 토큰과 claim 권한이 이미 있습니다.
-    - **trainer에서 `EpisodeSandbox`를 직접 쓰려면**: Kubernetes API 토큰을 마운트하고 `kubernetes` 패키지를 준비하세요. trainer 이미지가 설치하는 `.[client]` extra에는 이 패키지가 없습니다([개념 06](../concepts/06_agent_sandbox.md)의 조건 표).
-    - **RBAC 파일의 주석**: GPU trainer에 API 권한을 주는 대신 claim만 처리하는 작은 broker를 두도록 권장합니다.
+에피소드 Job만 Kubernetes API 토큰을 마운트합니다. 기본 trainer에서 `EpisodeSandbox`를 직접 호출하려면 API 토큰과 `kubernetes` 패키지를 준비해야 합니다. GPU trainer에 직접 권한을 주지 않고 별도의 broker로 claim을 처리하는 방법을 포함해 [Agent Sandbox 연동 조건](../concepts/06_agent_sandbox.md)을 참고하세요.
+
+</details>
 
 ## 다음 단계
 
@@ -468,7 +470,7 @@ warm pool과 Job은 [10](10_cpu_only.md)에서 만든 노드에서 실행되므�
 ??? note "참고 자료"
     | 주제 | 링크 |
     |---|---|
-    | Agent Sandbox 저장소와 릴리스 (v1.0.11) | https://github.com/kubernetes-sigs/agent-sandbox , https://github.com/kubernetes-sigs/agent-sandbox/releases |
+    | Agent Sandbox 소스 코드와 릴리스 (v1.0.11) | https://github.com/kubernetes-sigs/agent-sandbox , https://github.com/kubernetes-sigs/agent-sandbox/releases |
     | SandboxClaim, SandboxWarmPool 타입 (v1.0.11) | https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/extensions/api/v1beta1/sandboxclaim_types.go , https://github.com/kubernetes-sigs/agent-sandbox/blob/v1.0.11/extensions/api/v1beta1/sandboxwarmpool_types.go |
     | veRL `ToolAgentLoop`, `BaseTool`, tool registry (v0.9.1) | https://github.com/verl-project/verl/blob/v0.9.1/verl/experimental/agent_loop/tool_agent_loop.py , https://github.com/verl-project/verl/blob/v0.9.1/verl/tools/base_tool.py , https://github.com/verl-project/verl/blob/v0.9.1/verl/tools/tool_registry.py |
     | 완료된 Job의 자동 삭제 (`ttlSecondsAfterFinished`) | https://kubernetes.io/docs/concepts/workloads/controllers/ttlafterfinished/ |

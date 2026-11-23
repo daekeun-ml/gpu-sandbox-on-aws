@@ -51,7 +51,7 @@ Every script reads this file through `scripts/lib.sh`; if a required value is em
 | `GVISOR_RELEASE` | `20261109.0` | the release installed on the gVisor nodes |
 | `GVISOR_NODES` | `2` | number of gVisor nodes (one sandbox per node) |
 
-- **09 demo site**: `demo/deploy.sh` always deploys to `us-east-1`, whatever the `AWS_REGION` value is.
+- **CloudFront demo deployment**: `demo/deploy.sh` always deploys to `us-east-1`, whatever the `AWS_REGION` value is.
 - **If `ADMIN_PRINCIPAL_ARN` is empty**: `cdk/deploy.sh` uses your IAM user ARN, or for a role session the role ARN it derives from the session.
 - **If your role has a path (for example one created by IAM Identity Center)**: set the full ARN yourself. Put the ARN from `aws iam get-role --role-name <role> --query Role.Arn --output text` into `ADMIN_PRINCIPAL_ARN`.
 
@@ -286,7 +286,7 @@ The stack code is in `cdk/gpusandbox_cdk/stack.py`; `cdk/tests` checks the secur
 | `system` managed node group | `m6i.large` x2 (min 2, max 3), 50 GB, label `gpusandbox/role=system` | CoreDNS and add-ons |
 | Launch templates of all nodes | IMDSv2 required, hop limit 1, encrypted gp3 root volume, instance tag `project=gpu-sandbox-on-aws` | pods cannot reach node credentials. The cleanup script (`08_cleanup.sh`) finds leftover instances by this tag |
 
-- **Tags on the private subnets**: they are tagged `kubernetes.io/role/internal-elb=1` and `karpenter.sh/discovery=<CLUSTER_NAME>`. The HyperPod script ([07](07_hyperpod.md)) finds a subnet by the internal-elb tag, and the Production Karpenter EC2NodeClasses by the discovery tag.
+- **Tags on the private subnets**: they are tagged `kubernetes.io/role/internal-elb=1` and `karpenter.sh/discovery=<CLUSTER_NAME>`. The HyperPod script ([07](07_hyperpod_b1.md)) finds a subnet by the internal-elb tag, and the Production Karpenter EC2NodeClasses by the discovery tag.
 - **Self-managed copies of the add-ons**: the self-managed copies of these components are not installed (`BootstrapSelfManagedAddons: false`).
 
 ### Node groups per scenario
@@ -552,8 +552,8 @@ When you finish the hands-on, delete the whole stack with [99 Cleanup](99_cleanu
 Keep the tunnel running and continue on the page for your scenario.
 
 - **A**: run `04_install_gpu_stack.sh` in [02 gVisor GPU sandboxes](02_gvisor.md).
-- **B1 and B2**: continue in [07 HyperPod scenario](07_hyperpod.md). If you created the cluster here with `--hyperpod` (`--hyperpod-b2` for B2) and added the three `export` lines of the images pushed with `HYPERPOD=1` to `config.env`, start B1 at step 3 of "B1 steps" and B2 at `scripts/04_install_gpu_stack.sh` in step 1 of the [B2 procedure](07_hyperpod.md#b2). Rebuilding the images with the same `IMAGE_TAG` can be rejected on push because the tags are IMMUTABLE.
-- **C**: continue with `kata/cpu_nodes.sh` in [10 CPU-only path on c8i](10_cpu_only.md).
+- **B1 and B2**: continue in [B1 · Train on HyperPod and grade on EC2](07_hyperpod_b1.md). If you created the cluster here with `--hyperpod` (`--hyperpod-b2` for B2) and added the three `export` lines of the images pushed with `HYPERPOD=1` to `config.env`, start B1 at step 3 of "B1 steps" and B2 at `scripts/04_install_gpu_stack.sh` in step 1 of the [Earlier CDK workflow with a custom AMI](../reference/hyperpod_custom_ami.md). Rebuilding the images with the same `IMAGE_TAG` can be rejected on push because the tags are IMMUTABLE.
+- **C**: continue with `kata/cpu_nodes.sh` in [10 Hands-on lab with CPUs only](10_cpu_only.md).
 
 ??? note "References"
     | Topic | Link |

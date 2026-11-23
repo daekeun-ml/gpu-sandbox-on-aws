@@ -118,7 +118,7 @@ Node groups, namespaces and a step-by-step reading of each arrow are in [Hands-o
 | [Hands-on (Getting started)](handson/00_overview.md) | See the three runtimes and the on-policy loop for yourself within a day | the CDK stack (private API endpoint) and the SSM tunnel, TRL GRPO (1.5B, LoRA, vLLM colocate), switching the sandbox from v1 to v2 without downtime |
 | [Production ready](production/00_architecture.md) | Design and scale a production environment | Karpenter NodePools, sandbox gateway, security threat model, reward integrity, veRL on KubeRay, observability, cost |
 | [Agent Sandbox extension](concepts/06_agent_sandbox.md) | A dedicated sandbox per multi-turn episode | SandboxTemplate, SandboxWarmPool and SandboxClaim from kubernetes-sigs/agent-sandbox. gVisor or Kata, chosen by RuntimeClass |
-| [Demo site](handson/09_demo_site.md) | Replay an execution record in the browser | Private S3 + CloudFront (OAC, HTTPS, security headers). Visitor requests never reach the cluster or a GPU |
+| [CloudFront demo deployment](reference/demo_site.md) | Replay an execution record in the browser | Private S3 + CloudFront (OAC, HTTPS, security headers). Visitor requests never reach the cluster or a GPU |
 
 ## Validation status
 

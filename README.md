@@ -79,17 +79,17 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 - trainer는 headless Service를 CoreDNS로 풀어 Ready 상태인 pod에 `POST /v1/evaluate`를 직접 보냅니다. 바쁜 pod는 `503`을 돌려주고, trainer는 다른 pod로 다시 시도합니다.
 - 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있습니다.
 
-Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Production 00 아키텍처](https://daekeun-ml.github.io/gpu-sandbox-on-aws/production/00_architecture/)에, 노드 그룹과 네임스페이스, 화살표별 설명은 [핸즈온 00 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에 있습니다. 그림 원본(`.drawio`)은 [`diagrams/`](diagrams/)에서 볼 수 있습니다.
+Production 구성(Karpenter NodePool, sandbox gateway, veRL on KubeRay)은 [Production 00 아키텍처](https://daekeun-ml.github.io/gpu-sandbox-on-aws/production/00_architecture/)에, 노드 그룹과 네임스페이스, 화살표별 설명은 [핸즈온 00 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에 있습니다. 그림 원본(`.drawio`)은 [`diagrams/`](diagrams/)에 있습니다.
 
 ## 시작하기
 
 로컬 실습은 준비한 답안을 CPU로 채점하고, 정답, 오답, 정책 위반에 예상한 판정이 나오는지 확인합니다. 구성을 설치할 준비가 됐다면 [환경 설정](https://daekeun-ml.github.io/gpu-sandbox-on-aws/getting_started/)을 따라가세요.
 
-AWS에서는 목적에 맞춰 경로를 고를 수 있습니다.
+AWS에서 진행할 실습을 고르세요.
 
 - **C (CPU 전용)**　모델 없이 채점 흐름을 실행해 보고 gVisor와 Kata를 비교합니다. [CPU 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/10_cpu_only/)
-- **A (EC2 GPU)**　GPU에서 커널을 채점하고 그 결과로 GRPO 학습을 실행합니다. [클러스터 준비](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/01_cluster_and_images/)
-- **HyperPod B1과 B2**. B1은 HyperPod에서 학습하고 EC2에서 채점합니다. B2는 CPU 워커와 GPU 워커 세 대를 모두 HyperPod에 배치합니다. [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
+- **A (EC2 GPU)**　GPU에서 커널을 채점하고 그 결과로 GRPO 학습을 실행합니다. [A 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenario_a/)
+- **HyperPod B1과 B2**. B1은 HyperPod에서 학습하고 EC2에서 채점합니다. B2는 CPU 워커와 GPU 워커 세 대를 모두 HyperPod에 배치합니다. [B1 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b1/) · [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
 
 AWS 리소스는 사용하지 않는 동안에도 과금될 수 있습니다. 배포 전에 [비용 추정](https://daekeun-ml.github.io/gpu-sandbox-on-aws/concepts/04_platforms_and_instances/)을 확인하고, 실습이 끝나면 [정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/99_cleanup/)를 따르세요.
 
@@ -107,4 +107,4 @@ AWS 실습 계정에서 EC2 GPU 학습(A), CPU 채점과 버전 전환(C), Kata 
 
 코드와 문서는 [MIT](LICENSE)입니다. 모델과 데이터셋에는 각각의 라이선스가 적용됩니다.
 
-이 저장소는 저자의 개인 견해와 조사 결과를 정리한 것으로, 저자가 재직 중인 회사의 공식 문서나 입장을 대변하지 않습니다.
+저자가 직접 조사하고 판단한 내용을 정리했습니다. 소속 회사의 공식 문서나 입장을 대변하지 않습니다.

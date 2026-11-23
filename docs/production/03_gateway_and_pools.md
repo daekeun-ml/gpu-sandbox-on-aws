@@ -9,7 +9,7 @@
 
 <span id="trainer가-풀에-직접-연결할-때"></span>
 
-worker 두 개가 동시에 같은 pod를 골라 요청을 보내면, pod는 한 요청만 처리합니다. 다른 worker는 `503`을 받고 다시 시도합니다. worker가 늘수록 이 충돌이 배치 시간을 늘릴 수 있습니다. 여기에 채점 중 버전 전환까지 겹치면, 같은 group에 속한 답안을 서로 다른 기준으로 채점할 수 있습니다.
+worker 두 개가 동시에 같은 pod를 골라 요청을 보내면, pod는 한 요청만 처리합니다. 다른 worker는 `503`을 받고 다시 시도합니다. worker가 늘면서 재시도도 늘면 배치를 처리하는 데 더 오래 걸립니다. 채점 중 버전까지 바뀌면 같은 group의 답안에 서로 다른 채점 기준이 적용될 수 있습니다.
 
 ![a: TRL rank 0과 veRL reward worker가 각자 샌드박스 pod A를 빈 pod로 판단해 같은 pod로 요청을 보내고, 503 응답과 재시도가 발생합니다. group 17의 샘플 1은 v1로, routing 전환 뒤에 보낸 샘플 2는 v2로 채점되어 같은 group이 서로 다른 버전으로 채점됩니다. b: 네 요청이 모두 sandbox gateway 하나를 거칩니다. gateway가 in-flight 요청 수를 한곳에서 집계해 pod A와 pod B에 동시 1건씩 보내고, group_key pin으로 두 샘플을 첫 샘플의 버전인 v1로 채점합니다(group pin, TTL 900초).](../images/figures/production-03_gateway_and_pools.ko.svg)
 
@@ -127,7 +127,7 @@ GPU 타이밍 측정이 다른 평가의 영향을 받지 않도록 pod당 요�
 
 ## 배포
 
-아래 명령은 핸즈온의 `scripts/05_setup_namespaces_auth.sh`(namespace, JWKS, routing 표)와 `scripts/06_deploy_sandboxes.sh`(pool)를 이미 실행했고, `scripts/config.env`에 `CONTROL_IMAGE_URI`(`scripts/03_build_push_images.sh`의 출력)가 있다고 가정합니다. 저장소 루트에서 실행하세요.
+아래 명령은 핸즈온의 `scripts/05_setup_namespaces_auth.sh`(namespace, JWKS, routing 표)와 `scripts/06_deploy_sandboxes.sh`(pool)를 이미 실행했고, `scripts/config.env`에 `CONTROL_IMAGE_URI`(`scripts/03_build_push_images.sh`의 출력)가 있다고 가정합니다. 프로젝트 최상위 폴더에서 실행하세요.
 
 ```bash
 source scripts/config.env   # CONTROL_IMAGE_URI, SANDBOX_AUDIENCE
@@ -175,7 +175,7 @@ replica 1은 의도한 설계입니다. replica를 늘려야 한다면 다음 �
 
 1. **먼저 수직 확장합니다.** gateway는 대부분 응답을 기다리기만 하므로 병목은 대개 샌드박스 pod 수입니다. limits를 올리고 TokenReview 캐시(60초)가 효과가 있는지 확인합니다.
 2. **pool 단위로 gateway를 나눕니다.** runtime마다 gateway를 따로 두면 pin과 in-flight 정보가 섞이지 않습니다. 이때 trainer마다 다른 `SANDBOX_GATEWAY`를 지정합니다.
-3. **여러 replica에는 외부 pin 저장소가 필요합니다.** 템플릿 주석에 적힌 대로 group pin을 replica 외부의 공유 저장소로 옮겨야 합니다. 그리고 `group_key` 해시로 같은 group을 같은 replica에 보내거나, 샌드박스의 503 응답과 재시도에 의존해야 합니다(이 저장소에는 구현되어 있지 않습니다).
+3. **replica를 늘리려면 group pin을 공유해야 합니다.** 템플릿의 주석처럼 모든 replica가 같은 group pin을 읽을 수 있도록 별도 스토리지에 보관해야 합니다. 또한 `group_key` 해시로 같은 group의 요청을 같은 replica에 보내거나 샌드박스의 503 응답을 받아 재시도해야 합니다. 현재 gateway에는 이런 다중 replica 구성이 없습니다.
 
 replica가 1개이므로 gateway가 재시작하는 동안에는 요청이 실패합니다. trainer는 `sandbox_error`를 받습니다. TRL에서는 그 샘플이 reward 계산에서 제외되고, veRL에서는 그 샘플이 format 점수와 오류 표시만 받습니다([04 Reward 무결성](04_reward_integrity.md)).
 
@@ -189,7 +189,7 @@ replica가 1개이므로 gateway가 재시작하는 동안에는 요청이 실�
 
 같은 이름의 정책을 덮어쓰면 그때부터 trainer와 probe Job은 샌드박스에 직접 연결할 수 없습니다. `scripts/ops/verify.sh`의 3단계와 `scripts/ops/rollout.sh`의 parity 단계는 `rl-trainer`의 Job에서 샌드박스를 직접 호출하므로, production에서는 검증 Job을 허용하는 정책을 추가하세요.
 
-NetworkPolicy는 허용 규칙이 합집합으로 적용되므로, 아래 예시(저장소에 없는 파일)를 파일로 저장해 `kubectl apply -f <파일>`로 추가하면 됩니다. 적용한 뒤 3단계가 다시 `PASS`를 출력하면 정책이 적용된 것입니다.
+NetworkPolicy는 허용 규칙이 합집합으로 적용되므로, 아래 예시를 새 매니페스트 파일로 저장한 뒤 `kubectl apply -f <파일>`로 추가하면 됩니다. 적용한 뒤 3단계가 다시 `PASS`를 출력하면 정책이 적용된 것입니다.
 
 ```yaml
 # Example (not in the repo): admit the operator Jobs (probe, parity) in production.
@@ -239,7 +239,9 @@ volumes:
 
 `k8s/trainer/job-grpo.yaml.tpl`의 trainer 컨테이너 `env`와 pod의 `volumes`를 위 조각대로 바꾸고 Job을 다시 제출하세요. trainer 로그 앞부분에 `{"event": "routing", "mode": "gateway", "gateway": "gateway.sandbox-gateway.svc.cluster.local:8080"}`가 있으면 gateway 모드로 동작하는 것입니다. `reward_batch` 이벤트에는 배치의 `version`과 `routing_revision`, 결과의 `sandbox_version`별 건수(`served_versions`)가 기록됩니다.
 
-## 장애 모드
+## 증상별 원인과 확인 방법
+
+<span id="장애-모드"></span>
 
 | 증상 | 원인 | trainer가 받는 것 | 조치 |
 |---|---|---|---|
@@ -257,7 +259,7 @@ volumes:
 ## ❓ 오해
 
 !!! question "❓ 오해: gateway replica를 늘리면 처리량이 늘어난다"
-    처리량은 Ready 샌드박스 pod 수로 정해집니다. 공유 pin 저장소 없이 replica만 늘리면 같은 group이 replica마다 다른 버전으로 채점될 수 있습니다.
+    처리량은 Ready 샌드박스 pod 수로 정해집니다. group pin을 공유하지 않고 replica만 늘리면 같은 group이 replica마다 다른 버전으로 채점될 수 있습니다.
 
 !!! question "❓ 오해: group pin은 학습이 끝날 때까지 유지된다"
     pin은 gateway 메모리에 저장되며 기본 900초 뒤 만료되고, gateway가 재시작하면 사라집니다. 버전 전환은 pin TTL보다 긴 간격을 두고 마무리하세요.

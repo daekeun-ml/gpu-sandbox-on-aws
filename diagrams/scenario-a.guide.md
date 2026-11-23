@@ -12,7 +12,7 @@
 - **trainer node g5.2xlarge**(EKS node group trainer): taint로 구분한 GRPO trainer Job 전용 GPU 노드예요.
 - **sandbox-gvisor nodes g5.xlarge x2**(EKS node group sandbox-gvisor): 현재 채점을 맡는 pool v1과 rollout 때 함께 실행하는 pool v2입니다.
 - **Shared services**: 여러 컴포넌트가 함께 쓰는 CloudWatch Logs와 ECR repositories입니다. **Egress**: private subnet의 유일한 출구인 NAT gateway예요.
-- **선**: 실선은 동기 호출, 점선은 비동기 또는 보조 관계입니다. 화살표 라벨은 각 구간에서 오가는 요청이나 데이터를 나타냅니다. 아래 단계의 `라벨`로 그림에서 해당 화살표를 찾을 수 있습니다. 단계 번호는 브리프 관계표의 `#` 순서와 같아요.
+- **선**: 실선은 동기 호출, 점선은 비동기 또는 보조 관계입니다. 화살표 라벨은 각 구간에서 오가는 요청이나 데이터를 나타냅니다. 아래 단계의 `라벨`과 같은 이름이 붙은 화살표를 따라가세요. 단계 번호는 브리프 관계표의 `#` 순서와 같아요.
 - Operator workstation과 Hugging Face Hub는 AWS Cloud 상자 밖에 있습니다. 샌드박스에서 밖으로 나가는 선은 일부러 없어요(아래 설계 결정 참고).
 
 ## 단계별 흐름
@@ -25,7 +25,7 @@
 7. **GRPO trainer Job → gvisor pool v1**: reward batch마다 trainer가 routing snapshot 하나로 채점 버전을 고정하고, headless Service sandbox-gvisor-v1을 CoreDNS로 풀어 ready pod IP를 얻은 뒤 후보 kernel을 8000 포트의 /v1/evaluate로 POST합니다. 요청에는 audience gpu-sandbox인 projected ServiceAccount token이 붙고, pod는 JWKS ConfigMap으로 토큰을 오프라인 검증한 다음 gVisor 아래 자기 A10G에서 harness를 돌려 같은 호출로 verdict(status, speedup)를 돌려줘요. 바쁜 pod는 503을 돌려주고 client가 다른 pod로 재시도합니다. (라벨 `kernel code`)
 8. **GRPO trainer Job → gvisor pool v2**: scripts/ops/rollout.sh가 v1 옆에 v2를 배포하고 probe Job으로 검증하고 v1과 parity를 확인한 뒤 routing ConfigMap을 patch합니다. trainer는 다음 batch 경계에서 전환하므로 한 batch에 두 버전이 섞이지 않고, v1은 --finish로 0까지 줄인 채 rollback용으로 남아요. 전환 전에는 트래픽이 없어서 점선입니다. (라벨 `after switch`)
 9. **gvisor pool v1 → ECR repositories**: 노드의 container runtime이 node role(AmazonEC2ContainerRegistryPullOnly)로 sandbox 이미지를 pull합니다. pod가 아니라 노드가 당기는 것이고, stack에 VPC endpoint가 없어서 실제 트래픽은 NAT gateway를 지나요. 보조 관계라 점선입니다. (라벨 `image pull`)
-10. **Operator workstation → ECR repositories**: 운영자가 sandbox, trainer, control 이미지를 linux/amd64로 빌드해 push합니다. 이 호출은 터널이 아니라 public AWS endpoint로 바로 가고, 저장소 자체도 CDK stack이 아니라 scripts/03_build_push_images.sh가 만들어요. (라벨 `image push`)
+10. **Operator workstation → ECR repositories**: 운영자가 sandbox, trainer, control 이미지를 linux/amd64로 빌드해 push합니다. 이미지는 public AWS endpoint로 바로 올라가요. 이미지를 보관할 ECR 리포지토리는 scripts/03_build_push_images.sh가 만듭니다. (라벨 `image push`)
 11. **EKS 1.36 private API → CloudWatch Logs**: control plane이 api, audit, authenticator, controllerManager, scheduler 로그를 보존 기간 한 달인 log group으로 보냅니다. VPC flow log(REJECT)는 두 번째 log group으로 가지만 그림에는 대표 선 하나만 그렸어요. (라벨 `control plane logs`)
 12. **EKS 1.36 private API → KMS secrets key**: EKS가 rotation이 켜진 customer-managed key로 Kubernetes Secret을 envelope encryption합니다. (라벨 `encrypt secrets`)
 
@@ -40,7 +40,7 @@
 | GRPO trainer Job | GRPO 학습을 돌리고 verdict를 reward로 바꾸는 Job, GPU 한 장 | ns rl-trainer |
 | gvisor pool v1 | 지금 트래픽을 받는 gVisor 샌드박스 pool, GPU 한 장마다 pod 하나 | 기본 차단 NetworkPolicy |
 | gvisor pool v2 | blue/green의 다음 버전, 검증과 전환 전에는 트래픽이 없음 | rollout 때 노드를 4대로 늘림 |
-| ECR repositories | 세 이미지의 비공개 저장소 | scripts/03_build_push_images.sh가 생성 |
+| ECR repositories | 세 이미지를 비공개로 보관 | scripts/03_build_push_images.sh가 생성 |
 | CloudWatch Logs | control plane 로그와 VPC flow log | 보존 한 달 |
 | NAT gateway | private subnet의 유일한 출구 | 한 AZ에 하나 |
 | Hugging Face Hub | policy 모델 weight의 외부 출처 | AWS Cloud 밖 |
@@ -52,7 +52,7 @@
 ## 설계 결정
 - hands-on 시나리오에는 gateway가 없습니다. trainer가 headless Service로 pool을 직접 부르고(client-side scheduling), reward batch마다 routing snapshot 하나로 버전을 고정해요. TokenReview와 group별 pin을 하는 gateway는 production 전용입니다(docs/production/00_architecture.md:103).
 - 이 시나리오에서 control 이미지로 실행하는 작업은 rl-trainer 네임스페이스의 운영용 Job(probe, parity, bench)입니다. 이 이미지에는 production gateway도 들어 있어요.
-- ECR 저장소는 CDK stack이 아니라 scripts/03_build_push_images.sh가 만들고, stack은 node role에 ECR pull 권한만 줍니다.
+- scripts/03_build_push_images.sh가 ECR 리포지토리를 만들고, CDK 스택은 node role에 이미지를 내려받을 권한만 부여합니다.
 - Kubernetes workload(trainer Job, pool Deployment)는 EKS resource stencil이 없어서 Containers 카테고리의 `container_1`로 그리고 workload 이름을 붙였습니다. `eks` 아이콘은 control plane만 뜻해요.
 - node group은 stencil이 없고 그룹마다 EC2 아이콘을 두면 노드 수가 두 배로 보이므로, 아이콘 대신 role group으로 그리고 제목에 node group 이름과 instance type을 적었습니다. 1열 카드에 두 줄로 들어가도록 "node group"이라는 단어는 뺐어요.
 - 그림에서 Hugging Face Hub는 `internet` 아이콘으로, 운영자는 `client` 아이콘으로 표시했습니다. gVisor(runsc + nvproxy)는 stencil이 없어서 pool 라벨과 그룹 제목(sandbox-gvisor)으로 표시했습니다.

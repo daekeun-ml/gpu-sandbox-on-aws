@@ -65,7 +65,7 @@ Without capacity, step 1's `rollout status` fails once the Pending pods make no 
 **If it fails:** if nodes do not scale up, see the "cluster and nodes" section of [Troubleshooting](../reference/troubleshooting.md) (vCPU limits, insufficient capacity).
 
 !!! note "Runtimes with v2 in the routing template"
-    `k8s/base/routing.json.tpl` has v1 and v2 addresses for all seven runtimes: the GPU runtimes (`gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`) and the CPU profiles (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`). You can switch any of them without editing the template. The commands for a rehearsal on a CPU pool are in step 7 of [10 CPU-only path on c8i](10_cpu_only.md).
+    `k8s/base/routing.json.tpl` has v1 and v2 addresses for all seven runtimes: the GPU runtimes (`gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`) and the CPU profiles (`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`). You can switch any of them without editing the template. The commands for a rehearsal on a CPU pool are in step 7 of [10 Hands-on lab with CPUs only](10_cpu_only.md).
 
 ## Run
 

@@ -218,7 +218,7 @@
     - **The scoring recording published by default** (`demo/site/data/recording.json`): made on a laptop CPU pool and meant to be replaced by a recording from a GPU cluster.
     - **Recording from the GPU pools**: a recording made on 2026-11-18 on the EKS gVisor A10G pool and Kata QEMU T4 pool is in `demo/recordings/2026-11-18-eks-gpu.json`.
 
-    Details: [09 Demo site (CloudFront)](../handson/09_demo_site.md)
+    Details: [CloudFront demo deployment](demo_site.md)
 
 ??? question "the numbers in this guide were measured on AWS by this repository"
     **Actually:** only some of them. Prices and supported versions are cited from official documentation and public material, and the AWS steps have not all been run end to end.

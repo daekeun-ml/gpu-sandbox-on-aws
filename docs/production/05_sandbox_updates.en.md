@@ -195,6 +195,13 @@ On the veRL path the gateway holds the group pins in memory, so it runs as a sin
 
 ## Observing the switch
 
+<span id="scope-and-limits"></span>
+
+??? note "What the switch logs have shown"
+    In scenario C the CPU rollout completed deployment, verification, parity and switching; the simulator logged `sandbox_version_switch` in its eighth batch (`demo/site/data/extras.json`). Scenario A also switched gVisor during training and retired v1 with `--finish`. A live Kata GPU switch during training still needs a separate run. [AWS runs](../reference/sources.md#aws-run-record) · [Scenario A switch](../handson/06_sandbox_update.md#switch-batches)
+
+    Local tests cover revision changes, missing pools, group pins and CPU probe/parity. Canary switching and automated re-baselining are not implemented. Karpenter drift and kubelet propagation times follow the respective upstream documentation.
+
 Applying routing does not tell you when the trainer first received a successful result from the new pool. Check the version and verdict in the trainer logs before retiring the old pool.
 
 In the first reward batch that calls the sandbox after a version change, the trainer writes these two lines in order (other fields omitted, values are examples).
@@ -282,14 +289,6 @@ GRPO advantages are computed relative to the group, so a change that adds the sa
 - **If the switch added nodes**: check that they are returned after you scale the old pool down.
 
 The hands-on procedure is in [06 Updating the sandbox during training](../handson/06_sandbox_update.md).
-
-## Scope and limits
-
-- **Verified by local tests:** `pytest` (CPU, no AWS) confirms the routing file re-read with a revision bump, the error when choosing a missing pool, gateway group pins kept across a routing switch, and probe and parity between two CPU pools.
-- **Executed on AWS:** on a scenario C cluster in the practice account, the author ran `scripts/ops/rollout.sh kata-clh-cpu v1 v2` on a CPU pool. All four steps (deploy, verify, parity, switch) passed, and the model-free reward loop running alongside (`scripts/ops/simulate.sh`) logged `sandbox_version_switch` at its 8th batch. The output is in the demo site data (`demo/site/data/extras.json`), and the dated run record is in [Verified facts and sources](../reference/sources.md#aws-run-record).
-- Scenario A verified the [gVisor switch during training and `--finish`](../handson/06_sandbox_update.md#switch-batches). Switching a Kata GPU pool during training still needs a separate run.
-- **Not in the repository:** canary switching and re-baseline automation are not implemented.
-- **Based on documentation:** Karpenter drift behavior and the time a ConfigMap takes to reach pods (kubelet sync) come from the official documentation of each project.
 
 Related pages: [03 Gateway and pools](03_gateway_and_pools.md), [04 Reward integrity](04_reward_integrity.md), [07 Observability and operations](07_observability_and_operations.md), [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md)
 

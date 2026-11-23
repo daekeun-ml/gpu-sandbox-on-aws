@@ -12,7 +12,7 @@
 - **HyperPod trainer ml.g5.2xlarge**(HyperPod instance group trainer): GRPO trainer를 실행하는 HyperPod instance group이에요.
 - **sandbox-gvisor nodes g5.xlarge x2**(EKS node group sandbox-gvisor): 시나리오 A와 마찬가지로 v1이 채점을 맡고 rollout 때 v2도 함께 실행해요.
 - **Shared services**: CloudWatch Logs, S3 lifecycle scripts, ECR repositories입니다. **Egress**: private subnet의 유일한 출구인 NAT gateway예요.
-- **선**: 실선은 동기 호출, 점선은 비동기 또는 보조 관계입니다. 화살표 라벨은 각 구간에서 오가는 요청이나 데이터를 나타냅니다. 아래 단계의 `라벨`로 그림에서 해당 화살표를 찾을 수 있습니다. 단계 번호는 브리프 관계표의 `#` 순서와 같아요.
+- **선**: 실선은 동기 호출, 점선은 비동기 또는 보조 관계입니다. 화살표 라벨은 각 구간에서 오가는 요청이나 데이터를 나타냅니다. 아래 단계의 `라벨`과 같은 이름이 붙은 화살표를 따라가세요. 단계 번호는 브리프 관계표의 `#` 순서와 같아요.
 - Operator workstation과 Hugging Face Hub는 AWS Cloud 상자 밖에 있습니다.
 
 ## 단계별 흐름
@@ -42,7 +42,7 @@
 | HyperPod GRPO trainer | trainer instance group 위의 학습 Job, 노드 자동 복구와 재시도와 멈춤 감지 포함 | `sagemaker` 아이콘 |
 | gvisor pool v1 | 지금 트래픽을 받는 gVisor 샌드박스 pool | 기본 차단 NetworkPolicy |
 | gvisor pool v2 | 다음 버전 pool, 검증과 전환 전에는 트래픽이 없음 | |
-| ECR repositories | 세 이미지의 비공개 저장소 | scripts/03_build_push_images.sh가 생성 |
+| ECR repositories | 세 이미지를 비공개로 보관 | scripts/03_build_push_images.sh가 생성 |
 | CloudWatch Logs | control plane 로그와 VPC flow log | 보존 한 달 |
 | NAT gateway | private subnet의 유일한 출구, HyperPod 노드도 이리로 나감 | |
 | S3 lifecycle scripts | trainer 노드가 만들어질 때 실행할 스크립트를 담은 비공개 bucket | 공개 접근 차단 |

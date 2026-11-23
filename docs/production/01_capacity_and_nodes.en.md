@@ -40,6 +40,10 @@ Compare the cost of keeping a metal node warm with the first-batch delay it avoi
 
 ## Installing Karpenter and applying the manifests
 
+<span id="scope-and-limits"></span>
+
+Use these manifests as deployment examples. On first deployment, check the status of the EC2NodeClasses and NodePools before scheduling sandbox pods.
+
 This repository does not script the Karpenter install itself (IAM roles, interruption queue, Helm); follow the [official Getting Started guide](https://karpenter.sh/docs/getting-started/getting-started-with-karpenter/). The official guide uses Karpenter 1.15.2 (LTS 1.14.3), and the APIs are `karpenter.sh/v1` and `karpenter.k8s.aws/v1`.
 
 The EC2NodeClasses find subnets and security groups by the tag `karpenter.sh/discovery: <CLUSTER_NAME>` (`subnetSelectorTerms`, `securityGroupSelectorTerms`). The hands-on CDK stack ([`cdk/gpusandbox_cdk/stack.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/cdk/gpusandbox_cdk/stack.py)) tags only the private subnets, so tag the EKS-created cluster security group (used by the nodes) yourself as the Karpenter documentation describes when you install Karpenter. Without the tag, Karpenter finds no security group for the nodes.
@@ -107,7 +111,7 @@ A NodePool determines what capacity can be provisioned for pods. The EC2NodeClas
 - **`expireAfter` refreshes nodes periodically.** Per the Karpenter v1.15 documentation, expiration is forceful: `karpenter.sh/do-not-disrupt` does not stop it, and the drain follows PDBs and `terminationGracePeriod`. The gateway resends a cut-off evaluation to another pod.
 
 !!! note "Protecting trainer nodes from disruption"
-    Contrary to the `trainer` NodePool comment, the RayCluster pods in the current [`raycluster-verl.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/raycluster-verl.yaml.tpl) carry no `do-not-disrupt` annotation. Add `karpenter.sh/do-not-disrupt: "true"` to training pods to block consolidation and drift, and since it does not block expiration (`expireAfter`), keep the output path on shared storage to resume from a checkpoint.
+    The RayCluster pods in [`raycluster-verl.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/raycluster-verl.yaml.tpl) carry no `do-not-disrupt` annotation. Add `karpenter.sh/do-not-disrupt: "true"` to training pods to block consolidation and drift, and since it does not block expiration (`expireAfter`), keep the output path on shared storage to resume from a checkpoint.
 
 ## EC2NodeClasses and user data merging
 
@@ -247,7 +251,7 @@ In production, do the following.
 - **Re-verify after a change**: after changing the driver, the AMI or the gVisor version, re-run the `04_install_gpu_stack.sh` smoke test and `scripts/ops/verify.sh`. The g5 combination with the proprietary module rests on this repository's verification, not on the gVisor documentation.
 - **If the sandbox pool holds every GPU on the nodes**: the smoke pod stays `Pending`, so scale the pool down by one replica to free a GPU first.
 
-Before raising them, CI can verify the candidate gVisor release's checksum and nvproxy support list. This is an example, not a repository script, using the same URL and check as `install-gvisor.sh`.
+Before upgrading, CI can check the release checksum and nvproxy driver list using the same download URL as `install-gvisor.sh`. Before adding the example below to CI, check that `runsc nvproxy list-supported-drivers` runs with the permissions of your x86_64 Linux runner.
 
 ```bash
 # CI gate (example): fail if the pinned gVisor release does not know the AMI's driver.
@@ -316,7 +320,7 @@ What to look for:
 
 [`pool-hardening.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/pool-hardening.yaml) limits voluntary disruption and runaway usage.
 
-- **PDB `gpu-sandbox-pools` (`maxUnavailable: 1`).** Its single selector `app.kubernetes.io/name: gpu-sandbox` matches every pool (all runtimes and versions), so at most one sandbox pod across all pools is evicted at a time (the file comment says "of a pool"). NotReady pods already count as unavailable, so a draining pod left NotReady can block other evictions.
+- **PDB `gpu-sandbox-pools` (`maxUnavailable: 1`).** All pods in the `sandbox` namespace with `app.kubernetes.io/name: gpu-sandbox` share one disruption budget across runtimes and versions. A draining pod that is already NotReady counts against that budget and can block another eviction.
 - **What the PDB does not stop.** PDBs apply to the eviction API only, so the gateway's recycling, which deletes pods directly, is unaffected; the Kubernetes documentation says "deleting deployments or pods bypasses Pod Disruption Budgets".
 - **ResourceQuota `gpu-sandbox-quota`.** `requests.nvidia.com/gpu: 16` equals the `sandbox-gvisor` cap, and `requests.nvidia.com/pgpu: 8` is the number of T4s in one `g4dn.metal` (of the two nodes the metal NodePool allows, the second is the warm spare). `pods: 64` caps the pod count.
 - **Interaction with blue/green.** While a new version's pool runs next to the old one, both count against the quota, so if the old Kata pool holds many pgpu, new-version pods exceed the quota and are not created. Scale the old pool down first or raise the quota. ([05 Sandbox versioning](05_sandbox_updates.md))
@@ -337,14 +341,6 @@ EC2 On-Demand quotas count vCPUs, not instances. The defaults below come from th
 - **Immediate reservations**: no term commitment, but they bill until you cancel them and count toward the On-Demand quota.
 - **Future-dated reservations**: available for the C, G, I, M, R, T, U and X families with a minimum of 32 vCPU.
 - **Karpenter's `capacityReservationSelectorTerms`**: Beta in the Karpenter documentation, and it has to be enabled before use.
-
-## Scope and limits
-
-- **Not executed on AWS.** This covers the Karpenter, AMI pipeline and warm capacity procedures on this page. Verify them with the "What to look for" checks in each section.
-- **What the local tests cover.** They render the templates in `infra/karpenter/` and check the AMI selection rule, the nested virtualization option, the node guard and the NodePool to EC2NodeClass references, without applying anything to an API server, so check the status conditions with `kubectl get ec2nodeclass` the first time you apply them.
-- **The CI example is unverified.** Whether `runsc nvproxy list-supported-drivers` works without root on an x86_64 Linux runner has not been checked.
-- **Karpenter behavior comes from its documentation.** The statements about drift, expiration and `do-not-disrupt` come from the Karpenter v1.15 documentation; re-verify them for your installed version.
-- **Known mismatches:** the PDB comment in `pool-hardening.yaml` and the trainer comment in `nodepools.yaml` do not match the actual behavior (see "PDB and ResourceQuota" and "Protecting trainer nodes from disruption" above).
 
 ## ❓ Misconceptions
 

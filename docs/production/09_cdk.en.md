@@ -25,7 +25,7 @@ The CDK stack creates and removes the VPC, EKS cluster, managed node groups, and
     - **Private by default, and security checks block the deploy.** The EKS API endpoint is not opened to the internet (operators connect through SSM Session Manager port forwarding), and cdk-nag (AwsSolutions rules) runs on every synth and fails the deploy on any unacknowledged finding.
     - **The hands-on uses the same stack.** `scripts/02_create_cluster.sh` calls `cdk/deploy.sh`, and both read `scripts/config.env`, so instance types and pinned versions cannot drift.
 
-**Before you start:** read the architecture in [00 Hands-on overview](../handson/00_overview.md) and [00 Architecture](00_architecture.md). For the cheapest trial, create scenario C ([10 CPU-only path on c8i](../handson/10_cpu_only.md)).
+**Before you start:** read the architecture in [00 Hands-on overview](../handson/00_overview.md) and [00 Architecture](00_architecture.md). For the cheapest trial, create scenario C ([10 Hands-on lab with CPUs only](../handson/10_cpu_only.md)).
 
 ??? note "Terms (expand if a word is new)"
     - **AWS CDK**: a tool that defines AWS infrastructure in code (Python here) and deploys it with CloudFormation.
@@ -79,6 +79,15 @@ This CDK stack owns the infrastructure, and the scripts in `scripts/` own what r
 | Kept outside the stack | the HyperPod cluster, the IOMMU AMI and the B2 AMI, Karpenter, ECR repositories | `scripts/hyperpod/`, `kata/gpu_nodes.sh` (bakes the IOMMU AMI), `03_build_push_images.sh` (ECR) |
 
 ## Security defaults
+
+<span id="scope-and-limits"></span>
+
+??? note "Before updating an existing stack"
+    For EKS 1.28 and later, the stack sets the KMS `Provider` only. `EncryptionConfig.Resources` is deprecated (W9009). Updating a stack created with `Resources: [secrets]` can replace the cluster. Run `cdk diff` first. If it shows replacement, plan to delete and recreate the cluster.
+
+    For a new Kata CPU instance type, add its `CoreCount` and `ThreadsPerCore` to `CPU_TOPOLOGY` using the `describe-instance-types` command in `cdk/gpusandbox_cdk/config.py`; `c8i.2xlarge` uses 4 and 2. Check `CpuOptions.NestedVirtualization` in step 2: the November 14 node reported `enabled` and exposed `/dev/kvm`, but EKS does not document the pass-through behavior.
+
+    The VPC CNI policy is on the node role. AWS recommends granting `AmazonEKS_CNI_Policy` to `aws-node` through Pod Identity or IRSA. Long-lived 1.36 clusters on the default Extended policy incur extended support charges after standard support ends on 2027-08-02. Include the `t4g.nano`, KMS key and log storage when budgeting. The B1 deployment on EKS 1.36 ran one GRPO step with two gVisor graders. [Run and screenshots](../handson/07_hyperpod_b1.md#how-to-verify)
 
 `cdk/tests/test_stack.py` checks each item in the synthesized template.
 
@@ -197,10 +206,10 @@ CDK created the node groups, so run only the in-cluster steps, with the tunnel f
 | B1, B2 | create the HyperPod cluster with `scripts/hyperpod/create.sh`; B2 prepares the custom AMI first (the "B1, B2" list below the table) |
 
 - **Scenario C**:
-    1. Add `export KATA_CPU_REPLICAS="1"` to `scripts/config.env` as in preparation step 2 of [10 CPU-only path on c8i](../handson/10_cpu_only.md) (with the CPU profiles' default of 2 replicas, four pools do not fit on one `c8i.2xlarge`).
+    1. Add `export KATA_CPU_REPLICAS="1"` to `scripts/config.env` as in preparation step 2 of [10 Hands-on lab with CPUs only](../handson/10_cpu_only.md) (with the CPU profiles' default of 2 replicas, four pools do not fit on one `c8i.2xlarge`).
     2. Run `scripts/kata/cpu_nodes.sh` (kata-deploy, the `gvisor-cpu` RuntimeClass, the smoke pods; about 14 minutes in the practice account).
     3. Run `ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`.
-    4. Then continue with [10 CPU-only path on c8i](../handson/10_cpu_only.md) from step 6.
+    4. Then continue with [10 Hands-on lab with CPUs only](../handson/10_cpu_only.md) from step 6.
 - **B1, B2**:
     - **B1**: run `scripts/hyperpod/create.sh`.
     - **B2**: put the `export HYPERPOD_B2_AMI_ID=...` line printed by `scripts/hyperpod/build_b2_ami.sh` into `scripts/config.env`, then run `scripts/hyperpod/create.sh --b2` (it stops if the value is empty).
@@ -240,17 +249,6 @@ cdk/destroy.sh
 - **For an account you will not use again**: empty that S3 bucket and delete the `CDKToolkit` stack in CloudFormation.
 
 The hands-on `scripts/08_cleanup.sh` asks for the cluster name, calls `cdk/destroy.sh` with `--yes`, asks whether to delete the IOMMU AMI and the B2 AMI, and with `--images` also deletes the ECR repositories.
-
-## Scope and limits
-
-- **HyperPod B1**. The EKS 1.36 stack hosted a one-step GRPO run with two gVisor sandboxes on November 22. [Run and screenshots](../handson/07_hyperpod.md#how-to-verify)
-- **Outside the CDK stack:** the HyperPod cluster (`scripts/hyperpod/create.sh`), baking the IOMMU AMI (`scripts/kata/gpu_nodes.sh`) and the B2 AMI (`scripts/hyperpod/build_b2_ami.sh`), Karpenter, Production components such as the gateway, and the ECR repositories are created by the scripts.
-- **CPU topology of c8i:** the `CoreCount` and `ThreadsPerCore` that go with nested virtualization come from the table in `cdk/gpusandbox_cdk/config.py` (`c8i.2xlarge`: 4, 2). A type missing from the table is rejected when the CDK settings load, so to use another Kata CPU instance type, look up its core count and threads per core with the `describe-instance-types` command in that file's comment, add it to `CPU_TOPOLOGY`, then deploy.
-- **EKS encryption setting:** EKS 1.28 and later envelope-encrypt all Kubernetes API data by default, so CloudFormation marks `EncryptionConfig.Resources` as deprecated (W9009). The stack sets only the KMS key (`Provider`), without `Resources`. The CloudFormation documentation lists a change to this property as Replacement, so deploying onto a stack that was created with `Resources: [secrets]` can plan a cluster replacement. Check with `cdk diff` first, and if it shows a replacement, delete the stack and create it again.
-- **VPC CNI permissions:** `AmazonEKS_CNI_Policy` is attached to the node role, while the EKS documentation recommends the `aws-node` service account through Pod Identity or IRSA, so consider moving it in production.
-- **Passing nested virtualization through:** the documentation does not say that EKS managed node groups pass the launch template's `CpuOptions.NestedVirtualization` to the nodes. In the practice-account deployment (2026-11-14) it arrived as `enabled` (the node had `/dev/kvm`), but the behavior can change, so do not skip the `describe-instances` check in step 2.
-- **Upgrade policy:** the EKS default is Extended support. If you keep the cluster past 2027-08-02, when standard support for 1.36 ends, extended support charges apply, so upgrade before then for long-lived clusters.
-- **Cost:** besides the nodes and the control plane, the access instance (`t4g.nano`), the KMS key and log storage cost a little more (check the pricing pages).
 
 ## Next steps
 

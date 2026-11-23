@@ -45,7 +45,7 @@
 ??? question "Kata + Cloud Hypervisor도 QEMU처럼 GPU를 VM에 직접 할당할 수 있다"
     **실제:** upstream은 Cloud Hypervisor의 GPU passthrough를 지원하지 않습니다. 지원되는 Kata GPU 경로는 QEMU(`kata-qemu-nvidia-gpu`)입니다.
 
-    Kata의 `docs/hypervisors.md`에는 Cloud Hypervisor의 GPU 지원 여부가 not supported로 나옵니다. 2025-08에 유지보수 담당자도 GPU를 연결하려면 QEMU GPU runtime class를 선택하라고 안내했습니다(issue #11687). 이 저장소의 `kata-clh-nvidia-gpu`는 평가용 실험 구성이고, CPU 샌드박스(`kata-clh-cpu`)는 Kata + Cloud Hypervisor로 실행합니다. 자세히: [03 Kata 샌드박스](../handson/03_kata.md)
+    Kata의 `docs/hypervisors.md`에는 Cloud Hypervisor의 GPU 지원 여부가 not supported로 나옵니다. 2025-08에 유지보수 담당자도 GPU를 연결하려면 QEMU GPU runtime class를 선택하라고 안내했습니다(issue #11687). `kata-clh-nvidia-gpu`는 지원 여부를 살펴보기 위한 실험용 구성이고, CPU 샌드박스(`kata-clh-cpu`)는 Kata + Cloud Hypervisor로 실행합니다. 자세히: [03 Kata 샌드박스](../handson/03_kata.md)
 
 ??? question "Kata GPU pool(T4)에서도 Triton 커널은 당연히 동작한다"
     **실제:** T4(`g4dn.metal`)에서 Triton 커널이 동작하는지는 여러분의 노드에서 golden 커널로 확인해야 합니다. 이 가이드는 Triton의 공식 지원 GPU 범위를 단정하지 않습니다.
@@ -70,7 +70,7 @@
     - **기본 AMI의 gVisor GPU 샌드박스**: HyperPod EKS AMI(1.34~1.36)의 10월 릴리스에 포함된 NVIDIA 드라이버 595.91.07도 gVisor release-20261109.0의 nvproxy 지원 목록에 없어서 쓸 수 없습니다(목록에 없는 unknown 버전은 플래그와 관계없이 실패).
     - **기존 custom AMI 방식**에서는 CDK로 만든 EKS 클러스터를 사용하며, 별도 AMI에 드라이버를 넣습니다. 관리형 실습은 등록된 채점 노드에 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다.
     - **Kata GPU 샌드박스**: Kubernetes 버전이나 AMI와 관계없이 HyperPod 노드에서 실행할 수 없습니다. `ml.*.metal`이 없고, CreateCluster에 nested virtualization CPU 옵션이 없으며, G와 P 계열은 nested virtualization을 지원하지 않기 때문입니다.
-    - **GPU 없는 Kata**: 같은 `/dev/kvm` 조건 때문에 어렵다고 보지만 검증하지 않았고(추론), 이 저장소에는 HyperPod용 Kata 구성이 없습니다.
+    - **GPU 없는 Kata**: 같은 `/dev/kvm` 조건 때문에 어렵다고 보지만 검증하지 않았고(추론), HyperPod용 Kata 배포 예제도 제공하지 않습니다.
 
     아래 명령은 CPU 시스템 노드를 제외한 HyperPod 워커에서 NVIDIA 드라이버 버전과 gVisor 지원 여부를 확인합니다. 스크립트가 점검용 pod를 띄울 임시 네임스페이스를 만들고, 점검이 끝나면 그 네임스페이스를 삭제합니다.
 
@@ -95,9 +95,9 @@
     EC2 워커는 핸즈온에서 EKS 관리형 노드 그룹으로 배포합니다. 운영 환경을 위한 예제에서는 Karpenter NodePool이 EC2 노드를 관리합니다. AWS 기술 블로그 1부도 EKS Auto Mode에서는 runsc를 등록할 수 없다고 설명합니다. 자세히: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
 
 ??? question "관리형 code interpreter나 샌드박스 서비스로 GPU 샌드박스를 쓸 수 있다"
-    **실제:** 이 가이드가 확인한 AWS 관리형 샌드박스는 CPU 샌드박스의 대안으로만 쓸 수 있습니다.
+    **실제:** AWS 관리형 서비스 중 이 가이드에서 확인한 선택지는 CPU 샌드박스용입니다.
 
-    Amazon Bedrock AgentCore Code Interpreter 문서는 실행 환경을 containerized environment로 설명하고 GPU를 언급하지 않습니다. AWS Nitro Sandboxes와 EKS isolated pods(2026-11-09 출시, `runtimeClassName` `isolated-sandbox` 또는 `confidential-sandbox`, Kubernetes 1.36 이상)의 문서에는 "GPU and other device passthrough are not supported at launch"라고 적혀 있습니다. reward를 GPU에서 측정해야 한다면 이 저장소처럼 gVisor나 Kata를 직접 운영하세요. 자세히: [05 상황별 선택 가이드](../concepts/05_decision_guide.md)
+    Amazon Bedrock AgentCore Code Interpreter 문서는 실행 환경을 containerized environment로 설명하고 GPU를 언급하지 않습니다. AWS Nitro Sandboxes와 EKS isolated pods(2026-11-09 출시, `runtimeClassName` `isolated-sandbox` 또는 `confidential-sandbox`, Kubernetes 1.36 이상)의 문서에는 "GPU and other device passthrough are not supported at launch"라고 적혀 있습니다. reward를 GPU에서 측정해야 한다면 실습에서처럼 gVisor나 Kata로 GPU 샌드박스를 직접 운영하세요. 자세히: [05 상황별 선택 가이드](../concepts/05_decision_guide.md)
 
 ## 네트워크와 인증
 
@@ -124,7 +124,7 @@
 ??? question "TokenReview를 통과한 토큰이면 호출을 허용해도 된다"
     **실제:** TokenReview는 토큰의 유효성을 확인합니다. 그 토큰의 주체(subject)에게 호출 권한이 있는지는 별도로 확인해야 합니다.
 
-    AWS 기술 블로그 2부에 따르면 Agent Sandbox의 sandbox-router는 기본 인가 설정이 allow-all이어서 유효한 토큰을 가진 주체의 호출을 모두 허용합니다. 이 저장소의 gateway는 TokenReview 다음에 `GATEWAY_ALLOWED_SUBJECTS` allowlist를 따로 확인합니다. 샌드박스 pod는 audience(`gpu-sandbox`)와 `SANDBOX_ALLOWED_SUBJECTS`를 함께 검사하고, 일치하지 않으면 요청을 거부합니다. 자세히: [03 Gateway와 샌드박스 pool](../production/03_gateway_and_pools.md), [02 보안](../production/02_security.md)
+    AWS 기술 블로그 2부에 따르면 Agent Sandbox의 sandbox-router는 기본 인가 설정이 allow-all이어서 유효한 토큰을 가진 주체의 호출을 모두 허용합니다. 실습용 gateway는 TokenReview 다음에 `GATEWAY_ALLOWED_SUBJECTS` allowlist를 따로 확인합니다. 샌드박스 pod는 audience(`gpu-sandbox`)와 `SANDBOX_ALLOWED_SUBJECTS`를 함께 검사하고, 일치하지 않으면 요청을 거부합니다. 자세히: [03 Gateway와 샌드박스 pool](../production/03_gateway_and_pools.md), [02 보안](../production/02_security.md)
 
 ## 학습과 reward
 
@@ -183,9 +183,9 @@
 ## Agent Sandbox
 
 ??? question "Agent Sandbox는 gVisor만 지원한다"
-    **실제:** Agent Sandbox는 RuntimeClass로 지정한 런타임에 격리를 맡기므로 Kata도 쓸 수 있습니다.
+    **실제:** Agent Sandbox는 격리를 RuntimeClass에 지정한 런타임에 맡깁니다. Kata를 선택하려면 해당 RuntimeClass를 지정하세요.
 
-    upstream README는 "Agent Sandbox is a sandbox orchestrator. It delegates low-level container isolation to secure Sandbox Runtimes (like gVisor or Kata Containers) by managing Pods configured to use these runtimes (via RuntimeClass)."라고 적습니다. 저장소에는 Kata 예시(kata-aks, kata-gke)와 GKE의 gVisor + L4 GPU 예시가 있습니다. 이 저장소의 확장도 같은 SandboxTemplate을 gvisor, kata-qemu, kata-clh-cpu 같은 런타임 프로필마다 렌더링합니다. 다만 SandboxTemplate 안에서 Kata GPU(`kata-qemu-nvidia-gpu`와 `nvidia.com/pgpu`)를 쓰는 조합은 검증하지 않았습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
+    upstream README는 "Agent Sandbox is a sandbox orchestrator. It delegates low-level container isolation to secure Sandbox Runtimes (like gVisor or Kata Containers) by managing Pods configured to use these runtimes (via RuntimeClass)."라고 적습니다. Agent Sandbox의 공식 예제에는 Kata 구성(kata-aks, kata-gke)과 GKE에서 gVisor와 L4 GPU를 함께 사용하는 구성이 있습니다. 이 가이드의 Agent Sandbox 확장도 같은 SandboxTemplate을 gvisor, kata-qemu, kata-clh-cpu 같은 런타임 프로필마다 렌더링합니다. 다만 SandboxTemplate 안에서 Kata GPU(`kata-qemu-nvidia-gpu`와 `nvidia.com/pgpu`)를 쓰는 조합은 검증하지 않았습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 ??? question "Agent Sandbox의 기본 SandboxTemplate 정책이 인터넷 egress를 차단한다"
     **실제:** AWS 기술 블로그 2부에 따르면 기본 정책은 인터넷 egress를 허용합니다.
@@ -197,7 +197,7 @@
     - VPC CNI NetworkPolicy를 켜기 전에는 샌드박스가 IMDS와 Kubernetes API에 접근할 수 있었습니다.
     - 기본 DNS 주입(`dnsPolicy: None`에 8.8.8.8, 1.1.1.1)이 Route 53 Resolver를 우회합니다.
 
-    이 저장소의 확장은 `networkPolicy.egress: []`(전부 차단)와 nameserver 127.0.0.1을 명시해 이 기본값을 쓰지 않습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
+    가이드의 Agent Sandbox 확장에서는 `networkPolicy.egress: []`로 모든 외부 연결을 차단하고 nameserver를 127.0.0.1로 지정합니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 ??? question "warm pool의 GPU 샌드박스는 요청이 없는 동안 비용이 들지 않는다"
     **실제:** warm 샌드박스는 claim을 기다리는 동안에도 GPU를 점유하고 있으므로, 그 GPU 노드의 비용이 계속 발생합니다.
@@ -218,9 +218,9 @@
     - **기본으로 올리는 채점 녹화**(`demo/site/data/recording.json`): 노트북 CPU pool에서 만들었고, GPU 클러스터에서 만든 녹화로 교체해 쓰도록 되어 있습니다.
     - **GPU pool의 녹화**: 2026-11-18 EKS의 gVisor A10G pool과 Kata QEMU T4 pool에서 만든 녹화는 `demo/recordings/2026-11-18-eks-gpu.json`에 있습니다.
 
-    자세히: [09 데모 사이트 (CloudFront)](../handson/09_demo_site.md)
+    자세히: [CloudFront 데모 배포](demo_site.md)
 
-??? question "이 가이드의 수치는 이 저장소가 AWS에서 측정한 값이다"
+??? question "이 가이드에 나오는 수치는 모두 AWS 실습에서 측정한 값이다"
     **실제:** 일부만 그렇습니다. 가격과 지원 버전은 공식 문서와 공개 자료를 인용했고, AWS 단계 전체를 end-to-end로 실행하지는 않았습니다.
 
     실습 계정에서 실행한 것은 다음과 같습니다.

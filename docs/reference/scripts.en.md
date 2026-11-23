@@ -182,7 +182,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: By default 30 batches with 29 waits of 20 s. The 2026-11-17 run (`kata-clh-cpu`) took about 16 min. Nothing is billed.
 - **Running it again**: Every run creates a new Job (`simulate-<time>`) and reads the active pool at that moment. Several runs at once send overlapping requests to the same pool.
 - **Success signal**: A `batch <n>  <runtime>/<version>  ...` line per batch. After a version switch, one `SWITCH ...` line and `batch` lines without `MIXED VERSIONS`.
-- **If it fails**: [Troubleshooting: Version switches (routing)](troubleshooting.md#version-switches-routing), [10 CPU-only path on c8i](../handson/10_cpu_only.md)
+- **If it fails**: [Troubleshooting: Version switches (routing)](troubleshooting.md#version-switches-routing), [10 Hands-on lab with CPUs only](../handson/10_cpu_only.md)
 
 ### `scripts/ops/bench.sh`
 
@@ -225,9 +225,9 @@ See the [B2 lab](../handson/07_hyperpod_b2.md) for regional settings, screenshot
 - **Usage**: `scripts/hyperpod/create.sh` (B1) or `--b2` (B2, needs `HYPERPOD_B2_AMI_ID`). Needs `git` and `jq`.
 - **When**: B1 after `02_create_cluster.sh --hyperpod`, `HYPERPOD=1 03_build_push_images.sh` and `04_install_gpu_stack.sh`. B2 after `hyperpod/build_b2_ami.sh`.
 - **Time and cost**: 15-30 min until InService (script estimate). Billing starts for HyperPod `ml.g5.2xlarge` (1.515 USD/hour); B2 adds 2x `ml.g5.xlarge`.
-- **Running it again**: Steps 1 and 2 (Helm chart, Block Public Access, lifecycle upload) are applied again, and the bucket and role are created only if missing. Step 4 `create-cluster` is expected to fail when a cluster with that name exists (inferred), and step 5 fails too when the add-on exists; if only step 5 failed, run just the two commands in [07](../handson/07_hyperpod.md).
+- **Running it again**: Steps 1 and 2 (Helm chart, Block Public Access, lifecycle upload) are applied again, and the bucket and role are created only if missing. Step 4 `create-cluster` is expected to fail when a cluster with that name exists (inferred), and step 5 fails too when the add-on exists; if only step 5 failed, run just the two commands in [07](../handson/07_hyperpod_b1.md).
 - **Success signal**: `status` is `InService` and `failure` is empty, and the final node table shows the HyperPod nodes (B2: two `ml.g5.xlarge` nodes `Schedulable`).
-- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [07 HyperPod scenario](../handson/07_hyperpod.md)
+- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [B1 · Train on HyperPod and grade on EC2](../handson/07_hyperpod_b1.md)
 
 ### `scripts/hyperpod/build_b2_ami.sh`
 
@@ -237,7 +237,7 @@ See the [B2 lab](../handson/07_hyperpod_b2.md) for regional settings, screenshot
 - **Time and cost**: 20-40 min (estimate). The `m6i.large` during the build and the AMI snapshot afterwards are billed.
 - **Running it again**: It does not look at an existing `HYPERPOD_B2_AMI_ID` and builds a new AMI on every run, and `08_cleanup.sh` deletes only the one AMI in `config.env`, so delete older AMIs and snapshots yourself. A failed build leaves the stopped builder (EBS charges); clean it up with the printed commands before you run it again.
 - **Success signal**: `GPUSANDBOX-B2-BUILD: OK ...`, then `export HYPERPOD_B2_AMI_ID="ami-..."`.
-- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)
+- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [Earlier CDK workflow with a custom AMI](hyperpod_custom_ami.md)
 
 ### `scripts/hyperpod/check_gvisor.sh`
 
@@ -246,13 +246,13 @@ See the [B2 lab](../handson/07_hyperpod_b2.md) for regional settings, screenshot
 - **When**: In B2 after `hyperpod/create.sh --b2`, before deploying the pool.
 - **Time and cost**: Not recorded in the docs (each node downloads gVisor). Nothing is billed.
 - **Success signal**: `driver 580.178.04: SUPPORTED by gVisor ...` on the two sandbox nodes. `driver 595.91.07: NOT supported ...` on the trainer node is expected.
-- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)
+- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [Earlier CDK workflow with a custom AMI](hyperpod_custom_ami.md)
 
 ### `scripts/hyperpod/run_grpo.sh` { #scriptshyperpodrun_grposh }
 
 Submit a GRPO Job to a HyperPod trainer in B1 or B2. The existing sandbox pool grades the model-generated code, and the trainer updates the model from those scores.
 
-**Before you run it**　Prepare the training operator, trainer node, and sandbox pool in the [HyperPod exercise](../handson/07_hyperpod.md). `HYPERPOD=1 scripts/03_build_push_images.sh` builds a trainer image with `hyperpodrun`. Set `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, and `HYPERPOD_TRAINER_INSTANCE_TYPE` in `scripts/config.env`.
+**Before you run it**　Prepare the training operator, trainer node, and sandbox pool in the [HyperPod exercise](../handson/07_hyperpod_b1.md). `HYPERPOD=1 scripts/03_build_push_images.sh` builds a trainer image with `hyperpodrun`. Set `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, and `HYPERPOD_TRAINER_INSTANCE_TYPE` in `scripts/config.env`.
 
 ```bash
 scripts/hyperpod/run_grpo.sh 5
@@ -266,7 +266,7 @@ The argument is the number of optimizer steps. It defaults to 60. The default mo
 | `routing` | The trainer read the pool route. The template expects this event within 20 minutes. |
 | `reward_batch` and advancing steps | Check the sample verdicts and training progress. Investigate repeated `sandbox_error`. |
 
-The B1 trainer completed one GRPO step and two EC2 gVisor sandboxes scored 12 submissions. [Job status and logs](../handson/07_hyperpod.md#how-to-verify)
+The B1 trainer completed one GRPO step and two EC2 gVisor sandboxes scored 12 submissions. [Job status and logs](../handson/07_hyperpod_b1.md#how-to-verify)
 
 The script prints the Job name. Use it as the `HPJob` label value to find this run’s pod.
 
@@ -284,7 +284,7 @@ See [HyperPod troubleshooting](troubleshooting.md#hyperpod) for operator and sch
 - **What it does**: Asks for the HyperPod cluster name, deletes the HyperPodPyTorchJobs, the HyperPod cluster (waiting until it is gone) and the execution role, then asks again and empties and deletes the lifecycle bucket. The EKS cluster stays.
 - **Usage**: `scripts/hyperpod/delete.sh` (no arguments)
 - **When**: At cleanup in scenario B, before `08_cleanup.sh`.
-- **Time and cost**: Not recorded in the docs (see [07](../handson/07_hyperpod.md)). Billing for the HyperPod resources ends.
+- **Time and cost**: Not recorded in the docs (see [07](../handson/07_hyperpod_b1.md)). Billing for the HyperPod resources ends.
 - **Running it again**: If the HyperPod cluster is already gone, `delete-cluster` fails and the script stops before the role and bucket steps. If the first run stopped at the bucket prompt, delete the remaining bucket yourself.
 - **Success signal**: `waiting for the cluster to disappear`, `deleted role <name>-execution`, then the last line `HyperPod resources deleted`.
 - **If it fails**: [Troubleshooting: Cleanup and cost](troubleshooting.md#cleanup-and-cost), [99 Cleanup](../handson/99_cleanup.md)
@@ -311,7 +311,7 @@ See [HyperPod troubleshooting](troubleshooting.md#hyperpod) for operator and sch
 - **Time and cost**: Mostly waiting for the stack and CloudFront propagation; the wait for a 200 response is at most about 10 min (the real duration was not measured). S3, CloudFront requests and transfer, and AWS WAF (about 10 USD a month even with no visitors) are billed.
 - **Running it again**: The stack goes through `aws cloudformation deploy` (no failure when nothing changed), the files are uploaded again by overwrite and `s3 sync --delete`, and a new invalidation is created. A run without the `EXTRAS` file leaves the `data/extras.json` uploaded earlier in S3.
 - **Success signal**: The last line is `[demo] live: <URL>`. The header checks run even if no 200 response arrived, so open the URL in a browser yourself.
-- **If it fails**: [09 Demo site (CloudFront)](../handson/09_demo_site.md)
+- **If it fails**: [CloudFront demo deployment](demo_site.md)
 
 ### `demo/teardown.sh`
 
@@ -321,7 +321,7 @@ See [HyperPod troubleshooting](troubleshooting.md#hyperpod) for operator and sch
 - **Time and cost**: Not recorded (it waits for the stack deletion). Billing for S3, CloudFront and WAF ends; the log bucket stays until you delete it (log objects expire after 90 days).
 - **Running it again**: If the stack is already gone, reading its outputs fails and the script stops without deleting anything. Delete the remaining log bucket with the `aws s3 rb s3://<log bucket> --force` the first run printed.
 - **Success signal**: `deleted gpu-sandbox-demo`, then `kept the access log bucket <log bucket>; ...`.
-- **If it fails**: [99 Cleanup](../handson/99_cleanup.md), [09 Demo site (CloudFront)](../handson/09_demo_site.md)
+- **If it fails**: [99 Cleanup](../handson/99_cleanup.md), [CloudFront demo deployment](demo_site.md)
 
 ## Shared files
 

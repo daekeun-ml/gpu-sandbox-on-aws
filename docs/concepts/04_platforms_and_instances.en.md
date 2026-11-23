@@ -38,7 +38,7 @@ Select a tab to view the scenario.
 
     **Diagram** The training operator places the `HyperPodPyTorchJob` on a HyperPod trainer node. The `kernel code` arrow still leads to the EC2 pool in the same cluster, as in A. The sandbox executes the submission and returns the verdict over the same evaluation path.
 
-    **Difference** The trainer moves from EC2 to HyperPod for node recovery and Job restart. The scoring pool stays on EC2. [Scenario B1 exercise](../handson/07_hyperpod.md)
+    **Difference** The trainer moves from EC2 to HyperPod for node recovery and Job restart. The scoring pool stays on EC2. [Scenario B1 exercise](../handson/07_hyperpod_b1.md)
 
 === "B2 · All workers on HyperPod"
 
@@ -56,11 +56,11 @@ Select a tab to view the scenario.
 
 ## Job recovery and checkpoints
 
-HyperPod can recover a faulty node and the training operator can restart a Job. Resuming from the previous training state requires a checkpoint accessible to the replacement pod. The exercise uses `emptyDir`, which is removed with the pod. See the [HyperPod exercise](../handson/07_hyperpod.md) and [runtime comparison](02_isolation_runtimes.md).
+HyperPod can recover a faulty node and the training operator can restart a Job. Resuming from the previous training state requires a checkpoint accessible to the replacement pod. The exercise uses `emptyDir`, which is removed with the pod. See the [HyperPod exercise](../handson/07_hyperpod_b1.md) and [runtime comparison](02_isolation_runtimes.md).
 
 ## Distinguish the training GPU from the grading GPUs in B1
 
-The A10G in an `ml.g5.2xlarge` generated answers and updated the model. Two separate gVisor sandboxes on EC2 `g5.xlarge` instances executed the 12 submissions. The trainer Job reached `Completed`. One submission was correct. Job completion and the verdicts answer different questions. [Placement and completion logs](../handson/07_hyperpod.md#how-to-verify)
+The A10G in an `ml.g5.2xlarge` generated answers and updated the model. Two separate gVisor sandboxes on EC2 `g5.xlarge` instances executed the 12 submissions. The trainer Job reached `Completed`. One submission was correct. Job completion and the verdicts answer different questions. [Placement and completion logs](../handson/07_hyperpod_b1.md#how-to-verify)
 
 What can you learn by changing only the client? With training stopped, an EKS system node and the HyperPod trainer each submitted the fixed kernel 32 times to the same pool. Their median grading times were 9.918 s and 9.937 s, with pool throughput of 0.199 evaluations/s for each client. This records successful scoring through both clients. Recovery after node replacement would require a separate checkpoint-and-resume test. [B1 client comparison](../handson/08_benchmark.md#hyperpod-b1)
 
@@ -74,7 +74,7 @@ What can you learn by changing only the client? With training stopped, an EKS sy
     - **`JobStart`**: it expects a `"event": "routing"` line within 1200 seconds.
     - **`RewardStalled`**: it expects a `"event": "reward_batch"` line every 1800 seconds.
 
-    The HyperPod trainer image installs `hyperpod-elastic-agent` without a pinned version, and the Job starts the trainer with `hyperpodrun`. The installed version can differ with the build date.
+    The HyperPod trainer image installs `hyperpod-elastic-agent` 1.1.3. The Job starts training with `hyperpodrun`.
 
 - **Checkpoint resume:** after a restart, `train_grpo.py` resumes from the latest checkpoint in its output directory. The hands-on keeps `/outputs` on an emptyDir (a scratch volume that disappears with the pod), so resuming after a node replacement needs shared storage (an FSx for Lustre PVC, for example).
 - **Other features:** the `hyp` CLI (`pip install sagemaker-hyperpod`), the task governance and observability add-ons, and Karpenter-based autoscaling (`AutoScalerType: Karpenter`, `NodeProvisioningMode: Continuous`).
@@ -123,22 +123,12 @@ The gVisor GPU interface, nvproxy, supports specific driver versions. The defaul
 |---|---|---|---|
 | Trainer (A) | `g5.2xlarge` (1 x A10G 24 GB, 8 vCPU, 32 GiB) | configured to fit a 1.5B model + LoRA + vLLM colocate on one A10G (`vllm_gpu_memory_utilization` 0.35). A 5-step GRPO run finished in the practice account | 1.212 |
 | Trainer (B) | `ml.g5.2xlarge` | the same hardware through HyperPod. About 25% higher at list prices (1.515 / 1.212 = 1.25) | 1.515 |
-| gVisor sandbox | `g5.xlarge` (1 x A10G), one sandbox per node | the driver the AMI loads, 580.178.04, is on the nvproxy support list. Verification scope is in "Driver and verification scope of `g5`" below | 1.006 |
+| gVisor sandbox | `g5.xlarge` (1 x A10G), one sandbox per node | Tested on A10G. For the L4 alternative (`g6`) and driver compatibility, see the [gVisor lab](../handson/02_gvisor.md#driver-and-verification-scope-of-g5-nodes). | 1.006 |
 | Kata GPU sandbox | `g4dn.metal` (8 x T4, 96 vCPU, 384 GiB), one T4 per VM | the only `.metal` type with an x86 NVIDIA GPU | 7.824 (Seoul 9.624) |
 | Kata CPU sandbox | `c8i.2xlarge` (nested virtualization) | `/dev/kvm` without `.metal`. Kata rehearsal and the CPU tier | 0.37484 |
 | System | `m6i.large` x 2 | CoreDNS and controllers | 0.096 (each) |
 
 Prices are On-Demand list prices in us-east-1 and us-west-2.
-
-!!! note "Driver and verification scope of `g5`"
-    On a `g5.xlarge` node deployed on 2026-11-18, the EKS AL2023 NVIDIA AMI loaded the proprietary kernel module 580.178.04 with GSP off (`/proc/driver/nvidia/version`, and `EnableGpuFirmware: 0` in `/proc/driver/nvidia/params`). gVisor documents nvproxy against NVIDIA's open driver and does not mention the proprietary driver.
-
-    - **What this repository verified**: 580.178.04 is on the support list of runsc `release-20261109.0` (`runsc nvproxy list-supported-drivers`). In the practice account, the gVisor smoke test (`cuda ok: NVIDIA A10G 2048.0`) and `scripts/ops/verify.sh gvisor v1` passed on `g5.xlarge`, and a 5-step GRPO run finished with the trainer on `g5.2xlarge`. So this combination is verified by this repository, not documented by gVisor.
-    - **After changing the driver, AMI or gVisor version**: check again.
-    - **The `04_install_gpu_stack.sh` smoke test**: it creates its own pod that uses one GPU, so run it while a gVisor node has a free GPU.
-    - **A pool that is already deployed**: check it with `scripts/ops/verify.sh gvisor v1`.
-
-    `g6` (L4) is a supported alternative. The AMI loads the open module 580.178.04 there, which matches the gVisor documentation, and it is cheaper (`g6.xlarge` 0.8048, `g6.2xlarge` 0.9776). To use it, set `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` (`HYPERPOD_*` for HyperPod) in `scripts/config.env`.
 
 ??? info "Prices and GPUs of other candidates"
     | EC2 | GPU | USD/hour |
@@ -187,6 +177,13 @@ The Standard quota needs more in these cases.
 
 ## Hourly cost of the hands-on setups (estimate)
 
+<span id="scope-and-limits"></span>
+
+??? note "Runs behind the scenario estimates"
+    On the A10G, scenario A completed five GRPO steps using a 1.5B model, LoRA and colocated vLLM with one verified gVisor grader. A separate cluster ran four Kata + QEMU graders on `g4dn.metal` and benchmarked two GPU pools and three CPU pools with `scripts/ops/bench.sh 32`. Scenario A also switched grading versions during training. Managed B2 completed one step on HyperPod. [AWS run record](../reference/sources.md#aws-run-record) · [Switch record](../handson/06_sandbox_update.md#switch-batches)
+
+    For the CPU lab, `c8i.2xlarge` costs USD 0.37484 per hour in us-east-1 and us-west-2, or USD 0.42336 in Seoul. [CPU lab](../handson/10_cpu_only.md)
+
 | Setup | Nodes | Node subtotal (USD/hour) |
 |---|---|---|
 | A base (gVisor + trainer) | `m6i.large` x 2 + `g5.xlarge` x 2 + `g5.2xlarge` | 0.192 + 2.012 + 1.212 = about 3.42 |
@@ -214,13 +211,6 @@ The table is an estimate from list prices and leaves out the EKS control plane, 
 
 !!! question "❓ Misconception: T4 is cheaper, so make the gVisor nodes `g4dn`"
     `g4dn.xlarge` (0.526) is cheaper than `g5.xlarge` (1.006). `g4dn` has the same driver condition as `g5` (the AMI loads the proprietary kernel module with GSP off), so the driver flavor is not a reason to exclude it, but this asset has not tested gVisor on T4, so it stays unverified. T4 serves as the Kata + QEMU GPU (`g4dn.metal`); to use it with gVisor, verify it yourself.
-
-## Scope and limits
-
-- Scenario A's `g5` setup ran in the practice account ([run record](../reference/sources.md#aws-run-record)). The gVisor sandbox (1 replica) and `scripts/ops/verify.sh gvisor v1` passed, and a 5-step GRPO run finished with the trainer configuration (1.5B + LoRA + vLLM colocate on one A10G).
-- On a different cluster setup, Kata + QEMU ran on `g4dn.metal` (`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`), and `scripts/ops/bench.sh 32` measured two GPU pools and three CPU pools.
-- Scenario A switched gVisor versions during training. Managed B2 completed one GRPO step on HyperPod. [Switch record](../handson/06_sandbox_update.md#switch-batches)
-- `c8i.2xlarge` is 0.37484 USD per hour in us-east-1 and us-west-2 and 0.42336 USD in the Seoul Region. Scenario C, which uses only this node and no GPU, is in [10 CPU-only path on c8i](../handson/10_cpu_only.md).
 
 ??? note "References"
     | Topic | Link |

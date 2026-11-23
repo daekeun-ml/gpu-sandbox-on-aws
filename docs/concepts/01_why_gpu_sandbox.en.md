@@ -17,6 +17,10 @@ KernelBench uses PyTorch reference implementations to evaluate the correctness a
 
 ## CPU checks and GPU evaluation
 
+<span id="scope-and-limits"></span>
+
+The CPU-only lab uses a separate grading pool. For the checks that protect the GPU grader and their limits, see [Reward integrity](../production/04_reward_integrity.md).
+
 A training server can use GPUs while grading with CPU unit tests. In this repository's kernel tasks, the trainer uses the CPU to extract code from each answer and check it against the policy. The GPU sandbox runs submissions that pass that check and compares their correctness and speed.
 
 **Speedup** is the reference execution time divided by the submission's execution time. If the reference takes 4 ms and a correct submission takes 2 ms on the same GPU, the speedup is 2×.
@@ -85,11 +89,6 @@ The weighted sum peaks at 0.1 + 1.0 + 0.5 x 1.5 = 1.85. Infrastructure errors (`
 ![A clockwise loop. vLLM generates 8 completions per task prompt from the dataset, the trainer extracts code and checks the AST policy on CPU, then sends it to a sandbox pod with one GPU. Inside the pod an untrusted child runs the candidate and a trusted parent judges its outputs with the reference and timing and returns the verdict. Then come the three-part reward (format, correctness, speedup), the group-relative GRPO advantage and the LoRA update (one optimizer step), and a dashed weight sync arrow returns to generation.](../images/figures/concepts-01_why_gpu_sandbox--rl-loop.en.svg)
 
 *Takeaway: The sandbox sits between generation and update, so slow or wrong scoring slows down or skews the whole training run.*
-
-## Scope and limits
-
-- The CPU checks in the diagram run in the trainer. The separate CPU pool is for practicing the scoring flow without GPUs.
-- [Production 04 Reward integrity](../production/04_reward_integrity.md) covers the evaluator's safeguards and their limits.
 
 ??? note "References"
     | Topic | Link |

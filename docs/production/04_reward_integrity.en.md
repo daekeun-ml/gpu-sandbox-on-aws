@@ -76,6 +76,13 @@ The sandbox server creates a new process tree for every evaluation request and s
 
 ## Measurement contract
 
+<span id="scope-and-limits"></span>
+
+??? note "Interpreting correctness and speedup"
+    Correctness covers each task’s fixed shapes and 3 random inputs (5 in v2). Timed outputs are compared by their sum and absolute sum. Fresh per-request seeds depend on the static policy and process boundary; v2 also caps speedup at 10×, while v1 has no cap. gVisor, Kata and network controls provide node isolation. [Security](02_security.md)
+
+    Unlike KernelBench, the harness does not flush L2 or time with CUDA events. The effect of caching was not measured. Host timing includes launch overhead, which may make the speedup of short kernels look closer to 1. Compare speedups on the same GPU. In the November 18 EKS run, `relu_bias_triton` was classified as a custom kernel and measured 1.7819× on A10G and 1.7882× on T4. CPU tests cannot validate the Triton launch counter or real GPU timings; submissions using extra CUDA streams were not run on a GPU.
+
 Check correctness before comparing performance. Wait for GPU work to finish before recording its duration. The trainer then maps those results to rewards.
 
 The measurement contract is the set of rules for the clock, the inputs and the output checks; the code lives in `harness/timing.py` and `harness/evaluate.py`.
@@ -281,17 +288,6 @@ PASS read_host_file               status=policy_violation  speedup=None
 - For the Kata GPU pool, run the same check with `scripts/ops/verify.sh kata-qemu v1`.
 
 **If it fails:** see the "Sandbox pools and readiness" and "401 and 403 responses" tables in [Troubleshooting](../reference/troubleshooting.md).
-
-## Scope and limits
-
-- **The static policy is not a security boundary.** gVisor, Kata and the network controls protect the node ([02 Security](02_security.md)).
-- **Correctness is checked within a fixed range.** Only fixed per-task shapes with 3 random inputs (5 in v2) are checked, so correctness on other shapes or edge-case values is outside the verdict.
-- **Timed outputs are compared by checksum only.** Two values (sum, absolute sum) are a weaker fingerprint than an element-wise comparison.
-- **Timed inputs come from a fresh seed per request.** That a candidate cannot learn them in advance depends on the static policy and the process split. If it breaks, the backstop is v2's 10x cap; v1 has no cap.
-- **The L2 cache is not flushed.** KernelBench flushes L2 when it times with CUDA events, while this harness only changes the input per iteration; the effect was not measured.
-- **Very short kernels have low resolution.** The host clock includes launch overhead, so the shorter a kernel runs, the closer its speedup can appear to 1 (inference).
-- **A speedup means something only on the GPU it was measured on.** Treat A10G speedups (gVisor pool) and T4 speedups (Kata pool) as different reward functions.
-- **GPU paths are outside the local tests.** The Triton launch counter, submissions that use CUDA streams, and real speedups cannot be checked by CPU tests. On the v1 pools on EKS on 2026-11-18, Triton kernels were classified as custom kernels on both A10G and T4, and `relu_bias_triton` measured a speedup of 1.7819 on A10G and 1.7882 on T4. Submissions that use extra CUDA streams were not run on a GPU.
 
 Related pages: [02 Security](02_security.md), [03 Gateway and pools](03_gateway_and_pools.md), [05 Sandbox versioning](05_sandbox_updates.md), [07 Observability and operations](07_observability_and_operations.md), [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md)
 

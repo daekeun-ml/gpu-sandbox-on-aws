@@ -37,6 +37,11 @@ In the Kata GPU lab, a pod requests a physical GPU via `nvidia.com/pgpu`. Kata p
 
 ## Where each runtime can run on AWS
 
+<span id="scope-and-limits"></span>
+
+??? note "Which combinations have been tested"
+    T4 with gVisor and CPU-only Kata on HyperPod have not been tested here. NVIDIA’s Kata GPU CI covers A100 and H100, and its documented EKS setup uses Ubuntu. The practice run on T4 with AL2023 has no corresponding upstream validation.
+
 | Exercise | Node | Requirement |
 |---|---|---|
 | gVisor GPU | EC2 `g5.xlarge` | Driver supported by nvproxy |
@@ -110,12 +115,6 @@ The VM size of `kata-qemu-nvidia-gpu` is `default_memory` 8192 MiB plus the cont
     - T4 has no confidential computing.
 
 The GKE Sandbox documentation also advises "Don't use GPU time-sharing in sandboxed Pods". The full security boundary and threat model are in [Production 02 Security](../production/02_security.md).
-
-## Scope and limits
-
-- **T4 on gVisor:** unverified, because of the AMI condition above.
-- **Kata + GPU on `g4dn.metal`:** not verified upstream. The NVIDIA CI covers A100 and H100, not T4, and the EKS configuration NVIDIA validated is Ubuntu (AL2023 is not listed).
-- **Kata CPU on HyperPod nodes:** judged not possible, but not checked directly.
 
 ??? note "References"
     | Topic | Link |

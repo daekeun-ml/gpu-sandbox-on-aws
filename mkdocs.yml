@@ -6,6 +6,9 @@ repo_name: daekeun-ml/gpu-sandbox-on-aws
 edit_uri: edit/main/docs/
 
 docs_dir: docs
+not_in_nav: |
+  /handson/09_demo_site.md
+  /handson/09_demo_site.en.md
 
 theme:
   name: material
@@ -86,10 +89,17 @@ plugins:
             05 On-policy GRPO 학습: 05 On-policy GRPO training
             06 학습 중 샌드박스 업데이트: 06 Updating the sandbox during training
             07 HyperPod 시나리오: 07 HyperPod scenario
-            07B HyperPod에서 전체 실습: 07B All workers on HyperPod
+            시나리오별 실습: Scenario walkthroughs
+            A · EC2에서 GPU 학습과 채점: A · Train and grade on EC2
+            B1과 B2 비교: Compare B1 and B2
+            B1 · HyperPod 학습과 EC2 채점: B1 · Train on HyperPod and grade on EC2
+            B2 · 학습과 채점 모두 HyperPod: B2 · Train and grade on HyperPod
+            C · GPU 없이 CPU로 실습하기: C · Hands-on lab with CPUs only
+            공통 절차: Shared procedures
+            주제별 실습: Topic guides
+            기존 HyperPod custom AMI 구성: Earlier HyperPod custom AMI configuration
             08 런타임 벤치마크: 08 Runtime benchmark
-            09 데모 사이트 (CloudFront): 09 Demo site (CloudFront)
-            10 c8i 단독 저비용 경로: 10 CPU-only path on c8i
+            CloudFront로 데모 사이트 배포하기: Deploy the demo on CloudFront
             11 multi-turn 에피소드 실습: 11 Multi-turn episodes
             99 정리: 99 Cleanup
             Production Ready: Production ready
@@ -105,7 +115,7 @@ plugins:
             09 CDK로 프로비저닝: 09 Provisioning with CDK
             참고: Reference
             용어 사전: Glossary
-            저장소 구조: Repository map
+            프로젝트 구조: Repository map
             스크립트 레퍼런스: Script reference
             설정 값: Configuration
             문제 해결: Troubleshooting
@@ -163,18 +173,23 @@ nav:
   - 핸즈온:
       - 00 전체 흐름: handson/00_overview.md
       - 시작하기: getting_started.md
-      - 01 클러스터와 이미지: handson/01_cluster_and_images.md
-      - 02 gVisor GPU 샌드박스: handson/02_gvisor.md
-      - 03 Kata 샌드박스 (CLH, QEMU): handson/03_kata.md
-      - 04 샌드박스 pool 배포와 검증: handson/04_sandbox_pools.md
-      - 05 On-policy GRPO 학습: handson/05_grpo_training.md
-      - 06 학습 중 샌드박스 업데이트: handson/06_sandbox_update.md
-      - 07 HyperPod 시나리오: handson/07_hyperpod.md
-      - 07B HyperPod에서 전체 실습: handson/07_hyperpod_b2.md
-      - 08 런타임 벤치마크: handson/08_benchmark.md
-      - 09 데모 사이트 (CloudFront): handson/09_demo_site.md
-      - 10 c8i 단독 저비용 경로: handson/10_cpu_only.md
-      - 11 multi-turn 에피소드 실습: handson/11_multi_turn.md
+      - 시나리오별 실습:
+          - A · EC2에서 GPU 학습과 채점: handson/scenario_a.md
+          - 07 HyperPod 시나리오:
+              - B1과 B2 비교: handson/07_hyperpod.md
+              - B1 · HyperPod 학습과 EC2 채점: handson/07_hyperpod_b1.md
+              - B2 · 학습과 채점 모두 HyperPod: handson/07_hyperpod_b2.md
+          - C · GPU 없이 CPU로 실습하기: handson/10_cpu_only.md
+      - 공통 절차:
+          - 01 클러스터와 이미지: handson/01_cluster_and_images.md
+          - 02 gVisor GPU 샌드박스: handson/02_gvisor.md
+          - 04 샌드박스 pool 배포와 검증: handson/04_sandbox_pools.md
+          - 08 런타임 벤치마크: handson/08_benchmark.md
+      - 주제별 실습:
+          - 03 Kata 샌드박스 (CLH, QEMU): handson/03_kata.md
+          - 05 On-policy GRPO 학습: handson/05_grpo_training.md
+          - 06 학습 중 샌드박스 업데이트: handson/06_sandbox_update.md
+          - 11 multi-turn 에피소드 실습: handson/11_multi_turn.md
       - 99 정리: handson/99_cleanup.md
   - Production Ready:
       - 00 아키텍처: production/00_architecture.md
@@ -189,11 +204,13 @@ nav:
       - 09 CDK로 프로비저닝: production/09_cdk.md
   - 참고:
       - 스크립트 레퍼런스: reference/scripts.md
+      - CloudFront로 데모 사이트 배포하기: reference/demo_site.md
+      - 기존 HyperPod custom AMI 구성: reference/hyperpod_custom_ami.md
       - 설정 값: reference/configuration.md
       - 문제 해결: reference/troubleshooting.md
       - 자주 하는 오해: reference/faq.md
       - 용어 사전: reference/glossary.md
-      - 저장소 구조: reference/repository_map.md
+      - 프로젝트 구조: reference/repository_map.md
       - 검증된 사실과 출처: reference/sources.md
       - 참고 자료 모음: reference/references.md
 

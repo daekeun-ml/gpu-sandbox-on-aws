@@ -63,7 +63,7 @@ The sandbox pods reached Ready in 15, 120 seconds respectively. The p50 and p95 
 [Run data (JSON)](data/hyperpod-b1.json) · [Interactive demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1)
 
 ??? example "Repeat the runs on a B1 cluster"
-    Use the B1 configuration and the two ready sandbox pods from [07 HyperPod](07_hyperpod.md). The default Job used an EKS system node in this run. The final Job pins its client to the HyperPod trainer.
+    Use the B1 configuration and the two ready sandbox pods from [07 HyperPod](07_hyperpod_b1.md). The default Job used an EKS system node in this run. The final Job pins its client to the HyperPod trainer.
 
     ```bash
     scripts/ops/bench.sh 2
@@ -217,6 +217,12 @@ The sandbox times evaluation and process cleanup after it accepts a request. The
 
 ## How to interpret the results
 
+<span id="scope-and-limits"></span>
+
+The November 18 comparison uses the second, cached run with one gVisor pod and one pod per CPU runtime. There is no matching runc baseline on A10G. The experimental Kata CLH GPU VM returned `create container timeout` even with artifact paths configured. [Kata exercise](03_kata.md)
+
+Kubernetes timestamps resolve cold start only to whole seconds. To measure v2, change both v1 pod selectors (pool detection and readiness timing) and the v1 Service address in the script.
+
 In the EKS table, one evaluation took 9.984 seconds at p50 on gVisor and 10.789 on Kata QEMU. The whole Kata QEMU pool completed more requests per second (0.349). The pools had two and four pods respectively and used different GPUs, so throughput alone cannot establish a per-runtime speed ranking.
 
 Check which submissions succeeded before comparing latencies. A lower p50 is hard to interpret if many requests failed or the pools use different GPUs.
@@ -231,7 +237,7 @@ Check which submissions succeeded before comparing latencies. A lower p50 is har
 
 - **Kata CLH CPU vs Kata QEMU CPU**: the RuntimeClass sets the hypervisor and the per-pod reservation (`overhead.podFixed`), and the input seeds are drawn fresh per request.
 - **Kata CLH GPU (experimental)**: CLH GPU is not supported upstream, and on 2026-11-18 its VM never started, so it was not measured.
-- **gVisor CPU vs Kata CPU**: the isolation method (user-space kernel vs VM) and the RuntimeClass settings differ, and the input seeds are drawn fresh per request. Scenario C in [10 CPU-only path on c8i](10_cpu_only.md) brings up all three pools together.
+- **gVisor CPU vs Kata CPU**: the isolation method (user-space kernel vs VM) and the RuntimeClass settings differ, and the input seeds are drawn fresh per request. Scenario C in [10 Hands-on lab with CPUs only](10_cpu_only.md) brings up all three pools together.
 
 Keep the following in mind as well when you read the results.
 
@@ -374,15 +380,6 @@ The second pass on November 18, 2026 restarted the v1 pools with images cached o
 This hands-on starts pods in advance with Deployments, so the counterpart of the blog's pool claim is not the cold start but the time the client takes to get a free pod.
 
 </details>
-
-## Scope and limits
-
-- **Conditions for the November 18 table.** It was measured twice in the practice account on 2026-11-18, right after deploy (pass 1) and after restarting the pools (pass 2), and the table shows pass 2. The replica counts also differed from the defaults (`gvisor` 1, each CPU pool 1).
-- **No runc baseline.** So gVisor's overhead cannot be computed directly.
-- **Kata CLH GPU is not supported upstream.** On 2026-11-18 the VM of the experimental `kata-clh` pool never started (`create container timeout`), even with the artifact paths filled in, so it was not measured (stage 3 of [03 Kata sandboxes](03_kata.md)).
-- **Nested virtualization results are for relative comparison.**
-- **Cold start has a 1-second resolution.** Kubernetes timestamps are in seconds, so sub-second differences are invisible.
-- **Only v1 pools are measured.** `v1` is fixed in three places in the script: the pod selector that checks whether the pool exists, the pod selector that reads cold start, and the Service address. Measuring v2 means changing all three.
 
 ## Time and cost
 

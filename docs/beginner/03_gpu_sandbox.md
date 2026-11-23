@@ -1,6 +1,6 @@
 # 03 GPU까지 격리하려면
 
-모델에게 두 배열을 더하는 함수를 작성하게 했다고 해 봅시다. CPU용 함수라면 샌드박스에서 단위 테스트로 답을 확인할 수 있습니다. 같은 계산을 GPU에서 얼마나 빠르게 끝내는지가 과제라면, 코드를 실행하는 샌드박스에도 GPU가 필요합니다.
+모델에게 두 배열을 더하는 함수를 작성하게 했다고 해 봅시다. CPU용 함수는 샌드박스에서 단위 테스트로 채점합니다. 같은 계산을 GPU에서 얼마나 빠르게 끝내는지가 과제라면, 코드를 실행하는 샌드박스에도 GPU가 필요합니다.
 
 ## GPU 커널과 드라이버
 
@@ -12,7 +12,7 @@
 
 EKS에서는 Kubernetes가 pod를 실행할 노드를 고릅니다. **Kata**를 런타임으로 지정하면 그 노드에 가상 머신(VM)을 띄우고 그 안에서 pod의 컨테이너를 실행합니다. VM을 띄우는 프로그램을 **hypervisor**라고 합니다. Kata는 이 역할을 QEMU나 Cloud Hypervisor에 맡깁니다.
 
-| 구성 | 이 저장소에서 실습하는 내용 |
+| 구성 | 실습에서 확인할 내용 |
 |---|---|
 | gVisor | `nvproxy`가 지원하는 GPU 요청만 노드의 NVIDIA 드라이버에 전달합니다. 드라이버 버전이 맞으면 일반 GPU 인스턴스에서 시작할 수 있습니다. [gVisor GPU 실습](../handson/02_gvisor.md) |
 | Kata + QEMU | 물리 GPU를 VM에 직접 할당합니다. 이 방식을 **GPU passthrough**라고 합니다. 실습에서는 VM 안의 드라이버가 `g4dn.metal`의 T4 한 장을 제어합니다. [Kata GPU 실습](../handson/03_kata.md) |
@@ -20,7 +20,7 @@ EKS에서는 Kubernetes가 pod를 실행할 노드를 고릅니다. **Kata**를 
 
 ### Cloud Hypervisor의 GPU 지원 범위
 
-Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지정해 VM에 연결할 수 있습니다. EKS에서 Kata로 GPU pod를 띄울 때는 Kata가 그 pod에 할당된 GPU를 VM에 연결하고 컨테이너가 쓸 수 있게 해야 합니다. Kata가 지원하는 NVIDIA GPU 구성은 QEMU를 사용합니다. 이 저장소의 Kata + Cloud Hypervisor GPU 실험은 VM 부팅에서 타임아웃이 났습니다. [Cloud Hypervisor 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md) [Kata 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [GPU 실험 기록](../handson/03_kata.md#3단계-선택-실험-kata--cloud-hypervisor-gpu)
+Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지정해 VM에 연결할 수 있습니다. EKS에서 Kata로 GPU pod를 띄울 때는 Kata가 그 pod에 할당된 GPU를 VM에 연결하고 컨테이너가 쓸 수 있게 해야 합니다. Kata가 지원하는 NVIDIA GPU 구성은 QEMU를 사용합니다. Kata와 Cloud Hypervisor로 GPU를 연결해 봤지만, 제한 시간 안에 VM이 부팅되지 않았습니다. [Cloud Hypervisor 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md) [Kata 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [GPU 실험 기록](../handson/03_kata.md#3단계-선택-실험-kata--cloud-hypervisor-gpu)
 
 ## GPU 요청을 전달하는 경로
 
@@ -46,4 +46,4 @@ Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지
 
 같은 커널을 두 pool에 보내도 처리량은 달라질 수 있습니다. EKS 실습에서 gVisor pool은 A10G 두 장으로 초당 0.198건, Kata QEMU pool은 T4 네 장으로 초당 0.349건을 처리했습니다. Kata QEMU pool은 gVisor pool보다 동시에 채점할 수 있는 답안 수가 두 배였습니다. **코드 자체의 속도**를 비교하려면 같은 GPU에서 기준 구현과 제출 코드를 돌려 보고, **pool 용량**을 정하려면 전체 처리량과 Ready pod 수를 함께 보세요. [측정 조건과 원본 결과](../handson/08_benchmark.md#runtime-results)
 
-다른 GPU 작업의 예는 [GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), 노드별 GPU 연결 조건은 [격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 볼 수 있습니다. [다음 편](04_rl_and_sandbox.md)에서는 실행 결과를 학습 점수로 바꿉니다.
+다른 GPU 작업의 예는 [GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), 노드별 GPU 연결 조건은 [격리 런타임 비교](../concepts/02_isolation_runtimes.md)에 정리했습니다. [다음 편](04_rl_and_sandbox.md)에서는 실행 결과를 학습 점수로 바꿉니다.

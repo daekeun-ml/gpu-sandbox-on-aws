@@ -35,7 +35,7 @@ Check the AWS account, `AWS_REGION`, `CLUSTER_NAME` and your current `kubectl` c
 flowchart TD
     X["0. Delete Agent Sandbox objects<br/>(only if you used the extension)"] --> A["1. scripts/hyperpod/delete.sh<br/>(only if you built scenario B)"]
     A --> B["2. scripts/08_cleanup.sh<br/>CDK stack and AMIs (--images to delete the images too)"]
-    D["Demo site demo/teardown.sh<br/>(only if you built 09, independent of the cluster)"] --> C
+    D["Demo site demo/teardown.sh<br/>(only if deployed separately)"] --> C
     B --> C["3. Check remaining instances and resources outside the scripts"]
 ```
 
@@ -83,7 +83,7 @@ If you never installed the extension, the first command fails with an error such
 
 **If it fails:** if pods remain, see the "Cleanup and scale to zero" section of [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md) and the "Pod status, events and logs" section of [Troubleshooting](../reference/troubleshooting.md).
 
-## Demo site (only if you built 09)
+## Demo site you deployed { #demo-site-only-if-you-built-09 }
 
 Delete the demo stack and every file in its bucket (table below). The CloudFront distribution goes too, and the demo URL stops working.
 
@@ -109,7 +109,7 @@ The script does not read `scripts/config.env` and, like `demo/deploy.sh`, fixes 
 - The site bucket is deleted and the log bucket stays. Log objects expire after 90 days; delete the bucket with the printed command when you no longer need the logs.
 - **If you type a different word**: it prints `aborted` and deletes nothing.
 
-**If it fails:** if the stack ends in `DELETE_FAILED`, the resources that failed remain (per the CloudFormation documentation); check the cause in the console and delete again. The demo setup is described in section "6. Cleanup" of [09 Demo site (CloudFront)](09_demo_site.md).
+**If it fails:** if the stack ends in `DELETE_FAILED`, the resources that failed remain (per the CloudFormation documentation); check the cause in the console and delete again. The demo setup is described in section "6. Cleanup" of [CloudFront demo deployment](../reference/demo_site.md).
 
 ## 1. HyperPod first (scenario B)
 
@@ -253,6 +253,12 @@ Keep the following in mind while you pause.
 
 ## 3. Check what remains
 
+<span id="scope-and-limits"></span>
+
+HyperPod instances do not carry the `project=gpu-sandbox-on-aws` tag; check them by type and cluster name. Check retained CloudWatch groups by actual resource names. The EKS control-plane group `/aws/eks/<CLUSTER_NAME>/cluster` was verified in the practice account. KMS leaves the key in the account during its seven-day wait; final deletion can take another 24 hours, and charges during the wait were not verified.
+
+For a pause, this project provides no HyperPod scale-to-zero script. If you used Agent Sandbox, remove the warm pool and claims in step 0 before running `08_cleanup.sh`. Otherwise those objects can hold GPUs until the cluster itself is deleted.
+
 The final instance table queries EC2 instances with the lab tag. Once it is empty, use the checks below for any separately created volumes, snapshots or log buckets you used.
 
 After deletion, query the account for remaining resources. Check separately created deployments such as HyperPod and the demo site, along with AMIs and snapshots.
@@ -329,14 +335,6 @@ aws ec2 deregister-image --region "$AWS_REGION" --image-id <ami-id> --delete-ass
 **What to look for:** the AMI and snapshot queries in the table above return empty results.
 
 Local leftovers (`bench-*.jsonl`, the cluster entry and the `<CLUSTER_NAME>-tunnel` context in your kubeconfig) cost nothing; clean them up if you like.
-
-## Scope and limits
-
-- **Tag coverage:** HyperPod instances do not carry the `project=gpu-sandbox-on-aws` tag and have to be found by type and name (step 3).
-- **Log group names:** the log group naming of HyperPod was not verified; check it yourself. The EKS control plane log group `/aws/eks/<CLUSTER_NAME>/cluster` was checked in the practice account.
-- **KMS key:** the key stays in the account during the 7-day waiting period (per the KMS documentation, the actual deletion can be up to 24 hours later). Charges during the waiting period were not checked; see the KMS pricing page.
-- **HyperPod scale to zero:** this repository has no script for it (see the ❓ note above).
-- **Agent Sandbox objects:** `08_cleanup.sh` does not delete them (step 0), and until they go with the cluster, a warm pool holds its GPUs.
 
 ## How to verify
 

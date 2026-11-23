@@ -6,7 +6,7 @@
 
 1. [인증과 라우팅 준비](#네임스페이스-정책-인증-05_setup_namespaces_authsh)에서 trainer가 호출할 pool을 정합니다. EC2 gVisor의 기본값은 `gvisor/v1`입니다.
 2. [선택한 pool 배포](#샌드박스-pool-배포-06_deploy_sandboxessh) 후 pod의 `READY` 열을 봅니다. 요청을 받을 준비가 됐다는 표시입니다.
-3. [시험 답안으로 검증](#네-가지-검증-opsverifysh)하세요. 일부러 틀린 답안은 `wrong_answer`가 나와야 그 검사를 `PASS`합니다. 마지막 `verified` 줄까지 나오면 이 pool을 사용할 수 있습니다.
+3. [시험 답안으로 검증](#네-가지-검증-opsverifysh)하세요. 일부러 틀린 답안은 `wrong_answer`가 나와야 그 검사를 `PASS`합니다. 마지막 줄의 `verified`는 pool이 자동 검사를 모두 통과했다는 뜻입니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **Pod Security (restricted, baseline)**: 네임스페이스 단위로 pod의 보안 설정 수준을 강제하는 Kubernetes 기능과, 가장 엄격한 수준(restricted) 및 기본 수준(baseline)입니다.
@@ -20,9 +20,6 @@
     - **Guaranteed QoS**: requests와 limits가 같은 pod에 부여되는 등급으로, 요청한 자원이 그 pod에 보장됩니다.
     - **draining**: 새 요청을 받지 않고 교체를 기다리는 pod 상태입니다.
     - **golden**: 기대 verdict가 미리 정해진 테스트용 제출물입니다.
-
-??? note "실습 계정에서 확인한 범위"
-    이 페이지의 `gvisor`, `kata-qemu`, CPU pool 배포와 pool 검증(`scripts/ops/verify.sh`)은 실습 계정에서 실행해 통과했고, 실험용 `kata-clh` GPU pool은 VM이 시작되지 않았습니다(아래 "적용 범위와 한계"). 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다. 클러스터에서의 동작은 아래 "확인할 것"과 비교해 검증하세요.
 
 ## 네임스페이스, 정책, 인증: `05_setup_namespaces_auth.sh`
 
@@ -153,8 +150,8 @@ sequenceDiagram
 
 - **JWKS에 키가 하나뿐이면**: 토큰의 `kid`가 맞지 않아도 그 키로 서명을 검증하므로, 실패 시 `invalid token: ...`이 나옵니다.
 - **401 응답**: `WWW-Authenticate: Bearer` 헤더가 붙습니다.
-- **`/healthz`와 `/readyz`**: kubelet probe는 토큰을 보낼 수 없으므로 인증 없이 호출할 수 있고, 대신 샌드박스 정보를 반환하지 않습니다.
-- **기본 allowlist**: `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(production gateway)입니다. pool을 배포할 때(`06_deploy_sandboxes.sh`) `SANDBOX_ALLOWED_SUBJECTS`로 바꿀 수 있습니다.
+- **`/healthz`와 `/readyz`**: kubelet probe는 토큰을 보내지 못하므로 두 경로 모두 인증을 요구하지 않습니다. 응답에는 샌드박스 정보를 담지 않습니다.
+- **기본 allowlist**: `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(production gateway)입니다. 목록을 바꾸려면 pool을 배포할 때(`06_deploy_sandboxes.sh`) `SANDBOX_ALLOWED_SUBJECTS`를 지정하세요.
 
 !!! note "서명 키 교체"
     - **API server가 서명 키를 교체하면**: `scripts/ops/sync_jwks.sh`를 다시 실행하세요. production에서는 같은 작업을 CronJob(`python -m gpusandbox.tools sync-jwks`)으로 실행합니다([Production 02 보안](../production/02_security.md)).
@@ -179,6 +176,8 @@ sequenceDiagram
     ```bash
     scripts/06_deploy_sandboxes.sh kata-qemu v1
     ```
+
+Kata GPU 실습은 QEMU를 사용합니다. 실험용 Cloud Hypervisor GPU 구성에서는 VM이 시작되지 않았습니다. [Kata 실험 기록](03_kata.md#3단계-선택-실험-kata--cloud-hypervisor-gpu)
 
 pod 수를 직접 정하려면 버전 뒤에 개수를 붙이세요. 예를 들어 `scripts/06_deploy_sandboxes.sh kata-qemu v1 2`는 QEMU pod 두 개를 요청합니다.
 
@@ -293,14 +292,11 @@ egress 점검은 대상마다 TCP 연결을 시도해 다음과 같이 판정합
 이렇게 확인하는 이유는 VPC CNI의 두 가지 동작 때문입니다.
 
 1. **노드 IP는 항상 허용됩니다.** network policy agent는 kubelet의 liveness와 readiness probe를 위해 pod와 그 pod가 실행 중인 노드 IP 사이의 트래픽을 ingress와 egress 모두 허용합니다. 그래서 default-deny NetworkPolicy가 있어도 샌드박스 pod는 노드 IP의 kubelet(10250)이나 hostNetwork 서비스에 접속할 수 있습니다.
-    - **이 저장소의 대응**: 샌드박스 노드에 node guard(pod에서 들어오는 새 연결을 iptables로 차단, [01](01_cluster_and_images.md))를 설치합니다. readiness가 `NODE_IP:10250` 차단을 확인하므로, node guard가 없는 노드의 pod는 Ready 상태가 되지 않습니다.
+    - **node guard**: 샌드박스 노드에 node guard(pod에서 들어오는 새 연결을 iptables로 차단, [01](01_cluster_and_images.md))를 설치합니다. readiness가 `NODE_IP:10250` 차단을 확인하므로, node guard가 없는 노드의 pod는 Ready 상태가 되지 않습니다.
 2. **정책은 비동기로 적용됩니다.** standard 모드의 새 pod는 정책이 적용되기 전까지 default-allow 상태입니다.
-    - **이 저장소의 대응**: 그 사이에 후보 코드가 실행되지 않도록, pod는 IMDS와 API server로 가는 연결이 실제로 차단된 뒤에만 Ready 상태가 됩니다.
+    - **readiness**: 그 사이에 후보 코드가 실행되지 않도록, pod는 IMDS와 API server로 가는 연결이 실제로 차단된 뒤에만 Ready 상태가 됩니다.
 
-strict 모드(`NETWORK_POLICY_ENFORCING_MODE`)는 정책이 생기기 전까지 CoreDNS를 포함한 모든 pod의 트래픽을 차단합니다.
-
-??? note "strict 모드 대신 standard 모드를 쓰는 이유"
-    이 때문에 이 저장소에서는 standard 모드에서 readiness를 별도로 확인합니다.
+strict 모드(`NETWORK_POLICY_ENFORCING_MODE`)에서는 정책이 생길 때까지 CoreDNS를 포함한 모든 pod의 트래픽을 차단합니다. 이 실습은 standard 모드에서 필요한 연결이 차단됐는지 readiness로 확인합니다.
 
 pod는 아래 두 경우에 draining 상태가 됩니다. production에서는 gateway가 draining pod를 삭제하고, Deployment가 새 pod(Kata에서는 새 VM)를 만듭니다.
 
@@ -311,7 +307,7 @@ pod는 아래 두 경우에 draining 상태가 됩니다. production에서는 ga
 
 ## 네 가지 검증: `ops/verify.sh`
 
-pool 배포가 끝나면 Kubernetes가 pod를 평가 요청에 사용할 수 있다고 판단한 상태입니다. `verify.sh`는 실제로 trainer 쪽에서 답안을 보내 예상한 판정이 돌아오는지 확인하고, 허용 범위 밖의 연결도 검사합니다.
+pool 배포가 끝나면 pod가 `Ready`인지 확인하세요. `verify.sh`는 실제로 trainer 쪽에서 답안을 보내 예상한 판정이 돌아오는지 확인하고, 허용 범위 밖의 연결도 검사합니다.
 
 `06_deploy_sandboxes.sh`로 배포한 pool마다 `scripts/ops/verify.sh <runtime> [version]`(버전 기본값 `v1`)을 실행합니다.
 
@@ -319,12 +315,7 @@ pool 배포가 끝나면 Kubernetes가 pod를 평가 요청에 사용할 수 있
 scripts/ops/verify.sh gvisor
 ```
 
-위 명령은 gVisor pool을 검증합니다. Kata pool을 배포했다면 `gvisor` 자리에 배포에 사용한 런타임 이름을 넣으세요. 마지막에 `pool sandbox-<runtime>-<version> verified`가 나오면 자동 검사를 통과한 것입니다. 커널 문자열은 아래 표의 1번을 보고 직접 비교하세요.
-
-스크립트는 pool의 첫 pod를 선택해 아래 표의 검사를 차례로 실행합니다.
-
-- **2번부터 4번**: 실패하면 스크립트가 멈춥니다.
-- **1번**: 두 커널 문자열을 출력만 하고 비교하지 않습니다. 두 값이 같아도 계속 진행하므로 1번은 직접 확인하세요.
+Kata를 배포했다면 `gvisor` 대신 해당 런타임을 지정하세요. 첫 번째 검사는 pod와 노드의 커널 문자열을 출력하므로 두 값을 직접 비교해야 합니다. 2~4번 검사는 실패하면 스크립트가 멈추고, 모두 통과하면 마지막 줄에 `pool sandbox-<runtime>-<version> verified`가 나옵니다.
 
 | 검사 | 방법 | 통과 조건 |
 |---|---|---|
@@ -344,6 +335,9 @@ golden 제출물은 다음과 같습니다.
 - 오답(`wrong_answer`)
 - 정확성 검사 뒤에만 틀리는 벤치마크 치팅(`wrong_answer`)
 - `/etc/hostname`을 읽는 코드(`policy_violation`)
+
+<details class="note" markdown="1">
+<summary>gVisor 검증 출력 예시 전체 보기</summary>
 
 **확인할 것:** 다음은 `gvisor` pool의 마지막 출력 형식을 보여 주는 예시입니다. speedup과 IP 자리에는 실행 환경에 따라 다른 값이 표시됩니다.
 
@@ -370,6 +364,8 @@ PASS read_host_file               status=policy_violation  speedup=None
 [hh:mm:ss] pool sandbox-gvisor-v1 verified
 ```
 
+</details>
+
 ![verify.sh gvisor v1 실행 화면: 샌드박스 커널 4.19.0-gvisor와 노드 커널이 다르고, 외부 연결 네 곳이 blocked, 두 pod 모두 NVIDIA A10G와 egress blocked, 미리 준비한 코드 6개가 PASS(Triton 정답 speedup 1.76), default namespace 접속 blocked, 마지막 줄 pool sandbox-gvisor-v1 verified](../images/terminal/verify-gvisor-a.png)
 
 - 3번의 `pod` 줄은 endpoint마다 하나씩 나오며, pool, 커널, GPU, egress 차단 여부를 보여 줍니다. 차단되지 않은 endpoint는 `EGRESS OPEN`으로 표시됩니다.
@@ -381,20 +377,12 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 | 멈춘 메시지 | 뜻 | 볼 항목 |
 |---|---|---|
-| `a denial check failed: see docs/reference/troubleshooting.md` | 2번 검사가 실패함 | `REACHABLE`이면 "NetworkPolicy", "샌드박스 pool과 readiness". 줄이 없으면 바로 위 `kubectl exec`의 오류 |
-| `probe reported failures` | 3번의 probe Job이 실패함 | `FAIL` 줄이나 `EGRESS OPEN`이면 "샌드박스 pool과 readiness", "401, 403 응답". `did not start`는 `kubectl -n rl-trainer describe pod -l job-name=<Job 이름>` |
-| `NetworkPolicy did not block an outside caller` | 4번 검사가 실패함 | `REACHABLE`이면 "NetworkPolicy". 줄이 없으면 바로 위 `kubectl run`과 검사 명령의 오류(이미지 pull 등) |
+| `a denial check failed: see docs/reference/troubleshooting.md` | 2번 검사가 실패함 | `REACHABLE`이나 `REACHABLE (refused)`이면 "NetworkPolicy", "샌드박스 pool과 readiness". 줄이 없으면 바로 위 `kubectl exec`의 오류 |
+| `probe reported failures` | 3번의 probe Job이 실패함 | `FAIL`, `EGRESS OPEN`(`"egress_blocked": false`), `no ready endpoints behind ...`이면 "샌드박스 pool과 readiness", "401, 403 응답". `did not start`는 `kubectl -n rl-trainer describe pod -l job-name=<Job 이름>` |
+| `NetworkPolicy did not block an outside caller` | 4번 검사가 실패함 | `REACHABLE`이나 `REACHABLE (refused)`이면 "NetworkPolicy". 줄이 없으면 바로 위 `kubectl run`과 검사 명령의 오류(이미지 pull 등) |
 | `no pods for gpusandbox/runtime=...` | 그 pool이 배포되지 않음 | `06_deploy_sandboxes.sh`를 먼저 실행 |
 
-- **`a denial check failed`가 나왔을 때**:
-    - **2번에서 `REACHABLE` 또는 `REACHABLE (refused)`가 보이면**: 패킷이 대상까지 도달한 것입니다. "NetworkPolicy", "샌드박스 pool과 readiness" 항목을 보세요.
-    - **그런 줄이 없으면**: `kubectl exec`이나 검사 명령 자체가 실패한 것입니다. 바로 위 `kubectl exec`의 오류를 보세요.
-- **`probe reported failures`가 나왔을 때**: `FAIL` 줄, `EGRESS OPEN`(원래 JSON에서는 `"egress_blocked": false`), `no ready endpoints behind ...`, `job ... did not start` 경고 중 무엇이 나왔는지로 원인을 나눕니다.
-    - **`FAIL` 줄이나 `EGRESS OPEN` 중 하나라도 나오면**: "샌드박스 pool과 readiness", "401, 403 응답" 항목을 보세요.
-    - **`did not start`이면**: `kubectl -n rl-trainer describe pod -l job-name=<Job 이름>`을 실행하세요.
-- **`NetworkPolicy did not block an outside caller`가 나왔을 때**:
-    - **4번에서 `connect from default ns: REACHABLE`이 나왔으면**: 연결에 성공한 것입니다. "NetworkPolicy" 항목을 보세요.
-    - **그 줄이 없으면**: 임시 pod가 시작되지 못했거나 검사 명령이 실패한 것입니다. 바로 위 `kubectl run`과 검사 명령의 오류(이미지 pull 등)를 보세요.
+<span id="적용-범위와-한계"></span>
 
 ### 두 GPU pool의 검증 결과 { #gpu-verdicts }
 
@@ -402,12 +390,7 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 ![gVisor와 Kata QEMU에서 각각 통과한 golden 검사와 검증 완료 로그](../images/terminal/pools-verify-replay.png)
 
-## 적용 범위와 한계
-
-- **로컬 테스트:** audience가 잘못됐거나 토큰이 만료됐거나 subject가 허용되지 않으면 인증을 거부하는 fail-closed 동작을 확인했습니다. egress 차단을 확인한 뒤에만 Ready가 되는지도 점검했습니다. 두 CPU 서버에서 golden probe와 parity를 실행했고 모든 프로필과 버전의 매니페스트를 렌더링했습니다.
-- **실습 계정에서 확인한 것 (시나리오 A 클러스터):** `gvisor` pool(v1, replica 1개, `g5.xlarge`)에서 pool 검증(`scripts/ops/verify.sh`)이 통과했습니다. 노드 kubelet을 포함한 egress 대상 4개가 차단됐고, NetworkPolicy가 `default` 네임스페이스의 연결을 막았습니다.
-- **실습 계정에서 확인한 것 (Kata 클러스터):** `kata-qemu` GPU pool(`g4dn.metal`, pod 4개, `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`)과 CPU pool 세 개에서 pool 검증이 통과했습니다. 이미지가 캐시된 상태에서 `kata-qemu` pod 네 개가 생성부터 Ready까지 각각 30초, 30초, 31초, 36초 걸렸습니다([03](03_kata.md), [08](08_benchmark.md)).
-- **AWS에서 확인하지 않은 것:** 실험용 `kata-clh` GPU pool입니다(VM이 시작되지 않음, [03](03_kata.md)).
+`g5.xlarge`의 `gvisor` v1 pod 한 개와 `g4dn.metal`의 `kata-qemu` pod 네 개로 각각 검증했습니다. Kata에서는 `Tesla T4`와 guest 커널 `6.18.56-nvidia-gpu`를 확인했습니다. 이미지를 캐시한 상태에서 네 pod가 Ready가 되기까지 걸린 시간은 30초, 30초, 31초, 36초였습니다. [CPU pool 세 개의 검증](10_cpu_only.md) · [실행 기록](../reference/sources.md#aws-실행-기록)
 
 ## 소요 시간과 비용
 
@@ -438,7 +421,7 @@ Kata 노드 그룹을 0으로 줄이는 방법은 [03 Kata 샌드박스](03_kata
 
 ## 다음 단계
 
-EC2 trainer는 [05 GRPO 학습](05_grpo_training.md), HyperPod trainer는 [07 B1 학습](07_hyperpod.md)으로 이어 가세요. CPU 전용 클러스터에서는 [10편의 시뮬레이터](10_cpu_only.md)로 같은 pool에 답안을 보낼 수 있습니다.
+EC2 trainer는 [05 GRPO 학습](05_grpo_training.md), HyperPod trainer는 [B1 학습](07_hyperpod_b1.md#6-학습)으로 이어 가세요. CPU 전용 클러스터에서는 [10편의 시뮬레이터](10_cpu_only.md)로 같은 pool에 답안을 보내세요.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

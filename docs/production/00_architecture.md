@@ -32,7 +32,7 @@ gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니�
     - **샌드박스 pool**: 같은 runtime과 version으로 실행되는 샌드박스 pod 묶음입니다. Deployment 하나와 headless Service 하나로 구성합니다.
     - **Karpenter NodePool**: 어떤 EC2 인스턴스를 언제 띄우고 언제 반납할지 정하는 Karpenter 규칙입니다.
     - **RuntimeClass**: pod를 어떤 컨테이너 런타임(runc, gVisor, Kata)으로 실행할지 지정하는 Kubernetes 객체입니다.
-    - **headless Service**: 가상 IP 없이, DNS가 Ready pod의 IP 목록을 그대로 반환하는 Service입니다. 클라이언트가 pod를 직접 고를 수 있습니다.
+    - **headless Service**: 가상 IP 없이, DNS가 Ready pod의 IP 목록을 그대로 반환하는 Service입니다. 클라이언트는 이 목록에서 요청을 보낼 pod를 고릅니다.
     - **projected ServiceAccount token, audience**: kubelet이 pod 안에 파일로 마운트해 주는 수명이 짧은 토큰과, 그 토큰을 받을 대상의 이름(`aud`)입니다.
     - **TokenReview**: 토큰이 유효한지 Kubernetes API server에 확인을 요청하는 API입니다.
     - **JWKS**: 토큰 서명을 검증하는 공개 키 묶음입니다.
@@ -42,7 +42,11 @@ gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니�
 
 ## 핸즈온 이후 운영 준비
 
-같은 구성으로 다시 실행할 수 있어야 한다면 [CDK 스택의 관리 범위](09_cdk.md)와 [노드 준비 과정](01_capacity_and_nodes.md)부터 확인하세요. 첫 샌드박스가 늦게 준비되는 이유와, 실습이 끝난 뒤 누가 노드를 회수하는지 알 수 있습니다.
+<span id="적용-범위와-한계"></span>
+
+핸즈온에서 실행한 구성은 [AWS 실행 기록](../reference/sources.md#aws-실행-기록)에 있습니다. 이 장에서 추가하는 gateway, Karpenter 노드 관리, JWKS 갱신과 예비 노드는 운영 설계 예시입니다. 이 조합을 AWS에 배포해 검증하지는 않았습니다.
+
+같은 구성으로 다시 실행할 수 있어야 한다면 [CDK 스택의 관리 범위](09_cdk.md)와 [노드 준비 과정](01_capacity_and_nodes.md)부터 확인하세요. 두 문서는 첫 샌드박스가 준비되기까지 걸리는 시간과 실습이 끝난 뒤의 노드 회수 조건을 설명합니다.
 
 사용자나 worker를 늘리기 전에는 [보안 경계](02_security.md)와 [gateway의 요청 흐름](03_gateway_and_pools.md)을 함께 검토하세요. 응답을 받기 시작하면 [채점 기준](04_reward_integrity.md)과 [로그에서 볼 신호](07_observability_and_operations.md)를 확인해, step이 진행되는 동안 학습에 쓸 점수가 실제로 들어오는지 봅니다.
 
@@ -60,7 +64,7 @@ trainer는 답안을 생성하고 gateway는 채점할 pod와 버전을 고릅�
 
 ## 구성 요소
 
-| 구성 요소 | namespace | 역할 | 저장소 파일 |
+| 구성 요소 | namespace | 역할 | 관련 파일 |
 |---|---|---|---|
 | Trainer | `rl-trainer` | rollout을 만들고 reward 계산을 위해 gateway를 호출합니다. | [`job-grpo.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/trainer/job-grpo.yaml.tpl) (TRL), [`raycluster-verl.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/raycluster-verl.yaml.tpl) (veRL) |
 | Sandbox gateway | `sandbox-gateway` | TokenReview 인증, routing 스냅샷, group pin, pod당 요청 1건, draining pod 재활용 | [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py), [`gateway.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/gateway.yaml.tpl) |
@@ -89,7 +93,7 @@ taint, label, consolidation, `expireAfter`, userData 설정은 [01 용량과 노
 | 호출 경로 | trainer → 샌드박스 headless Service (`SANDBOX_ROUTING_FILE`, direct 모드) | trainer → gateway (`SANDBOX_GATEWAY`) → 샌드박스 | gateway가 요청 배정과 버전 pin을 모두 담당합니다. |
 | 샌드박스 ingress | `rl-trainer`의 `gpusandbox/client=true` pod 허용 | `sandbox-gateway`의 gateway pod만 허용 (같은 이름 `allow-clients-to-sandbox-api`를 덮어씀) | 학습 요청이 샌드박스에 닿는 경로를 gateway 하나로 줄입니다. |
 | JWKS | `scripts/ops/sync_jwks.sh` 수동 실행 | `jwks-sync` CronJob (`17 * * * *`) | 서명 키가 바뀌면 새 공개 키를 자동으로 반영합니다. |
-| 공유 저장소 | `emptyDir` (모델 캐시, 출력) | Amazon FSx 같은 공유 파일 시스템의 PVC (veRL 템플릿은 `/fsx`에 마운트) | 노드가 바뀌어도 checkpoint와 캐시가 유지됩니다. |
+| 모델 캐시와 학습 결과 보관 | `emptyDir` (모델 캐시, 출력) | Amazon FSx 같은 공유 파일 시스템의 PVC (veRL 템플릿은 `/fsx`에 마운트) | 노드가 바뀌어도 checkpoint와 캐시가 유지됩니다. |
 | 런타임 | 실습마다 한 런타임 | 런타임별 pool, 선택적으로 CPU 계층과 GPU 계층 | GPU 측정이 필요한 단계만 GPU에서 실행합니다. |
 | 버전 고정 | trainer가 배치 하나를 한 버전으로 채점 | gateway가 배치 스냅샷과 `group_key` pin을 모두 제공 | 샘플 단위로 채점하는 veRL을 지원합니다. |
 | Pod 재활용 | 없음 (draining pod가 NotReady로 남음) | gateway가 draining pod를 삭제 | Kata에서는 pod를 새로 만들면 VM도 새로 만들어집니다. |
@@ -115,11 +119,11 @@ CPU 계층은 Kata + Cloud Hypervisor로 실행합니다.
 
 - EC2 nested virtualization(C8i, M8i, R8i 등)이 제공하는 `/dev/kvm`을 쓰면 `.metal` 인스턴스 없이 VM 격리 경계를 만들 수 있습니다.
 - 장치 없이 쓰는 CLH는 upstream이 지원하는 구성이고, RuntimeClass overhead가 QEMU보다 작습니다(Kata 4.3.1 `podFixed`: CLH 130Mi/250m, QEMU 320Mi/250m).
-- spot을 쓸 수 있습니다. 노드가 회수되어 연결이 끊기면 gateway가 다른 pod로 재시도합니다. 끝내 실패한 요청은 `sandbox_error`가 되며, TRL은 그 샘플의 reward 요소를 모두 `None`으로 두고 veRL은 format 점수 0.1과 `sandbox_error: 1`을 기록합니다.
+- CPU 노드에는 Spot 인스턴스를 선택해도 됩니다. 노드가 회수되어 연결이 끊기면 gateway가 다른 pod로 재시도합니다. 끝내 실패한 요청은 `sandbox_error`가 되며, TRL은 그 샘플의 reward 요소를 모두 `None`으로 두고 veRL은 format 점수 0.1과 `sandbox_error: 1`을 기록합니다.
 
 EC2 문서가 성능에 민감한 가상화 워크로드에 bare metal을 권장하므로, nested virtualization 위에서 측정한 시간은 reward 근거로 쓰지 않습니다.
 
-!!! warning "저장소가 제공하는 것과 직접 만들어야 하는 것"
+!!! warning "두 단계 채점에 바로 쓸 수 있는 구성과 추가할 작업"
     **제공:** `kata-clh-cpu` 프로필, `sandbox-kata-cpu` NodePool, 요청마다 `runtime`을 고를 수 있는 gateway API.
 
     **직접 만들어야 하는 것:** 두 단계 파이프라인 자체입니다.
@@ -161,6 +165,8 @@ veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니�
 - **B1**: trainer만 HyperPod 인스턴스 그룹으로 옮기고, 샌드박스 pool은 같은 EKS 클러스터의 EC2 NodePool에 둡니다. veRL RayCluster 템플릿은 `VERL_NODE_SELECTOR`로 HyperPod 노드를 지정합니다.
 - **B2**는 시스템 Pod, 학습, gVisor 채점을 모두 HyperPod 워커에서 실행합니다. 두 채점 노드는 지원 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다. [관리형 B2 배포](../handson/07_hyperpod_b2.md)
 
+HyperPod의 노드 자동 확장과 별도로 설치한 Karpenter를 함께 사용하려면, 두 컨트롤러가 각각 어느 노드를 관리할지 먼저 확인하세요. 이 조합은 검증하지 않았습니다.
+
 ## 적용 순서
 
 1. 핸즈온 [01 클러스터와 이미지](../handson/01_cluster_and_images.md)로 EKS 클러스터와 이미지 세 개(`sandbox`, `trainer`, `control`)를 준비합니다.
@@ -180,17 +186,10 @@ veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니�
 
 진행 중에 문제가 생기면 [문제 해결](../reference/troubleshooting.md)에서 증상으로 원인을 찾으세요. 예를 들어 5단계에서 pod가 `0/1`로 남으면 "샌드박스 pool과 readiness" 표를 보세요.
 
-## 적용 범위와 한계
-
-- **로컬 테스트로 확인한 것:** routing이 바뀌어도 gateway의 group pin이 유지되고, 클라이언트가 loopback 샌드박스 서버 두 개에 요청을 나눠 보내는 것을 확인했습니다(`pytest`, CPU, AWS 없음).
-- **테스트가 다루지 않는 것:** 테스트는 Karpenter EC2NodeClass 템플릿(`infra/karpenter/`)을 렌더링해 NodePool과의 연결까지 확인하지만 API server에는 적용하지 않습니다. production 템플릿(`k8s/production/*.tpl`)은 렌더링하지 않습니다. `k8s/production/`의 정적 YAML(`pool-hardening.yaml`, `warm-capacity.yaml`)은 YAML 형식과 Service 노출 여부만 검사합니다.
-- **AWS에서 실행하지 않은 것:** Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity처럼 이 페이지가 핸즈온에 더하는 구성입니다. 핸즈온과 같은 스크립트를 쓰는 1, 4, 5단계는 시나리오 A 실습에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 나머지는 각 페이지의 확인 단계로 직접 검증하세요.
-- **HyperPod autoscaling과 Karpenter:** HyperPod의 Karpenter 기반 autoscaling과 오픈소스 Karpenter를 함께 쓸 때 두 기능이 서로 어떤 영향을 주는지는 확인하지 않았습니다. 공식 문서로 확인하세요.
-
 ## ❓ 오해
 
 !!! question "❓ 오해: Kata는 `.metal`에서만 실행된다"
-    GPU passthrough를 쓸 때만 그렇습니다. 호스트가 물리 GPU와 IOMMU에 직접 접근해야 하므로 이 저장소의 x86 구성은 AWS에서 `g4dn.metal`이 필요합니다. 장치 없이 쓰는 Kata는 nested virtualization이 제공하는 `/dev/kvm`에서 실행되며, 이 구성이 CPU 계층입니다.
+    GPU passthrough를 쓸 때만 그렇습니다. 호스트가 물리 GPU와 IOMMU에 직접 접근해야 하므로 이 실습의 x86 구성에는 `g4dn.metal`이 필요합니다. 장치 없이 쓰는 Kata는 nested virtualization이 제공하는 `/dev/kvm`에서 실행되며, 이 구성이 CPU 계층입니다.
 
 !!! question "❓ 오해: gateway가 있으니 샌드박스 pod는 인증하지 않아도 된다"
     NetworkPolicy와 토큰 검증은 서로 독립된 방어 층입니다. 한 층이 잘못 설정돼도 다른 층이 요청을 차단하도록 둘 다 적용합니다. 샌드박스 pod는 gateway 토큰(audience `gpu-sandbox`)을 JWKS로 직접 검증하고 허용 목록 밖의 subject를 거부합니다.

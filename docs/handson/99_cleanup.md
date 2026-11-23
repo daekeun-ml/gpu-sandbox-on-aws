@@ -10,10 +10,10 @@ HyperPod 마법사로 관리형 B2를 만들었다면 [B2 전용 절차](07_hype
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **CloudFormation stack**: 여러 AWS 리소스를 한 묶음으로 만들고 지우는 단위입니다. 클러스터 생성(`02_create_cluster.sh`)이 만드는 CDK 스택(`<CLUSTER_NAME>-cdk`)과 데모 사이트는 각각 별도의 stack입니다.
-    - **CDKToolkit**: `cdk bootstrap`이 만드는 stack입니다. CDK가 배포에 쓰는 S3 버킷, ECR 저장소, 배포 역할이 들어 있습니다.
+    - **CDKToolkit**: `cdk bootstrap`이 만드는 stack입니다. CDK가 배포에 쓰는 S3 버킷, ECR 리포지토리, 배포 역할이 들어 있습니다.
     - **노드 그룹 (node group)**: 같은 인스턴스 유형과 설정을 쓰는 EKS 노드 묶음입니다. 노드 수(`desiredSize`)를 바꿔 늘리고 줄입니다.
     - **scale to zero**: 노드 그룹의 노드 수를 0으로 줄여 인스턴스 요금이 발생하지 않게 하면서, 설정은 남겨 두는 방법입니다.
-    - **launch template**: EC2 인스턴스를 시작할 때 쓰는 설정 묶음입니다. 이 저장소에서는 CDK 스택이 노드 그룹마다 하나씩 만들고, Kata CPU 노드의 nested virtualization 옵션도 여기에 포함됩니다.
+    - **launch template**: EC2 인스턴스를 시작할 때 쓰는 설정 묶음입니다. CDK 스택이 노드 그룹마다 하나씩 만들고, Kata CPU 노드의 nested virtualization 옵션도 여기에 포함됩니다.
     - **KMS 키 삭제 대기 기간**: KMS 키는 삭제를 요청해도 바로 삭제되지 않습니다. 지정한 기간(여기서는 7일) 동안 `Pending deletion` 상태로 남은 뒤 삭제됩니다.
     - **AMI, snapshot**: 인스턴스를 시작할 때 쓰는 디스크 이미지와, 그 이미지의 데이터를 저장한 EBS 사본입니다. AMI를 등록 해제해도 snapshot은 남을 수 있습니다.
     - **ECR 리포지토리**: 컨테이너 이미지를 저장하는 AWS 레지스트리의 저장 단위입니다.
@@ -23,11 +23,11 @@ HyperPod 마법사로 관리형 B2를 만들었다면 [B2 전용 절차](07_hype
 
     더 자세한 설명은 [용어 사전](../reference/glossary.md)에 있습니다.
 
-!!! warning "검증 상태와 안전"
-    - **실행한 것**: 시나리오 C의 CDK 스택 삭제와 시나리오 A 클러스터의 `08_cleanup.sh --images`는 실습 계정에서 실행했습니다. 그 실행에서 AMI 삭제 단계가 돌았는지는 기록에 없습니다([실행 기록](../reference/sources.md#aws-실행-기록)).
-    - **끝까지 실행하지 않은 것**: `demo/teardown.sh`는 shellcheck만 통과했습니다. `hyperpod/delete.sh`는 B1 실습에서 실행 역할과 lifecycle 버킷 삭제까지 확인했습니다.
-    - **공유 계정이나 production 계정이라면**: 삭제 전에 이름, 태그, 생성 시각으로 이 실습의 리소스인지 확인하세요. 가능하면 이 실습 전용 계정이나 역할에서 실행하세요.
-    - **확인 명령**: 아래 확인 명령은 조회만 하고 리소스를 변경하지 않습니다.
+!!! warning "삭제할 계정과 클러스터를 먼저 확인하세요"
+    공유 계정에서는 리소스의 이름, 태그, 생성 시각을 확인해 이번 실습에서 만든 것만 삭제하세요. 아래 조회 명령으로 삭제 전후의 목록을 대조하세요.
+
+??? note "실습 계정에서 확인한 삭제 절차"
+    시나리오 C의 CDK 스택 삭제, 시나리오 A에서 `08_cleanup.sh --images` 실행, B1의 실행 역할과 lifecycle 버킷 삭제를 확인했습니다. A에서 AMI 삭제 단계가 실행됐는지는 기록에 없습니다. `demo/teardown.sh`는 shellcheck로만 점검했습니다. [실행 기록](../reference/sources.md#aws-실행-기록)
 
 ## 순서
 
@@ -35,7 +35,7 @@ HyperPod 마법사로 관리형 B2를 만들었다면 [B2 전용 절차](07_hype
 flowchart TD
     X["0. Agent Sandbox 객체 삭제<br/>(확장을 쓴 경우만)"] --> A["1. scripts/hyperpod/delete.sh<br/>(시나리오 B를 만든 경우만)"]
     A --> B["2. scripts/08_cleanup.sh<br/>CDK 스택과 AMI (이미지까지 지우려면 --images)"]
-    D["데모 사이트 demo/teardown.sh<br/>(09를 만든 경우만, 클러스터와 독립)"] --> C
+    D["데모 사이트 demo/teardown.sh<br/>(직접 배포한 경우만, 클러스터와 독립)"] --> C
     B --> C["3. 남은 인스턴스와 스크립트 밖 리소스 확인"]
 ```
 
@@ -83,7 +83,7 @@ kubectl -n sandbox delete sandboxclaims,sandboxwarmpools,sandboxtemplates --all
 
 **문제가 생기면:** pod가 남아 있으면 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)의 "정리와 scale to zero" 절과 [문제 해결](../reference/troubleshooting.md)의 "pod 상태, 이벤트, 로그" 항목을 보세요.
 
-## 데모 사이트 (09를 만든 경우)
+## 직접 배포한 데모 사이트 { #데모-사이트-09를-만든-경우 }
 
 데모 stack과 버킷의 모든 파일을 삭제합니다(아래 표). CloudFront 배포도 삭제되므로 데모 URL은 더 이상 동작하지 않습니다.
 
@@ -109,7 +109,7 @@ demo/teardown.sh
 - 사이트 버킷은 삭제되고 로그 버킷은 남습니다. 로그 객체는 90일 뒤 만료되며, 로그가 더 필요 없으면 안내된 명령으로 버킷을 삭제하세요.
 - **다른 단어를 입력하면**: `aborted`를 출력하고 아무것도 지우지 않습니다.
 
-**문제가 생기면:** stack이 `DELETE_FAILED`로 끝나면 실패한 리소스가 남습니다(CloudFormation 문서 기준). 콘솔에서 원인을 확인한 뒤 다시 삭제하세요. 데모 구성은 [09 데모 사이트 (CloudFront)](09_demo_site.md)의 "6. 정리" 절에 있습니다.
+**문제가 생기면:** stack이 `DELETE_FAILED`로 끝나면 실패한 리소스가 남습니다(CloudFormation 문서 기준). 콘솔에서 원인을 확인한 뒤 다시 삭제하세요. 데모 구성은 [CloudFront 데모 배포](../reference/demo_site.md)의 "6. 정리" 절에 있습니다.
 
 ## 1. HyperPod 먼저 (시나리오 B)
 
@@ -244,18 +244,16 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
     - EKS control plane, NAT gateway
     - 최소 크기가 2인 system 노드 그룹(`m6i.large` 2대, 시간당 0.192 USD), access instance(`t4g.nano`)
-    - KMS 키, CloudWatch 로그, ECR 저장소, AMI snapshot, S3 버킷
+    - KMS 키, CloudWatch 로그, ECR 리포지토리, AMI snapshot, S3 버킷
     - 데모의 CloudFront와 S3
 
-    HyperPod 인스턴스도 이 명령으로는 종료되지 않습니다. `CreateCluster` API에서는 인스턴스 그룹의 `InstanceCount`를 0으로 지정할 수 있습니다. 이 저장소에서 해당 설정을 검증하거나 스크립트로 구현하지는 않았습니다. HyperPod를 더 이상 사용하지 않을 때는 `hyperpod/delete.sh`로 클러스터를 삭제하는 편을 권합니다.
+    HyperPod 인스턴스도 이 명령으로는 종료되지 않습니다. `CreateCluster` API에서는 인스턴스 그룹의 `InstanceCount`를 0으로 지정할 수 있습니다. 인스턴스 수를 0으로 줄이는 HyperPod 스크립트는 제공하지 않으며 이 방법을 실습에서 검증하지 않았습니다. HyperPod를 더 이상 사용하지 않을 때는 `hyperpod/delete.sh`로 클러스터를 삭제하는 편을 권합니다.
 
 </details>
 
 ## 3. 남은 리소스 확인
 
 마지막 인스턴스 표는 실습 태그가 붙은 EC2 인스턴스를 조회한 결과입니다. 표가 비었으면 아래에서 별도 생성한 볼륨, 스냅샷이나 로그 버킷도 자신이 사용한 항목만 골라 확인하세요.
-
-삭제 명령의 성공 출력 뒤에는 리소스 상태를 조회하세요. HyperPod와 데모 사이트처럼 별도로 만든 리소스는 각 삭제 절차가 끝났는지 확인하고, AMI와 스냅샷이 남았는지도 살펴봅니다.
 
 ### 인스턴스
 
@@ -305,14 +303,14 @@ aws sagemaker list-clusters --region "$AWS_REGION" \
 | AMI의 snapshot | AMI를 만들 때 함께 생김 | 위 AMI 단계와 같이 | `aws ec2 describe-snapshots --region "$AWS_REGION" --owner-ids self --filters "Name=description,Values=*<ami-id>*" --query 'Snapshots[].[SnapshotId,Description]' --output table` |
 | CDK 스택 `${CLUSTER_NAME}-cdk` (VPC, NAT gateway, 클러스터, 노드 그룹, launch template, access instance) | `scripts/02_create_cluster.sh` (`cdk/deploy.sh`) | 예 (`cdk/destroy.sh`). 삭제가 실패하면 남음 | `aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "${CLUSTER_NAME}-cdk"` (stack이 없다는 오류가 정상) |
 | secrets용 KMS 키 | CDK 스택 | 예 (7일 삭제 대기 뒤) | KMS 콘솔의 고객 관리형 키에서 설명이 `EKS secrets encryption for <CLUSTER_NAME>`인 키가 `Pending deletion` 상태 |
-| bootstrap 스택 `CDKToolkit` (S3 버킷, ECR 저장소, 배포 역할) | `cdk bootstrap` (01의 준비 2) | 아니요 (다음 배포에 재사용) | `aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name CDKToolkit --query 'Stacks[0].StackStatus' --output text` (남아 있는 것이 정상. 지우려면 S3 버킷을 비운 뒤 stack 삭제) |
+| bootstrap 스택 `CDKToolkit` (S3 버킷, ECR 리포지토리, 배포 역할) | `cdk bootstrap` (01의 준비 2) | 아니요 (다음 배포에 재사용) | `aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name CDKToolkit --query 'Stacks[0].StackStatus' --output text` (남아 있는 것이 정상. 지우려면 S3 버킷을 비운 뒤 stack 삭제) |
 | S3 버킷 `${HYPERPOD_LCS_BUCKET}` | `scripts/hyperpod/create.sh` | `hyperpod/delete.sh`의 `bucket` 프롬프트 | `aws s3api head-bucket --bucket "$HYPERPOD_LCS_BUCKET"` (404가 정상) |
 | IAM 역할 `${HYPERPOD_CLUSTER_NAME}-execution` | `scripts/hyperpod/create.sh` | `hyperpod/delete.sh` | `aws iam get-role --role-name "${HYPERPOD_CLUSTER_NAME}-execution"` (NoSuchEntity가 정상) |
 | training operator용 IAM 역할 | 07의 안내대로 직접 만든 경우 | 아니요 | IAM 콘솔에서 만든 역할 이름으로 확인 |
 | 데모 stack `gpu-sandbox-demo` (버킷, CloudFront 배포 포함) | `demo/deploy.sh` | `demo/teardown.sh` | `aws cloudformation describe-stacks --region us-east-1 --stack-name "${DEMO_STACK_NAME:-gpu-sandbox-demo}"` (stack이 없다는 오류가 정상) |
 | CloudWatch 로그 그룹 | CDK 스택, 스택의 custom resource Lambda, HyperPod 클러스터 (표 아래 목록) | 스택의 로그 그룹은 스택과 함께, Lambda 로그 그룹은 `cdk/destroy.sh`가 지움. HyperPod 로그는 아니요 | `aws logs describe-log-groups --region "$AWS_REGION" --log-group-name-prefix /aws/sagemaker/ --query 'logGroups[].logGroupName' --output text` 와 `--log-group-name-prefix "/aws/eks/${CLUSTER_NAME}"`, `--log-group-name-prefix "/aws/lambda/${CLUSTER_NAME}-cdk-"` |
 
-- **ECR 리포지토리**: `--images`를 썼다면 `sandbox`, `trainer`, `control`이 목록에 없으면 정상입니다. veRL용 `verl`처럼 같은 접두사로 따로 만든 저장소는 남습니다.
+- **ECR 리포지토리**: `--images`를 썼다면 `sandbox`, `trainer`, `control`이 목록에 없으면 정상입니다. veRL용 `verl`처럼 같은 접두사로 따로 만든 리포지토리는 남습니다.
 - **B2 HyperPod AMI**: 빌드가 실패했다면 정지된 builder 인스턴스가 마지막 인스턴스 목록에 나옵니다.
 - **B2 builder 보안 그룹이 남아 있으면**: builder를 종료한 뒤 `aws ec2 delete-security-group --region "$AWS_REGION" --group-id <sg-id>`로 지웁니다. 클러스터 VPC 안에 있으므로 CDK 스택을 지우기 전에 정리하세요.
 - **데모 stack**: 데모는 클러스터 리전과 관계없이 `us-east-1`에 있습니다. 보존된 액세스 로그 버킷은 따로 남습니다.
@@ -330,13 +328,9 @@ aws ec2 deregister-image --region "$AWS_REGION" --image-id <ami-id> --delete-ass
 
 로컬에 남는 파일과 설정(`bench-*.jsonl`, kubeconfig의 클러스터 항목과 context `<CLUSTER_NAME>-tunnel`)은 과금과 관계가 없으니 필요하면 정리하세요.
 
-## 적용 범위와 한계
+<span id="적용-범위와-한계"></span>
 
-- **태그 범위:** `project=gpu-sandbox-on-aws` 태그가 없는 HyperPod 인스턴스는 유형과 이름으로 찾아야 합니다(3단계).
-- **로그 그룹 이름:** HyperPod의 로그 그룹 이름 규칙은 확인하지 못했으니 직접 확인하세요. EKS control plane 로그 그룹 `/aws/eks/<CLUSTER_NAME>/cluster`는 실습 계정에서 확인했습니다.
-- **KMS 키:** 7일 삭제 대기 동안 키가 계정에 남습니다(KMS 문서에 따르면 실제 삭제는 최대 24시간 늦어질 수 있습니다). 대기 기간의 요금은 확인하지 않았으니 KMS 요금 페이지를 보세요.
-- **HyperPod scale to zero:** 이 저장소에는 스크립트가 없습니다(위 ❓ 노트).
-- **Agent Sandbox 객체:** `08_cleanup.sh`는 이 객체를 삭제하지 않습니다(0단계 참고). 클러스터와 함께 삭제되기 전까지 warm pool이 GPU를 계속 점유합니다.
+KMS 키에는 7일의 삭제 대기 기간이 있습니다. 실제 삭제까지는 최대 24시간 더 걸릴 수 있으므로 `Pending deletion` 상태를 먼저 확인하세요. 대기 중 요금은 KMS 요금표를 참고하세요. HyperPod 로그 그룹 이름은 환경에서 직접 확인해야 합니다.
 
 ## 확인 방법
 
@@ -349,7 +343,7 @@ aws ec2 deregister-image --region "$AWS_REGION" --image-id <ami-id> --delete-ass
 
 3. `aws sagemaker list-clusters` 목록에 `${HYPERPOD_CLUSTER_NAME}`이 없습니다(시나리오 B).
 4. 데모를 만들었다면 `demo/teardown.sh`가 `deleted <stack>`과 로그 버킷 보존 안내를 출력했고, `us-east-1`의 데모 stack 조회가 stack이 없다는 오류를 반환합니다.
-5. 리소스마다 위 표의 기대 상태와 대조합니다. 삭제 직후 KMS 키는 `Pending deletion`, `CDKToolkit`은 남아 있는 것이 정상입니다. ECR은 `--images`로 실행했을 때 세 저장소가 목록에서 사라지고, 같은 접두사로 따로 만든 저장소는 남습니다.
+5. AMI와 스냅샷, ECR은 삭제할 때 고른 옵션에 따라 결과가 달라집니다. 위 표에서 해당 항목만 대조하세요.
 
 삭제 대상으로 고른 리소스가 표의 기대 상태와 다르면 [문제 해결](../reference/troubleshooting.md)의 "정리와 비용" 항목을 보세요.
 
@@ -360,6 +354,6 @@ aws ec2 deregister-image --region "$AWS_REGION" --image-id <ami-id> --delete-ass
     | AWS CDK `cdk destroy` | https://docs.aws.amazon.com/cdk/v2/guide/ref-cli-cmd-destroy.html |
     | CloudFormation stack 삭제 (`DELETE_FAILED`, 재시도) | https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-console-delete-stack.html |
     | HyperPod DeleteCluster API | https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DeleteCluster.html |
-    | Agent Sandbox 저장소 (SandboxClaim, SandboxWarmPool, SandboxTemplate) | https://github.com/kubernetes-sigs/agent-sandbox |
+    | Agent Sandbox 소스 코드 (SandboxClaim, SandboxWarmPool, SandboxTemplate) | https://github.com/kubernetes-sigs/agent-sandbox |
 
     [관련 대표 자료](../reference/references.md#ref-handson-99-cleanup)

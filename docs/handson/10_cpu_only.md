@@ -1,10 +1,10 @@
-# 10 c8i 단독 저비용 경로 (시나리오 C)
+# 10 GPU 없이 CPU로 실습하기
 
-GPU나 모델 없이 EKS에서 채점 pool을 교체해 봅니다. `c8i.2xlarge` 한 대에서 세 런타임을 비교하고, 시뮬레이터가 같은 답안을 보내는 동안 v1에서 v2로 바꿉니다.
+<span id="10-c8i-단독-저비용-경로-시나리오-c"></span>
 
-1. [로컬 설정과 CDK 준비](#준비)부터 [이미지 빌드](#3단계-이미지-두-개만-빌드-03_build_push_imagessh)까지 진행하세요. CPU 경로는 trainer 이미지가 필요 없어 `--no-trainer`로 빌드합니다.
-2. [세 런타임 설치](#4단계-c8i-노드에-세-런타임-설치-katacpu_nodessh) 후 각 pod의 커널을 호스트와 비교하세요. 이어서 라우팅을 설정하고 [세 pool에 시험 답안](#6단계-pool-세-개-배포와-검증-06_deploy_sandboxessh-opsverifysh)을 보내세요.
-3. [두 작업 터미널에서 교체](#7단계-모델-없는-reward-루프와-버전-교체-opssimulatesh-opsrolloutsh)합니다. `SWITCH` 다음 배치가 v2에서 `ok`와 `wrong_answer`를 냈는지 확인하면 됩니다. 기본 실습을 마쳤다면 [클러스터 정리](#정리-08_cleanupsh)로 가세요.
+시나리오 C에서는 GPU나 학습 모델 없이 EKS에서 채점 pool을 교체합니다. CPU 워커인 `c8i.2xlarge` 한 대에서 세 런타임을 비교한 뒤, 시뮬레이터가 같은 답안을 보내는 동안 채점 버전을 v1에서 v2로 바꿔 보세요.
+
+[준비](#준비)부터 7단계까지 순서대로 진행하세요. 7단계에서 `SWITCH` 뒤의 v2 배치에 `ok`와 `wrong_answer`가 모두 나오면 기본 실습이 끝납니다. 더 진행하려면 벤치마크나 에피소드 실습 중 하나를 고르세요. [전체 실습 경로](00_overview.md)
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **nested virtualization**: VM 안에서 다시 VM을 띄우는 기능입니다. EC2는 2026-02부터 C8i, M8i, R8i 같은 일부 가상 인스턴스에 `/dev/kvm`을 제공합니다. Kata는 이 장치로 pod마다 작은 VM을 만듭니다.
@@ -16,9 +16,6 @@ GPU나 모델 없이 EKS에서 채점 pool을 교체해 봅니다. `c8i.2xlarge`
     - **reward batch**: trainer가 한 번에 채점을 요청하는 completion 묶음입니다. trainer는 샌드박스를 부를 때마다 routing 표를 읽고, 한 배치는 한 버전으로 채점합니다.
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
-
-??? note "실습 계정에서 확인한 범위"
-    이 페이지의 모든 단계를 저자의 실습 계정에서 실행했습니다. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 아키텍처
 
@@ -58,12 +55,12 @@ c8i 노드 한 대에서 gVisor와 Kata를 실행합니다. `ops/simulate.sh`는
 
 ## 준비
 
-1. `scripts/config.env`를 [01 클러스터와 이미지](01_cluster_and_images.md)의 "준비 1"대로 만들고, CDK 준비(Node.js, CDK CLI, Session Manager plugin, `cdk/requirements.txt`, `cdk bootstrap`)도 01의 "준비 2"대로 한 번 실행해 둡니다.
-    - **필요한 값**: `AWS_REGION`, `CLUSTER_NAME`, `K8S_VERSION`, `GVISOR_RELEASE`, `KATA_VERSION`, `KATA_CPU_INSTANCE_TYPE`(기본값 `c8i.2xlarge`), `SANDBOX_AUDIENCE`입니다. GPU 관련 값은 그대로 둬도 됩니다.
-    - **`export SCENARIO="C"`로 설정하면**: 클러스터 생성(`02_create_cluster.sh`)을 옵션 없이 다시 실행해도 시나리오 C로 배포됩니다.
-2. `scripts/config.env`에 다음 줄을 추가합니다. pool마다 replica가 1개여야 v2 pool까지 노드 한 대에 배치할 수 있습니다.
+1. [01편의 준비 1과 준비 2](01_cluster_and_images.md#준비-1-scriptsconfigenv)에서 AWS 계정·리전을 설정하고, 실습 폴더의 Python 환경과 CDK, Session Manager plugin, `cdk bootstrap`을 준비하세요. 01편에서 클러스터를 만들기 전 이 페이지로 돌아오세요.
+2. `scripts/config.env`에서 시나리오와 replica 수를 다음과 같이 설정하세요. `KATA_CPU_INSTANCE_TYPE` 기본값은 `c8i.2xlarge`입니다. 다른 실습에서 쓰던 파일이라면 `AWS_REGION`과 `CLUSTER_NAME`을 확인하세요. 기존 클러스터를 유지하려면 C용 이름을 따로 지정합니다.
 
     ```bash
+    export SCENARIO="C"
+    export WITH_KATA_GPU="0"
     export KATA_CPU_REPLICAS="1"
     ```
 
@@ -105,7 +102,7 @@ scripts/02_create_cluster.sh --cpu-only
 
 단계별 의미는 [01 클러스터와 이미지](01_cluster_and_images.md)의 클러스터 생성(`02_create_cluster.sh`) 절에 있습니다.
 
-두 번째 터미널에서 터널을 열어 둡니다. 4단계의 Kata CPU 노드 추가(`kata/cpu_nodes.sh`)부터 kubectl과 helm은 모두 이 터널로 클러스터 API에 접속합니다.
+별도 터미널에서 프로젝트 최상위 폴더로 이동해 다음 명령을 실행하고 그대로 두세요. 원래 작업 터미널에서 실행할 `kubectl`과 Helm이 이 터널을 통해 클러스터 API에 접속합니다.
 
 ```bash
 cdk/tunnel.sh
@@ -142,7 +139,7 @@ sandbox 이미지와 control 이미지만 빌드해 ECR에 push합니다. traine
 scripts/03_build_push_images.sh --no-trainer
 ```
 
-**확인할 것:** 끝에 export 줄이 두 개 나옵니다. 두 줄을 `scripts/config.env`에 붙여 넣으세요.
+**확인할 것:** 빌드가 끝나면 아래와 같이 `export` 두 줄이 나옵니다. 출력된 실제 URI를 `scripts/config.env`에 저장하세요. 같은 ECR 리포지토리에 동일한 태그의 이미지가 있다면 빌드 전에 `IMAGE_TAG`를 바꾸세요.
 
 ```text
 Add to scripts/config.env:
@@ -229,18 +226,16 @@ done
 
 ## 7단계: 모델 없는 reward 루프와 버전 교체 (`ops/simulate.sh`, `ops/rollout.sh`)
 
-시뮬레이터는 교체 전후에 같은 답을 보냅니다. 새 pool에서도 정답과 오답의 판정이 유지되면, 답이 달라져서 생긴 변화와 버전 교체를 혼동하지 않고 로그를 읽을 수 있습니다.
+시뮬레이터가 같은 답안을 계속 보내는 동안 채점 pool만 바꿉니다. 전환 전후 로그에서 답안의 판정과 채점 버전을 함께 확인하세요.
 
-`ops/simulate.sh`가 모델 대신 정해진 제출물을 보냅니다. 이 단계에서 확인하는 것은 학습 성능이 아니라 채점과 라우팅입니다. 전환 전후 로그에서 판정과 실제 채점 버전을 함께 비교하세요.
-
-2단계에서 연 SSM 터널은 그대로 두고 터미널 두 개를 더 여세요. 첫 번째 터미널의 reward 루프는 30개 배치를 차례로 채점하며 각 배치가 끝나면 다음 배치까지 20초를 기다립니다. 2026-11-17 c8i 노드에서는 약 16분 걸렸습니다.
+2단계의 SSM 터널은 그대로 두세요. 원래 작업 터미널에서 아래 명령을 실행하면 시뮬레이터가 30개 배치를 차례로 보내며 각 배치가 끝나면 다음 배치까지 20초를 기다립니다. 2026-11-17 c8i 노드에서는 약 16분 걸렸습니다.
 
 ```bash
 # work terminal 1
 scripts/ops/simulate.sh 30 20
 ```
 
-몇 배치 뒤 두 번째 작업 터미널에서 `kata-clh-cpu`를 v1에서 v2로 바꿉니다. `ops/rollout.sh`는 다음을 차례로 실행합니다.
+v1 배치가 몇 개 보이면 새 작업 터미널을 하나 열고 프로젝트 최상위 폴더에서 `kata-clh-cpu`를 v1에서 v2로 바꿉니다. `ops/rollout.sh`는 다음을 차례로 실행합니다.
 
 1. v2 pool 배포
 2. 검증
@@ -279,15 +274,15 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 
 제출물 4개 중 호스트 파일을 읽는 코드 한 개는 trainer의 AST 검사에서 걸러집니다. 샌드박스에서 채점한 제출물은 3개이므로 원래 JSON에서도 `n`은 3입니다. speedup(`mean_speedup`)은 CPU 측정 노이즈 때문에 배치마다 달라지므로(로컬 실행에서 0.66에서 1.65 사이) 런타임 비교에 쓰지 마세요.
 
-v2 전환을 확인했으면 아래 명령으로 v1을 0으로 줄입니다. v1 Deployment는 남지만 replica가 0이라 요청을 받지 못합니다.
-
-- **8단계에서 세 런타임을 비교하려면**: 아래 `v1 v2 --finish` 명령은 벤치마크를 마친 뒤에 실행하세요.
+v2가 실제로 정답과 오답을 채점한 것을 확인했다면 다음 명령으로 v1 replica를 0으로 줄이세요. **8단계 벤치마크를 할 때는** 이 명령을 미루고, 시뮬레이터가 끝난 뒤 v1 pool 세 개가 모두 `Ready`인 상태에서 먼저 측정하세요.
 
 ```bash
 scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 ```
 
 되돌릴 때는 `scripts/ops/rollout.sh kata-clh-cpu v2 v1`이 v1 pod를 다시 띄우고 검증과 parity를 마친 뒤 routing을 바꿉니다.
+
+기본 실습만 할 경우 바로 [정리](#정리-08_cleanupsh)하세요. [11편의 에피소드 실습](11_multi_turn.md)을 이어간다면 클러스터와 터널을 유지하세요.
 
 **문제가 생기면:**
 
@@ -300,7 +295,7 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 
 ## 8단계 (선택): 세 런타임(gVisor, Kata + Cloud Hypervisor, Kata + QEMU) 비교 (`ops/bench.sh`)
 
-6단계에서 배포한 세 pool(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)에 같은 정답 코드를 보내 비교합니다. 세 pool이 같은 노드, 같은 CPU, 같은 커널 위에 있어서 측정 차이를 런타임 차이로 보기 쉽습니다. v1 pool마다 cold start(pod 생성에서 Ready까지)와 평가 지연을 측정합니다.
+6단계에서 배포한 세 pool(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)에 같은 정답 코드를 보내 비교합니다. 세 pool은 같은 CPU 노드와 이미지를 사용합니다. pod 안에서 보이는 커널은 런타임마다 다릅니다. v1 pool마다 cold start(pod 생성에서 Ready까지)와 평가 지연을 측정합니다.
 
 `ops/bench.sh`는 v1 pod가 없는 pool을 건너뜁니다. 7단계의 `--finish`로 `kata-clh-cpu` v1을 0으로 줄였다면 그 pool의 결과가 빠지니, v1 pool 세 개가 Ready인 상태에서 실행하세요.
 
@@ -308,11 +303,11 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish
 scripts/ops/bench.sh 16
 ```
 
-**확인할 것:** pool마다 `bench` 요약 한 줄(p50, p95, 초당 평가 수, speedup)이 나오고, 모든 필드가 담긴 원래 JSON은 `bench-<timestamp>.jsonl`에 추가됩니다. 결과를 해석하는 방법은 [08 런타임 벤치마크](08_benchmark.md)에 있습니다.
+**확인할 것:** pool마다 `bench` 요약 한 줄(p50, p95, 초당 평가 수, speedup)이 나오고, 모든 필드가 담긴 원래 JSON은 `bench-<timestamp>.jsonl`에 추가됩니다. 결과를 보관한 뒤 7단계에서 미뤄 둔 `scripts/ops/rollout.sh kata-clh-cpu v1 v2 --finish`를 실행하세요. [08 런타임 벤치마크](08_benchmark.md)
 
 ## 9단계 (선택): Agent Sandbox를 활용해 에피소드마다 샌드박스 빌려 쓰기
 
-1~8단계의 pool은 요청이 올 때마다 비어 있는 pod 하나를 골라 한 번 채점하고 끝납니다. multi-turn 학습에서는 모델이 코드를 내고, 피드백을 읽고, 고쳐서 다시 냅니다. 그래서 한 에피소드가 끝날 때까지 같은 샌드박스를 계속 써야 합니다.
+앞에서 배포한 채점 pool은 요청이 올 때마다 비어 있는 pod 하나를 골라 한 번 채점하고 끝납니다. multi-turn 학습에서는 모델이 코드를 내고, 피드백을 읽고, 고쳐서 다시 냅니다. 그래서 한 에피소드가 끝날 때까지 같은 샌드박스를 계속 써야 합니다.
 
 이 단계에서는 그 방식의 기본 동작만 확인합니다. 샌드박스를 미리 띄워 두고(warm pool), 하나를 빌렸다가(claim) 다 쓰면 돌려주는 흐름입니다.
 
@@ -326,23 +321,23 @@ scripts/extensions/agent_sandbox.sh claim kata-clh-cpu     # borrow it, print it
 
 - `claim`이 빌린 샌드박스의 이름과 주소(`sandbox: ...  address: ...`)를 출력하고 claim을 지웁니다.
 - 돌려준 샌드박스는 다시 쓰지 않고 지워지며, warm pool이 새 샌드박스를 띄워 대기 수 1을 다시 채웁니다.
-- 아래 화면의 마지막 명령(`kubectl -n sandbox get sandboxwarmpool,sandbox`)에서 빌린 샌드박스(`...-6bdp7`) 대신 새 샌드박스(`...-qnwbh`)가 대기 중인 것을 볼 수 있습니다.
+- 아래 화면에서 `kubectl -n sandbox get sandboxwarmpool,sandbox`의 결과를 보세요. 빌렸던 샌드박스(`...-6bdp7`)는 이미 삭제됐고 새 샌드박스(`...-qnwbh`)가 대기 중입니다.
 
 ![agent_sandbox.sh 실행 화면: install이 controller와 CRD 네 개, claim 권한을 만들고, pool kata-clh-cpu 1이 SandboxTemplate과 SandboxWarmPool을 만들고, claim이 샌드박스 kernel-eval-kata-clh-cpu-6bdp7의 주소를 출력한 뒤 claim을 지우고, 마지막 kubectl get에서 warm pool READY 1과 새 샌드박스 kernel-eval-kata-clh-cpu-qnwbh가 True](../images/terminal/agent-sandbox-claim.png)
 
-빌린 샌드박스로 실제 multi-turn 에피소드를 돌리는 실습은 [11 multi-turn 에피소드 실습](11_multi_turn.md)에 있습니다. 같은 warm pool을 쓸 수 있습니다(`episodes kata-clh-cpu 2 3`). 개념 설명은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)을 참고하세요.
+빌린 샌드박스로 실제 multi-turn 에피소드를 돌리는 실습은 [11 multi-turn 에피소드 실습](11_multi_turn.md)에 있습니다. 이어서 진행하려면 같은 warm pool에서 `episodes kata-clh-cpu 2 3`을 실행하세요. 개념 설명은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)을 참고하세요.
 
 </details>
 
 ## 정리 (`08_cleanup.sh`)
 
-pool, Job, CDK 스택(클러스터, 노드 그룹, VPC, access instance)을 삭제합니다. 클러스터 이름을 입력해야 삭제가 진행됩니다. `--images`를 붙이면 확인 단어 `images`를 입력받은 뒤 ECR 저장소도 삭제합니다.
+[에피소드 실습](11_multi_turn.md)을 이어갈 계획이면 클러스터를 남겨 두세요. 여기서 끝내려면 아래 명령을 실행하고 클러스터 이름을 입력하세요. pool과 Job, CDK 스택에 속한 노드·VPC·접속 인스턴스를 삭제합니다. `--images` 옵션으로 실행하고 `images`를 입력하면 실습용 ECR 리포지토리도 삭제됩니다.
 
 ```bash
 scripts/08_cleanup.sh
 ```
 
-**확인할 것:** 마지막 표(`project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스)가 비어 있으면 됩니다. 자세한 내용은 [99 정리](99_cleanup.md)에 있습니다.
+**확인할 것:** 마지막 표(`project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스)가 비었으면 터널 터미널을 닫으세요. 자세한 내용은 [99 정리](99_cleanup.md)에 있습니다.
 
 ## 비용
 
@@ -359,15 +354,22 @@ scripts/08_cleanup.sh
 - 위 합계에 포함되지 않는 항목: access instance(`t4g.nano`), secrets용 KMS 키, CloudWatch 로그, NAT gateway(시간 요금과 처리량 요금), EBS 볼륨(system 50 GB x2, c8i 100 GB), 데이터 전송, ECR 저장 용량.
 - 시간당 컴퓨트 비용은 시나리오 A의 최소 구성(약 3.42 USD/시간)의 약 6분의 1입니다.
 
-## 적용 범위와 한계
+<details class="note" markdown="1">
+<summary>CPU에서 검증할 수 있는 범위와 시간 측정의 한계</summary>
+
+<span id="적용-범위와-한계"></span>
 
 - **GPU와 Triton은 확인하지 않습니다.** nvproxy, VFIO passthrough, GPU timing(device-wide synchronize), Triton 컴파일은 GPU 경로([02](02_gvisor.md), [03](03_kata.md))에서만 확인할 수 있습니다.
 - **학습이 아닙니다.** reward 루프 시뮬레이션(`ops/simulate.sh`)에는 모델 생성과 gradient 계산이 없습니다. reward 경로와 버전 고정은 trainer와 같은 코드를 쓰지만, 실제 학습에서 vLLM 생성 시간에 따라 배치 간격이 정해지는 타이밍은 재현하지 않습니다.
 - **부팅 시간과 지연을 해석할 때는 가상화 환경을 확인하세요.** Kata VM이 VM 안에서 실행되므로 부팅 시간과 지연이 bare metal보다 길 수 있습니다. AWS도 성능에 민감한 가상화 워크로드에는 bare metal을 권장합니다(공식 문서 기준). 측정값은 같은 노드 안의 런타임 비교에만 쓰세요.
 
+[시나리오 C의 실행 기록](../reference/sources.md#aws-실행-기록)
+
+</details>
+
 ## 다음 단계
 
-- GPU 쿼터가 승인되면 [00 전체 흐름](00_overview.md)의 시나리오 A로 넘어가 실제 GRPO 학습(`07_run_grpo.sh`)을 실행해 보세요. `export SCENARIO="A"`와 `export WITH_KATA_CPU="1"`로 바꾸고 `CHANGE_SCENARIO=1 scripts/02_create_cluster.sh`를 실행하면 c8i 노드는 CPU pool용으로 유지되고 trainer와 gVisor 노드 그룹이 추가됩니다. `CHANGE_SCENARIO=1`이 없으면 시나리오가 실수로 바뀌지 않도록 배포가 멈춥니다.
+- 기존 C 클러스터를 남겨 두었고 GPU 쿼터가 승인됐다면 [00 전체 흐름](00_overview.md)의 시나리오 A로 넘어가 실제 GRPO 학습(`07_run_grpo.sh`)을 실행해 보세요. `export SCENARIO="A"`와 `export WITH_KATA_CPU="1"`로 바꾸고 `CHANGE_SCENARIO=1 scripts/02_create_cluster.sh`를 실행하면 c8i 노드는 CPU pool용으로 유지되고 trainer와 gVisor 노드 그룹이 추가됩니다. `CHANGE_SCENARIO=1`이 없으면 시나리오가 실수로 바뀌지 않도록 배포가 멈춥니다.
 - 운영 관점의 CPU tier 활용은 [Production 01 용량과 노드 관리](../production/01_capacity_and_nodes.md)에 있습니다.
 
 ??? note "참고 자료"

@@ -22,7 +22,7 @@ GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 필요한 메모
     - **7B 모델의 메모리**: `Qwen/Qwen2.5-Coder-7B-Instruct`는 파라미터가 약 7.6B라 bf16 가중치만 약 15 GB입니다. 생성과 학습을 한 GPU에서 실행하는 colocate 방식으로는 메모리 여유가 거의 없습니다.
     - **샘플별 채점 요청**: veRL은 샘플을 하나씩 채점해서 TRL처럼 batch 전체를 한 버전으로 채점할 수 없습니다.
 
-    - **같은 EKS 클러스터에서 확장합니다.** KubeRay로 Ray를 배포하면 기존 샌드박스 pool, gateway, NetworkPolicy, 토큰 인증을 그대로 쓸 수 있습니다.
+    - **같은 EKS 클러스터에서 확장합니다.** KubeRay로 Ray를 배포하는 구성에서도 기존 샌드박스 pool, gateway, NetworkPolicy, 토큰 인증을 그대로 유지합니다.
     - **샘플을 따로 보내더라도 group의 채점 버전은 고정합니다.** reward 함수가 요청마다 `group_key`를 붙이면 gateway는 이 키를 기준으로 샘플을 같은 샌드박스 버전으로 보냅니다.
     - **긴 run을 중단 지점부터 재개합니다.** checkpoint를 공유 PVC에 두고 `trainer.resume_mode=auto`를 쓰면, HyperPod가 노드를 교체한 뒤 같은 `CKPT_DIR`로 job을 다시 제출할 때 마지막 checkpoint부터 이어서 학습합니다.
 
@@ -74,6 +74,10 @@ flowchart LR
 
 ## 사전 준비
 
+<span id="적용-범위와-한계"></span>
+
+데이터 준비와 reward 함수의 반환값은 로컬에서 확인했습니다. veRL 이미지 빌드부터 RayCluster에서 학습 Job을 실행하는 전체 절차는 AWS에서 검증하지 않았습니다.
+
 1. **KubeRay operator**: 최신 릴리스는 v1.7.2(API `ray.io/v1`)입니다. 아래 명령은 HyperPod 문서의 설치 절차에 차트 버전 고정만 추가했습니다.
 2. **gateway**: [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)대로 배포하고 `GATEWAY_ALLOWED_SUBJECTS`에 `system:serviceaccount:rl-trainer:grpo-trainer`를 넣습니다. gateway의 `/readyz`는 routing 표를 읽어야 성공하므로 `sandbox-gateway` 네임스페이스에도 `sandbox-routing` ConfigMap이 있어야 합니다.
 3. **공유 PVC**: `rl-trainer` 네임스페이스에 head와 worker가 함께 마운트할 PVC를 만듭니다(FSx for Lustre CSI driver 사용법은 EKS 문서 참고).
@@ -111,7 +115,7 @@ veRL 0.9.1의 `[vllm]` extra는 vllm 0.24.0, torch 2.11.0, transformers 5.9.0을
 
 Dockerfile 주석에 따르면 CUDA 13 빌드는 580 계열 이상의 NVIDIA 드라이버가 필요하고, EKS AL2023 NVIDIA AMI(580.178.04)와 HyperPod EKS AMI(595.91.07)는 모두 이를 만족합니다. `scripts/03_build_push_images.sh`는 이 이미지를 빌드하지 않습니다.
 
-아래 명령은 ECR에 로그인하고, `verl` 저장소가 없으면 tag immutability를 IMMUTABLE로 설정해 만든 뒤 linux/amd64 이미지를 빌드해 push합니다. Dockerfile이 `ray[default]` 버전을 고정하지 않아 빌드마다 Ray 버전이 달라질 수 있으니, 마지막 줄이 출력한 값을 `RAY_VERSION`에 넣으세요.
+아래 명령은 ECR에 로그인하고, `verl` 리포지토리가 없으면 태그를 덮어쓸 수 없도록 IMMUTABLE로 생성한 뒤 linux/amd64 이미지를 빌드해 push합니다. Dockerfile이 `ray[default]` 버전을 고정하지 않아 빌드마다 Ray 버전이 달라질 수 있으니, 마지막 줄이 출력한 값을 `RAY_VERSION`에 넣으세요.
 
 ```bash
 source scripts/config.env
@@ -147,7 +151,7 @@ docker run --rm "${registry}/${ECR_REPO_PREFIX}/verl:${IMAGE_TAG}" python3 -c "i
 
 `ground_truth`에는 task ID가, `prompt`에는 모델이 다시 작성할 PyTorch reference 코드가 들어갑니다. 기준 출력과 실행 시간은 샌드박스가 자체 이미지의 reference로 계산합니다.
 
-veRL 이미지로 일회성 Job을 실행해 데이터를 공유 PVC에 저장합니다. 아래 예시 매니페스트(저장소에 없음)의 `<VERL_IMAGE_URI>`와 `<SHARED_PVC>`를 채워 `kubectl apply -f <파일>`로 적용하세요.
+veRL 이미지로 일회성 Job을 실행해 데이터를 공유 PVC에 저장합니다. 아래 매니페스트에서 `<VERL_IMAGE_URI>`와 `<SHARED_PVC>`를 채워 새 파일로 저장한 뒤 `kubectl apply -f <파일>`로 적용하세요.
 
 ```yaml
 apiVersion: batch/v1
@@ -215,7 +219,7 @@ ServiceAccount, projected token, gateway env는 GPU worker에만 있습니다. h
 | A (EC2 trainer NodePool 또는 노드 그룹) | `'{"gpusandbox/role": "trainer"}'` |
 | B (HyperPod) | `'{"sagemaker.amazonaws.com/node-health-status": "Schedulable", "node.kubernetes.io/instance-type": "ml.g6e.48xlarge"}'` |
 
-HyperPod 예시의 health label 조건은 worker를 `Schedulable` 노드에만 배치합니다. 저장소 루트에서 RayCluster 템플릿을 `scripts/render.py`로 렌더링해 적용하고 상태를 확인합니다.
+HyperPod 예시의 health label 조건은 worker를 `Schedulable` 노드에만 배치합니다. 프로젝트 최상위 폴더에서 RayCluster 템플릿을 `scripts/render.py`로 렌더링해 적용하고 상태를 확인합니다.
 
 ```bash
 python3 scripts/render.py k8s/production/raycluster-verl.yaml.tpl \
@@ -260,7 +264,7 @@ ray job logs <submission-id> --address http://127.0.0.1:8265 --follow
 **확인할 것:**
 
 - 터미널 1에 `Forwarding from 127.0.0.1:8265 -> 8265`가 출력됩니다. 이 터미널은 계속 열어 둡니다.
-- 스크립트는 `--no-wait`로 job을 제출하고 submission ID를 출력한 뒤 바로 종료됩니다. `ray job list`에서도 같은 ID와 상태를 확인할 수 있습니다.
+- 스크립트는 `--no-wait`로 job을 제출하고 submission ID를 출력한 뒤 바로 종료됩니다. `ray job list`에서 같은 ID의 Job을 찾아 상태를 확인하세요.
 - `ray job logs`에 veRL step 로그가 계속 출력됩니다.
 
 **문제가 생기면:**
@@ -284,14 +288,18 @@ veRL 0.9.1에서는 `reward.*` 아래에 reward 함수와 worker 수를 지정�
 !!! warning "예전 예제의 설정 키"
     AWS veRL 샘플(`awslabs/awsome-distributed-ai`의 `examples/training/verl/hyperpod-eks/rlvr`)은 veRL v0.6.1에서 테스트한 예제로, `custom_reward_function.path`와 `.name`을 최상위에 지정합니다. v0.9.1의 기본 config는 reward 설정을 `reward.*`(`verl/trainer/config/reward/reward.yaml`) 아래에 두고, 하위 호환용 `legacy_reward_impl`에 예전 top-level 키도 남겨 두었습니다. 두 형식을 섞지 말고, 설치한 릴리스가 어느 쪽을 읽는지 확인하세요.
 
-## 사이징 (조건부 안내)
+## 채점 요청 수와 필요한 pod 수
+
+<span id="사이징-조건부-안내"></span>
+
+아래 예시는 기본 학습 설정으로 계산한 값입니다. 필요한 pod 수를 정할 때는 사용하는 GPU에서 요청 한 건의 채점 시간(`t_eval`)을 재세요.
 
 - **GPU 메모리**: 스크립트 기본값은 rollout `tensor_model_parallel_size=1`, `gpu_memory_utilization=0.5`이므로, vLLM에 할당되는 GPU 메모리 절반에 7B 가중치(약 15 GB)와 KV cache가 모두 들어가야 합니다. A10G나 L4(24 GB)에서는 이 절반이 12 GB라 부족하니 tensor parallel을 늘리거나 메모리가 더 큰 GPU를 쓰세요. trainer NodePool 후보(`g6e.12xlarge`, `g6e.48xlarge`, `p5.48xlarge`)의 GPU 수와 메모리는 EC2 인스턴스 문서에서 확인해 `GPUS_PER_NODE`에 맞춥니다.
 - **샌드박스 pod 수**: step당 채점 요청은 최대 `N = TRAIN_BATCH_SIZE × N_RESP_PER_PROMPT`(기본 512)개이고, 코드가 없거나 정책을 위반한 샘플은 샌드박스에 보내기 전에 로컬에서 제외됩니다. Ready pod가 `P`개이고 평가 한 번에 `t_eval`이 걸리면, reward 계산 구간은 대략 `ceil(N / P) × t_eval`입니다. `t_eval`은 `scripts/ops/bench.sh`의 `eval_p50_s`, `eval_p95_s`로 측정합니다.
 - **timeout**: veRL 클라이언트는 gateway 응답을 300초(`SandboxClient`의 `request_timeout_s`) 기다리고, gateway는 빈 pod를 600초(`SandboxPool`의 `acquire_timeout_s`) 기다립니다.
     - **요청 N개가 한꺼번에 들어오면**: 300초 안에 응답을 받지 못한 요청은 `sandbox_error`가 됩니다. 이때 마지막 차례의 요청은 `ceil(N / P)`번째로 평가를 마치므로, `ceil(N / P) × t_eval(p95)`에 통신 여유를 더한 값이 300초보다 작도록 `P`를 고르고, 실제 timeout 비율도 확인하세요. 예를 들어 N = 32, `t_eval` = 28초이면 `P` = 3에서는 11번째 차례가 308초에 끝나므로 `P`는 4 이상이어야 합니다.
     - **동시 요청 수**: veRL이 동시에 보내는 요청 수는 `reward.num_workers`와 릴리스의 async 처리 방식에 따라 다릅니다.
-- **상한**: NodePool `sandbox-gvisor`와 ResourceQuota가 GPU를 16개로 제한하므로, blue/green 전환에 필요한 여유까지 고려하면 기본 한도에서 pool 하나는 GPU 8개까지 쓸 수 있습니다. 더 큰 pool이 필요하면 두 한도를 함께 올리세요.
+- **상한**: NodePool `sandbox-gvisor`와 ResourceQuota가 GPU를 16개로 제한하므로, blue/green 전환에 필요한 여유까지 고려하면 기본 한도에서 동시에 유지할 두 pool에 할당할 GPU는 각각 최대 8개입니다. 더 큰 pool이 필요하면 두 한도를 함께 올리세요.
 - **GPU 종류**: speedup은 샌드박스 GPU에서 측정하므로, 커널을 최적화할 대상 GPU를 샌드박스 GPU로 고르세요. 한 pool의 pod는 모두 같은 GPU 종류로 구성하세요. GPU 종류가 섞이면 한 group의 speedup이 서로 다른 하드웨어에서 측정됩니다. `sandbox-gvisor` NodePool은 `g5.xlarge`, `g5.2xlarge`(둘 다 A10G)만 허용합니다.
 
 ## 재개
@@ -331,14 +339,6 @@ Ray on HyperPod 문서는 port-forward 없이 인증된 브라우저 링크로 �
 - **group 안의 일관성**: `compute_score`의 반환값에는 `group_key`가 없고, 로컬에서 판정한 샘플(`no_code`, `policy_violation`)의 `sandbox_version`은 빈 문자열입니다. group 안의 일관성은 같은 데이터 행(`task_id`, `index`)의 샘플을 묶을 수 있는 기록에서, 샌드박스가 실제로 채점한 응답끼리 `sandbox_version`을 비교해 확인하세요. 검증 데이터도 같은 `task_id`, `index`를 쓰므로 학습 기록과 검증 기록은 나눠서 묶습니다.
 - 로그의 reward 부가 정보에서 `sandbox_error`가 0에 가깝습니다.
 - `save_freq` step마다 `CKPT_DIR` 아래에 checkpoint 디렉터리가 생깁니다(veRL 기본 이름은 `global_step_<N>`).
-
-## 적용 범위와 한계
-
-- **로컬에서 확인한 것:** `prepare_data.py`의 기본 출력(train 640행, val 10행)은 로컬 실행으로, reward 함수가 쓰는 정적 정책(`harness/policy.py`)과 gateway의 group pin은 `pytest`로 확인했습니다. `rl/verl/reward_fn.py`의 `compute_score`는 가짜 gateway 클라이언트로 정상, 코드 없음, 정책 위반, 인프라 오류일 때의 반환값과 키 구성을 `pytest`로 확인했습니다. 실제 veRL job과의 통합은 확인하지 않았습니다.
-- **실행하지 않은 것:** 저자는 veRL 이미지 빌드, RayCluster, veRL job을 AWS에서 실행하지 않았으니 위 "확인 방법"으로 검증하세요.
-- **문서 기준인 것:** `reward.*` 설정 키는 veRL 0.9.1 기본 config 기준이고, reward worker 배치, 동시 요청 수, 로그의 `reward_extra_info` 형식은 릴리스마다 다를 수 있으니 재확인하세요.
-- **확인하지 않은 기능:** Ray on HyperPod의 인증된 dashboard 링크와 resilient training 기능은 이 저장소의 검증 범위에 포함되지 않았습니다.
-- **필요한 자원 수는 계산으로 추정했습니다.** "사이징" 절의 식과 숫자는 스크립트 기본값으로 계산한 값이고 측정값이 아니니, `t_eval`은 직접 측정하세요.
 
 ## 비용과 정리
 

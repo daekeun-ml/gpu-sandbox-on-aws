@@ -30,16 +30,16 @@ EKS에서 샌드박스가 요청 한 건을 채점하는 데 걸린 시간과 �
 </table>
 </div>
 
-**표 읽기**　p50과 p95는 성공한 요청의 서버 채점 시간입니다. 처리량에는 클라이언트가 빈 Pod를 기다린 시간도 들어갑니다. 예를 들어 B2의 시스템 워커에서 보낸 요청의 p50은 10.448초이고, 채점 Pod 두 개를 합친 처리량은 초당 0.189건입니다. GPU 종류와 Pod 수가 다른 행을 런타임 성능 순위로 해석하기는 어렵습니다.
+**표 읽기**　p50과 p95는 성공한 요청의 서버 채점 시간입니다. 처리량에는 클라이언트가 빈 Pod를 기다린 시간도 들어갑니다. GPU 종류와 Pod 수가 다른 행을 런타임 성능 순위로 해석하기는 어렵습니다.
 
 [데모에서 같은 표 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results)
 
 <details class="note" markdown="1">
 <summary id="b2-conditions">B2 · HyperPod 채점 노드, 실행 화면과 원본</summary>
 
-`us-east-1`의 EKS 1.36에서 `ml.g5.xlarge` 두 대에 `gvisor-hyperpod` v1 Pod를 하나씩 띄웠습니다. 각 Pod에는 A10G 한 장이 있습니다. GRPO 학습이 끝난 뒤 CPU 시스템 노드와 학습 노드가 차례로 `relu_bias_triton`을 32번씩 제출했습니다. 두 Job은 차례로 실행했습니다.
+`us-east-1`의 EKS 1.36에서 `ml.g5.xlarge` 두 대에 `gvisor-hyperpod` v1 Pod를 하나씩 띄웠습니다. 각 Pod에는 A10G 한 장이 있습니다. GRPO 학습이 끝난 뒤 같은 커널(`relu_bias_triton`)로 채점 시간을 측정했습니다. CPU 시스템 노드에서 먼저 채점을 32회 요청하고, 측정이 끝나면 학습 노드에서 같은 방법으로 32회 더 요청했습니다.
 
-p50과 p95는 성공한 요청의 서버 채점 시간(`duration_s`)입니다. pool 처리량은 성공 건수를 클라이언트가 한 배치를 마칠 때까지 걸린 시간으로 나눈 값입니다. Pod 생성부터 `Ready`까지는 앞선 CUDA 검사로 이미지가 캐시된 노드에서 10초, 다른 노드에서 110초가 걸렸습니다.
+Pod 생성부터 `Ready`까지는 앞선 CUDA 검사로 이미지가 캐시된 노드에서 10초, 다른 노드에서 110초가 걸렸습니다.
 
 [![두 벤치마크 Job의 완료 상태와 클라이언트별 성공 건수, 채점 시간, 처리량](../images/terminal/hyperpod-b2-benchmark.png)](../images/terminal/hyperpod-b2-benchmark.png)
 
@@ -54,16 +54,16 @@ scripts/hyperpod/bench_b2.sh 32
 <details class="note" markdown="1">
 <summary id="b1-conditions">B1 · EC2 채점 노드, 실행 화면과 원본</summary>
 
-EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v1` 샌드박스 두 개를 띄웠습니다. 이미지 태그는 `a20261120b`입니다. 같은 pool을 두 건으로 예열한 뒤, 학습을 멈춘 상태에서 아래 순서대로 각 클라이언트가 `relu_bias_triton` 32건을 한 배치로 보냈습니다.
+EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v1` 샌드박스 두 개를 띄웠습니다. 이미지 태그는 `a20261120b`입니다. 학습을 마친 뒤 채점 요청 두 건을 보내 pool을 예열했습니다. 먼저 EKS 시스템 노드에서 `relu_bias_triton`의 채점을 32회 요청했습니다. 이 배치가 끝난 뒤 HyperPod 학습 노드에서도 같은 커널로 32회 요청했습니다.
 
-두 샌드박스 pod가 생성된 뒤 Ready가 되기까지 각각 15, 120초가 걸렸습니다. p50과 p95는 성공한 요청을 서버가 처리한 시간이고, 처리량에는 클라이언트가 빈 pod를 기다린 시간도 들어갑니다. 클라이언트별로 한 번씩 측정했으므로 두 행의 차이만으로 배치 위치의 효과를 판단하기는 어렵습니다.
+두 샌드박스 pod가 생성된 뒤 Ready 상태가 되기까지 한쪽은 15초, 다른 쪽은 120초가 걸렸습니다. 각 노드에서 한 번씩만 측정했으므로 채점 시간의 차이가 요청을 보낸 위치 때문인지는 알 수 없습니다.
 
 ![B1 벤치마크 Job이 실행된 노드와 각 Job의 측정값](../images/terminal/hyperpod-b1-benchmark.png)
 
 [실행 기록 JSON](data/hyperpod-b1.json) · [공개 데모](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1)
 
 ??? example "B1에서 같은 조건으로 다시 측정하기"
-    [07 HyperPod](07_hyperpod.md)의 B1 설정과 Ready 상태인 샌드박스 두 개를 사용합니다. 기본 Job은 이번 실행에서 EKS 시스템 노드에 배치됐습니다. 마지막 Job은 클라이언트를 HyperPod 학습 노드에 지정합니다.
+    [07 HyperPod](07_hyperpod_b1.md)의 B1 설정과 Ready 상태인 샌드박스 두 개를 사용합니다. 기본 Job은 이번 실행에서 EKS 시스템 노드에 배치됐습니다. 마지막 Job은 클라이언트를 HyperPod 학습 노드에 지정합니다.
 
     ```bash
     scripts/ops/bench.sh 2
@@ -95,12 +95,6 @@ EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v
 
 </details>
 
-**시작 전에**
-
-- 먼저 [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에 따라 비교할 pool을 배포하세요. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다.
-- **Kata일 때**: [03 Kata 샌드박스](03_kata.md)에서 노드와 런타임을 준비하고, 04의 `scripts/06_deploy_sandboxes.sh`로 측정할 v1 pool을 배포합니다.
-- 세 런타임의 구조 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
-
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **cold start**: 이 페이지에서는 pod가 만들어진 시각부터 마지막으로 Ready가 된 시각까지를 뜻합니다.
     - **p50, p95**: 측정값을 작은 값부터 정렬했을 때 50%와 95% 위치의 값입니다. p50은 일반적인 지연을, p95는 느린 요청의 지연(tail latency)을 나타냅니다.
@@ -112,12 +106,12 @@ EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v
     - **nested virtualization, bare metal**: VM 안에서 다시 VM을 띄우는 기능과, 하이퍼바이저 없이 물리 서버 전체를 쓰는 인스턴스(`.metal`)입니다.
     - **`overhead.podFixed`**: RuntimeClass에 지정하는 값으로, 스케줄러가 pod마다 런타임용으로 추가 예약하는 CPU와 메모리입니다.
     - **pool claim**: 미리 띄워 둔 샌드박스 pool(warm pool)에서 샌드박스 하나를 할당받는 작업입니다.
-    - **JSONL**: 한 줄에 JSON 객체 하나씩 기록하는 파일 형식입니다.
+    - **JSONL**: 한 줄에 JSON 객체 하나씩 기록하는 파일 형식입니다. 런타임의 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), 다른 용어는 [용어 사전](../reference/glossary.md)을 보세요.
 
 
 ## 시작 전 확인
 
-`sandbox` namespace의 pod를 런타임과 버전 label과 함께 확인합니다.
+[04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에 따라 측정할 v1 pool을 배포하세요. Kata를 비교하려면 먼저 [03 Kata 샌드박스](03_kata.md)에서 노드와 런타임을 준비합니다. 다음 명령에서 각 pod의 런타임과 버전을 확인하세요.
 
 ```bash
 kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version
@@ -140,7 +134,10 @@ kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version
 scripts/ops/bench.sh 32
 ```
 
-64건을 비교하려면 다음 실행에서 인자를 `64`로 바꾸세요.
+요청 수를 바꾸려면 원하는 건수를 인자로 지정하세요(예: `64`).
+
+<details class="note" markdown="1">
+<summary>벤치마크가 pool을 선택하고 지표를 기록하는 순서</summary>
 
 | 순서 | 스크립트 동작 |
 |---|---|
@@ -151,7 +148,11 @@ scripts/ops/bench.sh 32
 
 - **2단계의 cold start 값**: `lastTransitionTime`은 마지막으로 Ready가 된 시각이라서, 중간에 readiness를 잃었다가 회복한 pod는 첫 기동 시간이 아닌 값을 냅니다.
 
-**확인할 것:** pool마다 다음과 같은 출력이 나옵니다(예시 형태, 값은 환경마다 다릅니다).
+</details>
+
+<a id="확인-방법"></a>
+
+**출력 확인**　pool마다 Ready가 된 시간과 채점 결과가 나옵니다.
 
 ```text
 [hh:mm:ss] gvisor: cold start (creationTimestamp -> Ready)
@@ -161,10 +162,10 @@ scripts/ops/bench.sh 32
 [hh:mm:ss] bench  gvisor  ok 32/32  p50 ...s  p95 ...s  ... eval/s  speedup ...
 ```
 
-- **마지막 줄**: `[hh:mm:ss] results: <저장소 경로>/bench-<YYYYmmdd-HHMMSS>.jsonl`입니다.
+- **결과 파일**: 마지막 `results:` 줄에 `bench-<YYYYmmdd-HHMMSS>.jsonl` 파일의 전체 경로가 나옵니다. 측정한 pool마다 JSON 한 줄이 들어 있습니다.
 - **`bench` 줄**: `ok 32/32`처럼 두 수가 같아야 정상입니다.
-- **터미널과 JSONL**: 터미널에는 요약이 보이고, JSONL 파일에는 모든 필드가 담긴 원래 JSON이 저장됩니다. cold start 값은 터미널에만 출력되고 JSONL에는 저장되지 않으니 따로 기록해 두세요.
-- **측정 버전**: 스크립트는 v1 pool만 측정합니다. v2는 seed 수(5개)가 달라 평가 시간이 다를 수 있으므로 같은 버전끼리 비교하세요.
+- **cold start**: 이 값은 터미널에만 출력되므로 필요하면 따로 기록하세요.
+- **측정 버전**: v2는 seed 수(5개)가 달라 평가 시간도 달라질 수 있습니다. v2를 측정하려면 스크립트에서 pool 선택과 cold start 조회에 쓰는 pod selector 두 곳, Service 주소 한 곳의 `v1`을 함께 바꾸세요.
 
 **문제가 생기면:**
 
@@ -195,9 +196,7 @@ scripts/ops/bench.sh 32
 
 `eval_p50_s`와 `eval_p95_s`는 샌드박스가 요청을 맡은 뒤 채점과 프로세스 정리에 쓴 시간으로 계산합니다. 클라이언트가 빈 pod를 기다리고 요청을 보내는 데 걸린 시간은 pool 처리량에 반영됩니다.
 
-??? note "평가 지연에 포함되는 과정"
-    `duration_s`는 서버가 요청 하나를 맡은 뒤 verdict를 낼 때까지 걸린 시간으로, 커널 실행 외의 과정도 모두 들어갑니다. 클라이언트가 pod를 기다린 시간은 들어가지 않습니다.
-
+??? note "서버가 요청 한 건을 처리하는 순서"
     서버는 요청마다 새 프로세스 트리를 만들고 아래 과정을 실행합니다. golden에 따라 실행하는 과정이 다릅니다.
 
     - **GPU pool의 `relu_bias_triton`**: 그림의 CUDA 초기화와 Triton 컴파일은 이 경우에만 해당합니다.
@@ -217,23 +216,26 @@ scripts/ops/bench.sh 32
 
 ## 해석하는 방법
 
+<a id="적용-범위와-한계"></a>
+
 표에서 gVisor는 한 건을 채점하는 데 p50이 9.984초이고 Kata QEMU는 10.789초입니다. pool 전체 처리량은 Kata QEMU가 초당 0.349건으로 더 높습니다. 동시에 일한 pod가 각각 두 개와 네 개이고 GPU도 달랐기 때문에, 처리량만으로 런타임 하나의 속도를 판단하기 어렵습니다.
 
-표를 읽을 때는 런타임별로 몇 건이 성공했는지 먼저 보세요. 실패가 많거나 GPU 종류가 다르면 p50이 낮은 이유를 런타임에서만 찾기 어렵습니다. 같은 GPU에서 같은 입력을 채점한 성공 건끼리 걸린 시간을 비교하세요.
+p50과 p95에는 성공한 요청만 들어갑니다. 런타임 차이를 보려면 먼저 GPU 종류가 같은지, 실패한 요청은 얼마나 되는지 확인하세요.
 
 | 비교 | 조건 | 볼 지표 |
 |---|---|---|
 | Kata CLH CPU 대 Kata QEMU CPU | 같은 `c8i.2xlarge` 노드(nested virtualization), 같은 이미지, 같은 golden, RuntimeClass만 다른 같은 profile | cold start, `eval_p50_s`, `eval_p95_s` |
 | Kata QEMU 대 Kata CLH GPU(실험) | 같은 `g4dn.metal`, 같은 T4 | 위 지표와 `ref_ms_median` |
-| gVisor (A10G) | 같은 A10G의 runc 기준선은 이 저장소에 없습니다 | 측정값 자체와, 같은 pool을 다른 시점에 측정한 값 |
+| gVisor (A10G) | 같은 A10G에서 runc로 측정한 기준값이 없습니다 | 측정값 자체와, 같은 pool을 다른 시점에 측정한 값 |
 | gVisor CPU 대 Kata CPU | 같은 `c8i.2xlarge` 노드, 같은 이미지, 같은 golden | cold start, `eval_p50_s`, `eval_p95_s` |
 | GPU 종류가 다른 pool끼리 | A10G 대 T4 | 오버헤드 비교에 쓰지 않습니다. speedup은 GPU별로 따로 해석합니다 |
 
 - **Kata CLH CPU 대 Kata QEMU CPU**: RuntimeClass에 따라 hypervisor와 pod당 예약량(`overhead.podFixed`)이 다르고, 입력 seed는 요청마다 새로 뽑습니다.
-- **Kata CLH GPU(실험)**: CLH GPU는 upstream에서 지원하지 않으며, 2026-11-18에는 VM이 시작되지 않아 측정하지 못했습니다.
-- **gVisor CPU 대 Kata CPU**: 격리 방식(사용자 공간 커널 대 VM)과 RuntimeClass 설정이 다르고, 입력 seed는 요청마다 새로 뽑습니다. 시나리오 C의 [10 c8i 단독 저비용 경로](10_cpu_only.md)에서 세 pool을 함께 띄웁니다.
+- **Kata CLH GPU(실험)**: Kata upstream에서 지원하지 않습니다. 2026-11-18에는 artifact 경로를 지정한 뒤에도 VM 시작이 `create container timeout`으로 끝나 측정값이 없습니다. [Kata 실습의 3단계](03_kata.md)
+- **gVisor CPU 대 Kata CPU**: 격리 방식(사용자 공간 커널 대 VM)과 RuntimeClass 설정이 다르고, 입력 seed는 요청마다 새로 뽑습니다. 시나리오 C의 [10 GPU 없이 CPU로 실습하기](10_cpu_only.md)에서 세 pool을 함께 띄웁니다.
 
-결과를 읽을 때는 다음도 함께 고려하세요.
+<details class="note" markdown="1">
+<summary>pod 수, 요청 대기 시간, 측정 방식이 결과에 미치는 영향</summary>
 
 - **처리량은 Ready pod 수에 따라 달라집니다.** pod 하나가 한 번에 평가 하나만 처리하기 때문입니다. 기본 replica는 `gvisor` 2, `kata-qemu` 4, `kata-clh` 2이고 CPU pool은 각 2입니다. replica 수가 다른 pool은 전체 처리량과 함께 Ready pod 수로 나눈 pod당 값도 기록해 비교하세요.
 - **요청 수를 너무 크게 정하지 마세요.** pod는 한 번에 평가를 하나만 처리하므로 클라이언트는 비어 있는 pod를 기다립니다. 대기 시간이 600초(acquire timeout)를 넘으면 그 요청은 `sandbox_error`가 되어 `ok` 수가 줄어듭니다.
@@ -241,12 +243,11 @@ scripts/ops/bench.sh 32
 - **같은 GPU 종류에서 `ref_ms_median`이 다르면** 런타임에 따라 커널 실행을 요청하거나 동기화하는 데 걸리는 시간이 다를 수 있습니다(추론). 이 harness는 host clock과 `torch.cuda.synchronize()`로 측정하므로 launch 비용이 결과에 포함됩니다.
 - **KernelBench 수치와 직접 비교하지 않습니다.** KernelBench는 L2 flush와 CUDA event로 시간을 측정하고, 이 harness는 매번 입력을 바꿔 가며 host clock으로 시간을 잽니다.
 
-!!! question "❓ 오해: gVisor와 Kata의 숫자를 나란히 놓으면 런타임 비교가 된다"
-    이 핸즈온의 gVisor pool(`g5.xlarge`, A10G)과 Kata GPU pool(`g4dn.metal`, T4)은 GPU, 인스턴스, replica 수가 모두 달라서, 두 pool의 측정값 차이 중 런타임 때문에 생긴 부분만 따로 구할 수 없습니다. 런타임을 비교할 때는 같은 노드의 Kata CLH CPU와 Kata QEMU CPU처럼 런타임 외의 조건이 모두 같은 두 pool을 쓰세요.
+</details>
 
 ### 같은 실행에서 pod가 Ready가 되기까지 { #ready-times }
 
-벤치마크가 각 v1 pod의 생성 시각과 마지막 Ready 전환 시각을 읽어 출력한 값입니다. 이미지 pull과 캐시 상태도 이 시간에 영향을 줍니다.
+pod가 생성된 시각부터 마지막으로 Ready가 된 시각까지 쟀습니다. Kubernetes가 시각을 초 단위로 기록하므로 1초 미만의 차이는 구분할 수 없습니다. 이미지 다운로드와 캐시 상태도 영향을 줍니다.
 
 `gvisor` 15, 15 s · `kata-qemu` 141, 145, 146, 141 s · `gvisor-cpu` 116 s · `kata-clh-cpu` 20 s · `kata-qemu-cpu` 20 s
 
@@ -348,14 +349,11 @@ scripts/ops/bench.sh
     PY
     ```
 
-    **확인할 것:** 측정한 pool마다 한 줄씩, runtime, ok, requests, p50, p95, 처리량, speedup 중앙값, ref_ms 중앙값 순서로 나옵니다. 이 값을 위 양식에 옮기세요.
+    한 줄에 pool 하나의 runtime, 성공 건수와 요청 수, p50, p95, 처리량, speedup 중앙값, ref_ms 중앙값이 출력됩니다.
 
-### 관찰 (2026-11-18)
+<a id="관찰-2026-11-18"></a>
 
-- **같은 c8i 노드, 같은 이미지와 golden:** eval p50은 `gvisor-cpu` 3.76 s, `kata-qemu-cpu` 4.058 s, `kata-clh-cpu` 4.225 s였고, 이미지가 캐시된 상태의 cold start는 세 pool 모두 10에서 11 s였습니다. nested virtualization 환경에서 얻은 값이므로 같은 노드에서 실행한 세 런타임을 비교할 때만 참고하세요.
-- **GPU pool의 cold start:** gVisor(A10G)는 16 s, Kata QEMU(T4)는 pod마다 30에서 36 s였습니다. GPU가 다르므로(A10G 대 T4) "해석하는 방법"의 규칙대로 이 차이는 오버헤드 비교가 아닙니다.
-- **GPU별 값:** `ref_ms` 중앙값은 A10G 0.58 ms, T4 1.15 ms였고, speedup은 A10G 1.75, T4 1.79였습니다.
-
+캐시가 있는 `c8i.2xlarge`에서는 세 CPU pool 모두 10~11초 만에 Ready가 됐습니다. 두 GPU pool은 A10G와 T4로 하드웨어가 달라서 시작 시간이나 speedup 차이를 런타임만의 영향으로 해석할 수 없습니다.
 
 </details>
 
@@ -375,15 +373,6 @@ scripts/ops/bench.sh
 
 </details>
 
-## 적용 범위와 한계
-
-- **11월 18일 표의 측정 조건.** 2026-11-18 실습 계정에서 배포 직후(1차)와 pool 재시작 뒤(2차) 두 번 측정했고, 표는 2차입니다. replica 수도 기본값과 달랐습니다(`gvisor` 1, CPU pool 각 1).
-- **runc 기준선이 없습니다.** 그래서 gVisor의 오버헤드를 직접 계산할 수 없습니다.
-- **Kata CLH GPU는 upstream에서 지원하지 않습니다.** 2026-11-18 실행에서는 artifact 경로를 채운 뒤에도 실험용 `kata-clh` pool의 VM이 시작되지 않아(`create container timeout`) 측정하지 못했습니다([03 Kata 샌드박스](03_kata.md)의 3단계).
-- **nested virtualization 결과는 상대 비교용입니다.**
-- **cold start는 1초 해상도입니다.** Kubernetes timestamp가 초 단위라서 1초 미만의 차이는 측정할 수 없습니다.
-- **v1 pool만 측정합니다.** 스크립트에는 pool이 있는지 확인하는 pod selector, cold start를 읽는 pod selector, Service 주소 세 곳에 `v1`이 고정되어 있습니다. v2를 측정하려면 세 곳을 모두 바꿔야 합니다.
-
 ## 소요 시간과 비용
 
 벤치마크는 pool마다 Job 하나만 실행합니다.
@@ -395,13 +384,6 @@ scripts/ops/bench.sh
     - `c8i.2xlarge`: 시간당 0.37484 USD
 
 측정을 마치면 [99 정리](99_cleanup.md)에 따라 GPU 노드 그룹을 0으로 줄이거나 삭제하세요.
-
-## 확인 방법
-
-1. pool마다 `<runtime>: cold start (creationTimestamp -> Ready)` 다음에 `  <pod>: <N>s` 줄이 pod 수만큼 나옵니다.
-2. 이어서 `bench` 요약 한 줄이 나오고, `ok 32/32`처럼 두 수가 같습니다.
-3. 마지막에 `results: <repo>/bench-<timestamp>.jsonl`이 출력되고, 파일에 측정한 pool마다 JSON 한 줄이 있습니다.
-4. 스크립트는 배포하지 않은 pool을 별도 메시지 없이 건너뜁니다. 결과에 빠진 pool이 있으면 "시작 전 확인"의 `kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version`으로 v1 pod가 있는지 확인하세요.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

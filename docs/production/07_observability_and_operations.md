@@ -5,9 +5,9 @@
 
 ## 학습이 계속돼도 채점은 실패할 수 있습니다
 
-step 번호는 계속 올라가는데 모델 성능은 그대로이거나 배치 처리 시간이 길어질 수 있습니다. 이때 `reward_batch`를 먼저 보면 실행 결과가 틀렸는지, 샌드박스가 채점을 완료하지 못했는지 구분할 수 있습니다. 채점을 완료하지 못한 요청이 늘면 샌드박스로 요청을 보내고 응답을 받는 과정을 먼저 점검하세요.
+step 번호는 계속 올라가는데 모델 성능은 그대로이거나 배치 처리 시간이 길어질 수 있습니다. `reward_batch`를 먼저 열어 제출한 답이 틀렸는지, 샌드박스가 채점을 마치지 못했는지 구분하세요. 채점을 완료하지 못한 요청이 늘면 샌드박스로 요청을 보내고 응답을 받는 과정을 먼저 점검하세요.
 
-![a: 인증 실패(401 응답이 대량으로 발생)가 나면 sandbox_error 샘플이 None으로 제외되고 그 샘플의 advantage는 0이 됩니다. 모든 샘플이 제외되면 학습 신호 없이 step만 진행됩니다. pool이 줄면 Ready가 아닌 pod가 DNS에서 빠지고 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking은 flag가 verdict에만 기록되고 지표로 집계되지 않아 reward가 오르는 것처럼 보입니다. 세 경우 모두 학습은 멈추지 않습니다. b: 같은 세 고장을 각각 경보에 연결합니다. status.sandbox_error / n으로 sandbox_error 비율 경보(TRL 5% 초과, 3 batch 연속)를, 활성 pool Deployment별 available과 desired replicas 비교로 Ready pod 부족 경보(available이 desired 미만인 상태 10분)를, flag 개수(저장소에 없는 확장, 점선)로 reward hacking 신호 경보(flag 비율 상승 추세)를 만듭니다.](../images/figures/production-07_observability_and_operations.ko.svg)
+![a: 인증 실패(401 응답이 대량으로 발생)가 나면 sandbox_error 샘플이 None으로 제외되고 그 샘플의 advantage는 0이 됩니다. 모든 샘플이 제외되면 학습 신호 없이 step만 진행됩니다. pool이 줄면 Ready가 아닌 pod가 DNS에서 빠지고 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking은 flag가 verdict에만 기록되고 지표로 집계되지 않아 reward가 오르는 것처럼 보입니다. 세 경우 모두 학습은 멈추지 않습니다. b: 같은 세 고장을 각각 경보에 연결합니다. status.sandbox_error / n으로 sandbox_error 비율 경보(TRL 5% 초과, 3 batch 연속)를, 활성 pool Deployment별 available과 desired replicas 비교로 Ready pod 부족 경보(available이 desired 미만인 상태 10분)를, flag 개수(집계 기능을 추가해야 함, 점선)로 reward hacking 신호 경보(flag 비율 상승 추세)를 만듭니다.](../images/figures/production-07_observability_and_operations.ko.svg)
 
 ## 계층별 로그와 지표
 
@@ -175,7 +175,7 @@ verdict의 `flags` 목록(`implausible_speedup`, `timed_output_mismatch`, `trito
 "flags": dict(Counter(f for r in results for f in r.get("flags") or [])),
 ```
 
-코드를 수정하기 전에도 다음 두 flag의 영향은 기존 지표에서 간접적으로 확인할 수 있습니다.
+두 flag는 기존 지표에 각각 다음과 같이 간접적으로 나타납니다.
 
 - **`timed_output_mismatch`**: 이 flag가 붙은 결과는 `wrong_answer`로 집계됩니다.
 - **`implausible_speedup`**: 이 flag가 붙으면 speedup이 1.0으로 바뀌므로, `custom_kernel_rate`는 높은데 `mean_speedup`이 1.0 근처에 머뭅니다(위협 유형은 [04 Reward 무결성](04_reward_integrity.md) 참고).
@@ -221,10 +221,14 @@ sum(increase(gateway_recycled_pods_total[1h])) / (sum(increase(gateway_evaluatio
 
 ## CloudWatch를 쓰는 경우 (선택)
 
-- **Container Insights (EKS)**: CloudWatch agent가 클러스터, 노드, pod 수준 지표와 로그를 수집하며, 수집한 지표에 CloudWatch alarm을 설정할 수 있습니다.
-- **Prometheus 지표**: Container Insights의 Prometheus 모니터링은 CloudWatch agent로 지표를 수집합니다. 문서에는 counter, gauge, summary 유형을 수집한다고 적혀 있으므로, 이 저장소의 지연 지표(histogram)로 p95 경보를 만들 수 있는지 먼저 확인하세요. 문서가 권장하는 OTel Container Insights는 PromQL을 지원합니다.
-- **Amazon Managed Service for Prometheus**: EKS와 함께 쓰는 관리형 Prometheus 호환 서비스로, 위 PromQL을 그대로 쓸 수 있습니다.
-- **로그**: trainer의 JSON 줄을 CloudWatch Logs로 보내면 Logs Insights로 `reward_batch` 줄만 필터링해 볼 수 있습니다.
+<span id="적용-범위와-한계"></span>
+
+Prometheus 수집, NetworkPolicy, CloudWatch 연동은 클러스터에 맞게 적용할 예시입니다. 경보를 설정하기 전에 수집기가 인증을 통과하고 필요한 시계열이 생성되는지 확인하세요.
+
+- **Container Insights (EKS)**: CloudWatch agent는 클러스터, 노드, pod 수준의 지표와 로그를 수집합니다. 이 지표에서 알림이 필요하면 CloudWatch alarm을 설정하세요.
+- **Prometheus 지표**: Container Insights의 Prometheus 모니터링은 CloudWatch agent로 지표를 수집합니다. 문서에는 counter, gauge, summary 유형을 수집한다고 적혀 있으므로, 샌드박스와 gateway의 지연 지표(histogram)로 p95 경보를 만들 수 있는지 먼저 확인하세요. 문서가 권장하는 OTel Container Insights는 PromQL을 지원합니다.
+- **Amazon Managed Service for Prometheus**: EKS와 함께 쓰는 관리형 Prometheus 호환 서비스로 위 PromQL을 그대로 지원합니다.
+- **로그**: trainer의 JSON 로그를 CloudWatch Logs로 보낸다면 Logs Insights에서 `reward_batch` 줄만 필터링하세요.
 
 ```text
 fields @timestamp, @message
@@ -283,13 +287,6 @@ kubectl -n sandbox-gateway get configmap sandbox-routing -o jsonpath='{.data.rou
 
 !!! question "❓ 오해: RewardStalled로 재시작되면 인프라 문제다"
     항상 그렇지는 않습니다. policy가 코드 블록을 생성하지 않거나 모든 completion이 정적 정책을 위반해 샌드박스로 보내는 요청이 없을 때도 `reward_batch` 줄은 기록되지 않습니다. 이 경우 재시작으로는 해결되지 않으니 TRL의 `format_reward` 추이를 함께 확인하세요. 감지 패턴은 `json.dumps` 기본 출력(`"event": "reward_batch"`, 콜론 뒤 공백)에 맞춰져 있으므로, 로그 형식을 바꾸면 패턴도 수정해야 합니다.
-
-## 적용 범위와 한계
-
-- **코드에서 확인한 것:** 지표 이름, label, bucket, 이벤트 필드는 `server/app.py`, `gateway/app.py`, `rewards.py`에서 그대로 옮겼습니다. 서버와 gateway의 `/metrics`는 코드상 `/info`, `/v1/evaluate`와 같은 인증 의존성을 쓰고, 인증 동작 자체는 로컬 테스트가 `/info`로 확인합니다.
-- **실행하지 않은 것:** Prometheus 수집 예시, NetworkPolicy 예시, CloudWatch 연동은 저자가 클러스터에서 실행하지 않았습니다.
-- **아직 없는 것:** flag는 지표로 집계되지 않으니, reward hacking 경보는 위 "flag는 아직 지표가 아닙니다"의 확장을 적용한 뒤에 쓸 수 있습니다.
-- **문서 기준인 것:** Container Insights가 histogram 지표를 어떻게 다루는지는 CloudWatch 문서 기준이고 직접 확인하지 않았습니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

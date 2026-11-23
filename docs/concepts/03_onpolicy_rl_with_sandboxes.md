@@ -43,13 +43,15 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
 
 ## `reward_batch` 한 줄로 확인하는 전환
 
-시나리오 A의 16스텝 실행에서 배치 5에 해당하는 필드만 뽑으면 다음과 같습니다. `global_step`은 당시 trainer의 스텝이고, `batch`는 채점 호출의 순번입니다.
+<span id="적용-범위와-한계"></span>
+
+시나리오 A의 16스텝 학습에서 배치 1~4는 v1이, 5~16은 v2가 채점했습니다. 아래는 처음으로 v2에서 채점한 배치의 로그입니다. `global_step`은 당시 trainer의 스텝이고, `batch`는 채점 호출의 순번입니다.
 
 ```json
 {"batch": 5, "global_step": 4, "version": "v2", "served_versions": {"v2": 14}, "n": 14, "status": {"compile_error": 6, "runtime_error": 8}, "pass_rate": 0.0}
 ```
 
-`served_versions`의 14건이 모두 `v2`이므로 이번 배치가 새 pool로 넘어갔습니다. 컴파일 오류 6건과 실행 오류 8건이어서, 정상적으로 채점했어도 정답 비율은 0입니다. 이 로그의 `pass_rate`는 `ok` 건수를 이번 호출에 들어간 평가 결과 수(`n`)로 나눈 값입니다. TRL이 학습에서 `sandbox_error`의 reward를 제외하는 규칙은 아래 표에서 따로 확인할 수 있습니다. [배치별 원본](../handson/data/grpo-rollout-2026-11-22.json) · [버전 전환 화면](../handson/06_sandbox_update.md#switch-batches)
+`served_versions`의 14건이 모두 `v2`이므로 이번 배치가 새 pool로 넘어갔습니다. 컴파일 오류 6건과 실행 오류 8건이어서, 정상적으로 채점했어도 정답 비율은 0입니다. 이 로그의 `pass_rate`는 `ok` 건수를 이번 호출에 들어간 평가 결과 수(`n`)로 나눈 값입니다. TRL이 학습에서 `sandbox_error`의 reward를 제외하는 규칙은 아래 표에서 따로 확인할 수 있습니다. [배치별 원본](../handson/data/grpo-rollout-2026-11-22.json) · [버전 전환 화면](../handson/06_sandbox_update.md#switch-batches) · [학습 종료 후 v1 복구](../handson/06_sandbox_update.md#rollback-run)
 
 <a id="더-살펴보기"></a>
 
@@ -132,12 +134,6 @@ v2 예시 설정에서는 pod가 200회 평가 후 draining 상태로 바뀝니�
 
 !!! question "❓ 오해: parity를 통과하면 v1과 v2의 reward는 같다"
     parity는 golden 제출물의 verdict와 speedup이 허용 범위 안에서 같은지만 확인합니다. v2는 seed 수와 speedup 상한을 의도적으로 바꾸므로 일부 completion의 reward는 달라집니다. 그래서 전환을 batch 경계에 맞추고 `sandbox_version_switch` 이벤트로 기록합니다. 이 기록으로 reward 곡선의 변화가 버전 전환 때문인지 확인할 수 있습니다.
-
-## 적용 범위와 한계
-
-- **로컬 테스트로 확인한 것:** routing 표의 reload와 `revision` 증가, `sandbox_error`를 `None`으로 처리하는 reward, 두 CPU pool 사이의 golden probe와 parity, routing 전환 중 gateway의 group 고정을 pytest로 확인했습니다. TRL 경로는 프로세스 1개 dry run으로 구성 요소 연결만 확인했습니다.
-- **AWS에서 실행한 것:** 실습 계정에서 gVisor v1 pool을 배포해 `scripts/ops/verify.sh gvisor v1`을 통과했고, `g5.2xlarge` trainer로 GRPO 5 step을 마쳤습니다([실행 기록](../reference/sources.md#aws-실행-기록)).
-- **학습 중 버전 전환**　16스텝 동안 배치 1~4는 v1, 5~16은 v2에서 채점됐고, 학습이 끝난 뒤 v1으로 복구했습니다. [전환과 롤백](../handson/06_sandbox_update.md#rollback-run)
 
 ??? note "참고 자료"
     | 주제 | 링크 |

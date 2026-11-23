@@ -88,8 +88,8 @@ The local exercise checks whether prepared answers receive the expected verdicts
 Choose an AWS path that matches your goal.
 
 - **C (CPU only)** Run scoring without a model and compare gVisor and Kata. [CPU exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/10_cpu_only/)
-- **A (EC2 GPU)** Score GPU kernels and use the results for GRPO training. [Cluster setup](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/01_cluster_and_images/)
-- **HyperPod B1 and B2**. B1 puts the trainer on HyperPod and uses EC2 graders. B2 puts the CPU worker and all three GPU workers on HyperPod. [B2 lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
+- **A (EC2 GPU)** Score GPU kernels and use the results for GRPO training. [A lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/scenario_a/)
+- **HyperPod B1 and B2**. B1 puts the trainer on HyperPod and uses EC2 graders. B2 puts the CPU worker and all three GPU workers on HyperPod. [B1 lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b1/) · [B2 lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
 
 AWS resources can incur charges while idle. Check the [cost estimates](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/concepts/04_platforms_and_instances/) before deployment and follow the [cleanup steps](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/99_cleanup/) at the end.
 

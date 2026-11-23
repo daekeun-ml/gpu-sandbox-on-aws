@@ -1,6 +1,6 @@
 # 참고 자료 모음
 
-여러 장에서 함께 참고하는 자료를 주제별로 모았습니다. 문서 속 수치와 AWS 실행 기록의 근거는 [검증된 사실과 출처](sources.md)에서 확인할 수 있습니다.
+여러 장에서 함께 참고하는 자료를 주제별로 모았습니다. 문서 속 수치와 AWS 실행 기록의 근거는 [검증된 사실과 출처](sources.md)에 있습니다.
 
 <span id="ref-beginner-02-container-vs-sandbox"></span>
 <span id="ref-beginner-03-gpu-sandbox"></span>

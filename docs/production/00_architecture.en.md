@@ -42,6 +42,13 @@ The gateway selects an available pod and remembers the grading version. Karpente
 
 ## Preparing for production after the exercise
 
+<span id="scope-and-limits"></span>
+
+??? note "What has run on AWS"
+    Steps 1, 4 and 5 share the scripts used in the scenario A run. The extra gateway, Karpenter NodePools, JWKS CronJob, pool hardening and warm capacity shown here have not been deployed together on AWS. Combining HyperPod autoscaling with the open-source Karpenter installation is also untested. [Run record](../reference/sources.md#aws-run-record)
+
+    Local tests cover group pins across a switch and client requests to two loopback CPU servers. They render the EC2NodeClass and check NodePool references without applying them to a cluster. Tests check YAML and Service exposure for `pool-hardening.yaml` and `warm-capacity.yaml`; they do not render `k8s/production/*.tpl`.
+
 If you need a repeatable deployment, start with [CDK stack ownership](09_cdk.md) and [node provisioning](01_capacity_and_nodes.md). Check what delays the first sandbox and what removes idle nodes after a run.
 
 Before increasing the number of users or workers, review [isolation boundaries](02_security.md) alongside the [gateway request path](03_gateway_and_pools.md). Once requests succeed, use the [scoring rules](04_reward_integrity.md) and [log signals](07_observability_and_operations.md) to confirm that advancing steps receive usable scores.
@@ -179,13 +186,6 @@ veRL sends each sample with a `group_key` to `POST /v1/evaluate`, and the gatewa
 8. Review the security controls and the reward controls. ([02 Security](02_security.md), [04 Reward integrity](04_reward_integrity.md))
 
 If a step fails, look the symptom up in [Troubleshooting](../reference/troubleshooting.md) (for example, pods stuck at `0/1` in step 5 belong to the sandbox pool and readiness table).
-
-## Scope and limits
-
-- **Verified by local tests:** gateway group pins survive a routing switch, and the client spreads requests over two loopback sandbox servers (`pytest`, CPU, no AWS).
-- **Not covered by tests:** the tests render the Karpenter EC2NodeClass template (`infra/karpenter/`) and check its links to the NodePools, but do not apply it to an API server. The production templates (`k8s/production/*.tpl`) are not rendered, and the static YAML files in `k8s/production/` (`pool-hardening.yaml`, `warm-capacity.yaml`) are checked only for YAML validity and Service exposure.
-- **Not executed on AWS:** what this page adds to the hands-on setup, such as the Karpenter NodePools, the gateway, the jwks-sync CronJob, pool hardening and warm capacity. Steps 1, 4 and 5 use the same scripts as the hands-on and were run in the scenario A exercise ([run record](../reference/sources.md#aws-run-record)). Verify the rest with the checks on each page.
-- **HyperPod autoscaling and Karpenter:** combining HyperPod's Karpenter-based autoscaling with open source Karpenter is untested; re-verify with the official documentation.
 
 ## ❓ Misconceptions
 

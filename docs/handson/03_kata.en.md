@@ -88,7 +88,7 @@ The CDK stack (`cdk/gpusandbox_cdk/stack.py`) creates this node group's EC2 laun
 | Node group | desired 1, min 0, max 2, labels `gpusandbox/role=sandbox-kata` and `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | dedicated to Kata sandboxes. The smoke pods and the CPU pools select this node with `gpusandbox/kata-gpu=false` |
 
 - **Core and thread counts in `CpuOptions`**: the API wants the core and thread counts together with other CPU options. The values come from the table in `cdk/gpusandbox_cdk/config.py`.
-- **gVisor in `UserData`**: it is installed too so that all three runtimes can be compared on one node ([10 CPU-only path on c8i](10_cpu_only.md)).
+- **gVisor in `UserData`**: it is installed too so that all three runtimes can be compared on one node ([10 Hands-on lab with CPUs only](10_cpu_only.md)).
 
 The EKS documentation does not say whether a managed node group passes the launch template's `NestedVirtualization` on to the node. It was passed in the practice account (2026-11-14, the node had `/dev/kvm`), but this may change, so check it after the first deployment. The command below reads the instance ID from the Kata CPU node of the current kubectl context (the tunnel), so it never reads a node of another cluster that this repository created in the same Region.
 
@@ -325,6 +325,13 @@ The trainer and gVisor nodes carry the label `nvidia.com/gpu.deploy.operands=fal
 
 ### Checking the result of `kata/gpu_nodes.sh`
 
+<span id="scope-and-limits"></span>
+
+??? note "What was verified on T4"
+    Four `kata-qemu` pods reached Ready and `ops/verify.sh kata-qemu v1` passed after the `vfio_iommu_type1` fix on EKS 1.36 with `g4dn.metal` and AL2023. All eight T4s bound to vfio-pci in a configuration with 257 IOMMU groups. A third party reports similar binding on Ubuntu 24.04, which was not tested here. NVIDIA’s CI covers A100 and H100 and its validated EKS OS is Ubuntu. [Run record](../reference/sources.md#aws-run-record)
+
+    Recheck both runtime handler registration after a reboot and `CpuOptions.NestedVirtualization` on the instance. Neither behavior is guaranteed by the cited documentation. The experimental Cloud Hypervisor GPU VM timed out even with its artifact paths supplied; the recorded success is for QEMU.
+
 **What to look for (second run):**
 
 - The script waits up to 20 minutes (60 tries every 20 seconds) until the Kata GPU node advertises `nvidia.com/pgpu`, then prints the result in the shape below.
@@ -455,14 +462,6 @@ We added a `g4dn.metal` with IOMMU enabled to the same cluster. The terminal sho
     | HyperPod node (`ml.g5` and others) | no | no (likely, unverified) |
 
 </details>
-
-## Scope and limits
-
-- **Upstream verification:** NVIDIA's Kata CI covers A100 and H100, not T4, and the OS NVIDIA validated on EKS is Ubuntu, with AL2023 not listed. So this configuration on `g4dn.metal` + AL2023 is not verified upstream.
-- **This repository's run:** the Kata GPU path (`g4dn.metal` + AL2023 + `kata-qemu-nvidia-gpu`) ran in the practice account (EKS 1.36, [run record](../reference/sources.md#aws-run-record)). After the `vfio_iommu_type1` fix the 4 `kata-qemu` pods became Ready and `ops/verify.sh kata-qemu v1` passed. That is one run and does not replace upstream verification.
-- **Third-party report:** one report says that on Ubuntu 24.04 on `g4dn.metal`, `intel_iommu=on iommu=pt` bound all eight T4s to vfio-pci with IOMMU groups usable for passthrough. This repository saw the same binding on AL2023 (8 T4s, 257 IOMMU groups) and has not checked Ubuntu.
-- **Undocumented behavior:** keeping the Kata handlers after a reboot (containerd `imports`) and passing `CpuOptions.NestedVirtualization` on may change, so do not skip the reboot check and the `describe-instances` check in stage 1.
-- **Cloud Hypervisor + GPU:** an experimental path. In this repository's run the VM never started even with the artifact paths filled in (`create container timeout`), and no working configuration is known.
 
 ## Time and cost
 

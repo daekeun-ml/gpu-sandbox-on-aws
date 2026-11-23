@@ -47,7 +47,7 @@
 
 ![torch를 import하지 않는 샌드박스 서버(uvicorn)가 요청마다 새 프로세스를 시작합니다. 신뢰하는 부모 evaluate.py가 1. 정적 정책 검사(AST, check_source)와 2. 요청마다 새 seed 생성(정확성 seed, timing seed)을 한 뒤, 후보 코드와 seed를 신뢰하지 않는 자식 runner.py에 전달합니다(env allowlist, 새 session, timeout). 자식은 3. 후보 ModelNew를 실행해 seed별 출력을 저장하고, timing과 checksum을 runner.json에 씁니다. seed별 출력과 runner.json이 부모로 돌아옵니다. runner.json은 1 MiB 크기 제한과 타입 검사를 거칩니다. 부모는 4. seed별 출력을 크기 검사 없이 weights_only=True로 읽어 같은 seed로 만든 reference 출력과 비교하고, 5. reference timing과 timed 출력 checksum을 비교하고, 6. runner.py가 끝난 뒤 마지막에 verdict JSON을 작성합니다. 자식에게는 reference 출력과 토큰 같은 pod env가 없습니다.](../images/figures/production-04_reward_integrity--two-process.ko.svg)
 
-*그림 요약: 후보 코드는 자식 프로세스에서 실행하고, reference 계산, 시간 비교, verdict 작성은 부모 프로세스에서만 합니다. 두 프로세스는 같은 pod와 UID를 쓰므로 파일 접근까지 나뉘지는 않습니다([02 보안](02_security.md)의 "다루지 않는 위험" 3).*
+*그림 요약: 후보 코드는 자식 프로세스에서 실행하고, reference 계산, 시간 비교, verdict 작성은 부모 프로세스에서만 합니다. 두 프로세스는 같은 pod와 UID로 실행되므로 접근 가능한 파일도 같습니다. [샌드박스의 격리 범위와 공유 자원](02_security.md#다루지-않는-위험)*
 
 | 단계 | 프로세스 | 하는 일 | 여기서 끝나면 (`status`) |
 |---|---|---|---|
@@ -76,6 +76,8 @@
 
 ## 실행 시간 측정 기준
 
+<span id="적용-범위와-한계"></span>
+
 <span id="측정-계약"></span>
 
 후보가 정답을 냈는지와 실행 시간을 제대로 쟀는지는 따로 확인합니다. 기준 답과 일치해야 성능 비교가 의미 있고, GPU 작업을 끝까지 기다려야 기록한 시간이 실제 실행 시간을 반영합니다. 그 결과를 어떤 reward로 바꾸는지는 학습 쪽 규칙에서 확인합니다.
@@ -93,11 +95,11 @@
 | 7 | 출력은 `weights_only=True`로 읽음 | `torch.load(..., weights_only=True)` | 후보가 쓴 파일을 읽는 순간 임의 객체가 unpickle되는 것 |
 | 8 | (선택) speedup 상한 | `HARNESS_MAX_SPEEDUP`: v1은 0(끔), v2는 10 | 아직 발견되지 않은 측정 exploit이 큰 reward를 받는 것 |
 
-- **계약 1이 필요한 이유**: 기본 stream의 CUDA event만 보면 다른 stream의 작업을 놓칠 수 있고, KernelBench도 이 문제를 문서화합니다.
-- **계약 3의 허용 오차**: `ATOL × 원소 수 + RTOL × reference 절댓값 합`입니다.
-- **계약 8의 상한**: v2의 10은 KernelBench `excessive_speedup_threshold`와 같은 값입니다. 넘으면 `implausible_speedup` flag를 붙이고 speedup을 1.0으로 바꿉니다.
+- **장치 전체를 동기화하는 이유(1번)**: 기본 stream의 CUDA event만 보면 다른 stream의 작업을 놓칠 수 있고, KernelBench도 이 문제를 문서화합니다.
+- **checksum을 비교할 때의 허용 오차(3번)**: `ATOL × 원소 수 + RTOL × reference 절댓값 합`입니다.
+- **speedup 상한(8번)**: v2의 10은 KernelBench `excessive_speedup_threshold`와 같은 값입니다. 넘으면 `implausible_speedup` flag를 붙이고 speedup을 1.0으로 바꿉니다.
 
-자식과 부모는 같은 `timing_seed`로 입력을 만들므로, iteration마다 후보 출력과 reference 출력의 checksum을 하나씩 대응시켜 비교할 수 있습니다.
+자식과 부모는 같은 `timing_seed`로 입력을 만듭니다. 부모는 매 iteration에서 같은 입력으로 얻은 후보 출력과 reference 출력의 checksum을 비교합니다.
 
 1. warmup 입력(`HARNESS_WARMUP`, 기본 3개)으로 한 번씩 실행한 뒤 동기화합니다.
 2. 측정 입력(`HARNESS_ITERS`, 기본 20개)마다 타이머를 시작하고, `forward`를 호출하고, `torch.cuda.synchronize()`가 끝나면 타이머를 멈춥니다.
@@ -111,6 +113,10 @@
 
 !!! question "❓ 오해: speedup 상한을 넘으면 reward가 0이 된다"
     v2 상한(10배)을 넘으면 speedup이 1.0으로 바뀔 뿐 `status`는 `ok` 그대로입니다. 따라서 correctness 점수는 유지됩니다. 커스텀 커널로 판정된 정답은 speedup 요소가 reference와 같은 속도에 해당하는 0.5가 되어 총점에 0.25(가중치 0.5 × 0.5)를 더하고, PyTorch만 쓴 정답의 speedup 요소는 상한과 관계없이 0입니다. 상한은 1x를 넘는 속도 보너스만 없앱니다.
+
+정확성 검사는 과제에 정해진 shape에서 무작위 입력 3개(v2는 5개)로 실행합니다. 시간 측정 중에는 출력의 합과 절댓값 합만 비교하므로 모든 원소가 같다고 보장하지 않습니다. 난수 입력을 미리 알 수 없다는 가정은 정적 정책과 프로세스 분리에 의존합니다.
+
+짧은 커널에서는 실행 요청과 동기화에 걸리는 시간 때문에 speedup이 1에 가깝게 나올 수 있습니다. KernelBench와 달리 반복 사이에 L2 캐시를 비우지 않으며, 캐시가 수치에 미치는 영향은 측정하지 않았습니다. A10G와 T4의 speedup은 같은 보상 기준으로 비교할 수 없습니다.
 
 ## 정적 정책
 
@@ -128,7 +134,7 @@
 | Tensor 상속 | `class X(torch.Tensor)` (타입 힌트 `x: torch.Tensor`는 허용) | lazy tensor |
 | `ModelNew` | `class ModelNew`가 없거나 `forward()`가 없는 소스 | 과제 계약 |
 
-`torch.utils.cpp_extension`은 서버 env `HARNESS_ALLOW_CUDA_CPP=1`을 설정할 때만 허용되고, 이 저장소의 매니페스트는 이 변수를 설정하지 않습니다. 이 변수를 켜면 후보가 컴파일한 C++와 CUDA 코드는 AST로 검사할 수 없습니다. 따라서 정책이 차단하던 우회 방법을 네이티브 코드에서 다시 쓸 수 있다고 가정하는 편이 안전합니다(추론).
+`torch.utils.cpp_extension`은 서버 env `HARNESS_ALLOW_CUDA_CPP=1`을 설정할 때만 허용되고, 기본 배포 매니페스트에서는 이 변수를 설정하지 않습니다. 이 변수를 켜면 후보가 컴파일한 C++와 CUDA 코드는 AST로 검사할 수 없습니다. 따라서 정책이 차단하던 우회 방법을 네이티브 코드에서 다시 쓸 수 있다고 가정하는 편이 안전합니다(추론).
 
 ### `custom_kernel` 판정과 Triton launch counter
 
@@ -144,9 +150,9 @@ reward는 Triton 커널을 실제로 쓴 정답에만 속도 보너스를 주므
 
 ## 공개 보고된 reward hacking과 대응
 
-아래 표는 공개 자료에 보고된 유형을 요약합니다. "대응의 한계" 열은 이 저장소의 코드를 검토해 작성했습니다. 이 내용은 GPU에서 검증하지 않았습니다. 클러스터에서는 아래 "확인 방법"의 golden verdict로 직접 확인하세요.
+아래 표는 공개 자료에 보고된 유형을 요약합니다. "대응의 한계" 열은 샌드박스의 채점 코드를 검토해 작성했습니다. 이 내용은 GPU에서 검증하지 않았습니다. 클러스터에서는 아래 "확인 방법"의 golden verdict로 직접 확인하세요.
 
-| 공개 보고 | 보고된 유형 | 이 저장소의 대응 | 대응의 한계 |
+| 공개 보고 | 보고된 유형 | 채점 코드의 대응 | 대응의 한계 |
 |---|---|---|---|
 | Sakana AI CUDA Engineer | 평가 코드의 메모리 exploit으로 정확성 검사를 건너뜀 | 후보는 자식 프로세스에서만 실행되고 정답 비교는 부모가 함. 현재 요청의 reference 출력은 자식이 끝난 뒤에 만들어짐. 요청마다 새 seed. 후보 출력은 `weights_only=True`로 읽음 | 정확성은 과제별 고정 shape와 무작위 입력 3개(v2는 5개)로만 확인 |
 | KernelBench v0.1 블로그 | 커널 대신 torch나 cuBLAS 호출 | Triton 커널이 없거나 launch되지 않으면 `custom_kernel`이 거짓: 정답이어도 correctness 0.3, speedup 0 | launch 여부만 봄. 계산 대부분을 PyTorch가 해도 커널이 한 번 launch되면 커스텀 커널로 분류 |
@@ -156,7 +162,7 @@ reward는 Triton 커널을 실제로 쓴 정답에만 속도 보너스를 주므
 | Kevin-32B | reference 복사, reference 클래스 상속 | `gpusandbox`는 import 허용 목록 밖. 같은 PyTorch 코드를 다시 쓰면 `custom_kernel`이 거짓 | PyTorch만 쓴 정답도 correctness 0.3을 받음(Kevin-32B는 PyTorch만 쓴 completion에 0점을 줌). 커널이 어려운 과제에서 PyTorch 정답에 머물 유인이 남음 |
 | Kevin-32B | try/except fallback | 부분적: launch되지 않은 커널은 커스텀 커널로 치지 않음 | 미해결 (아래 경고) |
 | CUDA-L1 | 추가 stream으로 timing을 속임 (250건 중 82건, 32.8%) | 위 stream timing 행과 같음 | 위 stream timing 행과 같음 |
-| CUDA-L1 | lazy evaluation | 출력 타입이 정확히 `torch.Tensor`여야 함(리스트나 튜플이면 원소마다). Tensor 상속 금지 | 이 저장소 코드에서 확인한 잔여 경로는 없음 (GPU에서 미검증) |
+| CUDA-L1 | lazy evaluation | 출력 타입이 정확히 `torch.Tensor`여야 함(리스트나 튜플이면 원소마다). Tensor 상속 금지 | 채점 코드를 검토했을 때 이 유형이 차단을 피할 수 있는 경로는 찾지 못함 (GPU에서 미검증) |
 | CUDA-L1 | caching | timed iteration마다 다른 입력, 요청마다 새 seed와 새 프로세스 | 입력이 아닌 다른 key의 캐시는 checksum 비교에서 발견되며, checksum의 한계는 위와 같음 |
 
 !!! warning "해결하지 못한 부분: try/except fallback의 분류"
@@ -221,7 +227,7 @@ verdict의 `flags`는 아직 지표로 집계되지 않으니, reward hacking �
 
 ### 로컬 (AWS 없이)
 
-[시작하기](../getting_started.md)의 2장대로 Python 환경을 만든 뒤 저장소 루트에서 실행합니다.
+[시작하기](../getting_started.md)의 2장대로 Python 환경을 만든 뒤 프로젝트 최상위 폴더에서 실행합니다.
 
 ```bash
 # Two-process harness on CPU (smoke-size inputs) and the static policy; no AWS, no GPU
@@ -254,6 +260,8 @@ verdict를 reward로 바꾸는 부분은 `tests/test_routing_and_rewards.py`가 
 
 ### 클러스터에서
 
+CPU 테스트로는 Triton 실행이나 CUDA stream의 동작을 확인할 수 없습니다. EKS v1 pool에서 `relu_bias_triton`의 speedup은 A10G에서 1.7819, T4에서 1.7882였습니다. 추가 CUDA stream을 사용하는 제출물은 GPU에서 검증하지 않았습니다.
+
 아래 명령은 pool의 격리, egress 차단, 인증된 API로 보낸 golden verdict, 다른 namespace의 접속 차단을 차례로 확인합니다. 2026년 11월 18일 us-west-2 EKS에서 gVisor v1 pool(A10G)과 Kata GPU v1 pool(T4)에 실행해 golden 6개가 모두 `PASS`였습니다.
 
 ```bash
@@ -283,17 +291,6 @@ PASS read_host_file               status=policy_violation  speedup=None
 - Kata GPU pool은 `scripts/ops/verify.sh kata-qemu v1`로 같은 확인을 합니다.
 
 **문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "샌드박스 pool과 readiness", "401, 403 응답" 표를 보세요.
-
-## 적용 범위와 한계
-
-- **정적 정책은 보안 경계가 아닙니다.** 노드 보호는 gVisor, Kata와 네트워크 통제가 담당합니다([02 보안](02_security.md)).
-- **정확성 확인 범위가 정해져 있습니다.** 과제별 고정 shape와 무작위 입력 3개(v2는 5개)로만 확인하므로, 다른 shape나 경계값에서의 정확성은 verdict가 보장하지 않습니다.
-- **timed 출력은 checksum으로만 비교합니다.** (합, 절댓값 합) 두 값은 원소별 비교보다 약한 검사입니다.
-- **측정 입력은 요청마다 새 seed로 만듭니다.** 후보가 그 입력을 미리 알아낼 수 없다는 가정은 정적 정책과 프로세스 분리에 의존합니다. 이 가정이 깨질 때의 마지막 안전장치는 v2의 10배 상한이고, v1에는 상한이 없습니다.
-- **L2 cache를 비우지 않습니다.** KernelBench는 CUDA event로 측정할 때 L2를 flush하지만, 이 harness는 iteration마다 입력만 바꾸고 flush하지 않습니다. 그 영향은 측정하지 않았습니다.
-- **실행 시간이 아주 짧은 커널은 측정 해상도가 낮습니다.** host clock은 launch overhead를 포함하므로, 실행 시간이 짧은 커널일수록 speedup이 1에 가깝게 보일 수 있습니다(추론).
-- **speedup은 측정한 GPU에서만 의미가 있습니다.** A10G(gVisor pool)와 T4(Kata pool)의 speedup은 서로 다른 reward 함수로 다루세요.
-- **GPU 경로는 로컬 테스트 범위 밖입니다.** Triton launch counter, CUDA stream을 쓰는 제출물, 실제 speedup은 CPU 테스트로 확인할 수 없습니다. 2026년 11월 18일 EKS의 v1 pool에서는 A10G와 T4 모두 Triton 커널이 커스텀 커널로 판정됐고, `relu_bias_triton`의 speedup은 A10G 1.7819, T4 1.7882였습니다. 추가 CUDA stream을 쓰는 제출물은 GPU에서 실행하지 않았습니다.
 
 관련 페이지: [02 보안](02_security.md), [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md), [05 샌드박스 버전 관리](05_sandbox_updates.md), [07 Observability와 운영](07_observability_and_operations.md), [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
 

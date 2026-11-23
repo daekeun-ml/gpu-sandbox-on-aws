@@ -5,7 +5,7 @@
 
 ## 리소스가 유휴 상태일 때 드는 비용
 
-샌드박스 GPU의 사용률이 낮아도 요금은 계속 발생할 수 있습니다. 샌드박스 요청은 채점 구간에 몰리지만 답안을 생성하거나 모델을 업데이트할 때도 노드는 켜져 있기 때문입니다. 한 번의 학습에서 노드를 할당한 시간과 실제 채점 시간을 비교하면 채점하지 않는 시간에 얼마만큼의 노드 비용이 드는지 파악할 수 있습니다.
+샌드박스 GPU 사용률이 낮아도 노드를 계속 띄워 두면 요금이 발생합니다. 샌드박스 요청은 채점 구간에 몰리지만 답안을 생성하거나 모델을 업데이트할 때도 노드는 켜져 있기 때문입니다. 학습 한 번에 노드를 할당한 시간과 그중 채점에 걸린 시간을 비교해 유휴 시간의 비용을 계산하세요.
 
 ![a: trainer가 생성, reward 채점, 업데이트를 반복하는 동안 샌드박스 GPU는 reward 구간에만 사용되지만, 과금은 노드 단위로 계속됩니다. run이 끝난 뒤 pool을 그대로 두면 g4dn.metal이 시간당 7.824 USD로 계속 과금됩니다(주말 48시간이면 375.552 USD). g4dn.metal의 T4 8개 중 4개만 쓰면 사용한 T4당 1.956 USD/시간입니다. b: pool 크기를 reward 구간에 몰리는 요청에 맞추고, run이 끝나면 replicas를 0으로 줄입니다. 빈 노드는 consolidateAfter 30분이 지나면 반납 절차에 들어가므로 빈 기간마다 약 3.912 USD가 들고, 과금은 노드가 종료될 때까지 이어집니다. T4 8개를 모두 쓰면 T4당 0.978 USD/시간입니다.](../images/figures/production-08_cost.ko.svg)
 
@@ -19,7 +19,7 @@
     - **metal 노드의 T4 8개 중 4개만 쓰면**: 노드 단위로 과금되므로 사용하는 T4당 단가가 두 배가 됩니다.
     - **gVisor pool의 blue/green 전환 때 두 pool을 오래 함께 실행하면**: pod마다 노드 하나를 쓰므로 그동안 샌드박스 GPU 비용도 두 배가 됩니다.
 
-    - **비용을 네 항목으로 나눕니다.** pool 크기를 조절하면 샌드박스 GPU 비용을 줄일 수 있고 consolidation을 조정하면 빈 metal 노드를 유지하는 시간을 줄일 수 있습니다.
+    - **비용을 네 항목으로 나눕니다.** 샌드박스 GPU 비용을 줄이려면 pool 크기를 조절하고, 빈 metal 노드를 더 빨리 반납하려면 consolidation 설정을 조정하세요.
     - **공개된 온디맨드 요금으로만 계산합니다.** 측정한 사용량이 없으므로 금액은 단가와 시간을 곱한 추정치입니다.
     - **trainer를 HyperPod로 옮길 때는 같은 GPU의 시간당 차액과 노드 복구 기능을 함께 비교합니다.**
 
@@ -54,7 +54,7 @@ hourly cost ≈ trainer GPU nodes
 
 ## 단가 (온디맨드 요금)
 
-| 인스턴스 | 이 저장소에서의 용도 | USD/시간 |
+| 인스턴스 | 실습에서 맡는 역할 | USD/시간 |
 |---|---|---|
 | `m6i.large` | system 노드 (2대) | 0.096 |
 | `g5.xlarge` | gVisor 샌드박스 (A10G 1개) | 1.006 |
@@ -70,6 +70,8 @@ hourly cost ≈ trainer GPU nodes
 
 ## 비용을 줄이는 방법
 
+<span id="적용-범위와-한계"></span>
+
 ### 샌드박스 pool을 reward 구간에 맞추기
 
 <span id="샌드박스-풀을-reward-구간에-맞추기"></span>
@@ -81,7 +83,7 @@ step_time_s(P)   ≈ t_generate + t_update + ceil(N / P) × t_eval        (secon
 cost_per_step(P) ≈ (C_trainer + C_sandbox(P) + C_fixed) × step_time_s(P) / 3600
 ```
 
-`C_*`는 USD/시간이고 `t_*`는 초이므로(`scripts/ops/bench.sh`의 `eval_p50_s`, `eval_p95_s`도 초) 3600으로 나눕니다. `C_sandbox(P)`는 pod `P`개가 차지하는 노드의 시간당 요금입니다.
+`t_generate`, `t_update`, `t_eval`에는 실제 학습에서 잰 시간을 넣으세요. `C_*`는 USD/시간이고 `t_*`는 초이므로(`scripts/ops/bench.sh`의 `eval_p50_s`, `eval_p95_s`도 초) 3600으로 나눕니다. `C_sandbox(P)`는 pod `P`개가 차지하는 노드의 시간당 요금입니다.
 
 - **gVisor (노드 하나에 pod 하나)**: `P × C_node`입니다.
 - **Kata GPU (`g4dn.metal` 한 대에 pod 8개까지)**: 최소 `ceil(P / 8) × C_metal`입니다. 하지만 템플릿의 topology spread가 pod를 여러 노드에 나눠 놓는 쪽을 선호하고 placeholder와 빈 노드도 과금되므로, 청구액은 실제로 실행된 metal 노드별 가동 시간에 단가를 곱해 더하세요.
@@ -143,7 +145,7 @@ GPU당 단가만으로 고르지는 마세요. A10G와 T4는 speedup을 서로 �
 
 ### CPU 계층과 Spot
 
-- **Kata CPU 계층 (c8i)**: nested virtualization으로 `.metal` 없이 Kata를 실행합니다. 핸즈온에서는 `g4dn.metal`을 띄우기 전에 적은 비용으로 Kata를 연습하는 용도로 쓰고, Production에서는 GPU가 필요 없는 작업(정적 검사, nvcc 컴파일)을 GPU 계층보다 먼저 처리할 수 있습니다. CPU pool(`gvisor-cpu`, `kata-*-cpu`)은 routing 표에 있고 시나리오 C의 reward 루프([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md))가 사용하지만, CPU 계층과 GPU 계층을 잇는 2단 구성은 구현하지 않았습니다.
+- **Kata CPU 계층 (c8i)**: nested virtualization으로 `.metal` 없이 Kata를 실행합니다. 핸즈온에서는 `g4dn.metal`을 띄우기 전에 적은 비용으로 Kata를 연습하는 용도로 쓰고, Production에서는 GPU가 필요 없는 작업(정적 검사, nvcc 컴파일)을 GPU 계층보다 먼저 처리할 수 있습니다. CPU pool(`gvisor-cpu`, `kata-*-cpu`)은 routing 표에 있고 시나리오 C의 reward 루프([10 GPU 없이 CPU로 실습하기](../handson/10_cpu_only.md))가 사용하지만, CPU 계층과 GPU 계층을 잇는 2단 구성은 구현하지 않았습니다.
 - **이미 구현된 절감 방법**: `KernelRewards`의 세 reward 함수는 샌드박스 평가 결과를 공유합니다.
     - **보내지 않는 것**: 이미 캐시에 있는 completion과, 코드가 없거나 정적 정책을 위반한 completion은 샌드박스로 보내지 않습니다.
     - **한 호출 안의 동일한 completion**: 한 번만 전송됩니다.
@@ -167,7 +169,7 @@ GPU당 단가만으로 고르지는 마세요. A10G와 T4는 speedup을 서로 �
 
 HyperPod의 추가 요금에는 노드 상태 감시와 복구 기능이 포함됩니다. 예를 들면 health monitoring agent, deep health check(InstanceStress, InstanceConnectivity), 문제 노드를 재부팅하거나 교체하는 `NodeRecovery: Automatic`, training operator의 job 재시작과 로그 기반 hang 감지가 있습니다.
 
-EC2(시나리오 A)에서도 노드 교체 자체는 managed node group이나 Karpenter로 구성할 수 있습니다. HyperPod에서는 GPU 수준의 deep health check와 job 재시작까지 관리형 기능으로 제공합니다. "차액 × run 시간"과 "예상 장애 횟수 × (마지막 checkpoint 뒤 잃는 진행 + 복구 시간) × 클러스터 시간당 비용 + 운영자 시간"을 비교해 판단하세요. 핸즈온 단일 노드(`g5.2xlarge`와 `ml.g5.2xlarge`)라면 차액이 시간당 0.303 USD, 24시간 run에 7.272 USD입니다.
+시나리오 A에서 EC2 노드 교체를 자동화하는 방법으로는 managed node group과 Karpenter가 있습니다. HyperPod에서는 GPU 수준의 deep health check와 job 재시작까지 관리형 기능으로 제공합니다. "차액 × run 시간"과 "예상 장애 횟수 × (마지막 checkpoint 뒤 잃는 진행 + 복구 시간) × 클러스터 시간당 비용 + 운영자 시간"을 비교해 판단하세요. 핸즈온 단일 노드(`g5.2xlarge`와 `ml.g5.2xlarge`)라면 차액이 시간당 0.303 USD, 24시간 run에 7.272 USD입니다.
 
 HyperPod에 적용되는 "ml.<type> for cluster usage" 한도는 EC2 한도와 별개입니다. EC2의 "Running On-Demand G and VT instances" 한도는 vCPU 기준이고 기본값이 0일 수 있으니 두 한도를 함께 확인하세요(`g4dn.metal`은 96 vCPU 필요).
 
@@ -203,7 +205,7 @@ HyperPod에 적용되는 "ml.<type> for cluster usage" 한도는 EC2 한도와 �
 - 시나리오 B1은 `g5.2xlarge` 대신 `ml.g5.2xlarge`를 쓰므로 최소 경로 3.719, 전체 경로 11.91784 USD/시간입니다.
 - [관리형 B2](../handson/07_hyperpod_b2.md)는 `ml.m5.xlarge` CPU 한 대(0.230), `ml.g5.2xlarge` 학습 노드 한 대(1.515), `ml.g5.xlarge` 채점 노드 두 대(2 × 1.408)를 사용합니다. `us-east-1` 온디맨드 단가를 합하면 HyperPod 워커 네 대가 **시간당 4.561 USD**입니다. EKS, 스토리지와 네트워크 비용은 별도입니다.
 - 계산 예시: 최소 경로 8시간에 `g4dn.metal` 2시간을 더하면 3.416 × 8 + 7.824 × 2 = 42.976 USD입니다(EC2만, 소요 시간은 가정).
-- 클러스터를 삭제한 뒤에도 Kata용 AMI의 EBS snapshot과 ECR 이미지는 남아 과금될 수 있습니다. `scripts/08_cleanup.sh`는 AMI 등록 해제 여부를 묻고, `--images`를 지정하면 ECR 저장소도 삭제합니다.
+- 클러스터를 삭제한 뒤에도 Kata용 AMI의 EBS snapshot과 ECR 이미지는 남아 과금될 수 있습니다. `scripts/08_cleanup.sh`는 AMI 등록 해제 여부를 묻고, `--images`를 지정하면 ECR 리포지토리도 삭제합니다.
 
 Production veRL 예시에서 `g6e.48xlarge` trainer(30.13118 USD/시간)와 함께 gVisor 샌드박스 16개를 쓰면, 샌드박스 비용만 16.096 USD/시간으로 trainer 비용의 약 53%입니다. 8개면 8.048 USD/시간(약 27%)입니다. 비중이 작지 않으므로 pool 크기는 위의 step당 비용 기준으로 정하세요.
 
@@ -228,12 +230,6 @@ aws ec2 describe-instances --region "${AWS_REGION}" \
 **문제가 생기면:** 정리한 뒤에도 과금이 계속되면 [문제 해결](../reference/troubleshooting.md)의 "정리와 비용" 표를 보세요.
 
 실습을 마치면 [99 정리](../handson/99_cleanup.md)를 실행하세요(시나리오 B라면 `scripts/hyperpod/delete.sh`를 먼저). 관련 페이지: [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md), [01 용량과 노드 관리](01_capacity_and_nodes.md), [06 veRL로 확장](06_scaling_with_verl.md).
-
-## 적용 범위와 한계
-
-- **표의 금액은 예상 비용입니다.** 이 저장소에는 AWS에서 측정한 사용량이나 청구 금액이 없습니다.
-- **비용 추정에서 제외한 항목:** EKS control plane, NAT gateway, EBS, FSx for Lustre, ECR, CloudWatch 요금은 표에 포함하지 않았습니다.
-- **step 시간은 직접 측정해야 합니다.** "비용을 줄이는 방법"의 step당 비용 식은 `t_generate`, `t_update`, `t_eval`을 알고 있다고 가정합니다. 이 값들은 run마다 다릅니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

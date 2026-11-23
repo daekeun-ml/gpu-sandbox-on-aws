@@ -219,6 +219,11 @@ A rising `sandbox_reaped_processes_total` means candidate code left processes be
 
 ## Using CloudWatch (optional)
 
+<span id="scope-and-limits"></span>
+
+??? note "Checks before enabling production alerts"
+    The scrape example, monitoring NetworkPolicy and CloudWatch integration have not been run on a cluster. Confirm histogram support before relying on a p95 alarm. Metric names, labels, buckets and event fields come from `server/app.py`, `gateway/app.py` and `rewards.py`; `/metrics` uses the same authentication dependency tested through `/info`. A reward-hacking alarm also needs a metric that counts verdict flags.
+
 - **Container Insights (EKS)**: the CloudWatch agent collects cluster, node and pod level metrics and logs, and alarms on those metrics.
 - **Prometheus metrics**: Container Insights Prometheus monitoring collects with the CloudWatch agent, and the documentation states that counter, gauge and summary types are collected, so check first whether you can build p95 alarms from this repo's latency metrics (histograms). OTel Container Insights, which the documentation recommends, supports PromQL.
 - **Amazon Managed Service for Prometheus**: a managed Prometheus-compatible service that works with EKS, where the PromQL above applies as is.
@@ -281,13 +286,6 @@ kubectl -n sandbox-gateway get configmap sandbox-routing -o jsonpath='{.data.rou
 
 !!! question "❓ Misconception: a RewardStalled restart means an infrastructure problem"
     Not necessarily. The `reward_batch` line is also missing when the policy produces no code blocks or every completion fails the static policy, so nothing is sent to the sandbox. A restart does not fix that; check the trend of TRL's `format_reward` as well. The pattern matches the default `json.dumps` output (`"event": "reward_batch"`, a space after the colon), so if you change the log format, change the pattern too.
-
-## Scope and limits
-
-- **Checked in the code:** metric names, labels, buckets and event fields are copied from `server/app.py`, `gateway/app.py` and `rewards.py`. In the code, `/metrics` on the server and the gateway uses the same authentication dependency as `/info` and `/v1/evaluate`, and the local tests check the authentication behavior itself through `/info`.
-- **Not executed:** the author did not run the Prometheus scrape example, the NetworkPolicy example or the CloudWatch integration on a cluster.
-- **Not there yet:** flags are not aggregated into metrics, so reward hacking alarms need the extension in "Flags are not metrics yet" above.
-- **Based on documentation:** how Container Insights handles histogram metrics comes from the CloudWatch documentation and was not checked directly.
 
 ??? note "References"
     | Topic | Link |

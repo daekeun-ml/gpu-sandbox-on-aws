@@ -92,7 +92,7 @@ const TEXT = {
     benchNoteSpeed: "CPU 샌드박스는 속도 향상을 비교하지 않아서 표시하지 않습니다.",
     noData: "이 기록에는 이 부분의 데이터가 없습니다.",
     footer: "실제 실행 기록을 다시 보여 주는 데모입니다. 수치는 위에 적힌 환경에서 나온 값이라 다른 환경에서는 달라질 수 있습니다. 로그에 있던 IP 주소와 서버 이름은 가렸습니다.",
-    guide: "가이드북", repo: "GitHub 저장소",
+    guide: "가이드북", repo: "GitHub",
   },
   en: {
     navArch: "Request flow", navTry: "Scoring", navDefense: "Isolation checks", navTrain: "GRPO training", navBench: "Benchmarks",

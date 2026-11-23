@@ -24,7 +24,7 @@ const UI = {
     legendSolid: "실선: 바로 호출", legendDashed: "점선: 배포나 설정", legendBlocked: "빨간 ✕: 막힌 연결",
     step: "단계",
     footer: "아이콘은 AWS Architecture Icons를 썼습니다. 노드 수와 세부 리소스는 가이드북을 보세요.",
-    guide: "가이드북", repo: "GitHub 저장소",
+    guide: "가이드북", repo: "GitHub",
   },
   en: {
     back: "← Back to the demo", navPatterns: "Architecture patterns",
@@ -70,12 +70,12 @@ const COMMON_NODES = [
   N("ssm", "ssm", X_SSM, YM, L("SSM 터널", "SSM tunnel"), L("Session Manager", "Session Manager")),
   N("access", "ec2", X_ACC, YM, L("접속용 서버", "Access instance"), L("t4g.nano", "t4g.nano")),
   N("eks", "eks", X_EKS, YM, L("EKS API", "EKS API"), L("private 전용", "private only")),
-  N("ecr", "ecr", X_ECR, YT, L("ECR", "ECR"), L("이미지 저장소", "image registry")),
+  N("ecr", "ecr", X_ECR, YT, L("ECR", "ECR"), L("컨테이너 이미지", "image registry")),
   { id: "routing", icon: "doc", x: X_EKS, y: YT, label: L("라우팅 표", "Routing table") },
 ];
 const EGRESS_NODES = [
   N("nat", "nat", X_SB, YB, L("NAT 게이트웨이", "NAT gateway"), L("유일한 출구", "the only way out")),
-  N("hf", "internet", X_HF, YB, L("Hugging Face", "Hugging Face"), L("모델 저장소", "model hub")),
+  N("hf", "internet", X_HF, YB, L("Hugging Face", "Hugging Face"), L("모델 허브", "model hub")),
 ];
 const PULL_TO_V1 = [[X_ECR + 26, YT - B], [X_ECR + 26, BUS], [X_PULL, BUS], [X_PULL, YM - 20], [X_SB + B, YM - 20]];
 const COMMON_EDGES = (pull = { to: "v1", pts: PULL_TO_V1 }) => [
@@ -296,10 +296,10 @@ const PATTERNS = [
       {
         id: "bench", title: L("벤치마크", "Benchmark"), init: { hide: ["v2"], routing: "v1" },
         steps: [
-          S("학습이 끝나면 시스템 CPU가 Triton 커널 32개를 두 채점 Pod에 보냅니다. 32건 모두 성공했습니다.",
+          S("학습이 끝난 뒤 시스템 노드에서 같은 Triton 커널의 채점을 32회 요청했습니다. 채점 Pod 두 개가 요청을 나눠 처리했고, 32건 모두 정답이었습니다.",
             "After training, the CPU worker sends 32 evaluations to the two grading pods. All 32 succeeded.",
             { light: ["system", "v1"] }),
-          S("학습 노드에서도 같은 요청 32건을 보냅니다. 두 Job의 실행 시간은 겹치지 않습니다.",
+          S("첫 측정이 끝난 뒤 학습 노드에서도 같은 커널로 32회 요청했습니다. 같은 채점 pool에서 이 32건도 모두 정답으로 판정했습니다.",
             "The trainer node then sends the same 32 evaluations. The two benchmark jobs run in sequence.",
             { light: ["trainer", "v1"], moves: [{ e: "e_req1", c: "req" }] }),
         ],
