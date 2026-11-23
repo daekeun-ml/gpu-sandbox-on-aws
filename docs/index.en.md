@@ -82,7 +82,7 @@ A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the con
 
 === "B2 · All workers on HyperPod"
 
-    [![EKS control plane and the HyperPod system, training and grading workers](images/architecture/scenario-b2.drawio.png)](images/architecture/scenario-b2.drawio.png)
+    [![EKS control plane and the HyperPod system, training and grading workers](images/architecture/scenario-b2.drawio.png?layout=aws)](images/architecture/scenario-b2.drawio.png?layout=aws)
 
     One CPU worker runs cluster services, one GPU worker trains the model and two GPU workers grade code. [Run B2](handson/07_hyperpod_b2.md) · [Korean slides comparing B1 and B2 (PPTX)](slides/gpu-sandbox-theory.pptx)
 

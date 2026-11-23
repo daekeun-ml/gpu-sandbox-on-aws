@@ -1,0 +1,112 @@
+{
+  "title": "B2 · Amazon EKS and SageMaker HyperPod in us-east-1",
+  "units": "draw.io pixels relative to parent",
+  "groups": [
+    {
+      "id": "region",
+      "label": "AWS Region · us-east-1",
+      "bounds": [
+        10,
+        10,
+        1080,
+        535
+      ]
+    },
+    {
+      "id": "workers",
+      "label": "SageMaker HyperPod instance groups",
+      "group": "region",
+      "bounds": [
+        23,
+        205,
+        1032,
+        303
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "stack",
+      "label": "AWS CloudFormation",
+      "icon": "cloudformation",
+      "group": "region",
+      "bounds": [
+        23,
+        51,
+        397,
+        98
+      ]
+    },
+    {
+      "id": "eks",
+      "label": "Amazon EKS 1.36",
+      "icon": "eks",
+      "group": "region",
+      "bounds": [
+        585,
+        51,
+        470,
+        98
+      ]
+    },
+    {
+      "id": "system",
+      "label": "system",
+      "icon": "sagemaker",
+      "group": "workers",
+      "bounds": [
+        18,
+        68,
+        265,
+        154
+      ]
+    },
+    {
+      "id": "trainer",
+      "label": "trainer",
+      "icon": "sagemaker",
+      "group": "workers",
+      "bounds": [
+        308,
+        68,
+        270,
+        154
+      ]
+    },
+    {
+      "id": "sandbox",
+      "label": "sandbox",
+      "icon": "sagemaker",
+      "group": "workers",
+      "bounds": [
+        734,
+        68,
+        280,
+        154
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "stack",
+      "to": "eks",
+      "label": "Creates the EKS control plane"
+    },
+    {
+      "from": "eks",
+      "to": "workers",
+      "label": "Schedules pods on the registered workers"
+    },
+    {
+      "from": "stack",
+      "to": "workers",
+      "label": "Provisions the three instance groups"
+    },
+    {
+      "from": "trainer",
+      "to": "sandbox",
+      "label": "Candidate code and grading result",
+      "bidirectional": true
+    }
+  ]
+}

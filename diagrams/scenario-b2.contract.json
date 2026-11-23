@@ -1,15 +1,38 @@
 {
   "components": {
+    "provision": "drawn",
+    "control": "drawn",
+    "hp": "drawn",
+    "system": "drawn",
+    "train": "drawn",
+    "grading": "drawn",
+    "shared": "drawn",
+    "egress": "drawn",
+    "operator": "drawn",
     "stack": "drawn",
     "eks": "drawn",
-    "system": "drawn",
+    "cpu": "drawn",
     "trainer": "drawn",
-    "sandbox": "drawn"
+    "sandbox": "drawn",
+    "cw": "drawn",
+    "s3": "drawn",
+    "ecr": "drawn",
+    "nat": "drawn",
+    "hf": "drawn"
   },
   "relationships": {
-    "stack → eks": "primary",
-    "eks → workers": "primary",
-    "stack → workers": "primary",
-    "trainer → sandbox": "primary"
+    "operator → stack": "aux",
+    "operator → eks": "primary",
+    "stack → control": "aux",
+    "stack → hp": "aux",
+    "eks → trainer": "aux",
+    "cpu → sandbox": "primary",
+    "trainer → sandbox": "primary",
+    "sandbox → trainer": "primary",
+    "eks → cw": "aux",
+    "operator → s3": "aux",
+    "sandbox → ecr": "aux",
+    "trainer → nat": "primary",
+    "nat → hf": "primary"
   }
 }

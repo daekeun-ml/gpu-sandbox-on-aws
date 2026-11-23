@@ -42,7 +42,7 @@ Select a tab to view the scenario.
 
 === "B2 · All workers on HyperPod"
 
-    [![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+    [![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
     `system` runs CoreDNS, `trainer` runs the GRPO job and `sandbox` grades the code with gVisor. The Kubernetes API is provided by EKS. [B2 deployment](../handson/07_hyperpod_b2.md)
 

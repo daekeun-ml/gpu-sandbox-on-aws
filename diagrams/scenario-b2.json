@@ -1,70 +1,196 @@
 {
-  "title": "B2 · Amazon EKS and SageMaker HyperPod in us-east-1",
+  "title": "Scenario B2: System, training and grading on SageMaker HyperPod",
   "layout": "manual",
   "groups": [
     {
-      "id": "region",
-      "label": "AWS Region · us-east-1"
+      "id": "provision",
+      "label": "Cluster provisioning"
     },
     {
-      "id": "workers",
-      "label": "SageMaker HyperPod instance groups",
-      "group": "region"
+      "id": "control",
+      "label": "EKS control plane"
+    },
+    {
+      "id": "hp",
+      "label": "Amazon SageMaker HyperPod"
+    },
+    {
+      "id": "system",
+      "label": "system · ml.m5.xlarge × 1",
+      "parent": "hp"
+    },
+    {
+      "id": "train",
+      "label": "trainer · ml.g5.2xlarge × 1",
+      "parent": "hp"
+    },
+    {
+      "id": "grading",
+      "label": "sandbox · ml.g5.xlarge × 2",
+      "parent": "hp"
+    },
+    {
+      "id": "shared",
+      "label": "Shared services"
+    },
+    {
+      "id": "egress",
+      "label": "Egress"
     }
   ],
   "nodes": [
     {
+      "id": "operator",
+      "label": "Operator workstation",
+      "icon": "client",
+      "outside": true
+    },
+    {
       "id": "stack",
-      "label": "AWS CloudFormation",
+      "label": "CloudFormation HyperPod EKS wizard",
       "icon": "cloudformation",
-      "group": "region"
+      "group": "provision"
     },
     {
       "id": "eks",
-      "label": "Amazon EKS 1.36",
+      "label": "Amazon EKS 1.36 Kubernetes API",
       "icon": "eks",
-      "group": "region"
+      "group": "control"
     },
     {
-      "id": "system",
-      "label": "system",
+      "id": "cpu",
+      "label": "CoreDNS · CPU benchmark",
       "icon": "sagemaker",
-      "group": "workers"
+      "group": "system"
     },
     {
       "id": "trainer",
-      "label": "trainer",
+      "label": "GRPO training job",
       "icon": "sagemaker",
-      "group": "workers"
+      "group": "train"
     },
     {
       "id": "sandbox",
-      "label": "sandbox",
-      "icon": "sagemaker",
-      "group": "workers"
+      "label": "gVisor v1 · 2 pods 1 A10G per pod",
+      "icon": "container_1",
+      "group": "grading"
+    },
+    {
+      "id": "cw",
+      "label": "CloudWatch Logs",
+      "icon": "cloudwatch_2",
+      "group": "shared"
+    },
+    {
+      "id": "s3",
+      "label": "S3 lifecycle scripts",
+      "icon": "s3",
+      "group": "shared"
+    },
+    {
+      "id": "ecr",
+      "label": "ECR images",
+      "icon": "ecr",
+      "group": "shared"
+    },
+    {
+      "id": "nat",
+      "label": "NAT gateway",
+      "icon": "nat_gateway",
+      "group": "egress"
+    },
+    {
+      "id": "hf",
+      "label": "Hugging Face Hub",
+      "icon": "internet",
+      "outside": true
     }
   ],
   "edges": [
     {
-      "from": "stack",
+      "from": "operator",
+      "to": "stack",
+      "num": 1,
+      "label": "create stack",
+      "dashed": true
+    },
+    {
+      "from": "operator",
       "to": "eks",
-      "label": "Creates the EKS control plane"
+      "num": 2,
+      "label": "kubectl · HTTPS"
+    },
+    {
+      "from": "stack",
+      "to": "control",
+      "num": 3,
+      "label": "creates EKS",
+      "dashed": true
+    },
+    {
+      "from": "stack",
+      "to": "hp",
+      "num": 4,
+      "label": "creates groups",
+      "dashed": true
     },
     {
       "from": "eks",
-      "to": "workers",
-      "label": "Schedules pods on the registered workers"
+      "to": "trainer",
+      "num": 5,
+      "label": "schedule job",
+      "dashed": true
     },
     {
-      "from": "stack",
-      "to": "workers",
-      "label": "Provisions the three instance groups"
+      "from": "cpu",
+      "to": "sandbox",
+      "num": 6,
+      "label": "benchmark requests"
     },
     {
       "from": "trainer",
       "to": "sandbox",
-      "label": "Candidate code and grading result",
-      "bidirectional": true
+      "num": 7,
+      "label": "candidate code"
+    },
+    {
+      "from": "sandbox",
+      "to": "trainer",
+      "num": 8,
+      "label": "verdict + timing"
+    },
+    {
+      "from": "eks",
+      "to": "cw",
+      "num": 9,
+      "label": "control plane logs",
+      "dashed": true
+    },
+    {
+      "from": "operator",
+      "to": "s3",
+      "num": 10,
+      "label": "upload scripts",
+      "dashed": true
+    },
+    {
+      "from": "sandbox",
+      "to": "ecr",
+      "num": 11,
+      "label": "pull image",
+      "dashed": true
+    },
+    {
+      "from": "trainer",
+      "to": "nat",
+      "num": 12,
+      "label": "model download"
+    },
+    {
+      "from": "nat",
+      "to": "hf",
+      "num": 13,
+      "label": "HTTPS"
     }
   ]
 }

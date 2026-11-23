@@ -1,0 +1,15 @@
+{
+  "components": {
+    "stack": "drawn",
+    "eks": "drawn",
+    "system": "drawn",
+    "trainer": "drawn",
+    "sandbox": "drawn"
+  },
+  "relationships": {
+    "stack → eks": "primary",
+    "eks → workers": "primary",
+    "stack → workers": "primary",
+    "trainer → sandbox": "primary"
+  }
+}

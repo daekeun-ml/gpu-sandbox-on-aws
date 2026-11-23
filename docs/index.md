@@ -82,7 +82,7 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 
 === "B2 · CPU와 GPU 모두 HyperPod"
 
-    [![EKS 제어 영역과 HyperPod 시스템·학습·채점 워커](images/architecture/scenario-b2.drawio.png)](images/architecture/scenario-b2.drawio.png)
+    [![EKS 제어 영역과 HyperPod 시스템·학습·채점 워커](images/architecture/scenario-b2.drawio.png?layout=aws)](images/architecture/scenario-b2.drawio.png?layout=aws)
 
     CPU 한 대가 공용 Pod를 맡고, GPU 한 대가 모델을 학습합니다. 나머지 GPU 두 대에서는 모델이 만든 코드를 채점합니다. [B2 따라 하기](handson/07_hyperpod_b2.md) · [B1·B2 비교 슬라이드 (PPTX)](slides/gpu-sandbox-theory.pptx)
 

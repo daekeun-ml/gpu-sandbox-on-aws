@@ -43,9 +43,11 @@ A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the con
 <details>
 <summary><b>Scenario B2: training and sandboxes on HyperPod</b></summary>
 
-![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](docs/images/architecture/scenario-b2.drawio.png)
+![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](diagrams/scenario-b2.drawio.png?layout=aws)
 
-The CPU system worker, the GPU trainer and both GPU graders run on HyperPod. [B2 hands-on](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
+*EKS schedules the training job. The HyperPod `trainer` sends code to the `sandbox` group on the right, and the CPU worker in `system` sends benchmark requests to the same grading pool.*
+
+[B2 hands-on](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/) · [Earlier worker overview](diagrams/variants/b2-worker-overview/scenario-b2.drawio.png)
 
 </details>
 

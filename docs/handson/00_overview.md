@@ -82,7 +82,7 @@ scripts/01_check_prereqs.sh
     2. **워커 준비**　`scripts/hyperpod/create_managed.sh`로 EKS와 HyperPod를 함께 만들고 네 노드가 `Ready`인지 봅니다. 채점 노드의 드라이버를 맞춘 뒤 v1 pool을 배포합니다.
     3. **학습과 벤치마크**　GRPO Job이 `Completed`가 되면 `scripts/hyperpod/bench_b2.sh 32`로 같은 pool에 고정 커널을 보냅니다. [두 클라이언트의 결과](08_benchmark.md#hyperpod-b2)
 
-    [![B2의 EKS 제어 영역과 세 HyperPod 인스턴스 그룹](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+    [![B2의 EKS 제어 영역과 세 HyperPod 인스턴스 그룹](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
 === "C · CPU"
 

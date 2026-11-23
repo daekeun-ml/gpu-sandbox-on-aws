@@ -1,0 +1,70 @@
+{
+  "title": "B2 · Amazon EKS and SageMaker HyperPod in us-east-1",
+  "layout": "manual",
+  "groups": [
+    {
+      "id": "region",
+      "label": "AWS Region · us-east-1"
+    },
+    {
+      "id": "workers",
+      "label": "SageMaker HyperPod instance groups",
+      "group": "region"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "stack",
+      "label": "AWS CloudFormation",
+      "icon": "cloudformation",
+      "group": "region"
+    },
+    {
+      "id": "eks",
+      "label": "Amazon EKS 1.36",
+      "icon": "eks",
+      "group": "region"
+    },
+    {
+      "id": "system",
+      "label": "system",
+      "icon": "sagemaker",
+      "group": "workers"
+    },
+    {
+      "id": "trainer",
+      "label": "trainer",
+      "icon": "sagemaker",
+      "group": "workers"
+    },
+    {
+      "id": "sandbox",
+      "label": "sandbox",
+      "icon": "sagemaker",
+      "group": "workers"
+    }
+  ],
+  "edges": [
+    {
+      "from": "stack",
+      "to": "eks",
+      "label": "Creates the EKS control plane"
+    },
+    {
+      "from": "eks",
+      "to": "workers",
+      "label": "Schedules pods on the registered workers"
+    },
+    {
+      "from": "stack",
+      "to": "workers",
+      "label": "Provisions the three instance groups"
+    },
+    {
+      "from": "trainer",
+      "to": "sandbox",
+      "label": "Candidate code and grading result",
+      "bidirectional": true
+    }
+  ]
+}

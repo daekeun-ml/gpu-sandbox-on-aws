@@ -2,7 +2,7 @@
 
 모델이 코드를 만들면 별도의 GPU 샌드박스가 코드를 실행해 점수를 돌려줍니다. B2에서는 학습과 채점뿐 아니라 CoreDNS 같은 공용 Pod도 SageMaker HyperPod 인스턴스에서 실행합니다. Amazon EKS는 Kubernetes API와 스케줄러를 제공합니다.
 
-[![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+[![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
 | HyperPod 그룹 | `us-east-1` 실습 구성 | 역할 |
 |---|---|---|

@@ -388,7 +388,7 @@ A separate fixed-kernel benchmark sent 32 requests from the HyperPod trainer nod
 
 In Northern Virginia the HyperPod EKS creation workflow provisioned one `system` worker, one `trainer` and two `sandbox` workers. Kubernetes reported all four workers on a cluster with zero EKS managed node groups. [B2 lab and screenshots](07_hyperpod_b2.md)
 
-[![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+[![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
 <details class="note" markdown="1">
 <summary>Earlier CDK option with EC2 system nodes and a custom sandbox AMI</summary>

@@ -43,9 +43,11 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 <details>
 <summary><b>시나리오 B2: HyperPod 학습과 샌드박스</b></summary>
 
-![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](docs/images/architecture/scenario-b2.drawio.png)
+![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](diagrams/scenario-b2.drawio.png?layout=aws)
 
-시스템용 CPU 워커와 학습·채점용 GPU 워커를 모두 HyperPod에 배치합니다. [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
+*EKS가 학습 Job을 배치하면 HyperPod의 `trainer`가 오른쪽 `sandbox` 그룹에 코드를 보냅니다. `system`의 CPU 워커도 같은 채점 pool에 벤치마크 요청을 보냅니다.*
+
+[B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/) · [이전 워커 개요 그림](diagrams/variants/b2-worker-overview/scenario-b2.drawio.png)
 
 </details>
 

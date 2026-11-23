@@ -390,7 +390,7 @@ aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPO
 
 미국 동부(버지니아 북부)에서 HyperPod의 EKS 생성 흐름으로 `system` 1대, `trainer` 1대, `sandbox` 2대를 구성했습니다. 일반 EC2 노드 그룹 수가 0인 클러스터에서 네 워커의 배치를 확인할 수 있습니다. [B2 실습과 실행 화면](07_hyperpod_b2.md)
 
-[![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+[![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
 <details class="note" markdown="1">
 <summary>기존 CDK 구성 · EC2 시스템 노드와 샌드박스용 custom AMI</summary>

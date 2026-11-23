@@ -1,0 +1,136 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="managed-b2" name="B2 · Amazon EKS and SageMaker HyperPod in us-east-1">
+    <mxGraphModel page="1" pageWidth="1100" pageHeight="556" grid="1" gridSize="10" guides="1" connect="1" arrows="1" pageScale="1" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="region" parent="1" vertex="1" style="rounded=0;strokeWidth=2;strokeColor=#7C8D9B;fillColor=#FFFFFF;container=1;" value="">
+          <mxGeometry x="10" y="10" width="1080" height="535" as="geometry" />
+        </mxCell>
+        <mxCell id="region-title" parent="region" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=21;fontColor=#172D45;fontStyle=1;" value="AWS Region  /  us-east-1">
+          <mxGeometry x="25" y="5" width="620" height="39" as="geometry" />
+        </mxCell>
+        <mxCell id="stack" parent="region" vertex="1" style="rounded=1;arcSize=7;strokeWidth=1.6;strokeColor=#9BABBA;fillColor=#FFFFFF;container=1;" value="">
+          <mxGeometry x="23" y="51" width="397" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="stack_icon" parent="stack" vertex="1" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudformation;aspect=fixed;fillColor=#9856B4;strokeColor=#ffffff;outlineConnect=0;" value="">
+          <mxGeometry x="16" y="15" width="36" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="stack_name" parent="stack" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=20;fontColor=#172D45;fontStyle=1;" value="AWS CloudFormation">
+          <mxGeometry x="62" y="12" width="327" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="stack_row0" parent="stack" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=16;fontColor=#41576C;fontStyle=0;" value="Regional HyperPod EKS wizard template">
+          <mxGeometry x="16" y="65" width="369" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="eks" parent="region" vertex="1" style="rounded=1;arcSize=7;strokeWidth=1.6;strokeColor=#9BABBA;fillColor=#FFFFFF;container=1;" value="">
+          <mxGeometry x="585" y="51" width="470" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="eks_icon" parent="eks" vertex="1" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eks;aspect=fixed;fillColor=#D87519;strokeColor=#ffffff;outlineConnect=0;" value="">
+          <mxGeometry x="16" y="15" width="36" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="eks_name" parent="eks" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=20;fontColor=#172D45;fontStyle=1;" value="Amazon EKS 1.36">
+          <mxGeometry x="62" y="12" width="400" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="eks_row0" parent="eks" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=16;fontColor=#41576C;fontStyle=0;" value="Kubernetes API and scheduler">
+          <mxGeometry x="16" y="65" width="442" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="e-stackeks" parent="1" edge="1" source="stack" target="eks" value="" style="edgeStyle=none;rounded=0;html=0;endArrow=block;endFill=1;startArrow=none;startFill=1;strokeWidth=2;strokeColor=#17619A;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="create-label" parent="region" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=center;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=16;fontColor=#17619A;fontStyle=1;" value="creates">
+          <mxGeometry x="437" y="65" width="132" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="workers" parent="region" vertex="1" style="rounded=0;strokeWidth=2;strokeColor=#17756B;fillColor=#F0F8F6;container=1;" value="">
+          <mxGeometry x="23" y="205" width="1032" height="303" as="geometry" />
+        </mxCell>
+        <mxCell id="hp-icon" parent="workers" vertex="1" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sagemaker;aspect=fixed;fillColor=#17756B;strokeColor=#ffffff;outlineConnect=0;" value="">
+          <mxGeometry x="15" y="13" width="35" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="workers-title" parent="workers" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=23;fontColor=#172D45;fontStyle=1;" value="Amazon SageMaker HyperPod">
+          <mxGeometry x="61" y="9" width="600" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="workers-count" parent="workers" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=right;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=18;fontColor=#17756B;fontStyle=1;" value="3 instance groups  /  4 workers">
+          <mxGeometry x="605" y="11" width="405" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="e-eksworkers" parent="1" edge="1" source="eks" target="workers" value="" style="edgeStyle=none;rounded=0;html=0;endArrow=block;endFill=1;startArrow=none;startFill=1;strokeWidth=2;strokeColor=#17619A;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.772;entryY=0;entryPerimeter=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="schedule" parent="region" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=16;fontColor=#17619A;fontStyle=1;" value="schedules pods">
+          <mxGeometry x="838" y="162" width="180" height="27" as="geometry" />
+        </mxCell>
+        <mxCell id="e-stackworkers" parent="1" edge="1" source="stack" target="workers" value="" style="edgeStyle=none;rounded=0;html=0;endArrow=block;endFill=1;startArrow=none;startFill=1;strokeWidth=2;strokeColor=#17619A;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.192;entryY=0;entryPerimeter=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="provision" parent="region" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=16;fontColor=#17619A;fontStyle=1;" value="provisions workers">
+          <mxGeometry x="236" y="162" width="215" height="27" as="geometry" />
+        </mxCell>
+        <mxCell id="system" parent="workers" vertex="1" style="rounded=1;arcSize=7;strokeWidth=1.6;strokeColor=#A0B8B2;fillColor=#FFFFFF;container=1;" value="">
+          <mxGeometry x="18" y="68" width="265" height="154" as="geometry" />
+        </mxCell>
+        <mxCell id="system_icon" parent="system" vertex="1" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sagemaker;aspect=fixed;fillColor=#17756B;strokeColor=#ffffff;outlineConnect=0;" value="">
+          <mxGeometry x="16" y="15" width="36" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="system_name" parent="system" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=20;fontColor=#172D45;fontStyle=1;" value="system">
+          <mxGeometry x="62" y="12" width="195" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="system_row0" parent="system" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=19;fontColor=#172D45;fontStyle=1;" value="ml.m5.xlarge × 1">
+          <mxGeometry x="16" y="65" width="237" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="system_row1" parent="system" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=17;fontColor=#41576C;fontStyle=0;" value="CoreDNS">
+          <mxGeometry x="16" y="93" width="237" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="system_row2" parent="system" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=17;fontColor=#41576C;fontStyle=0;" value="CPU benchmark client">
+          <mxGeometry x="16" y="121" width="237" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="trainer" parent="workers" vertex="1" style="rounded=1;arcSize=7;strokeWidth=1.6;strokeColor=#99AFC2;fillColor=#FFFFFF;container=1;" value="">
+          <mxGeometry x="308" y="68" width="270" height="154" as="geometry" />
+        </mxCell>
+        <mxCell id="trainer_icon" parent="trainer" vertex="1" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sagemaker;aspect=fixed;fillColor=#17756B;strokeColor=#ffffff;outlineConnect=0;" value="">
+          <mxGeometry x="16" y="15" width="36" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="trainer_name" parent="trainer" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=20;fontColor=#172D45;fontStyle=1;" value="trainer">
+          <mxGeometry x="62" y="12" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="trainer_row0" parent="trainer" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=19;fontColor=#172D45;fontStyle=1;" value="ml.g5.2xlarge × 1">
+          <mxGeometry x="16" y="65" width="242" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="trainer_row1" parent="trainer" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=17;fontColor=#41576C;fontStyle=0;" value="GRPO training job">
+          <mxGeometry x="16" y="93" width="242" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="trainer_row2" parent="trainer" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=17;fontColor=#41576C;fontStyle=0;" value="NVIDIA A10G">
+          <mxGeometry x="16" y="121" width="242" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="sandbox" parent="workers" vertex="1" style="rounded=1;arcSize=7;strokeWidth=1.6;strokeColor=#17619A;fillColor=#FFFFFF;container=1;" value="">
+          <mxGeometry x="734" y="68" width="280" height="154" as="geometry" />
+        </mxCell>
+        <mxCell id="sandbox_icon" parent="sandbox" vertex="1" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sagemaker;aspect=fixed;fillColor=#17756B;strokeColor=#ffffff;outlineConnect=0;" value="">
+          <mxGeometry x="16" y="15" width="36" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="sandbox_name" parent="sandbox" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=20;fontColor=#172D45;fontStyle=1;" value="sandbox">
+          <mxGeometry x="62" y="12" width="210" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sandbox_row0" parent="sandbox" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=19;fontColor=#172D45;fontStyle=1;" value="ml.g5.xlarge × 2">
+          <mxGeometry x="16" y="65" width="252" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="sandbox_row1" parent="sandbox" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=17;fontColor=#41576C;fontStyle=0;" value="One gVisor v1 pod per node">
+          <mxGeometry x="16" y="93" width="252" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="sandbox_row2" parent="sandbox" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=17;fontColor=#41576C;fontStyle=0;" value="One NVIDIA A10G per pod">
+          <mxGeometry x="16" y="121" width="252" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="e-trainersandbox" parent="1" edge="1" source="trainer" target="sandbox" value="" style="edgeStyle=none;rounded=0;html=0;endArrow=block;endFill=1;startArrow=block;startFill=1;strokeWidth=2.5;strokeColor=#17619A;exitX=1;exitY=0.52;exitPerimeter=0;entryX=0;entryY=0.52;entryPerimeter=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="code" parent="workers" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=center;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=16;fontColor=#17619A;fontStyle=1;" value="candidate code">
+          <mxGeometry x="581" y="109" width="151" height="27" as="geometry" />
+        </mxCell>
+        <mxCell id="reward" parent="workers" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=center;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=16;fontColor=#17619A;fontStyle=1;" value="verdict + timing">
+          <mxGeometry x="581" y="153" width="151" height="27" as="geometry" />
+        </mxCell>
+        <mxCell id="driver-note" parent="workers" vertex="1" style="text;html=0;whiteSpace=wrap;overflow=hidden;align=left;verticalAlign=middle;spacing=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontSize=18;fontColor=#41576C;fontStyle=0;" value="Sandbox workers only   /   NVIDIA 580.178.04   ·   gVisor 20261109.0">
+          <mxGeometry x="20" y="238" width="993" height="42" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

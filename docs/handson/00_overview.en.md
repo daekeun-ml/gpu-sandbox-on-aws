@@ -82,7 +82,7 @@ Creating the cluster starts charges for resources including nodes and the NAT ga
     2. **Prepare the workers.** Run `scripts/hyperpod/create_managed.sh` to create EKS and HyperPod together. Wait for four `Ready` nodes, prepare the grading drivers and deploy the v1 pool.
     3. **Train and benchmark.** Once the GRPO job is `Completed`, run `scripts/hyperpod/bench_b2.sh 32` against the same pool. [Compare both clients](08_benchmark.md#hyperpod-b2)
 
-    [![EKS control plane and the three HyperPod instance groups](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+    [![EKS control plane and the three HyperPod instance groups](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
 === "C · CPU"
 
