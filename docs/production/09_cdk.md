@@ -1,5 +1,7 @@
 # 09 CDK로 프로비저닝하고 삭제하기
 
+이 장에서 B2 CDK 명령은 EC2 시스템 노드를 두는 이전 구성을 가리킵니다. CPU와 GPU 워커를 모두 HyperPod에 두는 실습은 [관리형 B2](../handson/07_hyperpod_b2.md)를 따르세요.
+
 !!! info "TL;DR"
     핸즈온의 클러스터 생성 단계(`02_create_cluster.sh`)에서 실행하는 이 CDK 앱은 VPC, EKS(API endpoint는 private 전용), 시나리오별 노드 그룹, SSM 접속 인스턴스를 스택 하나로 만들고 명령 한 번으로 삭제합니다. synth할 때마다 cdk-nag가 보안 규칙을 검사하고, 템플릿 테스트(`cdk/tests`)는 따로 실행합니다.
 

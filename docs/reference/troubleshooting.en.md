@@ -619,6 +619,8 @@ Before it submits the Job, the multi-turn episode run (`scripts/extensions/agent
 
 [Commands, screenshots and cleanup](../handson/07_hyperpod_b2.md)
 
+### B1 and the earlier CDK configuration
+
 | Symptom | Cause | Fix |
 |---|---|---|
 | `scripts/hyperpod/check_gvisor.sh` prints `NOT supported by gVisor ...: keep sandboxes on EC2 (mode B1)` | Expected on the trainer node: gVisor release-20261109.0 does not know the default HyperPod EKS AMI driver 595.91.07. On a sandbox node it means the custom AMI was not applied | Leave the trainer node as it is. For a sandbox node, check `HYPERPOD_B2_AMI_ID` and the instance group's `ImageId` |

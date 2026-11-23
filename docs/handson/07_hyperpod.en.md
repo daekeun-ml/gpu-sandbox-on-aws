@@ -82,7 +82,7 @@ scripts/01_check_prereqs.sh
 HyperPod instances use the `ml.<type> for cluster usage` quotas, not the EC2 ones.
 
 - **B1**: needs 8 vCPU of EC2 G/VT quota (two `g5.xlarge`) and one HyperPod `ml.g5.2xlarge`.
-- **B2**: has no EC2 GPU nodes and needs one HyperPod `ml.g5.2xlarge` and two `ml.g5.xlarge`.
+- **B2** uses HyperPod quotas in `us-east-1` for one `ml.m5.xlarge` system worker, one `ml.g5.2xlarge` trainer and two `ml.g5.xlarge` sandbox workers.
 
 Check the HyperPod `ml.<type> for cluster usage` quotas under Amazon SageMaker in the Service Quotas console and request an increase if any is too low.
 
@@ -388,16 +388,14 @@ A separate fixed-kernel benchmark sent 32 requests from the HyperPod trainer nod
 
 In Northern Virginia the HyperPod EKS creation workflow provisioned one `system` worker, one `trainer` and two `sandbox` workers. Kubernetes reported all four workers on a cluster with zero EKS managed node groups. [B2 lab and screenshots](07_hyperpod_b2.md)
 
+[![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+
 <details class="note" markdown="1">
 <summary>Earlier CDK option with EC2 system nodes and a custom sandbox AMI</summary>
 
 ### Earlier B2 custom AMI path
 
 B2 puts both the trainer and the GPU sandboxes on HyperPod instance groups. The sandbox instance group (`sandbox`) boots from a custom AMI that swaps the NVIDIA driver to 580.178.04 and installs gVisor, and runs the same kind of gVisor pool as scenario A (`gvisor-hyperpod`).
-
-[![Scenario B2: the trainer and the gVisor pools both on HyperPod instance groups, the sandbox nodes booting from a custom AMI](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
-
-*Takeaway: Unlike B1, EKS keeps only the system nodes, and the sandbox pools also run on HyperPod nodes booted from the custom AMI.*
 
 ```mermaid
 flowchart LR
@@ -424,7 +422,7 @@ The gVisor development branch does not have 595.91.07 either, as of 2026-11-14. 
 
 The replacement driver version, 580.178.04, matches the EC2 gVisor nodes.
 
-- **Verdicts**: so B1 and B2 are expected to give the same verdicts on the same driver version (B2 not verified).
+- **Verdicts**: so B1 and B2 are expected to give the same verdicts on the same driver version (the earlier custom AMI has not been tested).
 - **Kernel module flavor**: it differs, though. The AMI of the EC2 `g5.xlarge` nodes loads the proprietary kernel module (GSP off), while the B2 AMI installs the open kernel module.
 
 | Item | B1 | B2 |

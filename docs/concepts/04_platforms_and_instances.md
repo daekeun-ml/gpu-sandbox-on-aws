@@ -44,7 +44,7 @@ B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타�
 
 === "B2 · CPU와 GPU 모두 HyperPod"
 
-    [![CPU, 학습, 채점 인스턴스 그룹을 보여주는 HyperPod 콘솔](../images/console/hyperpod-b2-instance-groups.png)](../images/console/hyperpod-b2-instance-groups.png)
+    [![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
 
     `system`은 CoreDNS를, `trainer`는 GRPO Job을, `sandbox`는 gVisor 채점을 맡습니다. Kubernetes API는 EKS에서 제공합니다. [B2 배포 실습](../handson/07_hyperpod_b2.md)
 
@@ -106,45 +106,20 @@ B1 실습에서 `ml.g5.2xlarge`의 A10G 한 장은 모델의 답을 생성하고
 
 | 항목 | 사실 | 이 저장소의 대응 |
 |---|---|---|
-| 샌드박스 런타임 | HyperPod EKS AMI의 NVIDIA 드라이버 595.91.07은 gVisor release-20261109.0에서 unknown이라 nvproxy가 동작하지 않습니다. Kata는 `ml.*.metal`이 없고 CreateCluster에 nested virtualization CPU 옵션이 없어서 실행할 수 없습니다 | 샌드박스는 EC2 노드에서 실행 (B1). B2는 드라이버를 바꾼 custom AMI로 별도 인스턴스 그룹을 만듦 |
+| 샌드박스 런타임 | 기본 이미지의 드라이버가 gVisor 버전과 호환돼야 nvproxy로 GPU를 사용할 수 있습니다. Kata GPU는 이 HyperPod 인스턴스에서 필요한 가상화 장치를 제공받지 못합니다 | B1은 EC2에 gVisor를 배치합니다. B2는 HyperPod `sandbox` 그룹의 드라이버를 맞춥니다 |
 | 전용 노드 taint | "You cannot add custom taints to nodes in instance groups with DeepHealthChecks turned on." | 샌드박스 노드는 EC2 노드 그룹에서 `gpusandbox/role` taint로 분리 |
 | 격리 검증 | deep health check는 GPU, NVLink, EFA, NCCL 같은 하드웨어 점검이며 샌드박스 격리(egress 차단 등)를 확인하지 않습니다 | egress 차단을 확인한 뒤에만 Ready, `scripts/ops/verify.sh` |
 | pod 밀도 | B1의 `ml.g5.2xlarge` 노드가 보고한 pod 한도는 14개였습니다. ENI를 추가할 수 있는지는 AMI와 VPC CNI 버전에 따라 달라집니다. | B1은 HyperPod 노드에 trainer만 배치. B2의 `sandbox` 그룹은 노드당 샌드박스 pod 1개 |
-| CPU 노드 교체 | "Node auto-replacement is not supported for CPU instances." | CPU 계층은 EC2 (`c8i`) |
+| CPU 노드 교체 | "Node auto-replacement is not supported for CPU instances." | B2의 `system`은 HyperPod CPU 노드입니다. 시나리오 C의 CPU 채점은 EC2 `c8i`에서 실행합니다 |
 | 버전 고정, parity, gateway | HyperPod 기능이 아닙니다 | 이 저장소의 코드 |
 
 HyperPod 노드에서는 기본적으로 hostNetwork pod만 IMDS에 접근할 수 있습니다. 샌드박스 격리에는 유리한 기본값이지만, 위 표의 제약을 해결하지는 않습니다.
 
-## B1의 EC2 샌드박스와 기존 B2 custom AMI
+## B2에서 채점 노드의 드라이버를 맞추는 이유
 
-gVisor는 드라이버 버전이 지원 목록과 정확히 일치해야 하고, unknown 버전은 우회 플래그를 써도 동작하지 않습니다. 그래서 B2는 드라이버를 580.178.04로 바꾼 custom AMI를 직접 빌드합니다([07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)).
+gVisor의 GPU 연결 기능인 nvproxy에는 드라이버 버전별 지원 목록이 있습니다. B2의 기본 이미지에 들어 있던 `595.112.07`은 gVisor `20261109.0`의 목록에 없었습니다. 채점 노드 두 대에 `580.178.04`를 설치하고 HyperPod API로 재부팅한 뒤, 각 노드의 gVisor Pod에서 A10G로 코드를 실행했습니다. GPU를 직접 쓰는 학습 노드는 기본 드라이버를 유지했습니다.
 
-아래 스크립트는 노드의 드라이버 버전을 확인합니다(HyperPod 클러스터 필요). 노드마다 debug pod를 실행하고, 끝날 때 `default` 네임스페이스에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제합니다. 다른 작업자의 디버깅 세션도 함께 삭제될 수 있습니다.
-
-```bash
-scripts/hyperpod/check_gvisor.sh
-```
-
-**확인할 것:**
-
-- **기본 AMI를 쓰는 trainer 노드**: 아래 줄이 출력됩니다.
-
-    ```text
-      driver 595.91.07: NOT supported by gVisor 20261109.0
-    ```
-
-- **B2 custom AMI를 쓰는 sandbox 노드**: `driver 580.178.04: SUPPORTED ...`가 출력됩니다.
-
-B2에서도 위의 pod 수 제한은 그대로 적용됩니다. taint는 deep health check를 켜지 않은 인스턴스 그룹에만 추가할 수 있으므로 B2의 sandbox 그룹은 deep health check 없이 만듭니다. B1을 기본으로 둔 이유는 custom AMI를 직접 관리하지 않아도 되기 때문입니다. B2의 실제 노드 검증은 남아 있습니다.
-
-B2에서는 `scripts/04_install_gpu_stack.sh`가 smoke pod를 만들지 않습니다. 다음 순서로 확인하고 배포하세요.
-
-1. sandbox 노드의 `/proc/driver/nvidia/version`으로 어떤 모듈 종류가 로드됐는지 봅니다.
-2. 위의 `scripts/hyperpod/check_gvisor.sh`로 그 드라이버가 지원 목록에 있는지 확인합니다.
-3. `scripts/06_deploy_sandboxes.sh gvisor-hyperpod v1`로 풀을 배포합니다.
-4. `scripts/ops/verify.sh gvisor-hyperpod v1`로 검증합니다.
-
-**문제가 생기면:** `no HyperPod nodes found`는 HyperPod 노드가 아직 클러스터에 연결되지 않았다는 뜻입니다. [07 HyperPod 시나리오](../handson/07_hyperpod.md)와 [문제 해결](../reference/troubleshooting.md)의 "HyperPod" 항목을 보세요.
+[채점 노드 준비와 CUDA 실행 화면](../handson/07_hyperpod_b2.md) · [고정 커널 벤치마크](../handson/08_benchmark.md#hyperpod-b2)
 
 ## 인스턴스 선택
 
@@ -202,14 +177,15 @@ B2에서는 `scripts/04_install_gpu_stack.sh`가 smoke pod를 만들지 않습�
 | quota (vCPU 기준) | 핸즈온 필요량 | 비고 |
 |---|---|---|
 | Running On-Demand G and VT instances | A: 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2), B1: 8 (`g5.xlarge` 4 x 2), B2: 0. Kata GPU를 실습하면 `g4dn.metal` 96 추가 | 문서상 기본값 0일 수 있음 |
-| Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 6 (`m6i.large` 2 x 2 + SSM 접속용 `t4g.nano` 2). 추가 필요량은 표 아래 목록 | 문서상 기본값 5 |
+| Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | A/B1/C: 6 (`m6i.large` 2 x 2 + SSM 접속용 `t4g.nano` 2). 추가 필요량은 표 아래 목록 | 문서상 기본값 5 |
+| `ml.m5.xlarge for cluster usage` | 1 (B2) | HyperPod `system` 그룹. 관리형 B2에 필요한 일반 EC2 워커 쿼터는 0 |
 | `ml.g5.2xlarge for cluster usage` | 1 (B) | HyperPod는 `ml.<type> for cluster usage` quota를 씀 |
 | `ml.g5.xlarge for cluster usage` | 2 (B2) | B2의 `sandbox` 인스턴스 그룹(`HYPERPOD_SANDBOX_COUNT`) |
 
 Standard quota가 더 필요한 경우는 다음과 같습니다.
 
 - **Kata CPU를 실습하면**: 추가 필요량은 `c8i.2xlarge` 8(합계 14)입니다.
-- **B2나 Kata GPU용 AMI를 만드는 동안에는**: builder `m6i.large` 2가 더 필요합니다(8, Kata CPU 노드가 있으면 16).
+- **기존 CDK B2 또는 Kata GPU용 AMI를 만드는 동안에는**: builder `m6i.large` 2가 더 필요합니다(8, Kata CPU 노드가 있으면 16).
 
 `scripts/01_check_prereqs.sh`가 G and VT quota, `c8i.2xlarge`의 nested virtualization 지원, GPU 타입의 AZ별 제공 여부를 읽기 전용으로 조회해 출력합니다. 실행 방법과 확인할 내용은 [시작하기](../getting_started.md)의 5장에 있습니다.
 

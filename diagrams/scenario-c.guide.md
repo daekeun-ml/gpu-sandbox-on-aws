@@ -57,7 +57,7 @@ GPU가 전혀 없는 가장 싼 경로입니다. EC2 nested virtualization을 �
 - 노드 `sim`은 모든 tool 실행(simulate, probe, parity, bench)이 쓰는 Job 템플릿 하나를 뜻합니다. 7번과 8번은 활성이 아닌 두 pool에 대한 probe와 bench 실행이고, 점선이지만 선이 없는 pool이 생기지 않도록 꼭 그렸어요.
 - Kubernetes workload(Job, pool Deployment)는 Containers 카테고리의 `container_1`로 그리고 workload 이름을 붙였습니다. `eks` 아이콘은 control plane만 뜻해요.
 - gVisor, Kata, Cloud Hypervisor, QEMU는 stencil이 없어서 pool 라벨(pool 이름이 곧 runtime)과 설명으로 드러냈습니다. c8i node group은 이름과 instance type을 제목에 단 role group이에요.
-- system node group은 이 시나리오에서만 그룹으로 그렸습니다. reward driver가 그 위에 있기 때문이고, A, B1, B2에서는 그리지 않는 행이라는 점이 시나리오 차이예요.
+- C의 EC2 system 노드 그룹에서는 reward driver가 실행됩니다. B2 그림에서는 CPU 작업을 담당하는 HyperPod `system` 인스턴스 그룹을 볼 수 있습니다.
 - kata-deploy DaemonSet은 AWS 리소스가 아니라 kube-system의 Helm release이고 독자가 봐야 할 관계가 없어서 그리지 않았습니다.
 - 그룹 제목은 node group 이름과 instance type만 적고 1열 카드에 두 줄로 들어가게 했습니다.
 - 샌드박스 egress 선은 일부러 없습니다. default-deny NetworkPolicy, IMDS와 API server와 kubelet에 닿지 않아야 하는 readiness, c8i 노드 user data의 node guard가 그 자리를 지켜요.

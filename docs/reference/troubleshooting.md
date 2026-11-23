@@ -619,6 +619,8 @@ multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <ru
 
 [재현 명령과 실행 화면, 정리 절차](../handson/07_hyperpod_b2.md)
 
+### B1과 기존 CDK 구성의 문제 해결
+
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | `scripts/hyperpod/check_gvisor.sh`가 `NOT supported by gVisor ...: keep sandboxes on EC2 (mode B1)` 출력 | trainer 노드라면 예상 결과: 기본 HyperPod EKS AMI의 드라이버 595.91.07이 gVisor release-20261109.0의 nvproxy 지원 목록에 없음. sandbox 노드에서 나오면 custom AMI가 적용되지 않은 것 | trainer 노드는 그대로 둠. sandbox 노드라면 `HYPERPOD_B2_AMI_ID`와 인스턴스 그룹의 `ImageId` 확인 |

@@ -18,7 +18,7 @@
 
 ## 먼저 확인할 것
 
-1. `kubectl`이 연결되지 않으면 별도 터미널에서 `cdk/tunnel.sh`를 확인하세요. `kubectl config current-context`에는 `<CLUSTER_NAME>-tunnel`이 나와야 합니다.
+1. `kubectl` 연결 실패 시 A·B1·C는 `cdk/tunnel.sh`와 `<CLUSTER_NAME>-tunnel` 컨텍스트를 확인하세요. 관리형 B2는 [B2 접속 단계](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)에서 설정한 `$CLUSTER_NAME` 컨텍스트를 사용합니다.
 2. 연결되면 아래 명령으로 pod 상태를 봅니다. `<pod>`에는 첫 명령에 나온 이름을 넣으세요.
 
 ```bash

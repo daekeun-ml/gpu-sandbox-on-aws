@@ -1,6 +1,6 @@
 # GPU Sandbox on AWS
 
-Amazon EKS 클러스터에서 학습과 코드 채점을 별도 GPU 노드에 배치합니다. A는 EC2에서, B1은 SageMaker HyperPod에서 모델을 학습합니다. 두 구성 모두 같은 클러스터의 EC2 샌드박스 풀로 코드를 보냅니다.
+Amazon EKS에서 모델 학습과 코드 채점을 별도 GPU 노드에 배치합니다. 아래 그림의 A와 B1은 각각 EC2와 HyperPod에서 학습하고, 둘 다 EC2에서 채점합니다. [B2](handson/07_hyperpod_b2.md)는 시스템 CPU와 학습·채점 GPU를 모두 HyperPod에서 운영합니다.
 
 <a href="images/figures/index--aws-architecture.svg">
 <picture>
@@ -82,9 +82,9 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 
 === "B2 · CPU와 GPU 모두 HyperPod"
 
-    [![HyperPod 콘솔에서 확인한 system, trainer, sandbox 인스턴스 그룹](images/console/hyperpod-b2-instance-groups.png)](images/console/hyperpod-b2-instance-groups.png)
+    [![EKS 제어 영역과 HyperPod 시스템·학습·채점 워커](images/architecture/scenario-b2.drawio.png)](images/architecture/scenario-b2.drawio.png)
 
-    CPU 한 대가 공용 Pod를 맡고, GPU 한 대가 모델을 학습합니다. 나머지 GPU 두 대에서는 모델이 만든 코드를 채점합니다. [B2 따라 하기](handson/07_hyperpod_b2.md)
+    CPU 한 대가 공용 Pod를 맡고, GPU 한 대가 모델을 학습합니다. 나머지 GPU 두 대에서는 모델이 만든 코드를 채점합니다. [B2 따라 하기](handson/07_hyperpod_b2.md) · [B1·B2 비교 슬라이드 (PPTX)](https://github.com/daekeun-ml/gpu-sandbox-on-aws/raw/refs/heads/main/slides/gpu-sandbox-theory.pptx)
 
 === "C: CPU 전용"
 

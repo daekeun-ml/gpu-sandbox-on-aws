@@ -2,13 +2,15 @@
 
 모델이 코드를 만들면 별도의 GPU 샌드박스가 코드를 실행해 점수를 돌려줍니다. B2에서는 학습과 채점뿐 아니라 CoreDNS 같은 공용 Pod도 SageMaker HyperPod 인스턴스에서 실행합니다. Amazon EKS는 Kubernetes API와 스케줄러를 제공합니다.
 
+[![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+
 | HyperPod 그룹 | `us-east-1` 실습 구성 | 역할 |
 |---|---|---|
 | `system` | `ml.m5.xlarge` 1대 | CoreDNS와 CPU 작업 |
 | `trainer` | `ml.g5.2xlarge` 1대 | NVIDIA A10G에서 GRPO 학습 |
 | `sandbox` | `ml.g5.xlarge` 2대 | A10G 한 장을 쓰는 gVisor 채점 Pod를 노드당 하나씩 배치 |
 
-[![SageMaker 콘솔에 표시된 system, trainer, sandbox 인스턴스 그룹과 인스턴스 타입](../images/console/hyperpod-b2-instance-groups.png)](../images/console/hyperpod-b2-instance-groups.png)
+[이론 슬라이드 다운로드 (PPTX, B1·B2 비교는 18쪽)](https://github.com/daekeun-ml/gpu-sandbox-on-aws/raw/refs/heads/main/slides/gpu-sandbox-theory.pptx)
 
 `us-east-1` 온디맨드 단가로 워커 네 대의 합계는 **시간당 4.561 USD**입니다. EKS 제어 영역, 스토리지, 네트워크 비용은 별도입니다. [비용 구성](../production/08_cost.md)
 
@@ -75,6 +77,8 @@ aws eks list-nodegroups --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME"
 ```
 
 `list-nodegroups` 결과는 빈 배열입니다. 같은 클러스터에서 `kubectl`로 조회한 워커 네 대는 모두 HyperPod가 관리합니다.
+
+[![SageMaker 콘솔에 표시된 system, trainer, sandbox 인스턴스 그룹과 인스턴스 타입](../images/console/hyperpod-b2-instance-groups.png)](../images/console/hyperpod-b2-instance-groups.png)
 
 [![HyperPod에 등록된 워커 네 대의 역할과 인스턴스 타입, 비어 있는 EKS 관리형 노드 그룹 목록](../images/terminal/hyperpod-b2-nodes.png)](../images/terminal/hyperpod-b2-nodes.png)
 

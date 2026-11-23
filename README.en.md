@@ -8,7 +8,7 @@ The guide covers running the trainer and sandboxes on EC2 nodes in Amazon EKS, a
 
 The GRPO exercise grades model-generated code in GPU sandboxes and uses correctness and execution speed as rewards for model updates. A CPU exercise covers the scoring flow without GPUs.
 
-[Guidebook](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/) | [Replay demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en) | [Scripts](SCRIPTS.en.md) | [Troubleshooting](TROUBLESHOOTING.en.md)
+[Guidebook](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/) | [Replay demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en) | [Korean slide deck (PPTX)](slides/gpu-sandbox-theory.pptx) | [Scripts](SCRIPTS.en.md) | [Troubleshooting](TROUBLESHOOTING.en.md)
 
 | Goal | Start here |
 |---|---|
@@ -43,7 +43,7 @@ A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the con
 <details>
 <summary><b>Scenario B2: training and sandboxes on HyperPod</b></summary>
 
-![The three managed HyperPod instance groups](docs/images/console/hyperpod-b2-instance-groups.png)
+![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](docs/images/architecture/scenario-b2.drawio.png)
 
 The CPU system worker, the GPU trainer and both GPU graders run on HyperPod. [B2 hands-on](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
 

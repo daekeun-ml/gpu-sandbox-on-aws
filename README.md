@@ -8,7 +8,7 @@ Amazon EKS의 EC2 노드에서 학습과 샌드박스를 함께 운영하는 구
 
 GRPO 실습에서는 모델이 작성한 코드를 GPU 샌드박스에서 채점하고, 정확도와 실행 속도를 reward로 써서 모델을 업데이트합니다. GPU 없이 채점 흐름부터 확인할 수 있는 CPU 실습도 있습니다.
 
-[가이드북](https://daekeun-ml.github.io/gpu-sandbox-on-aws/) | [리플레이 데모](https://dohbsn4kn34ya.cloudfront.net/) | [스크립트](SCRIPTS.md) | [문제 해결](TROUBLESHOOTING.md)
+[가이드북](https://daekeun-ml.github.io/gpu-sandbox-on-aws/) | [리플레이 데모](https://dohbsn4kn34ya.cloudfront.net/) | [이론 슬라이드 (PPTX)](slides/gpu-sandbox-theory.pptx) | [스크립트](SCRIPTS.md) | [문제 해결](TROUBLESHOOTING.md)
 
 | 하고 싶은 일 | 어디서 시작할까요? |
 |---|---|
@@ -43,7 +43,7 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 <details>
 <summary><b>시나리오 B2: HyperPod 학습과 샌드박스</b></summary>
 
-![HyperPod에서 실행한 시스템, 학습, 채점 인스턴스 그룹](docs/images/console/hyperpod-b2-instance-groups.png)
+![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](docs/images/architecture/scenario-b2.drawio.png)
 
 시스템용 CPU 워커와 학습·채점용 GPU 워커를 모두 HyperPod에 배치합니다. [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
 

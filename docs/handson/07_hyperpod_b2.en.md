@@ -2,13 +2,15 @@
 
 The model sends the code it generates to a separate GPU sandbox for grading. In B2, SageMaker HyperPod runs the training workers, the grading workers and the CPU pods that provide cluster services such as DNS. Amazon EKS supplies the Kubernetes API and scheduler.
 
+[![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+
 | HyperPod group | Lab configuration in `us-east-1` | Workload |
 |---|---|---|
 | `system` | One `ml.m5.xlarge` | CoreDNS and CPU jobs |
 | `trainer` | One `ml.g5.2xlarge` | GRPO training on an NVIDIA A10G |
 | `sandbox` | Two `ml.g5.xlarge` | One gVisor grading pod per node, each with its own A10G |
 
-[![The system, trainer and sandbox instance groups and their instance types in the SageMaker console](../images/console/hyperpod-b2-instance-groups.png)](../images/console/hyperpod-b2-instance-groups.png)
+[Download the Korean slide deck (PPTX, B1 and B2 comparison on slide 18)](https://github.com/daekeun-ml/gpu-sandbox-on-aws/raw/refs/heads/main/slides/gpu-sandbox-theory.pptx)
 
 At `us-east-1` on-demand rates the four workers cost **$4.561 per hour** together. EKS, storage and networking have separate charges. [Cost breakdown](../production/08_cost.md)
 
@@ -75,6 +77,8 @@ aws eks list-nodegroups --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME"
 ```
 
 `list-nodegroups` returns an empty array. The four workers listed by Kubernetes belong to the HyperPod instance groups.
+
+[![The system, trainer and sandbox instance groups and their instance types in the SageMaker console](../images/console/hyperpod-b2-instance-groups.png)](../images/console/hyperpod-b2-instance-groups.png)
 
 [![Four HyperPod workers by role and instance type, alongside the empty list of EKS managed node groups](../images/terminal/hyperpod-b2-nodes.png)](../images/terminal/hyperpod-b2-nodes.png)
 

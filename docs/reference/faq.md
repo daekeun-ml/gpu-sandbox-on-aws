@@ -81,7 +81,7 @@
     **확인할 것:**
 
     - **기본 AMI 노드**: `NOT supported by gVisor ...: keep sandboxes on EC2 (mode B1)`가 출력됩니다.
-    - **B2 custom AMI 노드**: `driver 580.178.04: SUPPORTED ...`가 출력됩니다.
+    - **B2에서 드라이버를 교체한 채점 노드**: `driver 580.178.04: SUPPORTED ...`가 출력됩니다.
 
     새 AMI나 gVisor 릴리스가 나오면 다시 실행하세요.
 

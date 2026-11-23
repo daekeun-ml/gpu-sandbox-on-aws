@@ -6,6 +6,7 @@ Send code to a sandbox and follow its verdict into a training step. You can also
 
 - **[A · Train on EC2 GPUs](01_cluster_and_images.md)** Generate code, grade it with gVisor and update the model with GRPO.
 - **[B1 · Train on HyperPod](07_hyperpod.md)** Run the trainer on HyperPod and grade its code on an EC2 gVisor pool.
+- **[B2 · Run all workers on HyperPod](07_hyperpod_b2.md)** Create EKS through HyperPod, then send code from the training GPU to two grading GPUs.
 - **[C · Switch pools without GPUs](10_cpu_only.md)** Compare three CPU runtimes and switch from v1 to v2 as the simulator sends submissions.
 
 After choosing a path, **check the nodes and then the grading pool**. A `Ready` node can accept pods. Later, `verified` on the grading pool means the sample submissions received their expected verdicts. Look for each result at its own step.
@@ -29,6 +30,7 @@ Check the **AWS account, Region and EC2 quota values** in the output against you
     |---|---|---:|
     | A · EC2 GPU | G/VT 16, Standard 6 | 3.42 |
     | B1 · HyperPod trainer | G/VT 8, Standard 6 | 3.72 |
+    | B2 · All workers on HyperPod | 0 (worker quotas are under SageMaker) | 4.56 |
     | C · CPU only | Standard 14 | 0.57 |
 
     B1 also needs one `ml.g5.2xlarge for cluster usage` instance under SageMaker. Quotas apply per Region.
@@ -47,7 +49,7 @@ Check the **AWS account, Region and EC2 quota values** in the output against you
 
 ## Follow your scenario { #step-order }
 
-Creating the cluster starts charges for resources including nodes and the NAT gateway. <span id="main-path">Follow one tab</span> for the run order and <span id="aws-layout-per-scenario">its architecture diagram</span>. After provisioning EKS, keep `cdk/tunnel.sh` running in a separate terminal while you work with the cluster.
+Creating the cluster starts charges for resources including nodes and the NAT gateway. <span id="main-path">Follow one tab</span> for the run order and <span id="aws-layout-per-scenario">its architecture diagram</span>. For the CDK paths A, B1 and C, keep `cdk/tunnel.sh` running in a separate terminal while you work with the cluster.
 
 === "A · EC2 GPU"
 
@@ -62,7 +64,7 @@ Creating the cluster starts charges for resources including nodes and the NAT ga
 
         [![EC2 trainer sending submissions to two gVisor sandboxes in scenario A](../images/architecture/scenario-a.drawio.png)](../images/architecture/scenario-a.drawio.png)
 
-=== "B · HyperPod"
+=== "B1 · HyperPod + EC2"
 
     1. **[Prepare the B1 cluster and images](07_hyperpod.md).** Run `scripts/02_create_cluster.sh --hyperpod` to create EKS and the EC2 grading nodes. Open the tunnel, then build the trainer with `HYPERPOD=1 scripts/03_build_push_images.sh` to include `hyperpodrun`. Save the printed image URIs in the configuration file.
     2. **Connect the training node.** Check the EC2 GPU with `scripts/04_install_gpu_stack.sh`, then run `scripts/hyperpod/create.sh`. Verify that the HyperPod trainer node is `Ready` and its `node-health-status` is `Schedulable`.
@@ -74,7 +76,13 @@ Creating the cluster starts charges for resources including nodes and the NAT ga
 
         [![A HyperPod training node using an EC2 grading pool in the same EKS cluster](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
 
-    **[B2 · Run all workers on HyperPod](07_hyperpod_b2.md)** uses the EKS creation workflow in HyperPod. `system` hosts the CPU pods, `trainer` trains the model and `sandbox` runs two GPU graders. Check the three instance groups before running the same GRPO exercise.
+=== "B2 · HyperPod"
+
+    1. **[Check the three groups and quotas](07_hyperpod_b2.md).** In `us-east-1`, check SageMaker quotas for one CPU worker, one training GPU worker and two grading GPU workers.
+    2. **Prepare the workers.** Run `scripts/hyperpod/create_managed.sh` to create EKS and HyperPod together. Wait for four `Ready` nodes, prepare the grading drivers and deploy the v1 pool.
+    3. **Train and benchmark.** Once the GRPO job is `Completed`, run `scripts/hyperpod/bench_b2.sh 32` against the same pool. [Compare both clients](08_benchmark.md#hyperpod-b2)
+
+    [![EKS control plane and the three HyperPod instance groups](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
 
 === "C · CPU"
 
@@ -97,7 +105,9 @@ Creating the cluster starts charges for resources including nodes and the NAT ga
 
 ## Clean up the lab { #next-step }
 
-Keep the tunnel open for [99 Cleanup](99_cleanup.md). If you used Agent Sandbox, finish the episodes and clean up its claims and warm pools first. **For B, delete HyperPod with `scripts/hyperpod/delete.sh` before removing EKS.** On all three paths, `scripts/08_cleanup.sh` removes the EKS stack. Check the final instance list for remaining lab nodes. A demo site you deployed has its own cleanup step.
+**For B2, follow [HyperPod wizard stack cleanup](07_hyperpod_b2.md#cleanup).** Delete the workers and EKS control plane together, then remove the lab bucket and ECR repositories.
+
+For A, B1 and C, keep the tunnel open and follow [99 Cleanup](99_cleanup.md). In B1, delete HyperPod first with `scripts/hyperpod/delete.sh`. If you used Agent Sandbox, release the claims and warm pools first. Then use `scripts/08_cleanup.sh` to remove the EKS stack and check for remaining lab nodes. A demo site you deployed has its own cleanup step.
 
 To delete the ECR images too, use the `--images` option during cleanup. Scaling sandbox pods to zero leaves EC2 nodes billable. To pause and resume later, see [Scaling node groups to zero](99_cleanup.md#pausing-scale-node-groups-to-zero).
 

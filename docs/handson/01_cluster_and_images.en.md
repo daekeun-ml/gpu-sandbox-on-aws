@@ -157,7 +157,7 @@ Run the command in the tab for your scenario. For A, set `SCENARIO=A` in `script
     scripts/02_create_cluster.sh --hyperpod
     ```
 
-=== "B2 · HyperPod"
+=== "Earlier B2 · CDK"
 
     ```bash
     scripts/02_create_cluster.sh --hyperpod-b2
@@ -247,7 +247,7 @@ kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 
 ![kubectl get nodes: two system m6i.large, one trainer g5.2xlarge and two sandbox-gvisor g5.xlarge nodes, all Ready](../images/terminal/nodes-a.png)
 
-B1 (`--hyperpod`) has no trainer line, B2 only the two system nodes, and C two system nodes and one `sandbox-kata` node (`c8i.2xlarge`, checked in the practice account).
+B1 (`--hyperpod`) has no trainer line, the earlier CDK B2 only the two system nodes, and C two system nodes and one `sandbox-kata` node (`c8i.2xlarge`, checked in the practice account).
 
 **If it fails:**
 
@@ -295,7 +295,7 @@ The stack code is in `cdk/gpusandbox_cdk/stack.py`; `cdk/tests` checks the secur
 |---|---|
 | A (no option) | `system`, `trainer`, `sandbox-gvisor` |
 | B1 (`--hyperpod`) | `system`, `sandbox-gvisor` |
-| B2 (`--hyperpod-b2`) | `system` |
+| Earlier CDK B2 (`--hyperpod-b2`) | `system` |
 | C (`--cpu-only`) | `system`, `sandbox-kata-cpu` |
 | Any scenario | `WITH_KATA_CPU=1` adds `sandbox-kata-cpu`; `WITH_KATA_GPU=1` with `KATA_IOMMU_AMI_ID` adds `sandbox-kata-gpu` |
 

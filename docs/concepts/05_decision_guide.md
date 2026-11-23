@@ -75,7 +75,7 @@ L4에서 측정하면서 샌드박스마다 별도 VM을 요구하는 경우, �
 
 | 바뀌는 사실 | 영향 | 확인 방법 |
 |---|---|---|
-| gVisor 새 릴리스가 HyperPod 기본 AMI의 드라이버를 지원 | B2에서 드라이버 교체를 생략할 수 있음. 기본 AMI를 그대로 쓰려면 lifecycle script에 gVisor 설치 단계도 넣어야 함(`on_create_sandbox.sh`는 `runsc`가 없으면 실패) | `GVISOR_RELEASE`를 새 릴리스로 바꾼 뒤 `scripts/hyperpod/check_gvisor.sh` |
+| 새 gVisor 릴리스가 HyperPod 기본 드라이버를 지원 | B2 채점 워커에서 드라이버 교체가 필요한지 다시 판단 | 기본 드라이버와 새 `GVISOR_RELEASE` 조합으로 gVisor Pod의 CUDA 연산과 기준 사례를 다시 확인합니다. [B2 검증 순서](../handson/07_hyperpod_b2.md) |
 | EKS NVIDIA AMI, NVIDIA 드라이버, gVisor 버전이 바뀜 | 기본값 `g5`(GSP를 끈 proprietary 모듈)의 gVisor는 gVisor 문서가 아니라 이 저장소의 검증에 근거하므로 다시 확인해야 함 | 표 아래 목록의 순서 |
 | 사용할 가용 영역에서 `g6` On-Demand 용량을 확보할 수 있음 | open 드라이버를 써서 gVisor 문서와 맞고 요금도 낮은 `g6`를 선택할 수 있음 | 인스턴스를 시작했다가 바로 종료해 확인한 뒤 `scripts/config.env`의 `GVISOR_INSTANCE_TYPE`, `TRAINER_INSTANCE_TYPE` 변경 |
 | nested virtualization 지원 목록에 G나 P 계열이 추가 | `.metal` 없는 Kata + GPU 배치를 검토할 수 있음 (VFIO 지원은 따로 확인) | nested virtualization User Guide, `describe-instance-types` 필터 |

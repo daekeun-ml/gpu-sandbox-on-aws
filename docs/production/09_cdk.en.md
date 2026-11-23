@@ -1,5 +1,7 @@
 # 09 Provisioning and tearing down with CDK
 
+The B2 CDK commands in this chapter describe the earlier design with EC2 system workers. For the deployment with all CPU and GPU workers on HyperPod, follow the [managed B2 lab](../handson/07_hyperpod_b2.md).
+
 !!! info "TL;DR"
     This CDK app, called by the hands-on cluster creation script (`02_create_cluster.sh`), creates the VPC, EKS (private API endpoint only), the node groups of the scenario and an SSM access instance as one stack and deletes it with one command. cdk-nag checks the security rules on every synth; the template tests (`cdk/tests`) run separately.
 

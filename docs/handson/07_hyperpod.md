@@ -82,7 +82,7 @@ scripts/01_check_prereqs.sh
 HyperPod 인스턴스는 EC2 쿼터 대신 `ml.<유형> for cluster usage` 쿼터를 씁니다.
 
 - **B1**: EC2 G/VT 쿼터 8 vCPU(`g5.xlarge` 2대)와 HyperPod `ml.g5.2xlarge` 1대분이 필요합니다.
-- **B2**: EC2 GPU 노드가 없고, HyperPod `ml.g5.2xlarge` 1대분과 `ml.g5.xlarge` 2대분이 있어야 합니다.
+- **B2**는 `us-east-1`의 HyperPod 쿼터를 사용합니다. `system`용 `ml.m5.xlarge` 1대, `trainer`용 `ml.g5.2xlarge` 1대, `sandbox`용 `ml.g5.xlarge` 2대입니다.
 
 HyperPod의 `ml.<유형> for cluster usage` 쿼터는 Service Quotas 콘솔의 Amazon SageMaker 항목에서 확인하고, 부족하면 증가를 요청하세요.
 
@@ -388,16 +388,14 @@ aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPO
 
 미국 동부(버지니아 북부)에서 HyperPod의 EKS 생성 흐름으로 `system` 1대, `trainer` 1대, `sandbox` 2대를 구성했습니다. 일반 EC2 노드 그룹 수가 0인 클러스터에서 네 워커의 배치를 확인할 수 있습니다. [B2 실습과 실행 화면](07_hyperpod_b2.md)
 
+[![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+
 <details class="note" markdown="1">
 <summary>기존 CDK 구성 · EC2 시스템 노드와 샌드박스용 custom AMI</summary>
 
 ### 기존 B2 custom AMI 경로
 
 B2는 trainer와 GPU 샌드박스를 모두 HyperPod 인스턴스 그룹에서 실행합니다. 샌드박스용 인스턴스 그룹(`sandbox`)은 NVIDIA 드라이버를 580.178.04로 바꾸고 gVisor를 설치한 custom AMI로 부팅하고, 이 노드에서 시나리오 A와 같은 gVisor 풀(`gvisor-hyperpod`)이 실행됩니다.
-
-[![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
-
-*그림 요약: B1과 달리 EKS에는 system 노드만 남고, 샌드박스 풀도 custom AMI로 부팅한 HyperPod 노드에 올라갑니다.*
 
 ```mermaid
 flowchart LR
@@ -424,7 +422,7 @@ gVisor 개발 브랜치에도 2026-11-14 기준 595.91.07은 없습니다. 그�
 
 새로 설치하는 드라이버 버전은 EC2 gVisor 노드와 같은 580.178.04입니다.
 
-- **verdict**: 그래서 B1과 B2는 같은 드라이버 버전에서 같은 verdict를 낼 것으로 봅니다(B2 미검증).
+- **verdict**: 그래서 B1과 B2는 같은 드라이버 버전에서 같은 verdict를 낼 것으로 봅니다(기존 custom AMI 경로 미검증).
 - **커널 모듈 종류**: 다만 EC2 `g5.xlarge` 노드의 AMI는 proprietary 커널 모듈(GSP 꺼짐)을 로드하고, B2 AMI는 open 커널 모듈을 설치하므로 모듈 종류는 다릅니다.
 
 | 항목 | B1 | B2 |

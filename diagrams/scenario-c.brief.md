@@ -10,10 +10,10 @@ Components: 17, Relationships: 12
 |---|---|---|---|---|
 | Scenario A | cdk/ with SCENARIO=A, k8s/, scripts/ 20 to 80 | CDK stack CLUSTER_NAME-cdk (cdk/deploy.sh), then numbered scripts with kubectl and helm through cdk/tunnel.sh | us-west-2 by default (scripts/config.env.example:5) | scenario-a |
 | Scenario B1 | cdk/ with SCENARIO=B1, scripts/hyperpod/, infra/hyperpod/ | same stack, plus sagemaker create-cluster | same | scenario-b1 |
-| Scenario B2 (experimental) | cdk/ with SCENARIO=B2, infra/hyperpod/ami/, scripts/hyperpod/ | same stack, plus an EC2 AMI builder and create-cluster with a second instance group | same | scenario-b2 |
+| Scenario B2 | `scripts/hyperpod/create_managed.sh` | HyperPod EKS wizard template, three HyperPod instance groups | us-east-1 | scenario-b2 |
 | Scenario C (this diagram) | cdk/ with SCENARIO=C (scripts/02_create_cluster.sh --cpu-only), scripts/03_build_push_images.sh --no-trainer, kata/cpu_nodes.sh, 05_setup_namespaces_auth.sh, 06_deploy_sandboxes.sh, ops/verify.sh, ops/simulate.sh, ops/rollout.sh | same stack: system node group plus sandbox-kata-cpu, then the scripts above through the tunnel | same | scenario-c |
 
-Cross-unit: one CDK stack builds all four; SCENARIO=C turns on the sandbox-kata-cpu node group and drops every GPU node group (cdk/gpusandbox_cdk/config.py:95, stack.py:224-242). The same c8i node group is the optional CPU tier of the other scenarios (WITH_KATA_CPU=1).
+Cross-unit: one CDK stack builds A, B1 and C; SCENARIO=C turns on the sandbox-kata-cpu node group and drops every GPU node group (cdk/gpusandbox_cdk/config.py:95, stack.py:224-242). The same c8i node group is an optional CPU tier in the other CDK scenarios (WITH_KATA_CPU=1).
 
 Out of scope (not drawn), one line each:
 - WITH_KATA_GPU=1: sandbox-kata-gpu node group (g4dn.metal, Kata QEMU with GPU passthrough), stack.py:243-255.
@@ -97,7 +97,7 @@ Skipped: no AWS documentation MCP server (`search_documentation` / `retrieve_ski
 - The node `sim` stands for the one Job template that every tool run uses (simulate, probe, parity, bench); edges 7 and 8 are its probe and bench runs against the two pools that are not active. They are dashed but required, so no pool is left without an edge.
 - Substitution: Kubernetes workloads (the Jobs, the pool Deployments) use the Containers category resource icon `container_1`, labelled with the workload name; the `eks` service icon is the control plane only.
 - Substitution: gVisor, Kata, Cloud Hypervisor and QEMU have no stencil; they are named in the pool labels (pool name = runtime) and in the Role column. The c8i node group is a role group whose title carries its name and instance type.
-- The system node group is drawn here as a role group (it hosts the reward driver) while it is a not-drawn row in scenarios A, B1 and B2; that is the scenario difference.
+- The system node group is drawn here as a role group (it hosts the reward driver) while A and B1 omit it and managed B2 shows a HyperPod CPU group; that is the scenario difference.
 - The kata-deploy DaemonSet is a not-drawn row: it is a Helm release in kube-system, not an AWS resource, and has no relationship the reader must see.
 - Group titles are written as the node group or instance group name plus the instance type, without the words node group, so that each fits two lines of a one-column card (checked with the builder's title wrapping); the guide names them in full.
 - The Architecture review heading is written "Architecture review (skipped)" because the guidebook style bans em dashes.

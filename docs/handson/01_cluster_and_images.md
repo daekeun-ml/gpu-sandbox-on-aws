@@ -157,7 +157,7 @@ scripts/01_check_prereqs.sh
     scripts/02_create_cluster.sh --hyperpod
     ```
 
-=== "B2 · HyperPod"
+=== "기존 B2 · CDK"
 
     ```bash
     scripts/02_create_cluster.sh --hyperpod-b2
@@ -247,7 +247,7 @@ kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 
 ![kubectl get nodes 결과: system m6i.large 두 대, trainer g5.2xlarge 한 대, sandbox-gvisor g5.xlarge 두 대가 모두 Ready](../images/terminal/nodes-a.png)
 
-B1(`--hyperpod`)은 trainer 줄이 없고, B2는 system 두 대, C는 system 두 대와 `sandbox-kata` 한 대(`c8i.2xlarge`, 실습 계정에서 확인)입니다.
+B1(`--hyperpod`)은 trainer 줄이 없고, 기존 CDK B2는 system 두 대, C는 system 두 대와 `sandbox-kata` 한 대(`c8i.2xlarge`, 실습 계정에서 확인)입니다.
 
 **문제가 생기면:**
 
@@ -295,7 +295,7 @@ B1(`--hyperpod`)은 trainer 줄이 없고, B2는 system 두 대, C는 system 두
 |---|---|
 | A (옵션 없음) | `system`, `trainer`, `sandbox-gvisor` |
 | B1 (`--hyperpod`) | `system`, `sandbox-gvisor` |
-| B2 (`--hyperpod-b2`) | `system` |
+| 기존 CDK B2 (`--hyperpod-b2`) | `system` |
 | C (`--cpu-only`) | `system`, `sandbox-kata-cpu` |
 | 어느 시나리오든 | `WITH_KATA_CPU=1`이면 `sandbox-kata-cpu`, `WITH_KATA_GPU=1`과 `KATA_IOMMU_AMI_ID`가 있으면 `sandbox-kata-gpu`를 추가함 |
 

@@ -232,7 +232,7 @@ nvproxy는 드라이버 상태를 지원(supported), 미지원(unsupported, `--n
 | EKS AL2023 NVIDIA AMI | v20261107 |
 | g5 드라이버 | 580.178.04 (proprietary kernel module, GSP 꺼짐), release-20260831.0부터 nvproxy가 지원. g6에서는 같은 버전의 open kernel module |
 | gVisor | release-20261109.0 (`GVISOR_RELEASE="20261109.0"`) |
-| 주의할 버전 | 같은 AMI의 595.91.07(g7 전용)은 nvproxy가 인식하지 못합니다(unknown). HyperPod 기본 AMI도 이 버전을 쓰므로, B2는 드라이버를 580.178.04로 바꾼 custom AMI를 씁니다. |
+| 주의할 버전 | gVisor `20261109.0`은 595.91.07과 B2의 기본 드라이버 595.112.07을 인식하지 못합니다. [B2 실습](../handson/07_hyperpod_b2.md)에서는 채점 노드 두 대에 580.178.04를 설치하고 HyperPod API로 재부팅했습니다. |
 
 현재 `sandbox-gvisor` EC2NodeClass는 `alias: al2023@latest`라서, 새 EKS AMI가 나오면 Karpenter가 노드를 drift로 교체합니다. nvproxy가 새 드라이버를 인식하지 못하면 다음과 같이 됩니다.
 

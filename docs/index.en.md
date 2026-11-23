@@ -1,6 +1,6 @@
 # GPU Sandbox on AWS
 
-Training and code grading run on separate GPU nodes in one Amazon EKS cluster. Scenario A runs the trainer on EC2. B1 runs it on SageMaker HyperPod. Both send generated code to an EC2 sandbox pool in the same cluster.
+Training and grading run on separate GPU nodes in Amazon EKS. The diagram shows A and B1, which train on EC2 and HyperPod respectively and both grade on EC2. In [B2](handson/07_hyperpod_b2.md), HyperPod manages all the system, training and grading workers.
 
 <a href="images/figures/index--aws-architecture.svg">
 <picture>
@@ -82,9 +82,9 @@ A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the con
 
 === "B2 · All workers on HyperPod"
 
-    [![System, trainer and sandbox instance types in the HyperPod console](images/console/hyperpod-b2-instance-groups.png)](images/console/hyperpod-b2-instance-groups.png)
+    [![EKS control plane and the HyperPod system, training and grading workers](images/architecture/scenario-b2.drawio.png)](images/architecture/scenario-b2.drawio.png)
 
-    One CPU worker runs cluster services, one GPU worker trains the model and two GPU workers grade code. [Run B2](handson/07_hyperpod_b2.md)
+    One CPU worker runs cluster services, one GPU worker trains the model and two GPU workers grade code. [Run B2](handson/07_hyperpod_b2.md) · [Korean slides comparing B1 and B2 (PPTX)](https://github.com/daekeun-ml/gpu-sandbox-on-aws/raw/refs/heads/main/slides/gpu-sandbox-theory.pptx)
 
 === "C: CPU only"
 

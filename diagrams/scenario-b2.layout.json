@@ -1,327 +1,112 @@
 {
-  "title": "Scenario B2: HyperPod trainer and gVisor sandboxes on a HyperPod instance group (experimental)",
+  "title": "B2 · Amazon EKS and SageMaker HyperPod in us-east-1",
+  "units": "draw.io pixels relative to parent",
   "groups": [
     {
-      "id": "g_operator_access",
-      "label": "Operator access",
-      "cols": [
-        1,
-        2
-      ],
-      "lanes": [
-        1
+      "id": "region",
+      "label": "AWS Region · us-east-1",
+      "bounds": [
+        10,
+        10,
+        1080,
+        535
       ]
     },
     {
-      "id": "g_eks_control_plane",
-      "label": "EKS control plane",
-      "cols": [
-        3
-      ],
-      "lanes": [
-        0,
-        1
-      ]
-    },
-    {
-      "id": "g_hyperpod_trainer_ml_g6_2xlarge",
-      "label": "HyperPod trainer ml.g5.2xlarge",
-      "cols": [
-        4
-      ],
-      "lanes": [
-        0,
-        1
-      ]
-    },
-    {
-      "id": "g_hyperpod_sandbox_ml_g6_xlarge_x2",
-      "label": "HyperPod sandbox ml.g5.xlarge x2",
-      "cols": [
-        5
-      ],
-      "lanes": [
-        0,
-        1
-      ]
-    },
-    {
-      "id": "g_ami_build_one_time",
-      "label": "AMI build (one time)",
-      "cols": [
-        1,
-        2
-      ],
-      "lanes": [
-        5
-      ]
-    },
-    {
-      "id": "g_shared_services",
-      "label": "Shared services",
-      "cols": [
-        3
-      ],
-      "lanes": [
-        2,
-        3,
-        4
-      ]
-    },
-    {
-      "id": "g_egress",
-      "label": "Egress",
-      "cols": [
-        6
-      ],
-      "lanes": [
-        2
+      "id": "workers",
+      "label": "SageMaker HyperPod instance groups",
+      "group": "region",
+      "bounds": [
+        23,
+        205,
+        1032,
+        303
       ]
     }
   ],
   "nodes": [
     {
-      "id": "operator",
-      "label": "Operator workstation",
-      "icon": "client",
-      "outside": true,
-      "col": 0,
-      "lane": 1
-    },
-    {
-      "id": "ssm",
-      "label": "SSM Session Manager",
-      "icon": "systems_manager_session_manager",
-      "group": "g_operator_access",
-      "col": 1,
-      "lane": 1
-    },
-    {
-      "id": "access",
-      "label": "Access instance t4g.nano",
-      "icon": "t4g_instance",
-      "group": "g_operator_access",
-      "col": 2,
-      "lane": 1
+      "id": "stack",
+      "label": "AWS CloudFormation",
+      "icon": "cloudformation",
+      "group": "region",
+      "bounds": [
+        23,
+        51,
+        397,
+        98
+      ]
     },
     {
       "id": "eks",
-      "label": "EKS 1.36 private API",
+      "label": "Amazon EKS 1.36",
       "icon": "eks",
-      "group": "g_eks_control_plane",
-      "col": 3,
-      "lane": 1
+      "group": "region",
+      "bounds": [
+        585,
+        51,
+        470,
+        98
+      ]
     },
     {
-      "id": "kms",
-      "label": "KMS secrets key",
-      "icon": "key_management_service",
-      "group": "g_eks_control_plane",
-      "col": 3,
-      "lane": 0
+      "id": "system",
+      "label": "system",
+      "icon": "sagemaker",
+      "group": "workers",
+      "bounds": [
+        18,
+        68,
+        265,
+        154
+      ]
     },
     {
       "id": "trainer",
-      "label": "HyperPod GRPO trainer",
+      "label": "trainer",
       "icon": "sagemaker",
-      "group": "g_hyperpod_trainer_ml_g6_2xlarge",
-      "col": 4,
-      "lane": 1
+      "group": "workers",
+      "bounds": [
+        308,
+        68,
+        270,
+        154
+      ]
     },
     {
-      "id": "sbx_v1",
-      "label": "gvisor-hyperpod pool v1",
-      "icon": "container_1",
-      "group": "g_hyperpod_sandbox_ml_g6_xlarge_x2",
-      "col": 5,
-      "lane": 1
-    },
-    {
-      "id": "sbx_v2",
-      "label": "gvisor-hyperpod pool v2",
-      "icon": "container_1",
-      "group": "g_hyperpod_sandbox_ml_g6_xlarge_x2",
-      "col": 5,
-      "lane": 0
-    },
-    {
-      "id": "builder",
-      "label": "AMI builder m6i.large",
-      "icon": "ec2_m6i_instance",
-      "group": "g_ami_build_one_time",
-      "col": 1,
-      "lane": 5
-    },
-    {
-      "id": "ami",
-      "label": "Custom AMI, NVIDIA 580.178.04",
-      "icon": "ami",
-      "group": "g_ami_build_one_time",
-      "col": 2,
-      "lane": 5
-    },
-    {
-      "id": "ecr",
-      "label": "ECR repositories",
-      "icon": "ecr",
-      "group": "g_shared_services",
-      "col": 3,
-      "lane": 4
-    },
-    {
-      "id": "cw",
-      "label": "CloudWatch Logs",
-      "icon": "cloudwatch_2",
-      "group": "g_shared_services",
-      "col": 3,
-      "lane": 2
-    },
-    {
-      "id": "nat",
-      "label": "NAT gateway",
-      "icon": "nat_gateway",
-      "group": "g_egress",
-      "col": 6,
-      "lane": 2
-    },
-    {
-      "id": "lcs",
-      "label": "S3 lifecycle scripts",
-      "icon": "s3",
-      "group": "g_shared_services",
-      "col": 3,
-      "lane": 3
-    },
-    {
-      "id": "hf",
-      "label": "Hugging Face Hub",
-      "icon": "internet",
-      "outside": true,
-      "col": 7,
-      "lane": 2
+      "id": "sandbox",
+      "label": "sandbox",
+      "icon": "sagemaker",
+      "group": "workers",
+      "bounds": [
+        734,
+        68,
+        280,
+        154
+      ]
     }
   ],
   "edges": [
     {
-      "from": "operator",
-      "to": "ssm",
-      "num": 1,
-      "label": "kubectl tunnel"
-    },
-    {
-      "from": "ssm",
-      "to": "access",
-      "num": 2,
-      "label": "port forward"
-    },
-    {
-      "from": "access",
+      "from": "stack",
       "to": "eks",
-      "num": 3,
-      "label": "HTTPS 443"
-    },
-    {
-      "from": "operator",
-      "to": "builder",
-      "num": 4,
-      "dashed": true,
-      "label": "launch builder"
-    },
-    {
-      "from": "builder",
-      "to": "ami",
-      "num": 5,
-      "dashed": true,
-      "label": "create image"
-    },
-    {
-      "from": "ami",
-      "to": "sbx_v1",
-      "num": 6,
-      "dashed": true,
-      "label": "node image",
-      "route": "h"
-    },
-    {
-      "from": "sbx_v1",
-      "to": "lcs",
-      "num": 7,
-      "dashed": true,
-      "label": "runsc setup"
-    },
-    {
-      "from": "trainer",
-      "to": "lcs",
-      "num": 8,
-      "dashed": true,
-      "label": "boot script"
+      "label": "Creates the EKS control plane"
     },
     {
       "from": "eks",
-      "to": "trainer",
-      "num": 9,
-      "dashed": true,
-      "label": "Job, active pool"
+      "to": "workers",
+      "label": "Schedules pods on the registered workers"
+    },
+    {
+      "from": "stack",
+      "to": "workers",
+      "label": "Provisions the three instance groups"
     },
     {
       "from": "trainer",
-      "to": "nat",
-      "num": 10,
-      "label": "model pull"
-    },
-    {
-      "from": "nat",
-      "to": "hf",
-      "num": 11,
-      "label": "HTTPS"
-    },
-    {
-      "from": "trainer",
-      "to": "sbx_v1",
-      "num": 12,
-      "label": "kernel code"
-    },
-    {
-      "from": "trainer",
-      "to": "sbx_v2",
-      "num": 13,
-      "dashed": true,
-      "label": "after switch"
-    },
-    {
-      "from": "sbx_v1",
-      "to": "ecr",
-      "num": 14,
-      "dashed": true,
-      "label": "image pull"
-    },
-    {
-      "from": "operator",
-      "to": "ecr",
-      "num": 15,
-      "dashed": true,
-      "label": "image push"
-    },
-    {
-      "from": "operator",
-      "to": "lcs",
-      "num": 16,
-      "dashed": true,
-      "label": "script upload"
-    },
-    {
-      "from": "eks",
-      "to": "cw",
-      "num": 17,
-      "dashed": true,
-      "label": "control plane logs"
-    },
-    {
-      "from": "eks",
-      "to": "kms",
-      "num": 18,
-      "dashed": true,
-      "label": "encrypt secrets"
+      "to": "sandbox",
+      "label": "Candidate code and grading result",
+      "bidirectional": true
     }
   ]
 }

@@ -347,7 +347,7 @@ scripts/01_check_prereqs.sh
 **확인할 것:** AWS identity 표, 도구 버전, G and VT quota, `c8i.2xlarge`의 nested virtualization 지원 여부, GPU 인스턴스 타입의 AZ별 제공 여부가 차례로 출력됩니다. 스크립트는 후보 인스턴스 타입을 모두 조회하므로, 고른 시나리오에서 만들 노드만 확인하세요.
 
 - **G and VT quota**: quota 표의 `Running On-Demand G and VT instances` 값이 시나리오 A는 16, B1은 8 이상인지 (B2와 C는 0). Kata GPU를 추가하면 어느 시나리오든 96을 더하고, gVisor 풀을 v1에서 v2로 교체하는 동안에는 `g5.xlarge` 두 대분 8이 더 필요합니다
-- **Standard quota**: 값이 6 이상인지 (시나리오 C이거나 Kata CPU까지 하면 14 이상. 기존 CDK 경로에서 custom AMI를 빌드하는 B2와 Kata GPU는 2를 더해 8, c8i와 함께 쓰면 16 이상)
+- **Standard quota**: 관리형 B2의 일반 EC2 워커 필요량은 0입니다. CDK 경로는 값이 6 이상인지 확인하세요 (시나리오 C이거나 Kata CPU까지 하면 14 이상. 기존 CDK 경로에서 custom AMI를 빌드하는 B2와 Kata GPU는 2를 더해 8, c8i와 함께 쓰면 16 이상)
 - **c8i를 쓴다면(시나리오 C, Kata CPU)**: nested virtualization 줄에 `nested-virtualization`이 들어 있는지
 - **GPU 노드의 AZ**: 만들 GPU 노드의 인스턴스 타입(A는 `g5.2xlarge`와 `g5.xlarge`, B1은 `g5.xlarge`, Kata GPU는 `g4dn.metal`) 옆의 AZ 목록에, CDK 스택이 쓰는 두 AZ(CDK가 조회한 리전 AZ 목록의 앞 두 곳) 중 한 곳 이상이 있는지. 스크립트는 리전 전체를 조회하므로 다른 AZ 이름만 나와도 노드를 만들 수 없습니다
 

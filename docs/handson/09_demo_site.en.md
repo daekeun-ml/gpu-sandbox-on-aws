@@ -46,8 +46,8 @@ The first screen opens the scoring replay, benchmarks, or deployment diagrams. U
 | 1. Architecture | A diagram whose components open a description and measurements when clicked, and a play button | Text in the page and measurements from `extras.json` |
 | 2. Try scoring | Pick a golden submission and press play: a progress bar fills, then the verdict, reward components and the reason appear | Golden evaluation results in `recording.json`, and rewards computed with the same `score_verdict` as the trainer |
 | 3. Attacks blocked | For each pool, the kernel inside the sandbox and the node kernel, the GPU and egress status. Eight cards of isolation and scoring checks, and a terminal replay | `/info` in `recording.json`, terminal transcripts in `extras.json` (verify.sh, the gVisor smoke test, rollout.sh) |
-| 4. Training | Select the EC2 or HyperPod B1 GRPO run to inspect verdicts and rewards. A second chart replays the CPU version-switch simulation. | `training`, `b1.training`, `simulation` in `extras.json` |
-| 5. Benchmark | Throughput across five EKS pools, B1 client latency, and cold starts before and after caching images | `runtime_run`, `b1.bench`, and `bench` in `extras.json` |
+| 4. Training | Select the five-step EC2 run or the one-step B1 and B2 HyperPod runs to inspect the grading results. A separate chart shows the CPU version-switch simulation. | `training`, `b1.training`, `b2.training`, `simulation` in `extras.json` |
+| 5. Benchmark | Throughput across five EKS pools, grading latency by client in B1 and B2, and startup times with and without a cached image | `runtime_run`, `b1.bench`, `b2.bench`, `bench` in `extras.json` |
 | Architecture patterns (`architecture.html`) | Scenarios A, B1, B2 and C drawn with AWS icons | Static data in the page (`arch.js`); no data file is read |
 
 - **Key numbers at the top**: GPU runtimes, goldens matching their expected verdict, connections blocked in the two pools' `verify.sh` transcripts, benchmark requests answered ok.
@@ -60,7 +60,7 @@ The published data and recordings are these.
 
 - **Published files**: HTML, CSS, JavaScript, AWS architecture icons (SVG), the tour videos (MP4) with their thumbnails (JPG), and two recording JSON files (`data/recording.json`, `data/extras.json`).
 - **The repository's `recording.json` sample**: a laptop CPU pool recording; replace it with a GPU recording made on your cluster.
-- The published GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. In the training tab you can select the five-step EC2 run or the one-step HyperPod B1 run. The B1 benchmark compares two clients submitting the same fixed kernel to one pool. [B1 measurements](08_benchmark.md#hyperpod-b1)
+- The GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. EC2 graded the generated code in B1, and HyperPod graded it in B2. Each benchmark changes the client while keeping the pool fixed within that cluster. [B1 results](08_benchmark.md#hyperpod-b1) · [B2 results](08_benchmark.md#hyperpod-b2)
 - **Progress bar in section 2**: the recorded total evaluation time. Per-stage times are not recorded, so the stages are filled in from the verdict once the evaluation ends.
 
 </details>

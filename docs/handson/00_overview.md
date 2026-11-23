@@ -6,6 +6,7 @@
 
 - **[A · EC2에서 GPU 학습](01_cluster_and_images.md)**　모델이 만든 코드를 gVisor에서 채점하고 그 점수로 모델을 학습합니다.
 - **[B1 · HyperPod에서 GPU 학습](07_hyperpod.md)**　HyperPod에서 모델을 학습하고 EC2의 gVisor 풀이 코드를 채점합니다.
+- **[B2 · CPU와 GPU를 모두 HyperPod에 배치](07_hyperpod_b2.md)**　HyperPod로 EKS를 구성하고, 학습 GPU에서 생성한 코드를 두 채점 GPU에 보냅니다.
 - **[C · GPU 없이 풀 교체 연습](10_cpu_only.md)**　CPU 런타임 세 개를 비교하고, 시뮬레이터가 답안을 보내는 동안 v1을 v2로 바꿉니다.
 
 경로를 정했다면 **노드와 채점 풀을 차례로 확인**하세요. 노드의 `Ready`는 Kubernetes가 pod를 배치할 수 있다는 뜻입니다. 그 노드에 띄운 풀의 `verified`는 시험 답안이 기대한 판정을 받았다는 뜻입니다. 두 결과는 실습 중 서로 다른 시점에 확인합니다.
@@ -29,6 +30,7 @@ scripts/01_check_prereqs.sh
     |---|---|---:|
     | A · EC2 GPU | G/VT 16, Standard 6 | 3.42 |
     | B1 · HyperPod trainer | G/VT 8, Standard 6 | 3.72 |
+    | B2 · HyperPod 전체 | 0 (워커 쿼터는 SageMaker에서 확인) | 4.56 |
     | C · CPU 전용 | Standard 14 | 0.57 |
 
     B1은 SageMaker의 `ml.g5.2xlarge for cluster usage`도 1대분 필요합니다. 쿼터는 실습할 리전에서 확인하세요.
@@ -47,7 +49,7 @@ scripts/01_check_prereqs.sh
 
 ## 경로별 진행 순서 { #단계-순서 }
 
-클러스터를 만들면 노드와 NAT gateway 등의 요금이 발생합니다. 각 탭에서 <span id="필수-경로">실행 순서</span>와 <span id="시나리오별-aws-구성">구성도</span>를 볼 수 있습니다. 클러스터에 접속한 뒤에는 `cdk/tunnel.sh`를 별도 터미널에서 계속 실행해 두세요.
+클러스터를 만들면 노드와 NAT gateway 등의 요금이 발생합니다. 각 탭에서 <span id="필수-경로">실행 순서</span>와 <span id="시나리오별-aws-구성">구성도</span>를 볼 수 있습니다. CDK로 만든 A·B1·C에 접속할 때는 `cdk/tunnel.sh`를 별도 터미널에서 계속 실행해 두세요.
 
 === "A · EC2 GPU"
 
@@ -62,7 +64,7 @@ scripts/01_check_prereqs.sh
 
         [![EC2 trainer가 두 gVisor 샌드박스에 채점을 요청하는 시나리오 A](../images/architecture/scenario-a.drawio.png)](../images/architecture/scenario-a.drawio.png)
 
-=== "B · HyperPod"
+=== "B1 · HyperPod + EC2"
 
     1. **[B1 클러스터와 이미지 준비](07_hyperpod.md)**　`scripts/02_create_cluster.sh --hyperpod`로 EKS와 EC2 채점 노드를 만듭니다. 터널을 열고 `HYPERPOD=1 scripts/03_build_push_images.sh`로 trainer에 `hyperpodrun`을 포함합니다. 출력된 이미지 URI를 설정 파일에 넣습니다.
     2. **학습 노드 연결**　`scripts/04_install_gpu_stack.sh`로 EC2 GPU를 확인한 뒤 `scripts/hyperpod/create.sh`를 실행합니다. HyperPod trainer 노드가 `Ready`이고 `node-health-status`가 `Schedulable`인지 확인합니다.
@@ -74,7 +76,13 @@ scripts/01_check_prereqs.sh
 
         [![HyperPod 학습 노드에서 같은 EKS 클러스터의 EC2 채점 풀을 호출하는 구성](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
 
-    **[B2 · CPU와 GPU를 모두 HyperPod에 두기](07_hyperpod_b2.md)**　HyperPod에서 EKS를 함께 구성합니다. `system`이 CPU Pod를, `trainer`가 모델 학습을, `sandbox` 두 대가 GPU 채점을 맡습니다. 세 그룹의 배치를 확인한 뒤 같은 GRPO 실습을 진행하세요.
+=== "B2 · HyperPod"
+
+    1. **[세 그룹과 쿼터 확인](07_hyperpod_b2.md)**　`us-east-1`에서 CPU 한 대, 학습 GPU 한 대, 채점 GPU 두 대분의 SageMaker 쿼터를 확인합니다.
+    2. **워커 준비**　`scripts/hyperpod/create_managed.sh`로 EKS와 HyperPod를 함께 만들고 네 노드가 `Ready`인지 봅니다. 채점 노드의 드라이버를 맞춘 뒤 v1 풀을 배포합니다.
+    3. **학습과 벤치마크**　GRPO Job이 `Completed`가 되면 `scripts/hyperpod/bench_b2.sh 32`로 같은 풀에 고정 커널을 보냅니다. [두 클라이언트의 결과](08_benchmark.md#hyperpod-b2)
+
+    [![B2의 EKS 제어 영역과 세 HyperPod 인스턴스 그룹](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
 
 === "C · CPU"
 
@@ -97,7 +105,9 @@ scripts/01_check_prereqs.sh
 
 ## 실습 리소스 정리 { #다음-단계 }
 
-터널을 열어 둔 채 [99 정리](99_cleanup.md)를 진행합니다. Agent Sandbox를 사용했다면 에피소드를 마치고 claim과 warm pool을 먼저 정리하세요. **B 경로는 EKS를 지우기 전에 `scripts/hyperpod/delete.sh`로 HyperPod를 삭제합니다.** A·B·C 모두 `scripts/08_cleanup.sh`로 EKS 스택을 지운 뒤 마지막 인스턴스 표에 실습 노드가 남았는지 확인합니다. 직접 배포한 데모 사이트는 별도로 정리합니다.
+**B2는 [HyperPod 마법사 스택 정리](07_hyperpod_b2.md#cleanup)를 따르세요.** 워커와 EKS 제어 영역을 함께 삭제한 뒤 실습 전용 버킷과 ECR 저장소를 정리합니다.
+
+A·B1·C는 터널을 열어 둔 채 [99 정리](99_cleanup.md)를 진행합니다. B1은 `scripts/hyperpod/delete.sh`로 HyperPod를 먼저 삭제합니다. Agent Sandbox를 사용했다면 claim과 warm pool부터 정리하세요. 이어서 `scripts/08_cleanup.sh`로 EKS 스택을 삭제하고 남은 노드를 확인합니다. 직접 배포한 데모 사이트는 별도로 정리합니다.
 
 ECR 이미지까지 삭제하려면 정리할 때 `--images`를 붙입니다. 샌드박스 pod를 0개로 줄여도 EC2 노드 요금은 계속 발생합니다. 잠시 쉬었다 이어갈 때는 [노드 그룹 일시 정지](99_cleanup.md#일시-정지-노드-그룹을-0으로-줄이기)를 참고하세요.
 

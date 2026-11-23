@@ -18,7 +18,7 @@ Find the symptom you see below. For more diagnostic commands, see the [troublesh
 
 ## Check these first
 
-1. If `kubectl` cannot connect, check `cdk/tunnel.sh` in a separate terminal. `kubectl config current-context` should show `<CLUSTER_NAME>-tunnel`.
+1. If `kubectl` cannot connect on A, B1 or C, check `cdk/tunnel.sh` and the `<CLUSTER_NAME>-tunnel` context. Managed B2 uses the `$CLUSTER_NAME` context from the [B2 connection step](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/).
 2. Once connected, replace `<pod>` with the pod name from the first command below.
 
 ```bash

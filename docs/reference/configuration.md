@@ -69,18 +69,19 @@ flowchart LR
 | `HYPERPOD_LCS_BUCKET` | `sagemaker-gpu-sandbox-lcs-__SET_ME__` | lifecycle 스크립트 버킷. HyperPod 관리형 정책이 `sagemaker-` 접두사를 전제로 하므로 유지 | `hyperpod/create.sh`, `hyperpod/delete.sh` |
 | `HYPERPOD_SYSTEM_INSTANCE_TYPE` | `ml.m5.xlarge` | 관리형 B2의 HyperPod CPU 시스템 워커 | `hyperpod/create_managed.sh` |
 | `HYPERPOD_AZ_IDS` | 예: `use1-az1,use1-az2` | 대상 리전에서 사용할 가용 영역 ID | `hyperpod/create_managed.sh` |
-| `B2_NVIDIA_DRIVER_VERSION` | `580.178.04` | B2 custom AMI에 넣을 드라이버. 고정한 gVisor의 nvproxy 지원 목록에 있어야 함 | `hyperpod/build_b2_ami.sh` |
-| `B2_NVIDIA_RUNFILE_SHA256` | `5975a86e...` (64자) | 위 드라이버의 `.run` 설치 파일 sha256 | `hyperpod/build_b2_ami.sh` |
-| `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | B2 `sandbox` 인스턴스 그룹. `ml.g6.xlarge`도 지정할 수 있음 | `instance-group-sandbox.json.tpl` |
+| `B2_NVIDIA_DRIVER_VERSION` | `580.178.04` | 관리형 B2 채점 노드에 설치할 드라이버. 고정한 gVisor의 지원 목록에서 선택 | `hyperpod/create_managed.sh`, `hyperpod/reboot_sandboxes.sh`, 기존 `hyperpod/build_b2_ami.sh` |
+| `B2_NVIDIA_RUNFILE_SHA256` | `5975a86e...` (64자) | 위 드라이버의 `.run` 설치 파일 sha256 | `hyperpod/create_managed.sh`, `hyperpod/build_b2_ami.sh` |
+| `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | B2 `sandbox` 인스턴스 그룹. `ml.g6.xlarge`도 지정할 수 있음 | `hyperpod/create_managed.sh`, `instance-group-sandbox.json.tpl` |
 
 - **`AWS_REGION`**: 데모 사이트(`demo/deploy.sh`)는 이 값과 관계없이 `us-east-1`에 배포합니다.
 - **`K8S_VERSION`**: 예시 값 `1.36`은 EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 범위에 포함됩니다.
-- **`SCENARIO`**: `A`(system, trainer, gVisor), `B1`(system, gVisor), `B2`(system만), `C`(system, Kata CPU). `02_create_cluster.sh`의 옵션(`--hyperpod`, `--hyperpod-b2`, `--cpu-only`)이 이 값을 덮어씁니다.
+- **`SCENARIO`**: `A`(system, trainer, gVisor), `B1`(system, gVisor), 기존 CDK `B2`(EC2 system만), `C`(system, Kata CPU). `02_create_cluster.sh`의 옵션(`--hyperpod`, `--hyperpod-b2`, `--cpu-only`)이 이 값을 덮어씁니다.
+- **관리형 B2**는 `SCENARIO=B2`로 [`create_managed.sh`를 실행](../handson/07_hyperpod_b2.md)해 EKS와 HyperPod의 `system`, `trainer`, `sandbox`를 함께 만듭니다.
 - **`CHANGE_SCENARIO`**: 첫 배포와 같은 시나리오의 재배포에는 필요 없습니다. 시나리오가 다를 때 이 값이 없으면 `cdk/deploy.sh`가 멈춥니다.
 - **`ADMIN_PRINCIPAL_ARN`**: 여러 개는 쉼표로 구분합니다(STS 세션 ARN 불가). 역할에 path가 있으면 직접 적습니다.
 - **`WITH_KATA_CPU`**: `1`로 설정하면 `cdk/deploy.sh <시나리오> --with-kata-cpu`와 같습니다. Kata CPU 노드 추가(`kata/cpu_nodes.sh`) 전에 넣고 `02_create_cluster.sh`를 다시 실행합니다.
 - **`KATA_CPU_INSTANCE_TYPE`**: 다른 유형은 `cdk/gpusandbox_cdk/config.py`의 `CPU_TOPOLOGY`에 코어 수와 코어당 스레드 수를 추가해야 합니다.
-- **`B2_NVIDIA_RUNFILE_SHA256`**: base AMI가 `.run`으로 설치했을 때만 씁니다. NVIDIA의 `.sha256sum`과 gVisor nvproxy 표의 값과 같습니다.
+- **`B2_NVIDIA_RUNFILE_SHA256`**는 관리형 B2 채점 노드에서 내려받은 드라이버 설치 파일을 실행하기 전에 검증하는 값입니다.
 
 !!! warning "EKS_PUBLIC_ACCESS_CIDR"
     기본으로는 비워 두세요.

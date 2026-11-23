@@ -46,8 +46,8 @@
 | 1. 아키텍처 | 구성 요소를 누르면 설명과 측정값이 열리는 구성도와 재생 버튼 | 페이지의 설명과 `extras.json`의 측정값 |
 | 2. 채점 체험 | golden 제출물을 골라 재생하면 진행 막대가 차고 verdict, reward 구성 요소, 판정 이유가 나옵니다 | `recording.json`의 golden 평가 결과와, trainer와 같은 `score_verdict`로 계산한 reward |
 | 3. 공격 차단 | 풀마다 샌드박스 안 커널과 노드 커널, GPU, egress 차단 여부. 격리와 채점 검증 결과 카드 8개와 터미널 출력 재생 | `recording.json`의 `/info`, `extras.json`의 터미널 기록(verify.sh, gVisor 스모크 테스트, rollout.sh) |
-| 4. 학습 | EC2와 HyperPod B1의 GRPO 실행을 고르면 배치별 판정과 점수를 볼 수 있습니다. 아래 차트는 CPU 모의 실행에서의 버전 전환입니다. | `extras.json`의 `training`, `b1.training`, `simulation` |
-| 5. 벤치마크 | EKS 다섯 풀의 처리량, B1 클라이언트별 채점 시간, 이미지 캐시 전후의 시작 시간 | `extras.json`의 `runtime_run`, `b1.bench`, `bench` |
+| 4. 학습 | EC2의 5스텝과 HyperPod B1·B2의 한 스텝에서 모델이 제출한 코드와 판정을 비교합니다. 버전 전환 차트는 CPU 모의 실행 기록입니다. | `extras.json`의 `training`, `b1.training`, `b2.training`, `simulation` |
+| 5. 벤치마크 | EKS 다섯 풀의 처리량, B1·B2에서 요청을 보낸 노드별 채점 시간, 이미지 캐시에 따른 시작 시간 | `extras.json`의 `runtime_run`, `b1.bench`, `b2.bench`, `bench` |
 | 패턴별 아키텍처 (`architecture.html`) | 시나리오 A, B1, B2, C를 AWS 아이콘으로 그린 구성도 | 페이지에 들어 있는 정적 데이터(`arch.js`). 데이터 파일을 읽지 않습니다 |
 
 - **맨 위의 핵심 수치**: GPU 런타임 수, 기대 판정과 일치한 golden 수, 두 풀의 `verify.sh` 기록에서 막힌 연결 수, 벤치마크 정상 응답 수입니다.
@@ -60,7 +60,7 @@
 
 - **공개되는 파일**: HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다.
 - **저장소의 `recording.json` 샘플**: 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요.
-- 공개 데모는 `demo/recordings/2026-11-18-eks-gpu.json`으로 GPU 채점을 재생합니다. 학습 탭에서는 EC2의 5스텝과 HyperPod B1의 1스텝을 고를 수 있습니다. B1 결과표는 같은 풀에 고정 커널을 보낸 두 클라이언트를 비교합니다. [B1 측정 결과](08_benchmark.md#hyperpod-b1)
+- 공개 데모의 GPU 채점 재생은 `demo/recordings/2026-11-18-eks-gpu.json`을 사용합니다. B1에서는 EC2가, B2에서는 HyperPod가 생성 코드를 채점했습니다. 두 벤치마크는 각 클러스터에서 요청을 보낸 노드만 바꿔 비교합니다. [B1 결과](08_benchmark.md#hyperpod-b1) · [B2 결과](08_benchmark.md#hyperpod-b2)
 - **2절의 진행 막대**: 기록된 전체 평가 시간입니다. 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.
 
 </details>

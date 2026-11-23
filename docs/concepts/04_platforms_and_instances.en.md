@@ -42,7 +42,7 @@ Select a tab to view the scenario.
 
 === "B2 · All workers on HyperPod"
 
-    [![The three HyperPod instance groups](../images/console/hyperpod-b2-instance-groups.png)](../images/console/hyperpod-b2-instance-groups.png)
+    [![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
 
     `system` runs CoreDNS, `trainer` runs the GRPO job and `sandbox` grades the code with gVisor. The Kubernetes API is provided by EKS. [B2 deployment](../handson/07_hyperpod_b2.md)
 
@@ -102,45 +102,20 @@ What can you learn by changing only the client? With training stopped, an EKS sy
 
 | Item | Fact | This asset's answer |
 |---|---|---|
-| Sandbox runtime | The NVIDIA driver 595.91.07 in the HyperPod EKS AMI is unknown to gVisor release-20261109.0, so nvproxy does not work. Kata is impossible: there is no `ml.*.metal`, and CreateCluster has no nested-virtualization CPU option | sandboxes stay on EC2 nodes (B1). B2 builds a separate instance group from a custom AMI with a replaced driver |
+| Sandbox runtime | nvproxy needs a supported host driver. These HyperPod instances lack the virtualization devices required for Kata GPU. | B1 runs gVisor on EC2. B2 installs a compatible driver on its HyperPod `sandbox` group. |
 | Dedicated node taints | "You cannot add custom taints to nodes in instance groups with DeepHealthChecks turned on." | sandbox nodes are separated by the `gpusandbox/role` taint on EC2 node groups |
 | Isolation checks | deep health checks test hardware (GPU, NVLink, EFA, NCCL), not sandbox isolation (egress denial and so on) | Ready only after egress denial is verified, `scripts/ops/verify.sh` |
 | Pod density | The B1 `ml.g5.2xlarge` node advertised 14 pod slots. The AMI and VPC CNI version determine whether the node can attach additional ENIs. | B1 runs only the trainer on HyperPod nodes. The B2 `sandbox` group runs one sandbox pod per node |
-| CPU node replacement | "Node auto-replacement is not supported for CPU instances." | the CPU tier is on EC2 (`c8i`) |
+| CPU node replacement | "Node auto-replacement is not supported for CPU instances." | B2 runs system pods on a HyperPod CPU worker. Scenario C grades on EC2 `c8i` |
 | Version pinning, parity, gateway | not HyperPod features | code in this repository |
 
 On HyperPod nodes, by default only hostNetwork pods can reach IMDS. That default favors sandboxes, but it does not lift the constraints above.
 
-## EC2 sandboxes in B1 and the earlier B2 custom AMI
+## Why B2 changes the grading workers’ driver
 
-gVisor needs an exact driver version match, and an unknown version does not work even with the override flag, so B2 bakes its own custom AMI with the driver replaced by 580.178.04 ([B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)).
+The gVisor GPU interface, nvproxy, supports specific driver versions. The default image in the B2 run shipped `595.112.07`, which gVisor `20261109.0` did not recognize. We installed `580.178.04` on the two grading workers, rebooted them through HyperPod and ran CUDA on the A10G in each gVisor pod. The training worker used its default driver.
 
-The script below checks a node's driver (needs a HyperPod cluster). It runs a debug pod on each node and, when it ends, deletes every pod in the `default` namespace whose name starts with `node-debugger-`, which can include other people's debugging sessions.
-
-```bash
-scripts/hyperpod/check_gvisor.sh
-```
-
-**What to look for:**
-
-- **A default-AMI node (the trainer)**: it prints the line below.
-
-    ```text
-      driver 595.91.07: NOT supported by gVisor 20261109.0
-    ```
-
-- **A B2 custom-AMI node (sandbox)**: it prints `driver 580.178.04: SUPPORTED ...`.
-
-The pod limit above still applies to B2, and a taint can only be added to an instance group without deep health checks, so B2's sandbox group is created without them. B1 stays the default because it needs no custom AMI to maintain. B2 awaits a live test.
-
-In B2, `scripts/04_install_gpu_stack.sh` does not create a smoke pod. Check and deploy in this order.
-
-1. Check which module flavor loaded on the sandbox node (`/proc/driver/nvidia/version`).
-2. Confirm with `scripts/hyperpod/check_gvisor.sh` above that the driver is on the support list.
-3. Deploy the pool with `scripts/06_deploy_sandboxes.sh gvisor-hyperpod v1`.
-4. Verify it with `scripts/ops/verify.sh gvisor-hyperpod v1`.
-
-**If it fails:** `no HyperPod nodes found` means no HyperPod node has joined the cluster yet; see [07 HyperPod scenario](../handson/07_hyperpod.md) and the "HyperPod" section of [Troubleshooting](../reference/troubleshooting.md).
+[Worker preparation and CUDA output](../handson/07_hyperpod_b2.md) · [Fixed-kernel benchmark](../handson/08_benchmark.md#hyperpod-b2)
 
 ## Instance choice
 
@@ -198,14 +173,15 @@ Prices are On-Demand list prices in us-east-1 and us-west-2.
 | Quota (vCPU-based) | Needed for the hands-on | Notes |
 |---|---|---|
 | Running On-Demand G and VT instances | A: 16 (`g5.2xlarge` 8 + `g5.xlarge` 4 x 2), B1: 8 (`g5.xlarge` 4 x 2), B2: 0. Kata GPU adds `g4dn.metal` 96 | documented default can be 0 |
-| Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 6 (`m6i.large` 2 x 2 + the SSM access `t4g.nano` 2). Additional needs are in the list below the table | documented default is 5 |
+| Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | A/B1/C: 6 (`m6i.large` 2 x 2 + the SSM access `t4g.nano` 2). Additional needs are in the list below the table | documented default is 5 |
+| `ml.m5.xlarge for cluster usage` | 1 (B2) | HyperPod `system` group. Managed B2 requires no standalone EC2 worker quota. |
 | `ml.g5.2xlarge for cluster usage` | 1 (B) | HyperPod uses `ml.<type> for cluster usage` quotas |
 | `ml.g5.xlarge for cluster usage` | 2 (B2) | the B2 `sandbox` instance group (`HYPERPOD_SANDBOX_COUNT`) |
 
 The Standard quota needs more in these cases.
 
 - **If you practice Kata CPU**: it adds `c8i.2xlarge` 8 (14 in total).
-- **While the B2 or Kata GPU AMI is being built**: the builder `m6i.large` needs 2 more (8, or 16 with the Kata CPU node).
+- **While the earlier CDK B2 or Kata GPU AMI is being built**: the builder `m6i.large` needs 2 more (8, or 16 with the Kata CPU node).
 
 `scripts/01_check_prereqs.sh` prints, read-only, the G and VT quota, nested virtualization support for `c8i.2xlarge` and which AZs offer each GPU type. How to run it and what to check are in section 5 of [Getting started](../getting_started.md).
 

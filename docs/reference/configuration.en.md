@@ -69,18 +69,19 @@ Create it only when it does not exist, with `test -f scripts/config.env || cp sc
 | `HYPERPOD_LCS_BUCKET` | `sagemaker-gpu-sandbox-lcs-__SET_ME__` | Lifecycle script bucket. Keep the `sagemaker-` prefix, which the HyperPod managed policy expects | `hyperpod/create.sh`, `hyperpod/delete.sh` |
 | `HYPERPOD_SYSTEM_INSTANCE_TYPE` | `ml.m5.xlarge` | HyperPod CPU system worker for managed B2 | `hyperpod/create_managed.sh` |
 | `HYPERPOD_AZ_IDS` | e.g. `use1-az1,use1-az2` | Availability zone IDs in the target region | `hyperpod/create_managed.sh` |
-| `B2_NVIDIA_DRIVER_VERSION` | `580.178.04` | Driver baked into the B2 custom AMI. Must be on the pinned gVisor's nvproxy supported list | `hyperpod/build_b2_ami.sh` |
-| `B2_NVIDIA_RUNFILE_SHA256` | `5975a86e...` (64 chars) | sha256 of that driver's `.run` installer | `hyperpod/build_b2_ami.sh` |
-| `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | The B2 `sandbox` instance group. You can set `ml.g6.xlarge` instead | `instance-group-sandbox.json.tpl` |
+| `B2_NVIDIA_DRIVER_VERSION` | `580.178.04` | Driver to install on managed B2 grading workers. Choose a version supported by the pinned gVisor release | `hyperpod/create_managed.sh`, `hyperpod/reboot_sandboxes.sh`, earlier `hyperpod/build_b2_ami.sh` |
+| `B2_NVIDIA_RUNFILE_SHA256` | `5975a86e...` (64 chars) | sha256 of that driver's `.run` installer | `hyperpod/create_managed.sh`, `hyperpod/build_b2_ami.sh` |
+| `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | The B2 `sandbox` instance group. You can set `ml.g6.xlarge` instead | `hyperpod/create_managed.sh`, `instance-group-sandbox.json.tpl` |
 
 - **`AWS_REGION`**: the demo site (`demo/deploy.sh`) deploys to `us-east-1` regardless of this value.
 - **`K8S_VERSION`**: the example value `1.36` is inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes.
-- **`SCENARIO`**: `A` (system, trainer, gVisor), `B1` (system, gVisor), `B2` (system only), `C` (system, Kata CPU). The options of `02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) override it.
+- **`SCENARIO`**: `A` (system, trainer, gVisor), `B1` (system, gVisor), earlier CDK `B2` (EC2 system only), `C` (system, Kata CPU). The options of `02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) override it.
+- **Managed B2** uses `SCENARIO=B2` with [`create_managed.sh`](../handson/07_hyperpod_b2.md) to create EKS and the HyperPod `system`, `trainer` and `sandbox` groups together.
 - **`CHANGE_SCENARIO`**: not needed for a first deployment or a redeployment of the same scenario. When the scenario differs and this is not `1`, `cdk/deploy.sh` stops.
 - **`ADMIN_PRINCIPAL_ARN`**: comma-separated (not STS session ARNs). Set it yourself if the role has a path.
 - **`WITH_KATA_CPU`**: setting it to `1` is the same as `cdk/deploy.sh <scenario> --with-kata-cpu`. Set it before adding Kata CPU nodes (`kata/cpu_nodes.sh`) and run `02_create_cluster.sh` again.
 - **`KATA_CPU_INSTANCE_TYPE`**: another type needs its core count and threads per core in `CPU_TOPOLOGY` of `cdk/gpusandbox_cdk/config.py`.
-- **`B2_NVIDIA_RUNFILE_SHA256`**: used only if the base AMI installed the driver with the `.run` installer. Matches NVIDIA's `.sha256sum` and gVisor's nvproxy table.
+- **`B2_NVIDIA_RUNFILE_SHA256`** verifies the downloaded NVIDIA installer before it runs on a managed B2 grading worker.
 
 !!! warning "EKS_PUBLIC_ACCESS_CIDR"
     Leave it empty by default.

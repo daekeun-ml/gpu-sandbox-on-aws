@@ -347,7 +347,7 @@ scripts/01_check_prereqs.sh
 **What to look for:** the AWS identity table, tool versions, the G and VT quota, nested virtualization support for `c8i.2xlarge`, and the AZs that offer each GPU instance type, in that order. The script queries every candidate instance type, so check only the nodes your scenario creates:
 
 - **G and VT quota**: the `Running On-Demand G and VT instances` value is at least 16 for scenario A and 8 for B1 (0 for B2 and C). Kata GPU adds 96 in any scenario, and switching the gVisor pool from v1 to v2 needs 8 more for two extra `g5.xlarge` nodes while both versions run
-- **Standard quota**: the value is at least 6 (at least 14 for scenario C or with Kata CPU; B2 and Kata GPU build a custom AMI and need 2 more, 8, or 16 together with c8i)
+- **Standard quota**: managed B2 needs zero standalone EC2 worker vCPUs. The CDK paths need at least 6 (at least 14 for scenario C or with Kata CPU; the earlier CDK B2 option and Kata GPU build a custom AMI and need 2 more, 8, or 16 together with c8i)
 - **If you use c8i (scenario C, Kata CPU)**: the nested virtualization line contains `nested-virtualization`
 - **GPU node AZs**: the AZ list next to each GPU instance type you create (`g5.2xlarge` and `g5.xlarge` for A, `g5.xlarge` for B1, `g4dn.metal` for Kata GPU) includes at least one of the two AZs the CDK stack uses (the first two of the region AZ list CDK looks up). The script queries the whole region, so other AZ names alone do not mean the node can be created
 

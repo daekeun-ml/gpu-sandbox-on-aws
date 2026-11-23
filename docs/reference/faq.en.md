@@ -81,7 +81,7 @@
     **What to look for:**
 
     - **Default-AMI nodes**: they print `NOT supported by gVisor ...: keep sandboxes on EC2 (mode B1)`.
-    - **B2 custom-AMI nodes**: they print `driver 580.178.04: SUPPORTED ...`.
+    - **B2 grading workers after the driver change**: they print `driver 580.178.04: SUPPORTED ...`.
 
     Run it again when a new AMI or gVisor release comes out.
 

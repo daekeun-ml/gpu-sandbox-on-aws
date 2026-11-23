@@ -73,7 +73,7 @@ Revisit the runtime choice if one of these facts changes.
 
 | Changing fact | Impact | How to check |
 |---|---|---|
-| A new gVisor release supports the default HyperPod AMI's driver | B2 can skip the driver swap. To use the default AMI as is, the lifecycle script must also install gVisor (`on_create_sandbox.sh` fails when `runsc` is missing) | set `GVISOR_RELEASE` to the new release, then run `scripts/hyperpod/check_gvisor.sh` |
+| A new gVisor release supports the default HyperPod driver | Reassess the driver change on B2 grading workers | Test CUDA inside a gVisor pod and rerun the golden cases with that driver and `GVISOR_RELEASE`. [B2 verification steps](../handson/07_hyperpod_b2.md) |
 | The EKS NVIDIA AMI, the NVIDIA driver or the gVisor version changes | gVisor on the default `g5` (proprietary module with GSP off) rests on this repository's verification, not on the gVisor documentation, so it must be checked again | the steps in the list below the table |
 | you can get `g6` On-Demand capacity in the Availability Zones you use | you can choose `g6`, which uses the open driver, matches the gVisor documentation and is cheaper | launch an instance and terminate it at once to check, then change `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` in `scripts/config.env` |
 | A G or P family joins the nested virtualization list | Kata + GPU without `.metal` becomes worth evaluating (check VFIO support separately) | the nested virtualization User Guide, the `describe-instance-types` filter |

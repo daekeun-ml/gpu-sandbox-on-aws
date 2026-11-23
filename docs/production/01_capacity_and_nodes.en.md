@@ -232,7 +232,7 @@ To nvproxy a driver is supported, unsupported (needs `--nvproxy-allow-unsupporte
 | EKS AL2023 NVIDIA AMI | v20261107 |
 | g5 driver | 580.178.04 (proprietary kernel module, GSP off), supported by nvproxy since release-20260831.0. g6 loads the open kernel module of the same version |
 | gVisor | release-20261109.0 (`GVISOR_RELEASE="20261109.0"`) |
-| Version to watch | 595.91.07 in the same AMI (g7 only) is unknown to nvproxy. The default HyperPod AMI ships this version too, which is why B2 uses a custom AMI with the driver replaced by 580.178.04. |
+| Version to watch | gVisor `20261109.0` does not recognize 595.91.07 or the B2 default driver, 595.112.07. The [B2 lab](../handson/07_hyperpod_b2.md) installed 580.178.04 on both grading workers and rebooted them through HyperPod. |
 
 Today the `sandbox-gvisor` EC2NodeClass uses `alias: al2023@latest`, so Karpenter replaces nodes through drift when a new EKS AMI appears. If nvproxy does not know the new driver, this happens.
 
