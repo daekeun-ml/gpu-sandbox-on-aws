@@ -1,7 +1,7 @@
 # GPU 샌드박스가 필요한 경우
 
 !!! info "TL;DR"
-    샌드박스에 GPU를 붙일지는 그 안에서 실행할 작업으로 판단합니다. 이 저장소에서는 모델이 작성한 GPU 커널의 정확도와 실행 시간을 확인해 학습 점수(reward)를 계산합니다. CPU 단위 테스트로 채점할 수 있는 과제라면 CPU 샌드박스로 충분합니다.
+    샌드박스에 GPU가 필요한지는 어떤 코드를 실행하고 무엇을 채점하느냐에 달려 있습니다. 이 저장소에서는 모델이 작성한 GPU 커널의 정확도와 실행 시간을 확인해 학습 점수(reward)를 계산합니다. CPU 단위 테스트로 채점할 수 있는 과제라면 CPU 샌드박스로 충분합니다.
 
 ## GPU가 필요한 작업
 
@@ -19,7 +19,7 @@ KernelBench는 PyTorch 기준 구현을 주고, 모델이 작성한 GPU 커널�
 
 학습 서버가 GPU를 써도 보상이 단위 테스트 통과 여부라면 CPU에서 채점할 수 있습니다. 이 저장소의 커널 과제에서도 trainer는 먼저 CPU에서 답안의 코드를 추출하고 정책을 검사합니다. 이 검사를 통과한 코드를 GPU 샌드박스에서 실행해 정확도와 속도를 비교합니다.
 
-**Speedup**은 기준 구현의 실행 시간을 제출 코드의 실행 시간으로 나눈 값입니다. 같은 GPU에서 기준 구현이 4 ms, 정답인 제출이 2 ms 걸렸다면 speedup은 2배입니다.
+**Speedup**은 기준 구현의 실행 시간을 제출 코드의 실행 시간으로 나눈 값입니다. 같은 GPU에서 기준 구현이 4 ms, 제출한 정답 코드가 2 ms 걸렸다면 speedup은 2배입니다.
 
 ![trainer의 CPU 사전 검사를 통과한 답은 GPU pool로 보내고, CPU 전용 pool은 별도 실습에 사용합니다.](../images/figures/concepts-01_why_gpu_sandbox--two-tier.ko.svg)
 
@@ -27,14 +27,14 @@ KernelBench는 PyTorch 기준 구현을 주고, 모델이 작성한 GPU 커널�
 
 - **장치 연결**　Firecracker v1.18.0은 물리 GPU를 VM에 직접 연결하는 GPU passthrough를 지원하지 않습니다. E2B의 샌드박스도 CPU 전용입니다. 이 저장소의 GPU 실습은 gVisor와 Kata + QEMU를 사용합니다. [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md) [E2B GPU 지원](https://docs.e2b.dev/faq/gpu-support) [격리 런타임 비교](02_isolation_runtimes.md)
 - **측정 일관성**　같은 GPU에서 다른 작업이 겹치면 같은 코드도 실행 시간이 달라져 속도 점수가 흔들릴 수 있습니다. 이 실습에서는 GPU 한 장을 pod 하나에 할당하고, pod마다 한 번에 제출 하나만 채점합니다. [샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)
-- **동시 실행 비용**　이 구성에서 pod 10개를 동시에 띄우려면 GPU 10장이 필요합니다. 요청을 기다리는 pod도 GPU를 할당받은 상태라서 pool을 크게 유지할수록 더 많은 GPU 용량을 확보해야 합니다. [용량과 노드 관리](../production/01_capacity_and_nodes.md)
+- **동시 실행 비용**　이 구성에서 pod 10개를 동시에 띄우려면 GPU 10장이 필요합니다. 요청을 기다리는 pod도 GPU 한 장을 계속 점유합니다. 그래서 한꺼번에 띄울 pod 수만큼 GPU를 확보해야 합니다. [용량과 노드 관리](../production/01_capacity_and_nodes.md)
 
 ??? note "CUDA 오류와 다음 채점"
     잘못된 메모리 접근 같은 일부 CUDA 오류가 나면 같은 프로세스에서 다음에 실행하는 정상 코드도 실패할 수 있습니다. NVIDIA time-slicing으로 GPU를 공유하는 pod는 같은 GPU 메모리 용량을 나눠 쓰며, 장치 오류가 여러 pod에 영향을 줄 수 있습니다. [CUDA 오류 코드](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html) [NVIDIA GPU time-slicing](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html)
 
     이 저장소는 제출마다 새 프로세스에서 후보 코드를 실행합니다. 기준 구현에서도 CUDA 오류가 감지되면 해당 샌드박스는 `sandbox_error`를 반환하고 새 요청을 받지 않습니다. TRL 학습에서는 이렇게 실패한 평가를 제외합니다. [On-policy RL과 오류 처리](03_onpolicy_rl_with_sandboxes.md)
 
-점수가 학습에 들어가는 과정은 [On-policy RL과 샌드박스](03_onpolicy_rl_with_sandboxes.md)에서 이어집니다. GPU 없이 채점 흐름을 실습하려면 [CPU 핸즈온](../handson/10_cpu_only.md)부터 시작하세요.
+채점 점수가 모델 업데이트에 어떻게 반영되는지는 [On-policy RL과 샌드박스](03_onpolicy_rl_with_sandboxes.md)에서 살펴봅니다. GPU 없이 채점 흐름을 실습하려면 [CPU 핸즈온](../handson/10_cpu_only.md)부터 시작하세요.
 
 ## 커널 실행 시간과 채점 시간을 구별하기
 

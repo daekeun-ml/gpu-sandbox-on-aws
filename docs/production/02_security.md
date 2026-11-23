@@ -1,17 +1,17 @@
 # 보안
 
 !!! info "TL;DR"
-    모델이 만든 코드는 신뢰할 수 없는 입력으로 취급하고, 런타임 격리(gVisor 또는 Kata)와 함께 pod, 네트워크, 노드, 토큰, 프로세스 통제를 여러 계층으로 적용합니다. gVisor의 호스트 드라이버 공유처럼 이 통제로 막지 못하는 위험도 남습니다.
+    모델이 만든 코드는 신뢰할 수 없는 입력으로 취급합니다. gVisor 또는 Kata로 코드를 격리하고, pod·네트워크·노드·토큰·프로세스별로 접근을 제한합니다. 가령 gVisor에서는 이 설정을 모두 적용해도 샌드박스와 호스트가 GPU 드라이버를 공유합니다.
 
 ## 격리 경계와 접근 경로
 
-실습에서 기준 답안이 잘 채점됐더라도, 팀 밖에서 받은 코드를 실행하기 전에 답안이 어떤 파일과 서비스에 접근할 수 있는지 확인해야 합니다. 런타임을 gVisor나 Kata로 바꾸면 커널 경계가 달라집니다. 샌드박스 안에 자격 증명이 들어가는지, 어느 주소로 연결할 수 있는지는 배포 설정에서 따로 정합니다.
+실습에서 기준 답안을 정상적으로 채점했더라도, 팀 밖에서 받은 코드를 실행하기 전에는 그 코드가 어떤 파일과 서비스에 접근할 수 있는지 확인해야 합니다. 런타임을 gVisor나 Kata로 바꾸면 커널 경계가 달라집니다. 샌드박스 안에 자격 증명이 들어가는지, 어느 주소로 연결할 수 있는지는 배포 설정에서 따로 정합니다.
 
-![a: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 NVIDIA 드라이버를 그대로 공유합니다. 또 pod 안의 ServiceAccount token과 시크릿을 읽고, NetworkPolicy와 관계없이 허용되는 자기 노드 IP의 로컬 서비스에 접속하며, 같은 pod에서 이어서 실행되는 다음 평가에 남은 프로세스, 캐시, GPU 상태를 넘깁니다. b: 샌드박스 pod(gVisor 또는 Kata)에서는 네 경로를 각각 다른 통제로 막거나 줄입니다. 커널 경로는 gVisor Sentry 또는 Kata VM이 차단하고(gVisor는 호스트 드라이버를 공유), 토큰과 시크릿은 pod에 넣지 않습니다. 노드 경로는 노드 가드가 차단하고 readiness가 그 차단을 확인합니다. 다음 평가로 가는 경로는 프로세스 정리와 요청별 캐시로 줄일 뿐 막지는 못합니다(점선). v1은 pod 재활용을 끄고, gVisor에서는 pod를 바꿔도 같은 호스트 드라이버와 GPU를 씁니다.](../images/figures/production-02_security.ko.svg)
+![a: 하드닝하지 않은 runc pod의 후보 코드는 호스트 커널과 NVIDIA 드라이버를 그대로 공유합니다. 또 pod 안의 ServiceAccount token과 시크릿을 읽고, NetworkPolicy와 관계없이 허용되는 자기 노드 IP의 로컬 서비스에 접속하며, 같은 pod에서 이어서 실행되는 다음 평가에 남은 프로세스, 캐시, GPU 상태를 넘깁니다. b: 샌드박스 pod(gVisor 또는 Kata)에서는 네 경로를 각각 다른 통제로 막거나 줄입니다. 커널 경로는 gVisor Sentry 또는 Kata VM이 차단하고(gVisor는 호스트 드라이버를 공유), 토큰과 시크릿은 pod에 넣지 않습니다. 노드 경로는 노드 가드가 차단하고 readiness가 그 차단을 확인합니다. 다음 평가로 가는 경로는 프로세스 정리와 요청별 캐시로 줄일 뿐 막지는 못합니다(점선). v1은 pod 재활용을 끄고, gVisor에서는 pod를 바꿔도 호스트 드라이버와 GPU는 그대로 공유합니다.](../images/figures/production-02_security.ko.svg)
 
 ## 방어 설계 요약
 
-점검할 때는 승인된 trainer의 요청이 도착하는 경로와 제출 코드가 밖으로 연결하는 경로를 각각 따라갑니다. 하나는 토큰과 ingress 정책으로 검증합니다. 다른 하나는 egress 제한과 노드 가드로 통제하고 readiness에서 실제 차단 여부를 확인합니다. 아래 위협 모델은 통제별 확인 범위를 정하는 데 쓰세요.
+점검할 때는 승인된 trainer의 요청이 도착하는 경로와 제출 코드가 밖으로 연결하는 경로를 각각 따라갑니다. 들어오는 요청은 토큰과 ingress 정책으로 검사합니다. 나가는 연결은 egress 정책과 노드 가드로 제한하고 readiness 검사에서 실제로 차단됐는지 확인합니다. 아래 위협 모델을 보고 각 보안 설정이 어떤 접근을 제한하는지 확인하세요.
 
 ??? note "세부 조건과 예외"
     - **일반 컨테이너(runc)**: 호스트 커널과 NVIDIA 드라이버를 그대로 사용합니다.
@@ -20,7 +20,7 @@
     - **노드 IP 예외**: VPC CNI는 pod와 그 pod가 실행 중인 노드 IP 사이의 통신을 정책과 관계없이 허용합니다.
     - **같은 pod에서 이어지는 평가**: 같은 pod에서 다음 평가를 실행하면 이전 평가가 남긴 프로세스, 캐시, GPU 상태가 그대로 남아 있을 수도 있습니다.
 
-    - **계층마다 다른 위험을 차단합니다.** 런타임은 커널 접근을, NetworkPolicy는 egress를, 노드 가드는 VPC CNI의 노드 IP 예외를 담당합니다. pod는 egress가 실제로 차단됐는지 확인한 뒤에만 Ready가 됩니다.
+    - **계층마다 다른 위험을 차단합니다.** 런타임은 커널 접근을, NetworkPolicy는 egress를, 노드 가드는 VPC CNI가 예외로 허용하는 노드 IP 트래픽을 제한합니다. pod는 egress가 실제로 차단됐는지 확인한 뒤에만 Ready가 됩니다.
     - **pod에 없는 자격 증명은 탈취할 수 없습니다.** 샌드박스 pod에는 API token도 시크릿도 넣지 않습니다.
 
 **읽기 전에**　[02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)에서 pool과 토큰 배포 절차를 먼저 보세요.
@@ -29,7 +29,7 @@
     - **runc, gVisor, Kata**: runc는 호스트 커널을 공유합니다. gVisor에서는 사용자 공간 커널(Sentry)이 system call을 먼저 받아 처리하고, Kata는 pod마다 별도의 VM(guest 커널)을 실행합니다.
     - **Sentry**: gVisor의 사용자 공간 커널입니다. 컨테이너의 system call을 호스트 커널 대신 받아 처리합니다.
     - **nvproxy, ioctl**: ioctl은 프로그램이 장치 드라이버에 명령을 보내는 system call입니다. nvproxy는 GPU 드라이버에 보내는 ioctl을 드라이버 버전별 허용 목록으로 걸러 호스트 드라이버에 전달합니다.
-    - **IMDS**: EC2 인스턴스 안에서 `169.254.169.254`로 접근하는 메타데이터 서비스입니다. 노드 IAM role의 임시 자격 증명도 여기서 제공됩니다.
+    - **IMDS**: EC2 인스턴스 안에서 `169.254.169.254`로 접근하는 메타데이터 서비스입니다. 노드 IAM role의 임시 자격 증명도 이 서비스에서 받을 수 있습니다.
     - **NetworkPolicy**: pod가 주고받을 수 있는 트래픽을 정하는 Kubernetes 규칙입니다. EKS에서는 VPC CNI가 이 규칙을 적용합니다.
     - **Pod Security `restricted`**: namespace 단위로 pod 보안 설정(non-root, capability 제거 등)을 강제하는 Kubernetes 표준 수준입니다.
     - **audience, JWKS, TokenReview**: audience는 토큰을 받을 대상의 이름(`aud`)이고, JWKS는 토큰 서명을 검증하는 공개 키 묶음입니다. TokenReview는 토큰이 유효한지 API server에 직접 확인을 요청하는 API입니다.
@@ -41,7 +41,7 @@
 
 운영할 때는 제출 코드가 파일을 열 수 있는지, 다른 서비스로 연결할 수 있는지, 누가 평가 API를 호출할 수 있는지를 따로 확인합니다. 런타임 격리, 네트워크 정책, 토큰 검증은 각각 다른 경계를 통제합니다.
 
-이 페이지가 가정하는 공격자는 학습 중인 policy입니다. policy는 악의가 없어도 reward를 높이는 과정에서 위험한 코드를 만들 수 있고, 프롬프트나 데이터셋이 오염되면 의도적인 공격 코드를 생성할 수도 있습니다.
+이 위협 모델에서는 학습 중인 policy를 공격자로 가정합니다. policy는 악의가 없어도 reward를 높이는 과정에서 위험한 코드를 만들 수 있고, 프롬프트나 데이터셋이 오염되면 의도적인 공격 코드를 생성할 수도 있습니다.
 
 | 보호 대상 | 위협 | 주요 통제 |
 |---|---|---|
@@ -53,12 +53,12 @@
 
 ![학습 중인 policy가 만든 후보 코드를 다섯 겹의 통제가 둘러쌉니다. 안쪽부터 자식 프로세스(env allowlist, 요청별 캐시, timeout), pod(non-root, 읽기 전용 root FS, capability 없음, 토큰 없음), 런타임(gVisor Sentry 또는 Kata VM, 격리 경계로 강조), 노드(전용 taint, 노드 가드, IMDS hop 1), 네트워크(기본 거부, gateway만 ingress) 순서입니다.](../images/figures/production-02_security--threat-model.ko.svg)
 
-*그림 요약: 후보 코드는 다섯 겹의 통제 안에서 실행되므로, 한 겹의 통제가 실패해도 바깥쪽 통제가 계속 적용됩니다.*
+*그림 요약: 후보 코드는 다섯 겹의 통제 안에서 실행되므로, 한 계층에서 막지 못한 접근도 바깥 계층의 통제를 계속 받습니다.*
 
 
 ## 계층별 통제
 
-| 계층 | 통제 | 구현 위치 | 남는 위험 |
+| 계층 | 보안 설정 | 구현 위치 | 이 설정으로 막지 못하는 위험 |
 |---|---|---|---|
 | 런타임 (gVisor) | 사용자 공간 커널(Sentry), nvproxy가 드라이버 버전별 ioctl allowlist 적용 | [`runtimeclass-gvisor.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/runtimes/runtimeclass-gvisor.yaml), [`install-gvisor.sh`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh) | 호스트 NVIDIA 드라이버를 공유합니다. 격리 수준이 VM 경계보다 약합니다. |
 | 런타임 (Kata) | pod마다 VM, GPU는 VFIO passthrough, IOMMU가 DMA를 VM 안으로 제한 | [`kata-deploy-values.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml), [`gpu-operator-values.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml) | 하이퍼바이저(QEMU)가 공격 표면이고, T4에는 confidential computing이 없습니다. |
@@ -75,7 +75,7 @@
 | 출력 읽기 | 후보 출력은 `torch.load(weights_only=True)`, 상태 파일은 1 MiB 제한과 타입 검사 | [`harness/evaluate.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/harness/evaluate.py) | |
 | 노드 배치 | 런타임별 전용 taint 노드. Kata GPU 노드는 VM passthrough 한 가지 모드만 씀(GPU Operator: "A node can only run one container runtime at a time") | [`nodepools.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodepools.yaml) | |
 | GPU 상태 | Kata에서 VM이 GPU를 해제하면 vfio-pci가 function(또는 bus)을 reset. T4는 `reset_method=bus`로 보고됨(제3자 보고, NVIDIA 보증 아님) | 호스트 커널 VFIO | GPU firmware 상태가 VM 사이에 남는지는 확인하지 않았습니다. |
-| 재활용 | `SANDBOX_MAX_EVALS`(v2: 200)에 이르면 draining, gateway가 pod 삭제. Kata에서는 새 VM | [`server/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py), [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py) | gVisor에서는 새 pod여도 같은 호스트 드라이버와 GPU를 씁니다. |
+| 재활용 | `SANDBOX_MAX_EVALS`(v2: 200)에 이르면 draining, gateway가 pod 삭제. Kata에서는 새 VM | [`server/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py), [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py) | gVisor에서는 새 pod여도 호스트 드라이버와 GPU는 그대로 공유합니다. |
 
 - **Readiness 판정**: 연결 거부(refused)도 도달한 것으로 판정합니다. 차단돼 있으면 30초, 연결되면 5초마다 재확인합니다.
 
@@ -102,8 +102,8 @@ sequenceDiagram
 
 - **audience를 분리합니다.** trainer 토큰은 aud `gpu-sandbox-gateway`, gateway가 샌드박스에 보내는 토큰은 aud `gpu-sandbox`입니다.
 - **샌드박스는 offline으로 검증합니다.** ConfigMap `sandbox-auth-jwks`의 공개 키로 RS256 서명과 `exp`, `iat`, `iss`, `aud`, `sub`를 확인하고(leeway 30초), 파일이 바뀌면 다시 읽습니다. 샌드박스는 Kubernetes API를 호출하지 않으므로 pod에 토큰이 필요 없습니다.
-- **gateway는 TokenReview를 씁니다.** API server가 직접 토큰을 확인하므로 offline 검증보다 엄격하고, 코드 주석에 따르면 삭제된 pod의 토큰도 거부합니다.
-    - **성공 결과 캐시**: gateway는 성공 결과를 토큰 해시를 키로 60초 동안 캐시합니다. 그래서 요청이 수천 건이어도 TokenReview 호출이 수천 건으로 늘지 않지만, 무효가 된 토큰이 최대 60초 동안 통과할 수 있습니다.
+- **gateway는 TokenReview로 API server에 토큰 검증을 요청합니다.** API server가 직접 확인하므로 offline 검증보다 엄격하고, 코드 주석에 따르면 삭제된 pod의 토큰도 거부합니다.
+    - **성공 결과 캐시**: gateway는 토큰 해시를 키로 삼아 검증에 성공한 결과를 60초 동안 캐시합니다. 그래서 요청이 수천 건이어도 TokenReview 호출이 수천 건으로 늘지 않지만, 무효가 된 토큰이 최대 60초 동안 통과할 수 있습니다.
 - **샌드박스에 보내는 토큰의 수명을 짧게 설정합니다.** offline 검증은 pod 삭제 여부를 확인할 수 없고 토큰은 `exp`까지 유효하므로, projected token의 `expirationSeconds`를 3600으로 설정합니다.
 - **설정이 없으면 거부합니다(fail closed).**
     - **샌드박스**: audience, issuer, allowlist, JWKS 중 하나라도 없거나 읽을 수 없으면 보호된 경로에서 모두 401을 반환합니다.
@@ -153,7 +153,7 @@ kubectl -n sandbox get pod "$pod" \
 4. **GPU firmware 상태가 남는지는 확인하지 않았습니다.** NVIDIA는 VFIO reset이 모든 GPU 상태를 지운다고 보장하지 않으며, T4의 `reset_method=bus`는 제3자 보고입니다.
 5. **정적 정책은 보안 경계가 아닙니다.** 이 설계는 후보 코드가 pod 안에서 임의의 Python을 실행할 수 있다고 가정하고, 격리는 런타임이 담당합니다. 정적 정책은 reward 무결성을 지키는 장치입니다([04 Reward 무결성](04_reward_integrity.md)).
 6. **같은 노드의 다른 샌드박스와 하드웨어를 공유합니다.** Kata VM들은 같은 `g4dn.metal`의 CPU, 메모리 대역폭, PCIe를 공유하므로 타이밍 간섭과 side channel 가능성이 있습니다. 이 저장소는 이 위험을 평가하지 않았습니다.
-7. **upstream 검증 범위 밖의 조합을 씁니다.**
+7. **이 구성에는 upstream에서 검증하지 않은 조합이 포함됩니다.**
     - **Kata**: NVIDIA의 Kata CI는 A100과 H100을 테스트하고 T4(`g4dn.metal`)는 테스트하지 않습니다. GPU Operator의 Kata 구성은 EKS에서 Ubuntu로만 검증되었고 AL2023은 목록에 없습니다.
     - **gVisor와 proprietary 드라이버**: gVisor 문서는 nvproxy를 NVIDIA open 드라이버 기준으로 설명하고 proprietary 드라이버는 언급하지 않습니다. gVisor pool의 기본값인 g5(A10G)에서는 AMI가 proprietary 커널 모듈(GSP 꺼짐)을 로드하므로, 이 조합은 gVisor 문서가 아니라 이 저장소에서 검증한 것입니다.
     - **드라이버, AMI, gVisor 버전을 바꾸면**: smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요. 샌드박스 pool이 노드의 GPU를 모두 쓰고 있으면 smoke pod가 `Pending`으로 남으니, pool의 replica를 하나 줄여 GPU를 비운 뒤 실행합니다([02 gVisor](../handson/02_gvisor.md)).
@@ -214,7 +214,7 @@ PASS read_host_file               status=policy_violation  speedup=<값>
 ## 적용 범위와 한계
 
 - **로컬 테스트로 확인한 것:** audience 기반 인증의 fail closed 동작(잘못된 audience, 만료, 허용 목록에 없는 subject 거부), egress 차단을 확인해야 Ready가 되는 readiness, 매니페스트 템플릿의 하드닝 값, 노드 user data(`infra/eks/userdata.py`)의 node guard 포함 여부를 확인했습니다(`pytest`, CPU, AWS 없음). CDK 스택 테스트(`cdk/tests`)는 synth한 템플릿에서 private endpoint, `0.0.0.0/0` inbound 없음, IMDSv2 필수(hop limit은 지정된 경우에만 1인지 검사), 볼륨 암호화를 확인합니다.
-- **AWS에서 실행한 것:** "확인 방법"의 `ops/verify.sh`를 실습 계정의 `gvisor` v1, `kata-qemu` v1, CPU pool 세 개에서 실행해 통과했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 이 검증은 핸즈온 NetworkPolicy에서 실행했습니다.
+- **AWS에서 실행한 것:** "확인 방법"의 `ops/verify.sh`를 실습 계정의 `gvisor` v1, `kata-qemu` v1, CPU pool 세 개에서 실행해 통과했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 이때는 핸즈온의 NetworkPolicy를 적용했습니다.
 - **AWS에서 실행하지 않은 것:** gateway-only NetworkPolicy를 적용한 production 구성과 위의 allowlist 재배포입니다. 이 구성에서 검증 Job이 접근할 수 있는지와 실제 차단 여부는 직접 실행해 확인하세요.
 - **확인하지 않은 동작:** EKS의 서명 키 회전 일정, GuardDuty Runtime Monitoring에 gVisor와 Kata 안쪽 프로세스가 보이는 방식, GPU firmware 상태가 VM 사이에 남는지 여부.
 - **대응하지 않는 위험:** gVisor의 호스트 드라이버 공유, 같은 노드의 하드웨어 공유, GPU firmware 상태 잔존 등은 위 "다루지 않는 위험"에 있습니다. 멀티 테넌트라면 "Production 옵션"의 Kata와 테넌트별 NodePool을 검토하세요.

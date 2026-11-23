@@ -8,9 +8,9 @@ EKS는 Kubernetes API와 스케줄러를 제공합니다. `us-east-1`에서 이 
 
 ## 구성도 읽기
 
-1. **운영자와 EKS**. 왼쪽 워크스테이션에서 CloudFormation에 HyperPod EKS 마법사 스택을 제출합니다. 이 스택이 VPC, EKS 제어 영역과 HyperPod 클러스터를 함께 만듭니다. 이후 `kubectl`은 EKS API에 직접 연결합니다.
-2. **HyperPod의 세 인스턴스 그룹**. 안쪽 점선 상자는 인스턴스 그룹입니다. `system`의 CPU 워커 한 대는 CoreDNS와 벤치마크 클라이언트를 실행합니다. `trainer`는 `ml.g5.2xlarge` 한 대에서 GRPO를 실행합니다. `sandbox`는 `ml.g5.xlarge` 두 대에 A10G 한 장과 v1 채점 Pod 한 개씩을 배치합니다.
-3. **채점 요청과 응답**. 가운데 실선을 따라가면 트레이너가 생성 코드를 보내고 샌드박스가 판정과 실행 시간을 돌려주는 경로가 보입니다. 위쪽 실선은 학습을 마친 뒤 CPU 워커에서 같은 채점 pool에 벤치마크 요청을 보낸 경로입니다.
+1. **운영자와 EKS**. 운영자는 왼쪽 워크스테이션에서 CloudFormation에 HyperPod EKS 마법사 스택 생성을 요청합니다. 이 스택이 VPC, EKS 제어 영역과 HyperPod 클러스터를 함께 만듭니다. 이후 `kubectl`은 EKS API에 직접 연결합니다.
+2. **HyperPod의 세 인스턴스 그룹**. 안쪽 점선 상자는 인스턴스 그룹입니다. `system` 그룹의 CPU 워커 한 대에서 CoreDNS와 벤치마크 클라이언트가 동작합니다. `trainer` 그룹의 `ml.g5.2xlarge` 한 대는 GRPO 학습을 맡습니다. `sandbox`는 `ml.g5.xlarge` 두 대에 A10G 한 장과 v1 채점 Pod 한 개씩을 배치합니다.
+3. **채점 요청과 응답**. 가운데 실선을 따라 트레이너가 생성 코드를 보내면 샌드박스가 채점 판정과 실행 시간을 돌려줍니다. 위쪽 실선은 학습을 마친 뒤 CPU 워커에서 같은 채점 pool에 벤치마크 요청을 보낸 경로입니다.
 4. **공유 서비스와 모델 다운로드**. 아래쪽에는 lifecycle 스크립트를 저장한 S3, 컨테이너 이미지를 제공하는 ECR, EKS 제어 영역 로그를 받는 CloudWatch Logs가 있습니다. 학습 노드는 NAT 게이트웨이를 거쳐 Hugging Face Hub에서 모델을 받습니다.
 
 ## 노드에서 확인한 것

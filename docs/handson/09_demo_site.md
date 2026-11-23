@@ -1,9 +1,9 @@
 # 09 데모 사이트 (CloudFront)
 
-[공개 데모](https://dohbsn4kn34ya.cloudfront.net/#try)에서 답안을 하나 고르고 **채점 기록 재생**을 누르세요. 브라우저는 저장된 실행을 재생하므로 AWS 계정 없이 gVisor와 Kata의 판정, 학습 로그, 벤치마크를 볼 수 있습니다.
+[공개 데모](https://dohbsn4kn34ya.cloudfront.net/#try)에서 답안을 하나 고르고 **채점 기록 재생**을 누르세요. 브라우저에서 기존 실행 기록을 보여 주므로 AWS 계정 없이도 gVisor와 Kata의 채점 결과, 학습 로그, 벤치마크를 볼 수 있습니다.
 
 - **내 PC에서 보기**　[로컬 미리보기](#1-로컬에서-미리-보기)로 샘플을 열고 정답과 오답을 하나씩 재생하세요. CPU 샘플과 공개 데모의 GPU 기록은 출처가 다릅니다.
-- **내 실습 결과 공개하기**　[GPU 기록 만들기](#2-클러스터에서-gpu-기록-만들기)로 시작해 [공개할 파일 검토](#25-공개하기-전에-검토하기) 후 [CloudFront에 배포](#4-배포-demodeploysh)하세요. 배포 주소에서 같은 답안을 골라 내 기록의 pool 이름과 판정이 나오는지 확인합니다.
+- **내 실습 결과 공개하기**　[GPU 기록 만들기](#2-클러스터에서-gpu-기록-만들기)로 시작해 [공개할 파일 검토](#25-공개하기-전에-검토하기) 후 [CloudFront에 배포](#4-배포-demodeploysh)하세요. 배포한 사이트에서 같은 답안을 골라 보세요. 화면에 표시된 pool 이름과 판정이 자신이 기록한 값과 일치하면 됩니다.
 
 <details class="note" markdown="1">
 <summary>직접 기록을 만들 때 필요한 환경과 로그</summary>
@@ -22,7 +22,7 @@
     - **OAC (Origin Access Control)**: CloudFront가 S3에 서명된 요청을 보내는 방식입니다. 버킷을 공개하지 않고 CloudFront만 버킷을 읽도록 설정할 수 있습니다.
     - **S3 Block Public Access**: 버킷 정책이나 ACL로 버킷이 공개되는 것을 막는 설정 네 가지입니다.
     - **service principal**: AWS 서비스가 권한 주체로 쓰는 이름입니다. CloudFront는 `cloudfront.amazonaws.com`입니다.
-    - **`AWS:SourceArn`**: 요청을 보낸 AWS 리소스의 ARN을 조건으로 거는 정책 키입니다. 여기서는 이 CloudFront 배포가 보낸 요청만 허용하는 조건으로 씁니다.
+    - **`AWS:SourceArn`**: 요청을 보낸 AWS 리소스의 ARN을 검사하는 정책 키입니다. 여기서는 해당 CloudFront 배포에서 온 요청만 허용합니다.
     - **CSP (Content-Security-Policy)**: 페이지가 어디서 스크립트, 스타일, 데이터를 불러올 수 있는지 브라우저에 알려 주는 응답 헤더입니다.
     - **HSTS (Strict-Transport-Security)**: 브라우저가 정해진 기간 동안 그 도메인에 HTTPS로만 접속하게 하는 응답 헤더입니다.
     - **ACM (AWS Certificate Manager)**: TLS 인증서를 발급하고 관리하는 서비스입니다.
@@ -52,7 +52,7 @@
 
 - **맨 위의 핵심 수치**: GPU 런타임 수, 기대 판정과 일치한 golden 수, 두 pool의 `verify.sh` 기록에서 막힌 연결 수, 벤치마크 정상 응답 수입니다.
 - **1절의 재생 버튼**: reward 요청 한 건이 trainer, reward 함수, 라우팅 표, 샌드박스 pool을 지나는 순서를 보여 줍니다.
-- **2절의 채점 체험**: golden 제출물은 정답, 오답, 벤치마크 구간에서만 틀리는 코드, 호스트 파일 읽기 등입니다. 진행 막대는 pool마다 기록된 평가 시간(`duration_s`)을 기준으로 차고(기본 4배속, 실제 속도나 결과만 보기도 선택 가능), reward 구성 요소는 format, correctness, speedup, 합계입니다.
+- **2절의 채점 체험**: golden 제출물은 정답, 오답, 벤치마크 구간에서만 틀리는 코드, 호스트 파일 읽기 등입니다. pool마다 기록한 평가 시간(`duration_s`)에 맞춰 진행 막대가 차오릅니다. 기본 재생 속도는 4배입니다. 실제 속도로 보거나 결과만 볼 수도 있습니다. 결과에는 format, correctness, speedup과 합계가 나옵니다.
 - **3절의 카드 8개**: 샌드박스 안에서 시도한 IMDS, Kubernetes API, kubelet, 인터넷 연결, `default` namespace에서 샌드박스로 들어오는 연결, 샌드박스 안과 노드의 커널 비교, golden 제출물의 호스트 파일 읽기와 벤치마크 치팅입니다. 카드를 누르면 터미널 출력 재생에서 그 줄을 강조합니다.
 - **패턴별 아키텍처**: 패턴마다 "준비와 배포", "학습 한 step", "버전 바꾸기" 흐름을 단계별로 재생하고, 요청과 결과가 선을 따라 움직입니다. 기본 한국어이고 `?lang=en`이나 `EN` 버튼으로 영어로 바뀝니다.
 
@@ -61,7 +61,7 @@
 - **공개되는 파일**: HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다.
 - **저장소의 `recording.json` 샘플**: 노트북의 CPU pool에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요.
 - 공개 데모의 GPU 채점 재생은 `demo/recordings/2026-11-18-eks-gpu.json`을 사용합니다. B1에서는 EC2가, B2에서는 HyperPod가 생성 코드를 채점했습니다. 두 벤치마크는 각 클러스터에서 요청을 보낸 노드만 바꿔 비교합니다. [B1 결과](08_benchmark.md#hyperpod-b1) · [B2 결과](08_benchmark.md#hyperpod-b2)
-- **2절의 진행 막대**: 기록된 전체 평가 시간입니다. 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.
+- **2절의 진행 막대**: 막대는 평가 전체에 걸린 시간을 보여 줍니다. 단계별 소요 시간은 기록하지 않으므로 각 단계의 상태는 재생이 끝날 때 최종 판정에 맞춰 표시합니다.
 
 </details>
 
@@ -176,12 +176,12 @@ recorder pod는 trainer 이미지(`rl-trainer`)로 `sleep`만 실행하는 pod�
 
 ### 2.1 기록할 시점 고르기
 
-- **학습 Job이 없으면 recorder pod로 기록합니다(2.2).** 이때 기록에는 학습 이벤트가 들어가지 않습니다. 4절의 버전 전환 차트는 `extras.json`의 `simulation`을 먼저 쓰고, 없을 때만 기록의 학습 이벤트를 씁니다. 둘 다 없으면 이 차트는 표시되지 않습니다.
+- **학습 Job이 없으면 recorder pod로 기록합니다(2.2).** 이때 기록에는 학습 이벤트가 들어가지 않습니다. 4절의 버전 전환 차트에는 `extras.json`의 `simulation`이 우선 표시됩니다. 이 값이 없으면 학습 이벤트를 표시하고, 두 기록이 모두 없으면 차트를 숨깁니다.
 - **trainer pod로 기록할 때는 학습 Job이 Running인 동안 실행합니다.** Job이 끝나면 컨테이너가 종료되어 emptyDir에 있는 이벤트 파일을 복사할 수 없습니다([05 On-policy GRPO 학습](05_grpo_training.md)).
 - **학습 이벤트에 버전 전환을 넣으려면** [06](06_sandbox_update.md)의 `scripts/ops/rollout.sh gvisor v1 v2`로 routing을 바꾸고, trainer 로그에 `sandbox_version_switch`가 나온 뒤 기록하세요. `record`는 기록할 때 `--training-events` 파일에 있는 이벤트만 읽습니다.
     - **두 pool의 golden도 기록하려면**: `--pool`로 넘긴 주소는 golden을 실행할 대상이라, `--finish`로 v1을 줄이기 전에 2.3의 예처럼 v1과 v2 주소를 각각 `--pool`로 넘기세요.
-    - **B2에서는**: Service 이름에 `gvisor-hyperpod`를 씁니다(`sandbox-gvisor-hyperpod-v1`).
-    - **4절 차트에 내 전환을 표시하려면**: 4절 차트는 `extras.json`의 `simulation`을 먼저 쓰므로, 2.6에서 `extras.json`을 만들 때 `--simulation-log`를 빼세요.
+    - **B2에서는**: Service 이름에 `gvisor-hyperpod`가 들어갑니다. 예를 들어 `sandbox-gvisor-hyperpod-v1`입니다.
+    - **4절 차트에 내 전환을 표시하려면**: 4절 차트에는 `extras.json`의 `simulation`이 우선 표시되므로, 2.6에서 `extras.json`을 만들 때 `--simulation-log`를 빼세요.
 - **학습이 잠깐 느려질 수 있습니다.** 기록과 학습이 같은 pool을 쓰고 pod는 한 번에 평가를 하나만 처리하므로, golden 평가가 reward 평가 사이에 추가로 실행됩니다.
 
 ### 2.2 trainer pod 찾기
@@ -356,7 +356,7 @@ python3 demo/build_extras.py --out demo/site/data/extras.json \
 - IP 주소(IPv4, IPv6, `10-0-12-34` 같은 pod DNS 형식)를 `<private-ip>`, `<public-ip>`, `<ipv6>`로, 노드 이름을 `<node>`로, `*.amazonaws.com` 호스트(EKS API endpoint, OIDC, ELB 등)를 `<aws-endpoint>`로 바꿉니다.
 - 계정 ID, ARN, EC2 리소스 ID, 토큰(access key, Hugging Face, GitHub, JWT)도 자리 표시로 대체합니다.
 - `169.254.169.254`(IMDS)처럼 누구에게나 같은 주소는 그대로 둡니다.
-- **바꾼 뒤에도 남아 있으면**: 이런 값이나 `*.internal` 호스트, `user@host`, home 경로(`/home`, `/root`, `/Users`)가 남아 있으면 파일을 쓰지 않고 실패합니다.
+- **파일 생성이 중단되는 경우**: 위 값이나 `*.internal` 호스트, `user@host`, 홈 디렉터리 경로(`/home`, `/root`, `/Users`)가 남아 있으면 스크립트는 파일을 저장하지 않고 오류를 냅니다.
 
 **확인할 것:** 위 명령의 마지막 줄에는 `"transcripts": 2`가 나옵니다. 아래는 2026-11-18 로그로 터미널 기록 4개(`verify-gvisor`, `verify-kata-qemu`, `smoke-gvisor`, `rollout`)를 넣어 만든 공개본의 출력입니다.
 
@@ -364,7 +364,7 @@ python3 demo/build_extras.py --out demo/site/data/extras.json \
 {"event": "extras", "out": "demo/site/data/extras.json", "transcripts": 4, "bench": true, "training": true, "simulation": true}
 ```
 
-터미널 출력은 페이지에 그대로 나오므로, 2.5와 같은 기준으로 한 번 더 읽어 보세요. `python3 demo/build_extras.py --check <파일>...`은 같은 검사를 기존 파일에 실행하고, `deploy.sh`도 업로드 전에 이 검사를 실행합니다.
+터미널 출력은 페이지에 그대로 나오므로, 2.5와 같은 기준으로 한 번 더 읽어 보세요. 기존 파일을 검사하려면 `python3 demo/build_extras.py --check <파일>...`을 실행하세요. `deploy.sh`도 업로드 직전에 같은 항목을 검사합니다.
 
 ### 2.7 둘러보기 영상 다시 만들기 (선택)
 
@@ -425,7 +425,7 @@ python demo/record_local.py
 
 스크립트는 다음 작업을 실행합니다.
 
-- `127.0.0.1`에 CPU 샌드박스 서버 두 개(v1, v2)를 띄웁니다. v2 harness는 seed 5개와 speedup 상한 10배를 쓰고, 인증에는 loopback 전용 test bypass를 씁니다.
+- `127.0.0.1`에 CPU 샌드박스 서버 두 개(v1, v2)를 띄웁니다. v2 harness에서 seed는 5개, speedup 상한은 10배입니다. 인증 검사에는 loopback 전용 test bypass를 적용합니다.
 - 클러스터와 같은 코드 경로로 golden set(CPU에서는 4개)을 두 서버에 보냅니다.
 - 모델 completion 대신 golden 제출물을 써서 reward 배치 6개를 `KernelRewards`로 계산하고, 3번째 배치 뒤에 routing을 v1에서 v2로 바꿉니다.
 - **채점 재생에 사용한 기록**을 펼치면 `Local CPU smoke run on a laptop`으로 시작하는 설명과 기록 시각이 나옵니다.
@@ -687,7 +687,7 @@ GPU 노드와 클러스터 정리는 [99 정리](99_cleanup.md)에 있습니다.
 - **custom domain의 DNS는 자동으로 만들지 않습니다**(5절).
 - **기본 `*.cloudfront.net` 인증서에서는 viewer TLS 정책이 TLSv1로 고정됩니다.** 2026-11-18 배포에서 TLS 1.0과 1.1 handshake가 성공했습니다. `TLSv1.2_2021`은 custom domain에서만 적용됩니다(5절).
 - **WAF는 트래픽이 없어도 고정 비용이 듭니다**("소요 시간과 비용"). 로그 버킷은 정리 뒤에도 남습니다(6절).
-- **`PriceClass_100`을 씁니다.** 기본값(모든 edge location)보다 범위가 좁으므로, 방문자가 많은 지역에 맞는 price class를 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)에서 확인하세요.
+- **배포 스크립트의 가격 등급은 `PriceClass_100`입니다.** 기본값(모든 edge location)보다 범위가 좁으므로, 방문자가 많은 지역에 맞는 price class를 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)에서 확인하세요.
 - **저장소의 샘플 기록(`demo/site/data/recording.json`)은 여전히 노트북의 CPU pool에서 만든 기록입니다.** 샘플의 수치는 GPU 샌드박스 성능과 관계가 없으며, 페이지 footer에도 이 내용이 적혀 있습니다.
 
 ??? note "참고 자료"

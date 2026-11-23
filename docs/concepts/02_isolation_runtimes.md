@@ -3,7 +3,9 @@
 !!! info "TL;DR"
     gVisor는 시스템 호출을 사용자 공간 커널에서 처리하고, Kata는 pod마다 별도의 커널이 있는 VM을 띄웁니다. 이 저장소에서 Kata로 GPU를 쓸 때는 QEMU로 VM을 띄우고, CPU 격리 실습에서는 Cloud Hypervisor와 QEMU를 비교합니다.
 
-## 코드가 운영체제에 일을 부탁할 때
+## 시스템 호출은 어디에서 처리될까?
+
+<span id="코드가-운영체제에-일을-부탁할-때"></span>
 
 파일을 열거나 GPU를 사용하려면 프로그램이 운영체제에 요청을 보냅니다. 모델이 만든 코드도 마찬가지입니다. 격리 런타임을 고를 때는 그 요청을 어디서 받아 처리할지 정합니다.
 
@@ -13,15 +15,17 @@
 | gVisor | 사용자 공간 커널(Sentry) | CPU 및 GPU 샌드박스 |
 | Kata | pod마다 띄운 VM의 Linux 커널 | CPU 샌드박스, QEMU 기반 GPU 샌드박스 |
 
-## GPU 경로 두 가지
+## 샌드박스에서 GPU에 접근하는 두 가지 방식
+
+<span id="gpu-경로-두-가지"></span>
 
 ### gVisor + nvproxy
 
-`nvproxy`는 GPU에 보내는 요청 가운데 자신이 지원하는 요청만 노드의 NVIDIA 드라이버로 전달합니다. 일반 GPU VM에서도 쓸 수 있지만 드라이버 버전이 `nvproxy` 지원 목록과 맞아야 합니다.
+`nvproxy`는 GPU 요청 중 지원 목록에 있는 요청만 노드의 NVIDIA 드라이버로 전달합니다. 일반 GPU VM에서도 쓸 수 있지만 드라이버 버전이 `nvproxy` 지원 목록과 맞아야 합니다.
 
 ### Kata + VFIO passthrough
 
-GPU를 작은 VM에 직접 연결하고 VM 안의 NVIDIA 드라이버가 장치를 제어합니다. 이 저장소의 x86 GPU 실습에서는 T4가 있는 `g4dn.metal`을 씁니다. CPU만 쓰는 Kata는 `c8i`의 중첩 가상화로 실습할 수 있습니다.
+GPU를 작은 VM에 직접 연결하고 VM 안의 NVIDIA 드라이버가 장치를 제어합니다. x86 GPU 실습은 T4를 장착한 `g4dn.metal`에서 진행합니다. GPU 없이 Kata를 실습할 때는 `c8i`의 중첩 가상화를 이용할 수 있습니다.
 
 ![gVisor는 노드 드라이버로 GPU 요청을 전달하고, Kata의 VM은 연결된 GPU를 자체 드라이버로 사용합니다.](../images/figures/concepts-02_isolation_runtimes--gpu-paths.ko.svg)
 
@@ -29,7 +33,7 @@ GPU **passthrough**는 물리 GPU를 VM에 직접 할당하는 방식입니다. 
 
 ## 격리 경계와 운영 조건
 
-파일 요청을 가로채는 위치와 GPU 드라이버가 실행되는 위치를 함께 보세요. gVisor는 Sentry를 거치지만 GPU 요청 일부는 노드 드라이버에 도달합니다. 그래서 이미지가 같아도 노드의 드라이버를 바꾸면 GPU 실행 여부가 달라질 수 있습니다. Kata에서는 드라이버를 VM 안에 둡니다. 대신 VM이 쓸 메모리를 확보하고 장치를 직접 할당해야 합니다.
+파일 접근 요청은 어느 커널이 처리하고, GPU 드라이버는 어디에서 실행될까요? gVisor에서 요청은 Sentry를 거치며 일부 GPU 요청은 노드 드라이버까지 전달됩니다. 그래서 이미지가 같아도 노드의 드라이버를 바꾸면 GPU 실행 여부가 달라질 수 있습니다. Kata에서는 드라이버를 VM 안에 둡니다. 대신 VM이 쓸 메모리를 확보하고 장치를 직접 할당해야 합니다.
 
 ## Kata에서 QEMU와 Cloud Hypervisor의 역할
 
@@ -45,11 +49,11 @@ Kata GPU 실습에서는 pod가 `nvidia.com/pgpu`로 물리 GPU를 요청합니�
 | Kata + QEMU GPU | EC2 `g4dn.metal` | GPU passthrough용 AMI와 IOMMU 설정 |
 | Kata CPU (QEMU, Cloud Hypervisor) | EC2 `c8i.2xlarge` | 중첩 가상화 활성화 |
 
-격리 경계는 실행 경로의 일부입니다. pool 접근 권한과 네트워크 제어도 함께 확인해야 합니다. 직접 비교하려면 [gVisor 핸즈온](../handson/02_gvisor.md)과 [Kata 핸즈온](../handson/03_kata.md)을 보세요.
+런타임을 선택한 뒤에는 누가 pool에 요청을 보낼 수 있는지, 샌드박스에서 나가는 연결은 어디까지 허용되는지도 확인해야 합니다. 직접 비교하려면 [gVisor 핸즈온](../handson/02_gvisor.md)과 [Kata 핸즈온](../handson/03_kata.md)을 보세요.
 
 ## 같은 노드에서 런타임 비교하기
 
-GPU 두 pool이 서로 다른 장치를 쓰면 장치 차이와 런타임 차이가 함께 결과에 들어갑니다. 런타임 선택에서 무엇이 달라지는지 보려면 먼저 CPU 비교를 보세요. 아래 세 pool은 `c8i.2xlarge` 한 대에 있었고 Ready pod가 한 개씩이었습니다. 같은 `relu_bias_torch_only` 답안을 pool마다 32번 채점한 결과입니다.
+두 pool의 GPU 모델이 다르면 채점 시간에 영향을 준 요인이 GPU인지 런타임인지 구분하기 어렵습니다. 아래 CPU 실험에서는 `c8i.2xlarge` 한 대에 런타임별로 pool을 띄웠고, 세 pool 모두 Ready 상태인 pod가 한 개씩이었습니다. 같은 `relu_bias_torch_only` 답안을 pool마다 32번 채점한 결과입니다.
 
 | pool | 파일·메모리 요청을 받는 곳 | 성공 | 채점 p50 |
 |---|---|---:|---:|
@@ -74,7 +78,7 @@ runc에서는 컨테이너가 host 커널을 공유합니다. gVisor에서는 �
 | `/dev/kvm` | 불필요 | 불필요 (systrap) | 필요 | 필요 |
 | 이 저장소에서 | trainer와 시스템 pod | `gvisor` RuntimeClass (handler `runsc`) | `kata-qemu-nvidia-gpu`, `kata-qemu`, `kata-clh` | 사용하지 않음 (Kata의 hypervisor로도 쓰임) |
 
-세 런타임 모두 같은 샌드박스 이미지를 씁니다. 이미지에는 NVIDIA 커널 드라이버가 없고, PyTorch wheel에 포함된 CUDA 사용자 공간 라이브러리만 들어 있습니다.
+세 런타임의 샌드박스 이미지는 동일합니다. 이미지에는 NVIDIA 커널 드라이버가 없고, PyTorch wheel에 포함된 CUDA 사용자 공간 라이브러리만 들어 있습니다.
 
 ## QEMU와 Cloud Hypervisor의 자원 예약량
 
@@ -96,20 +100,22 @@ Kata의 Go 런타임에는 Cloud Hypervisor VM을 띄우기 전에 VFIO 장치�
 
 `kata-qemu-nvidia-gpu`의 VM 크기는 `default_memory` 8192 MiB에 컨테이너 limit을 더한 값입니다. VFIO type1은 guest RAM 전체를 pin하므로 메모리를 overcommit할 수 없습니다. 이 저장소의 프로필은 T4 pod마다 8 CPU, 16 GiB를 할당합니다. 8 x (16 + 10) GiB = 208 GiB이므로 `g4dn.metal`의 384 GiB 안에 들어갑니다.
 
-## 격리 강도와 남는 위험
+## 런타임별 격리 범위와 한계
 
-| 런타임 | 신뢰할 수 없는 코드와 host 사이 | 남는 위험 | 이 저장소의 보완 |
+<span id="격리-강도와-남는-위험"></span>
+
+| 런타임 | 제출 코드와 호스트를 분리하는 방식 | 격리 후에도 주의할 점 | 실습의 보완 조치 |
 |---|---|---|---|
 | runc | host kernel과 드라이버를 공유 | kernel이나 드라이버 취약점이 그대로 노출 | 샌드박스에 쓰지 않음 |
 | gVisor + nvproxy | syscall은 Sentry, GPU는 ioctl allowlist | VM 경계보다 약함(표 아래 목록) | pod마다 GPU 1개(time-sharing 없음), 노드당 샌드박스 1개, egress 차단을 확인한 뒤 Ready, node guard iptables |
 | Kata + VFIO | VM 경계 + IOMMU | hypervisor와 GPU 장치 자체(표 아래 목록) | v2는 200회 평가 후 pod를 draining으로 바꾸고, Production gateway의 recycler가 그 pod를 삭제하고 새 pod(Kata에서는 새 VM)로 교체 |
 | Kata (CPU 전용) | VM 경계 | hypervisor | 같은 네트워크 통제 |
 
-- **gVisor + nvproxy의 남는 위험**: gVisor 문서 기준 nvproxy는 "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves"이고 "no validation of things like DMA buffers"입니다.
-- **Kata + VFIO의 남는 위험**:
-    - DMA는 IOMMU가 VM 안으로 제한합니다(unsafe noiommu 모드는 켜지 않음).
-    - vfio-pci는 해제 시 function(또는 bus)을 reset하며, T4는 `reset_method=bus`로 보고됩니다(제3자 보고, NVIDIA 보증 아님).
-    - T4에는 confidential computing이 없습니다.
+- **gVisor + nvproxy에서 호스트 드라이버를 공유할 때 주의할 점** gVisor 문서는 NVIDIA 드라이버 자체의 취약점을 완화하는 데에는 nvproxy의 효과가 제한적이라고 설명합니다("much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves"). DMA 버퍼 등도 검증하지 않습니다("no validation of things like DMA buffers").
+- **Kata + VFIO로 GPU를 할당할 때 주의할 점**
+    - IOMMU는 DMA로 접근할 수 있는 메모리를 해당 VM 안으로 제한합니다(unsafe noiommu 모드는 켜지 않음).
+    - vfio-pci는 장치를 해제할 때 function 또는 bus를 초기화합니다. T4에서 `reset_method=bus`가 나타났다는 제3자 보고가 있지만 NVIDIA가 보증한 동작은 아닙니다.
+    - T4는 confidential computing을 지원하지 않습니다.
 
 GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권고합니다. 보안 경계 전체와 위협 모델은 [Production 02 보안](../production/02_security.md)에서 다룹니다.
 
@@ -117,7 +123,7 @@ GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권�
 
 - **T4 on gVisor:** 위 AMI 조건 때문에 검증하지 않은 조합입니다.
 - **Kata + GPU on `g4dn.metal`:** upstream에서 검증되지 않은 구성입니다. NVIDIA CI는 A100과 H100을 테스트하고 T4는 테스트하지 않습니다. NVIDIA가 검증한 EKS 구성은 Ubuntu 기반입니다(AL2023 없음).
-- **HyperPod 노드의 Kata CPU:** 불가로 판단하지만 직접 확인하지 않았습니다.
+- **HyperPod 노드의 Kata CPU:** 직접 확인하지는 않았으나 이 구성에서는 실행할 수 없을 것으로 판단했습니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

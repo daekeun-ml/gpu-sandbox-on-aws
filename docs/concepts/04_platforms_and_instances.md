@@ -1,13 +1,13 @@
 # 플랫폼과 인스턴스 선택
 
 !!! info "TL;DR"
-    trainer는 모델을 학습시키고 샌드박스는 모델의 답을 실행해 채점합니다. 두 역할의 노드는 따로 고를 수 있습니다. HyperPod가 필요한지 판단할 때는 먼저 trainer의 복구 요구를 보세요.
+    trainer는 모델을 학습시키고 샌드박스는 모델의 답을 실행해 채점합니다. 두 역할의 노드는 따로 고를 수 있습니다. HyperPod가 필요한지 판단하려면 먼저 학습 노드에 장애가 났을 때 어떻게 복구할지 살펴보세요.
 
 ## 한 클러스터에서 역할을 나누는 이유
 
 학습과 채점에서 GPU가 하는 일이 다릅니다. trainer는 모델을 메모리에 올려 생성과 업데이트를 반복합니다. 샌드박스는 제출물을 실행합니다. 여기서는 작업의 격리 방식과 측정할 GPU가 중요합니다. 노드를 분리하면 학습 쪽을 바꿀 때 샌드박스 런타임도 함께 바꿀 필요가 줄어듭니다.
 
-**Amazon EKS**는 Kubernetes 클러스터를 운영하는 서비스입니다. **EC2** 인스턴스는 그 클러스터에 연결하는 실행 노드로 쓸 수 있습니다. 이 가이드에서 **HyperPod**는 학습용 노드를 관리하며, B1에서는 그 노드가 기존 EKS 클러스터에 합류합니다. trainer와 샌드박스는 같은 클러스터에서 통신하면서 서로 다른 종류의 노드에서 실행됩니다.
+**Amazon EKS**는 Kubernetes 클러스터를 운영하는 서비스입니다. **EC2** 인스턴스는 그 클러스터에 연결하는 실행 노드로 쓸 수 있습니다. 이 가이드에서 **HyperPod**는 학습용 노드를 관리하며, B1에서는 해당 노드를 기존 EKS 클러스터에 등록합니다. trainer와 샌드박스는 같은 클러스터에서 통신하면서 서로 다른 종류의 노드에서 실행됩니다.
 
 ## 시나리오 A, B1, B2, C 비교
 
@@ -84,7 +84,7 @@ B1 실습에서 `ml.g5.2xlarge`의 A10G 한 장은 모델의 답을 생성하고
 - **그 밖의 기능:** CLI `hyp`(`pip install sagemaker-hyperpod`), task governance와 observability add-on, Karpenter 기반 autoscaling(`AutoScalerType: Karpenter`, `NodeProvisioningMode: Continuous`)이 있습니다.
 
 !!! warning "training operator와 Kubernetes 버전"
-    이 저장소는 Kubernetes 1.36을 씁니다. HyperPod의 EKS 지원 범위에 포함되는 버전입니다. 클러스터를 만들기 전에 아래 읽기 전용 명령으로 add-on 호환 버전을 확인하세요.
+    실습 환경의 Kubernetes 버전은 1.36입니다. HyperPod는 이 버전의 EKS를 지원합니다. 클러스터를 만들기 전에 아래 읽기 전용 명령으로 add-on 호환 버전을 확인하세요.
 
     ```bash
     aws eks describe-addon-versions \
@@ -94,17 +94,17 @@ B1 실습에서 `ml.g5.2xlarge`의 A10G 한 장은 모델의 답을 생성하고
 
     **확인할 것:**
 
-    - **JSON의 `addons[0].addonVersions` 목록에 버전이 하나 이상 있으면**: 1.36과 호환되는 add-on이 있다는 뜻입니다.
+    - **JSON의 `addons[0].addonVersions` 목록**: 여기에 나온 버전이 1.36과 호환되는 add-on 버전입니다.
     - **목록이 비어 있으면**: `K8S_VERSION`을 낮추는 것을 검토하세요.
 
 ??? info "HyperPod (EKS) 사전 요구 사항 요약"
     - EKS 인증 모드 `API` 또는 `API_AND_CONFIG_MAP`, VPC CNI 1.18.3 이상, private subnet이 필요합니다.
     - **API로 클러스터를 만들 때**: health monitoring agent, deep health check RBAC, job auto-restart, MPI operator, nvidia-device-plugin, Neuron과 EFA plugin, Kueue를 설치하는 HyperPod 의존성 Helm 차트(`sagemaker-hyperpod-cli`의 `helm_chart/HyperPodHelmChart`)를 먼저 설치해야 합니다.
-    - **IAM role**: HyperPod 노드와 EKS 노드는 서로 다른 IAM role을 씁니다. execution role에는 `AmazonSageMakerClusterInstanceRolePolicy`와 EC2 ENI, ECR inline policy가 연결됩니다.
+    - **IAM role**: HyperPod 노드와 EKS 노드에는 서로 다른 IAM role을 연결합니다. execution role에는 `AmazonSageMakerClusterInstanceRolePolicy`와 EC2 ENI, ECR inline policy가 연결됩니다.
 
 ## HyperPod가 샌드박스 계층에 제공하지 않는 기능
 
-| 항목 | 사실 | 이 저장소의 대응 |
+| 항목 | HyperPod에서 고려할 조건 | 이 저장소의 대응 |
 |---|---|---|
 | 샌드박스 런타임 | 기본 이미지의 드라이버가 gVisor 버전과 호환돼야 nvproxy로 GPU를 사용할 수 있습니다. Kata GPU는 이 HyperPod 인스턴스에서 필요한 가상화 장치를 제공받지 못합니다 | B1은 EC2에 gVisor를 배치합니다. B2는 HyperPod `sandbox` 그룹의 드라이버를 맞춥니다 |
 | 전용 노드 taint | "You cannot add custom taints to nodes in instance groups with DeepHealthChecks turned on." | 샌드박스 노드는 EC2 노드 그룹에서 `gpusandbox/role` taint로 분리 |

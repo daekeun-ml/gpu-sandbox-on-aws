@@ -1,10 +1,10 @@
 # 99 정리
 
-HyperPod 마법사로 만드는 관리형 B2는 [B2 전용 절차](07_hyperpod_b2.md#cleanup)를 따르세요. 이 페이지의 CDK 명령은 A, B1, C와 기존 custom AMI 경로에 적용됩니다.
+HyperPod 마법사로 관리형 B2를 만들었다면 [B2 전용 절차](07_hyperpod_b2.md#cleanup)에 따라 정리하세요. 이 페이지의 CDK 명령은 시나리오 A, B1, C 또는 기존 custom AMI로 만든 환경에서 실행합니다.
 
 먼저 `aws sts get-caller-identity`의 계정과 `scripts/config.env`의 `AWS_REGION`, `CLUSTER_NAME`을 확인하세요. 현재 `kubectl` context도 지울 실습 클러스터와 일치해야 합니다. 터널은 열어 둡니다. 사용한 리소스에 맞는 순서로 진행하세요.
 
-1. **에피소드를 실행했다면** 남은 [claim과 warm pool](#0-agent-sandbox-확장-쓴-경우만)을 먼저 정리하세요. **HyperPod를 썼다면** EKS가 있는 동안 [HyperPod 클러스터](#1-hyperpod-먼저-시나리오-b)를 삭제합니다.
+1. **에피소드를 실행했다면** 남은 [claim과 warm pool](#0-agent-sandbox-확장-쓴-경우만)을 먼저 정리하세요. **HyperPod를 연결했다면** EKS를 삭제하기 전에 [HyperPod 클러스터](#1-hyperpod-먼저-시나리오-b)부터 삭제하세요.
 2. [EKS 스택 삭제](#2-eks-클러스터cdk-스택와-나머지)에서 이미지를 남길지 함께 지울지 선택하세요. 직접 배포한 [데모 사이트](#데모-사이트-09를-만든-경우)는 별도 스택입니다.
 3. [남은 리소스 확인](#3-남은-리소스-확인)에서 실습 태그가 붙은 인스턴스와 스택 밖에 만든 리소스를 살피세요. 다음 실습을 위해 [노드 수만 0으로 줄이면](#일시-정지-노드-그룹을-0으로-줄이기) EKS와 NAT gateway 요금은 계속 나옵니다.
 
@@ -60,7 +60,7 @@ CDK 스택 삭제와 HyperPod 삭제 모두 소요 시간은 측정하지 않았
 
 `08_cleanup.sh`는 `sandbox` namespace의 Deployment와 Service만 먼저 삭제하고 Agent Sandbox 객체는 삭제하지 않습니다. 그러니 클러스터를 삭제하기 전에 이 객체를 먼저 삭제해 GPU를 반환하게 하세요.
 
-멀티턴 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes`)은 끝날 때 자신이 만든 claim을 삭제합니다. Job pod가 claim을 삭제하기 전에 종료되면, 스크립트가 Job이 끝난 뒤 run label(`gpusandbox/run=episodes-<epoch>`)로 남은 claim을 지웁니다. 그래도 남은 claim에는 이 label이 붙어 있으므로 `kubectl -n sandbox get sandboxclaims -L gpusandbox/run`으로 어느 실행에서 남은 claim인지 확인할 수 있습니다.
+멀티턴 에피소드(`scripts/extensions/agent_sandbox.sh episodes`)가 끝나면 Job pod가 해당 에피소드의 claim을 삭제합니다. pod가 먼저 종료된 경우에는 스크립트가 Job이 끝난 뒤 run label(`gpusandbox/run=episodes-<epoch>`)로 남은 claim을 찾아 삭제합니다. 그래도 claim이 남았다면 `kubectl -n sandbox get sandboxclaims -L gpusandbox/run`으로 어느 실행에서 만들었는지 확인하세요.
 
 아래 명령은 남은 claim, warm pool, template을 이 순서로 모두 삭제합니다.
 
@@ -164,9 +164,9 @@ scripts/hyperpod/delete.sh
 | 순서 | 프롬프트 | 입력할 단어 | 지우는 것 |
 |---|---|---|---|
 | 1 | `This deletes EKS cluster ${CLUSTER_NAME} in ${AWS_REGION} and its node groups.` | 클러스터 이름 (기본 `gpu-sandbox`). 이 단계에서 한 번만 묻습니다 | `cdk/destroy.sh --yes`를 실행합니다(표 아래 목록) |
-| 2 | `Deregister AMI ${KATA_IOMMU_AMI_ID} and delete its snapshot?` | `ami` | `config.env`에 `KATA_IOMMU_AMI_ID`가 있을 때만: AMI 등록 해제와 첫 번째 block device의 snapshot 삭제 |
-| 3 | `Deregister the B2 HyperPod AMI ${HYPERPOD_B2_AMI_ID} and delete its snapshot?` | `ami` | `config.env`에 `HYPERPOD_B2_AMI_ID`가 있을 때만: B2 custom AMI 등록 해제와 snapshot 삭제. HyperPod 클러스터를 먼저 지운 뒤에 실행하세요 |
-| 4 | `Delete the ECR repositories ${ECR_REPO_PREFIX}/{sandbox,trainer,control} and all images?` | `images` | `--images`일 때만: 세 이름의 리포지토리를 차례로 `--force`로 삭제. 없는 리포지토리는 오류를 출력하고 넘어갑니다 |
+| 2 | `Deregister AMI ${KATA_IOMMU_AMI_ID} and delete its snapshot?` | `ami` | `config.env`에 `KATA_IOMMU_AMI_ID`가 있을 때만 이 단계를 진행해 AMI 등록을 해제하고 첫 번째 block device의 snapshot을 삭제합니다 |
+| 3 | `Deregister the B2 HyperPod AMI ${HYPERPOD_B2_AMI_ID} and delete its snapshot?` | `ami` | `config.env`에 `HYPERPOD_B2_AMI_ID`가 있을 때만 이 단계를 진행해 B2 custom AMI 등록을 해제하고 snapshot을 삭제합니다. 이 단계 전에 HyperPod 클러스터를 삭제하세요 |
+| 4 | `Delete the ECR repositories ${ECR_REPO_PREFIX}/{sandbox,trainer,control} and all images?` | `images` | `--images`를 지정했을 때만 세 리포지토리를 차례로 `--force`로 삭제합니다. 해당 이름의 리포지토리가 없으면 오류를 표시한 뒤 다음 리포지토리로 넘어갑니다 |
 | 끝 | 없음 | | `project=gpu-sandbox-on-aws` 태그가 붙은 pending, running, stopping, stopped 인스턴스 목록 |
 
 1단계의 `cdk/destroy.sh --yes`는 다음 순서로 지웁니다.
@@ -247,7 +247,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
     - KMS 키, CloudWatch 로그, ECR 저장소, AMI snapshot, S3 버킷
     - 데모의 CloudFront와 S3
 
-    HyperPod 인스턴스도 이 명령으로는 종료되지 않습니다. `CreateCluster` API는 인스턴스 그룹의 `InstanceCount` 최솟값으로 0을 허용합니다. 하지만 이 저장소는 그 방법을 스크립트로 제공하거나 검증하지 않았으므로, HyperPod를 쓰지 않을 때는 `hyperpod/delete.sh`로 삭제하기를 권합니다.
+    HyperPod 인스턴스도 이 명령으로는 종료되지 않습니다. `CreateCluster` API에서는 인스턴스 그룹의 `InstanceCount`를 0으로 지정할 수 있습니다. 이 저장소에서 해당 설정을 검증하거나 스크립트로 구현하지는 않았습니다. HyperPod를 더 이상 사용하지 않을 때는 `hyperpod/delete.sh`로 클러스터를 삭제하는 편을 권합니다.
 
 </details>
 
@@ -320,13 +320,13 @@ aws sagemaker list-clusters --region "$AWS_REGION" \
 
 CDK 스택이 `DELETE_FAILED`로 남았다면 NAT gateway와 Elastic IP도 남아 요금이 계속 발생할 수 있습니다. CloudFormation 콘솔에서 실패 원인을 확인한 뒤 `cdk/destroy.sh`를 다시 실행하세요.
 
-AMI를 수동으로 삭제할 때는 snapshot도 삭제해야 저장 요금이 더 발생하지 않습니다. EC2 문서에 따르면 AMI를 등록 해제해도 기본적으로 snapshot은 남습니다. 아래 명령은 AMI와 snapshot을 한 번에 삭제하므로, `<ami-id>`가 맞는지 위 표의 조회 결과로 확인한 뒤 실행하세요.
+EC2 문서에 따르면 AMI 등록을 해제해도 기본적으로 snapshot은 남아 저장 요금이 계속 발생합니다. 아래 명령은 AMI 등록을 해제하면서 snapshot도 삭제합니다. 실행 전에 `<ami-id>`가 위 표에서 조회한 ID와 같은지 확인하세요.
 
 ```bash
 aws ec2 deregister-image --region "$AWS_REGION" --image-id <ami-id> --delete-associated-snapshots
 ```
 
-**확인할 것:** 위 표의 AMI와 snapshot 조회 명령이 빈 결과를 반환합니다.
+**삭제 확인:** 위 표의 조회 명령을 다시 실행해 AMI와 snapshot이 더 이상 목록에 나오지 않는지 확인하세요.
 
 로컬에 남는 파일과 설정(`bench-*.jsonl`, kubeconfig의 클러스터 항목과 context `<CLUSTER_NAME>-tunnel`)은 과금과 관계가 없으니 필요하면 정리하세요.
 

@@ -4,13 +4,13 @@
 
 ## GPU 커널과 드라이버
 
-**GPU 커널**은 GPU에서 실행되는 계산 코드입니다. [앞 편](02_container_vs_sandbox.md)에서 파일 접근을 처리하던 운영체제 커널과는 이름만 같습니다. Python 프로그램이 GPU에서 계산을 요청하면 **GPU 드라이버**가 소프트웨어와 GPU 사이에서 그 일을 전달합니다.
+**GPU 커널**은 GPU에서 실행되는 계산 코드입니다. [앞 편](02_container_vs_sandbox.md)에서 파일 접근을 처리하던 운영체제 커널과는 이름만 같습니다. Python 프로그램이 GPU에 계산을 요청하면 **GPU 드라이버**가 해당 요청을 장치에 전달합니다.
 
 두 구현이 같은 정답을 냈다고 가정해 봅시다. A10G에서 기존 코드가 4 ms, 새 코드가 2 ms 걸렸다면 그 조건에서 새 코드가 2배 빠릅니다. 배포할 GPU가 L4라면 같은 입력으로 두 구현을 L4에서 다시 측정합니다. GPU에 따라 계산 속도와 메모리 접근 속도가 달라져 두 구현의 순위도 바뀔 수 있기 때문입니다.
 
 ## EKS에서 샌드박스 구성 고르기
 
-EKS에서 Kubernetes가 pod를 실행할 노드를 고릅니다. 런타임으로 **Kata**를 선택하면 Kata는 그 노드에서 pod의 컨테이너를 가상 머신(VM) 안에서 실행합니다. VM을 띄우는 프로그램을 **hypervisor**라고 합니다. Kata는 이 역할을 QEMU나 Cloud Hypervisor에 맡깁니다.
+EKS에서는 Kubernetes가 pod를 실행할 노드를 고릅니다. **Kata**를 런타임으로 지정하면 그 노드에 가상 머신(VM)을 띄우고 그 안에서 pod의 컨테이너를 실행합니다. VM을 띄우는 프로그램을 **hypervisor**라고 합니다. Kata는 이 역할을 QEMU나 Cloud Hypervisor에 맡깁니다.
 
 | 구성 | 이 저장소에서 실습하는 내용 |
 |---|---|
@@ -40,10 +40,10 @@ Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지
 
 ## GPU 한 장에 답 하나를 보내면
 
-`g5.xlarge`에서는 gVisor가 GPU 장치 요청을 검사하고 노드의 NVIDIA 드라이버에 전달합니다. 이때 확인할 것은 노드의 드라이버 버전과 `nvproxy`의 지원 목록입니다. `g4dn.metal`에서 Kata + QEMU를 쓰면 물리 GPU 한 장을 게스트 VM에 연결하고, 게스트 안의 드라이버가 연산을 실행합니다. 이때는 VM 내부에서 어떤 GPU가 보이고 첫 연산이 끝나는지 확인합니다. IOMMU는 그 장치가 접근할 수 있는 메모리 주소 범위를 제한합니다.
+`g5.xlarge`에서는 gVisor가 GPU 장치 요청을 검사하고 노드의 NVIDIA 드라이버에 전달합니다. 노드의 드라이버 버전이 `nvproxy`의 지원 목록에 있는지 확인하세요. `g4dn.metal`에서 Kata + QEMU를 쓰면 물리 GPU 한 장을 게스트 VM에 연결하고, 게스트 안의 드라이버가 연산을 실행합니다. VM에서 어떤 GPU가 보이는지, 그 GPU에서 첫 연산이 끝나는지 확인합니다. IOMMU는 그 장치가 접근할 수 있는 메모리 주소 범위를 제한합니다.
 
 ![Kata 게스트 안에서 확인한 T4와 GPU 연산 결과](../images/terminal/kata-gpu-replay.png)
 
-같은 커널을 두 pool에 보내도 처리량은 달라질 수 있습니다. EKS 실습에서 gVisor pool은 A10G 두 장으로 초당 0.198건, Kata QEMU pool은 T4 네 장으로 초당 0.349건을 처리했습니다. 뒤쪽 pool에는 동시에 채점할 자리가 두 배 있었습니다. **코드 자체의 속도**를 비교하려면 같은 GPU에서 기준 구현과 제출 코드를 돌려 보고, **pool 용량**을 정하려면 전체 처리량과 Ready pod 수를 함께 보세요. [측정 조건과 원본 결과](../handson/08_benchmark.md#runtime-results)
+같은 커널을 두 pool에 보내도 처리량은 달라질 수 있습니다. EKS 실습에서 gVisor pool은 A10G 두 장으로 초당 0.198건, Kata QEMU pool은 T4 네 장으로 초당 0.349건을 처리했습니다. Kata QEMU pool은 gVisor pool보다 동시에 채점할 수 있는 답안 수가 두 배였습니다. **코드 자체의 속도**를 비교하려면 같은 GPU에서 기준 구현과 제출 코드를 돌려 보고, **pool 용량**을 정하려면 전체 처리량과 Ready pod 수를 함께 보세요. [측정 조건과 원본 결과](../handson/08_benchmark.md#runtime-results)
 
 다른 GPU 작업의 예는 [GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), 노드별 GPU 연결 조건은 [격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 볼 수 있습니다. [다음 편](04_rl_and_sandbox.md)에서는 실행 결과를 학습 점수로 바꿉니다.

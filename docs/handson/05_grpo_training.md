@@ -3,16 +3,16 @@
 모델이 같은 문제에 답을 여러 개 내면 GRPO는 그 답들의 점수를 비교해 모델을 업데이트합니다. [04편](04_sandbox_pools.md)에서 검증한 `gvisor/v1` pool이 이번에는 모델이 막 작성한 코드를 채점합니다.
 
 1. [trainer 노드와 이미지 확인](#시작-전-확인) 후 [학습 Job 하나를 제출](#실행)하세요. HyperPod로 학습하려면 [07편](07_hyperpod.md)에서 시작합니다.
-2. [로그](#로그-읽는-법)에서 `routing`은 pool 선택, `batch`는 코드 채점, `train`은 모델 업데이트를 보여 줍니다. 첫 `batch`의 판정과 다음 `train` 줄을 함께 읽으세요.
+2. [로그](#로그-읽는-법)에서 `routing` 줄에는 선택한 pool, `batch` 줄에는 코드 채점 결과, `train` 줄에는 모델 업데이트 기록이 나옵니다. 첫 `batch`의 판정과 다음 `train` 줄을 함께 읽으세요.
 3. 학습 중 pool을 바꿔 보려면 Job이 진행되는 동안 다른 터미널에서 [06편](06_sandbox_update.md)을 여세요. 이번에는 학습만 한다면 [완료된 Job과 채점 건수](#trainer-complete)를 확인합니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
-    - **GRPO**: prompt 하나에 completion을 여러 개(group) 생성하고, group 평균보다 reward가 높은 completion이 더 자주 생성되도록 학습하는 RL 알고리즘입니다.
-    - **on-policy, strictly on-policy**: 현재 policy가 방금 생성한 데이터로만 학습하는 방식이고, strictly는 생성한 batch를 optimizer step 한 번에만 쓰고 버린다는 뜻입니다.
+    - **GRPO**: 모델이 prompt 하나에 생성한 여러 completion을 한 묶음(group)으로 비교하는 RL 알고리즘입니다. group 평균보다 reward가 높은 completion을 더 자주 생성하도록 모델을 학습합니다.
+    - **on-policy, strictly on-policy**: on-policy에서는 현재 policy가 방금 생성한 데이터로만 학습합니다. strictly on-policy에서는 생성한 batch로 optimizer step을 한 번만 수행한 뒤 그 batch를 버립니다.
     - **rollout, completion, group**: 모델이 prompt에 답을 생성하는 과정, 그렇게 나온 답 하나, 같은 prompt에서 나온 답 묶음(여기서는 8개)입니다.
     - **advantage**: 한 completion의 reward가 group 평균보다 얼마나 높은지를 나타내는 값입니다.
     - **LoRA**: 모델 가중치 전체 대신 작은 어댑터 행렬만 학습하는 방법입니다. 메모리 사용량이 크게 줄어듭니다.
-    - **vLLM colocate, sleep mode**: 생성 엔진 vLLM을 trainer와 같은 GPU에서 실행하는 모드와, 학습하는 동안 vLLM이 쓰던 GPU 메모리를 잠시 해제하는 기능입니다.
+    - **vLLM colocate, sleep mode**: 생성 엔진 vLLM을 trainer와 같은 GPU에서 실행하는 모드를 colocate라고 합니다. sleep mode는 학습하는 동안 vLLM이 점유한 GPU 메모리를 잠시 해제하는 기능입니다.
     - **reference model, KL**: 학습 중인 모델이 학습 전 모델과 얼마나 달라졌는지 측정할 때 쓰는 기준 모델과, 그 차이를 나타내는 값입니다. 여기서는 `beta`가 0이라 쓰지 않습니다.
     - **importance sampling 보정**: 생성 엔진과 학습 모델의 수치 차이로 생기는 분포 차이를 확률 비율로 보정하는 방법입니다.
     - **Job, emptyDir**: 작업이 끝나면 완료 상태가 되는 Kubernetes 리소스와, pod가 삭제되면 함께 삭제되는 임시 볼륨입니다.
@@ -112,7 +112,7 @@ Job이 `Complete`로 끝났습니다. trainer가 기록한 배치는 16개, 채�
 
 `wrong_answer`가 한 번 나왔다면 채점기가 기준 답과 다른 출력을 찾아낸 것입니다. `sandbox_error`는 그 답을 채점하지 못했다는 뜻이라 이 실습의 GRPO는 해당 답을 그룹 평균에서 뺍니다. 반복되면 [pool 검증](04_sandbox_pools.md)으로 돌아가세요.
 
-`routing`은 사용할 pool을 읽었다는 신호입니다. 그 뒤 `reward_batch`의 판정과 optimizer step을 함께 확인하세요. 샌드박스 요청이 모두 `sandbox_error`라면 로그가 찍혀도 채점 경로를 점검해야 합니다.
+`routing` 로그에서 trainer가 어느 pool로 채점을 요청할지 확인하세요. 그 뒤 `reward_batch`의 판정과 optimizer step을 함께 확인하세요. 샌드박스 요청이 모두 `sandbox_error`라면 로그가 찍혀도 채점 경로를 점검해야 합니다.
 
 로그에는 두 종류의 줄이 함께 출력됩니다. 첫째는 TRL이 step마다 출력하는 Python dict입니다(`loss` 키가 있어 스크립트 필터를 통과).
 
@@ -173,7 +173,7 @@ completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라
 | 2 | `row_softmax`, `rms_norm`, `layer_norm` |
 | 3 (기본 제외) | `matmul_bias_relu` (float16) |
 
-tasks 모듈 주석은 level 0을 작은 모델도 대부분 pool 수 있는 sanity level로 설명합니다.
+tasks 모듈 주석에 따르면 level 0은 기본 동작을 점검하는 단계입니다. 이 단계의 문제는 작은 모델도 대체로 풀 수 있습니다.
 
 - **level 0**: 0보다 큰 reward는 level 0에서 먼저 나올 가능성이 큽니다(추론).
 - **level 2**: 정답 커널이 드물어 reward가 희소하므로 `frac_reward_zero_std`가 높을 수 있습니다.
@@ -216,7 +216,7 @@ OOM이나 첫 로그가 나오지 않는 경우는 [학습 문제 해결](../ref
 - **routing ConfigMap 마운트**: [06](06_sandbox_update.md)의 버전 전환을 실행 중인 pod에 반영하려면 디렉터리로 마운트해야 합니다.
 
 !!! note "학습 결과 보존"
-    LoRA adapter와 `sandbox_metrics.jsonl`은 emptyDir에 저장되므로, 컨테이너가 종료되면 `kubectl cp`로도 가져올 수 없습니다(파이프라인 확인용이라 그대로 둠). JSON 이벤트는 stdout에도 출력되므로, Job이 삭제되기 전(완료 후 24시간)에 아래 명령으로 저장하세요. adapter를 보존하려면 `/outputs`에 공유 스토리지를 마운트하세요([Production 06 veRL로 확장](../production/06_scaling_with_verl.md)).
+    이 실습은 학습 파이프라인을 확인하기 위한 예제여서 LoRA adapter와 `sandbox_metrics.jsonl`을 emptyDir에 저장합니다. 컨테이너가 종료되면 `kubectl cp`로도 가져올 수 없습니다. JSON 이벤트는 stdout에도 출력되므로, Job이 삭제되기 전(완료 후 24시간)에 아래 명령으로 저장하세요. adapter를 보존하려면 `/outputs`에 공유 스토리지를 마운트하세요([Production 06 veRL로 확장](../production/06_scaling_with_verl.md)).
 
     ```bash
     kubectl -n rl-trainer logs "job/grpo-<RUN_ID>" | grep '"event"' > grpo-events.jsonl
@@ -260,11 +260,11 @@ TRL은 generation batch가 `num_generations`로 나누어떨어지지 않으면 
     - **`LoraConfig`**: `--lora-r`과 `--lora-alpha`가 설정합니다.
     - **채점 함수(`KernelRewards`)**: `--allow-torch-only`와 `--runtime`이 설정합니다.
 
-아래 표의 항목은 GPU 학습 경로에서 따로 지정하지 않아 TRL 기본값을 씁니다. 이 기본값은 로컬 TRL 1.18.0의 `GRPOConfig`로 확인했으므로, TRL 버전을 바꾸면 다시 확인하세요.
+GPU 학습 설정에서는 아래 항목을 따로 지정하지 않으므로 TRL 기본값이 적용됩니다. 이 기본값은 로컬 TRL 1.18.0의 `GRPOConfig`로 확인했으므로, TRL 버전을 바꾸면 다시 확인하세요.
 
 | TRL 기본값 | 값 | 의미 |
 |---|---|---|
-| `steps_per_generation`, `num_iterations` | `gradient_accumulation_steps`, `1` | 생성한 batch는 optimizer step 한 번에만 씁니다 |
+| `steps_per_generation`, `num_iterations` | `gradient_accumulation_steps`, `1` | 생성한 batch마다 optimizer step을 한 번만 수행합니다 |
 | `beta` | `0.0` | reference model을 로드하지 않습니다 (KL 항 없음) |
 | `loss_type`, `scale_rewards` | `"dapo"`, `"group"` | group 안에서 reward를 정규화합니다 |
 | `vllm_importance_sampling_correction` | `True` | vLLM과 학습 모델의 수치 차이를 importance sampling으로 보정합니다 |
@@ -300,7 +300,7 @@ TRL은 generation batch가 `num_generations`로 나누어떨어지지 않으면 
 
     - **같은 pool에서는**: 샌드박스 평가가 completion마다 한 번만 실행됩니다.
     - **버전 전환 뒤 새 completion을 새 pool에서 채점할 때**: 같은 batch에 있는 이전 pool의 캐시 항목도 새 pool에서 다시 채점합니다.
-    - **batch 전체가 한 pool의 캐시에 있으면**: 샌드박스를 부르지 않고 그 pool의 결과를 씁니다.
+    - **batch 전체가 한 pool의 캐시에 있으면**: 샌드박스에 다시 요청하지 않고 해당 pool의 채점 결과를 재사용합니다.
 
     어느 경우든 한 batch는 한 버전으로 채점됩니다.
 
@@ -314,7 +314,7 @@ TRL은 generation batch가 `num_generations`로 나누어떨어지지 않으면 
     - **format**: 고른 코드가 파싱되고 최상위에 `ModelNew` 클래스가 있으면 1.0, 아니면 0.0입니다. 추출기는 다음 순서로 코드를 고릅니다.
         1. 여는 줄과 닫는 줄을 앞에서부터 차례로 짝지어 닫힌 코드 블록을 나눕니다.
         2. 언어 표시가 없거나 `python`, `py`, `python3`(대소문자 무관)인 블록만 후보로 삼습니다.
-        3. 후보 중 `class ModelNew` 문자열이 있는 마지막 블록을 고르고, 없으면 마지막 후보를 씁니다. 그래서 앞에 `bash`나 `text` 블록이 있어도 뒤의 Python 블록을 찾습니다.
+        3. `class ModelNew` 문자열이 있는 후보 중 마지막 블록을 고릅니다. 해당 문자열이 있는 블록이 없으면 마지막 후보를 선택합니다. 그래서 앞에 `bash`나 `text` 블록이 있어도 뒤의 Python 블록을 찾습니다.
 
         블록 하나만 채점하므로 prompt가 요구하는 대로 `ModelNew` 전체를 `python` 블록 하나에 넣어야 합니다.
 
@@ -393,7 +393,7 @@ sleep mode가 vLLM의 가중치와 cache를 해제해 확보한 메모리는 bac
 2. `--max-completion-length 512`: 잘림 비율(`completions/clipped_ratio`)이 함께 오르는지 확인합니다.
 3. `--vllm-gpu-memory-utilization 0.3`: KV cache가 줄어 생성이 느려질 수 있습니다.
 
-7B 모델은 bf16 가중치만 약 15 GB이고, colocate 모드에서는 학습 모델과 vLLM이 각각 가중치를 로드하므로 A10G 24 GB 한 장에는 들어가지 않을 것입니다(추론).
+7B 모델은 bf16 가중치만 약 15 GB이고, colocate 모드에서는 학습 모델과 vLLM이 각각 가중치를 로드하므로 A10G 24 GB 한 장에는 메모리가 부족할 것으로 보입니다(추론).
 
 </details>
 

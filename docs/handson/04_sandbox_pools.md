@@ -2,11 +2,11 @@
 
 <span id="04-샌드박스-풀-배포와-검증"></span>
 
-채점 pool은 같은 런타임과 버전으로 답안을 처리하는 pod 묶음입니다. [gVisor](02_gvisor.md)나 [Kata](03_kata.md)에서 실행 환경을 준비했다면, 이제 trainer가 보낸 답에 기대한 판정이 돌아오는지 확인하세요.
+채점 pool은 같은 런타임과 버전으로 답안을 처리하는 pod 묶음입니다. [gVisor](02_gvisor.md)나 [Kata](03_kata.md)에서 실행 환경을 준비했다면, trainer가 보낸 답안을 이 pool이 예상대로 채점하는지 확인하세요.
 
 1. [인증과 라우팅 준비](#네임스페이스-정책-인증-05_setup_namespaces_authsh)에서 trainer가 호출할 pool을 정합니다. EC2 gVisor의 기본값은 `gvisor/v1`입니다.
 2. [선택한 pool 배포](#샌드박스-pool-배포-06_deploy_sandboxessh) 후 pod의 `READY` 열을 봅니다. 요청을 받을 준비가 됐다는 표시입니다.
-3. [시험 답안으로 검증](#네-가지-검증-opsverifysh)하세요. 일부러 틀린 답에 `wrong_answer`가 돌아와도 예상과 일치하면 그 항목은 `PASS`입니다. 마지막 `verified` 줄까지 나오면 이 pool을 사용할 수 있습니다.
+3. [시험 답안으로 검증](#네-가지-검증-opsverifysh)하세요. 일부러 틀린 답안은 `wrong_answer`가 나와야 그 검사를 `PASS`합니다. 마지막 `verified` 줄까지 나오면 이 pool을 사용할 수 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **Pod Security (restricted, baseline)**: 네임스페이스 단위로 pod의 보안 설정 수준을 강제하는 Kubernetes 기능과, 가장 엄격한 수준(restricted) 및 기본 수준(baseline)입니다.
@@ -118,7 +118,7 @@ trainer는 이 ConfigMap을 디렉터리로 마운트합니다(subPath로 마운
 
 ??? note "trainer가 routing 표를 쓰는 방식"
     - 샌드박스에 채점을 보낼 때마다 routing 표의 snapshot을 만들고, 한 reward batch를 한 버전으로만 채점합니다.
-    - batch의 결과가 모두 한 pool의 캐시에 있으면 샌드박스를 부르지 않고 그 결과를 씁니다.
+    - 한 pool에서 채점한 결과가 batch 전체에 대해 캐시되어 있으면 샌드박스에 다시 요청하지 않고 그 결과를 재사용합니다.
 
 ## 샌드박스 인증 동작
 
@@ -158,7 +158,7 @@ sequenceDiagram
 
 !!! note "서명 키 교체"
     - **API server가 서명 키를 교체하면**: `scripts/ops/sync_jwks.sh`를 다시 실행하세요. production에서는 같은 작업을 CronJob(`python -m gpusandbox.tools sync-jwks`)으로 실행합니다([Production 02 보안](../production/02_security.md)).
-    - **로컬 smoke test용 `SANDBOX_AUTH_TEST_BYPASS=1`**: loopback에만 바인딩한 로컬 테스트에서만 쓰세요. 서버가 접속 주소를 검사하지는 않으며, 배포 매니페스트에는 이 변수가 없어 인증 검증을 그대로 씁니다.
+    - **로컬 smoke test용 `SANDBOX_AUTH_TEST_BYPASS=1`**: loopback에만 바인딩한 로컬 테스트에서만 쓰세요. 서버는 접속 주소를 검사하지 않습니다. 배포 매니페스트에는 이 변수가 없으므로 인증 검증이 그대로 적용됩니다.
 
 </details>
 
@@ -166,7 +166,7 @@ sequenceDiagram
 
 <span id="샌드박스-풀-배포-06_deploy_sandboxessh"></span>
 
-준비한 GPU 노드에 맞는 탭에서 pool 하나를 배포하세요. 마지막 인자 `[replicas]`를 생략하면 프로필의 기본 pod 수를 씁니다. 세 CPU pool의 이름과 배포 순서는 [CPU 전용 실습](10_cpu_only.md)에 있습니다.
+준비한 GPU 노드에 맞는 탭에서 pool 하나를 배포하세요. 마지막 인자 `[replicas]`를 생략하면 프로필에 지정된 수만큼 pod를 띄웁니다. 세 CPU pool의 이름과 배포 순서는 [CPU 전용 실습](10_cpu_only.md)에 있습니다.
 
 === "gVisor"
 
@@ -225,7 +225,7 @@ sandbox-gvisor-v1-xxxxxxxxxx-xxxxx   1/1     Running   0          3m    10.0.x.x
 
 | 버전 | `HARNESS_SEEDS` | `HARNESS_MAX_SPEEDUP` | `SANDBOX_MAX_EVALS` | 의미 |
 |---|---|---|---|---|
-| `v1` | 3 | 0 (상한 없음) | 0 (교체 안 함) | 첫 측정 계약 |
+| `v1` | 3 | 0 (상한 없음) | 0 (교체 안 함) | 최초 버전의 측정 기준 |
 | `v2` | 5 | 10 | 200 | 정확성 seed를 늘리고, speedup 상한과 pod당 평가 횟수 한도를 둠 |
 
 - **v2의 speedup 상한**: 10배를 넘는 speedup은 측정 exploit으로 보고 `implausible_speedup`을 기록한 뒤 1배로 채점합니다(속도 점수 0.5).
@@ -233,8 +233,8 @@ sandbox-gvisor-v1-xxxxxxxxxx-xxxxx   1/1     Running   0          3m    10.0.x.x
 
 입력 크기(`SANDBOX_SIZE`)는 프로필 종류에 따라 다릅니다.
 
-- **CPU 프로필**: Kata 리허설과 CPU 계층용이므로 작은 입력(`smoke`)을 씁니다.
-- **GPU 프로필**: 실행 시간을 의미 있게 측정할 수 있는 크기(`full`)를 씁니다.
+- **CPU 프로필**: Kata 사전 점검과 CPU 채점에서는 작은 입력(`smoke`)으로 실행합니다.
+- **GPU 프로필**: 실행 시간을 비교할 수 있도록 전체 크기의 입력(`full`)으로 실행합니다.
 
 학습 중에 v2로 교체하는 과정은 [06 학습 중 샌드박스 업데이트](06_sandbox_update.md)에서 설명합니다.
 
@@ -300,7 +300,7 @@ egress 점검은 대상마다 TCP 연결을 시도해 다음과 같이 판정합
 strict 모드(`NETWORK_POLICY_ENFORCING_MODE`)는 정책이 생기기 전까지 CoreDNS를 포함한 모든 pod의 트래픽을 차단합니다.
 
 ??? note "strict 모드 대신 standard 모드를 쓰는 이유"
-    이 때문에 이 저장소는 strict 모드 대신 standard 모드와 readiness 확인을 함께 씁니다.
+    이 때문에 이 저장소에서는 standard 모드에서 readiness를 별도로 확인합니다.
 
 pod는 아래 두 경우에 draining 상태가 됩니다. production에서는 gateway가 draining pod를 삭제하고, Deployment가 새 pod(Kata에서는 새 VM)를 만듭니다.
 
@@ -335,7 +335,7 @@ scripts/ops/verify.sh gvisor
 
 - **1번의 샌드박스 쪽 값**: gVisor는 Sentry 버전, Kata는 guest 커널입니다.
 - **2번의 S3 주소**: 샌드박스에는 DNS가 없으므로 S3 주소는 작업 PC에서 미리 조회해 전달합니다.
-- **3번의 probe Job**: control 이미지, SA `sandbox-probe`, label `gpusandbox/client=true`, audience 토큰을 씁니다.
+- **3번의 probe Job**: control 이미지로 실행됩니다. SA는 `sandbox-probe`, label은 `gpusandbox/client=true`이며 요청에는 audience 토큰을 붙입니다.
 
 golden 제출물은 다음과 같습니다.
 
@@ -345,7 +345,7 @@ golden 제출물은 다음과 같습니다.
 - 정확성 검사 뒤에만 틀리는 벤치마크 치팅(`wrong_answer`)
 - `/etc/hostname`을 읽는 코드(`policy_violation`)
 
-**확인할 것:** `gvisor` pool이라면 아래와 같은 형태로 끝납니다. speedup과 IP는 환경마다 다르며, 아래 값은 측정값이 아니라 출력 형태를 보여 주는 예시입니다.
+**확인할 것:** 다음은 `gvisor` pool의 마지막 출력 형식을 보여 주는 예시입니다. speedup과 IP 자리에는 실행 환경에 따라 다른 값이 표시됩니다.
 
 ```text
 [hh:mm:ss] 1) kernel inside sandbox-gvisor-v1-xxxxxxxxxx-xxxxx vs node ip-192-168-x-x.us-west-2.compute.internal
@@ -404,7 +404,7 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 ## 적용 범위와 한계
 
-- **로컬 테스트로 확인한 것:** 인증의 fail-closed 동작(잘못된 audience, 만료, 허용되지 않은 subject), egress 차단을 확인한 뒤에만 Ready가 되는 readiness, 두 CPU 서버를 대상으로 한 golden probe와 parity, 모든 프로필과 버전의 매니페스트 렌더링입니다.
+- **로컬 테스트:** audience가 잘못됐거나 토큰이 만료됐거나 subject가 허용되지 않으면 인증을 거부하는 fail-closed 동작을 확인했습니다. egress 차단을 확인한 뒤에만 Ready가 되는지도 점검했습니다. 두 CPU 서버에서 golden probe와 parity를 실행했고 모든 프로필과 버전의 매니페스트를 렌더링했습니다.
 - **실습 계정에서 확인한 것 (시나리오 A 클러스터):** `gvisor` pool(v1, replica 1개, `g5.xlarge`)에서 pool 검증(`scripts/ops/verify.sh`)이 통과했습니다. 노드 kubelet을 포함한 egress 대상 4개가 차단됐고, NetworkPolicy가 `default` 네임스페이스의 연결을 막았습니다.
 - **실습 계정에서 확인한 것 (Kata 클러스터):** `kata-qemu` GPU pool(`g4dn.metal`, pod 4개, `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`)과 CPU pool 세 개에서 pool 검증이 통과했습니다. 이미지가 캐시된 상태에서 `kata-qemu` pod 네 개가 생성부터 Ready까지 각각 30초, 30초, 31초, 36초 걸렸습니다([03](03_kata.md), [08](08_benchmark.md)).
 - **AWS에서 확인하지 않은 것:** 실험용 `kata-clh` GPU pool입니다(VM이 시작되지 않음, [03](03_kata.md)).

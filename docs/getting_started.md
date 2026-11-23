@@ -3,11 +3,11 @@
 CPU와 GPU 워커를 전부 HyperPod에 두는 B2를 실습하려면 [리전별 쿼터와 생성 절차](handson/07_hyperpod_b2.md)를 보세요.
 
 !!! info "TL;DR"
-    AWS 없이 로컬 CPU에서 파이프라인을 먼저 확인한 다음, `scripts/config.env`를 채우고 시나리오를 고릅니다.
+    AWS 계정 없이 로컬 CPU에서 채점 과정을 시험해 보고, `scripts/config.env`를 설정한 뒤 실습 시나리오를 고릅니다.
 
 ## GPU 노드를 띄우기 전에
 
-로컬 CPU 테스트로 설치와 채점을 먼저 확인하세요. 그다음 AWS 실습 경로를 고릅니다. 이미지 URI와 AMI ID는 앞 단계에서 만든 값을 사용합니다.
+AWS 실습을 시작하기 전에 로컬 CPU 테스트로 설치와 채점을 확인하세요. 이미지 URI와 AMI ID는 각각의 생성 단계에서 얻은 값을 입력합니다.
 
 ![a: GPU 노드를 시작한 뒤에야 import 오류나 설정 누락을 발견합니다. 오류를 고치고 다시 실행하는 동안에도 GPU 노드 요금이 계속 나갑니다. b: 먼저 로컬 CPU에서 pytest 110개와 GRPO dry run 2 step으로 파이프라인을 확인합니다(AWS 비용 없음). 다음으로 scripts/config.env를 채우고(그 단계에 필요한 값이 비었거나 __SET_ME__면 스크립트가 그 자리에서 멈춥니다), 경로(A, B1, B2, C, Production)를 고릅니다. GPU 노드는 그다음에 시작하므로 과금도 그때부터 시작됩니다.](images/figures/getting_started.ko.svg)
 
@@ -25,7 +25,7 @@ CPU와 GPU 워커를 전부 HyperPod에 두는 B2를 실습하려면 [리전별 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **샌드박스(sandbox)**: 신뢰할 수 없는 코드를 격리해서 실행하는 환경입니다. 이 저장소에서는 모델이 쓴 커널 코드를 실행해 채점하는 HTTP 서버를 말합니다.
     - **harness**: 후보 코드를 실행하고 정확성과 속도를 측정해 verdict(채점 결과)를 내리는 채점 프로그램입니다.
-    - **golden**: 기대 verdict가 미리 정해진 시험용 제출물입니다. 서버가 올바르게 채점하는지 확인할 때 씁니다.
+    - **golden**: 예상 verdict가 정해진 시험용 답안입니다. 서버의 판정을 예상 verdict와 비교해 채점이 올바른지 확인합니다.
     - **loopback**: 자기 컴퓨터 안에서만 접속할 수 있는 주소(`127.0.0.1`)입니다. 다른 컴퓨터에서는 이 주소로 접속할 수 없습니다.
     - **smoke run**: 본 실행 전에 파이프라인이 제대로 연결됐는지만 짧게 확인하는 실행입니다.
     - **GRPO**: 같은 prompt에 completion(모델이 생성한 답)을 여러 개 생성하고, 그 group 안에서 평균보다 나은 completion을 강화하는 RL 알고리즘입니다.
@@ -206,7 +206,7 @@ INFO:     Uvicorn running on http://127.0.0.1:18001 (Press CTRL+C to quit)
 
 두 경고는 로컬에서 실행할 때 정상적으로 나오는 메시지입니다. 서버는 기본으로 `127.0.0.1`에만 바인딩합니다(`SANDBOX_HOST`).
 
-??? note "클러스터에서의 bind와 접근 제한"
+??? note "클러스터에서 서버가 수신하는 주소와 접근 제한"
     클러스터에서는 pod 매니페스트가 `SANDBOX_HOST=0.0.0.0`을 설정합니다. trainer는 headless ClusterIP Service(가상 IP 없이 pod 주소를 DNS로 알려 줌)로 샌드박스 pod 주소를 조회하고, NetworkPolicy(pod 사이의 방화벽 규칙)는 trainer namespace에서 오는 연결만 허용합니다.
 
 **문제가 생기면:** `address already in use`는 다른 프로세스가 그 포트를 쓰고 있다는 뜻이니, 다른 포트(예: `18011`)로 바꾸고 4.2와 4.3의 주소도 맞추세요.
@@ -279,7 +279,7 @@ python rl/trl/train_grpo.py --dry-run \
 - `--output-dir`는 쓰기 가능한 경로여야 합니다(기본값 `/outputs/grpo`는 pod 기준).
 - `--allow-torch-only`는 Triton 커널이 없어도 정답이면 correctness 점수 1.0을 주는 옵션입니다. 끄면 PyTorch만 쓴 정답은 0.3을 받습니다. CPU에서는 Triton 커널을 실행할 수 없어서 이 dry run에서는 켭니다.
 - 로컬에서는 `SANDBOX_ADDRESS`에 쉼표로 나열한 두 서버 주소를 그대로 사용합니다. 클러스터 Job은 이 변수 대신 `SANDBOX_ROUTING_FILE`이 가리키는 routing 표(ConfigMap)에서 현재 pool의 Service 주소를 읽습니다.
-- LoRA는 모델 가중치 전체 대신 작은 어댑터 행렬만 학습하는 방법이고, trainer가 기본으로 씁니다.
+- trainer의 기본 학습 방식은 LoRA입니다. 모델 가중치 전체가 아니라 작은 어댑터 행렬만 학습합니다.
 
 **확인할 것:**
 
@@ -319,7 +319,7 @@ cp scripts/config.env.example scripts/config.env
 | 인스턴스 타입, 버전 고정 값 | 보통 그대로 | `GVISOR_RELEASE=20261109.0`, `KATA_VERSION=4.3.1`, `GPU_OPERATOR_VERSION=v26.7.2`, `NVIDIA_DEVICE_PLUGIN_VERSION=0.20.1` |
 
 - **`SCENARIO`를 덮어쓰는 옵션**: `--hyperpod`, `--hyperpod-b2`, `--cpu-only`입니다. 옵션으로 배포했다면 이 값을 배포한 시나리오로 바꿔 두거나, 노드 그룹을 추가하려고 다시 실행할 때도 같은 옵션을 붙이세요(다르면 `cdk/deploy.sh`가 멈춤).
-- **`ADMIN_PRINCIPAL_ARN`을 비우면**: `cdk/deploy.sh`가 현재 역할을 씁니다.
+- **`ADMIN_PRINCIPAL_ARN`을 비우면**: `cdk/deploy.sh`가 현재 역할을 선택합니다.
 - **역할에 path가 있으면**: `ADMIN_PRINCIPAL_ARN`을 직접 적으세요.
 
 !!! note "알아 두면 좋은 점"

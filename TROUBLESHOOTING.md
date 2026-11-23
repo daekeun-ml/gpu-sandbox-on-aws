@@ -2,7 +2,7 @@
 
 # 문제 해결
 
-화면에 나온 증상으로 찾아보세요. 로그를 더 확인해야 한다면 가이드북의 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)을 참고하세요.
+아래 표에서 화면에 나타난 증상을 찾으세요. 로그를 더 확인해야 한다면 가이드북의 [문제 해결](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/)을 참고하세요.
 
 | 증상 | 먼저 볼 곳 |
 |---|---|
@@ -14,11 +14,11 @@
 | `CUDA out of memory`, `sandbox_error` 반복 | [학습](#학습) |
 | `hyperpodrun` 누락, HyperPod 생성 실패 | [HyperPod](#hyperpod) |
 | 새 pool로 전환했는데 이전 버전으로 채점됨 | [버전 전환](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing) |
-| 정리 후에도 리소스나 요금이 남음 | [정리와 비용](#정리와-비용) |
+| 정리 후에도 리소스가 남아 있거나 요금이 계속 발생함 | [정리와 비용](#정리와-비용) |
 
 ## 먼저 확인할 것
 
-1. `kubectl` 연결 실패 시 A·B1·C는 `cdk/tunnel.sh`와 `<CLUSTER_NAME>-tunnel` 컨텍스트를 확인하세요. 관리형 B2는 [B2 접속 단계](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)에서 설정한 `$CLUSTER_NAME` 컨텍스트를 사용합니다.
+1. A·B1·C에서 `kubectl`이 연결되지 않으면 `cdk/tunnel.sh`와 `<CLUSTER_NAME>-tunnel` 컨텍스트를 확인하세요. 관리형 B2는 [B2 접속 단계](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)에서 설정한 `$CLUSTER_NAME` 컨텍스트를 사용합니다.
 2. 연결되면 아래 명령으로 pod 상태를 봅니다. `<pod>`에는 첫 명령에 나온 이름을 넣으세요.
 
 ```bash
@@ -27,7 +27,7 @@ kubectl -n sandbox describe pod <pod>
 kubectl -n sandbox logs <pod>
 ```
 
-- `Pending`이나 `ContainerCreating`이면 `describe`의 `Events`에서 스케줄링과 시작 실패 사유를 확인하세요.
+- `Pending`이나 `ContainerCreating`이면 `describe`의 `Events`에서 pod를 배치하거나 시작하지 못한 이유를 확인하세요.
 - `Running`인데 `0/1`이면 로그의 `device probe ok=`와 `egress is open`을 확인하세요. Ready가 되기 전에는 새 평가 요청을 받지 않습니다.
 - 학습이 진행 중이어도 채점이 실패할 수 있습니다. TRL은 `reward_batch`, veRL은 `reward_extra_info`에서 `sandbox_error`가 반복되는지 확인하세요.
 
@@ -35,7 +35,7 @@ kubectl -n sandbox logs <pod>
 
 - **`[error] set <이름> in scripts/config.env`**: 그 값이 비어 있거나 `__SET_ME__`가 남아 있습니다. 이미지 주소(`SANDBOX_IMAGE_URI` 등)는 `03_build_push_images.sh`가 마지막에 출력하는 `export` 줄을 붙여 넣으면 됩니다.
 - **`[error] missing tool: <도구>`**: 그 도구를 설치한 뒤 `scripts/01_check_prereqs.sh`를 다시 실행하세요.
-- **`03_build_push_images.sh`를 다시 실행했더니 push가 태그 중복으로 실패**: ECR 저장소는 같은 태그를 덮어쓰지 않습니다. `IMAGE_TAG`를 새 값으로 바꿔 다시 실행하고, 새로 출력된 주소로 `config.env`를 고치세요.
+- **`03_build_push_images.sh`를 다시 실행했더니 같은 태그가 있어 이미지를 push할 수 없음**: ECR 저장소는 같은 태그를 덮어쓰지 않습니다. `IMAGE_TAG`를 새 값으로 바꿔 다시 실행하고, 새로 출력된 주소로 `config.env`를 고치세요.
 - **이미지 빌드가 매우 느리거나 디스크가 부족**: arm64 PC에서 amd64 이미지를 만들면 에뮬레이션 때문에 느립니다. 디스크가 100 GB 이상인 x86_64 호스트에서 빌드하세요.
 
 자세히: [설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트)
@@ -84,7 +84,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 - **`scripts/kata/gpu_nodes.sh`가 `add KATA_IOMMU_AMI_ID and WITH_KATA_GPU=1 ...`로 끝남**: 정상입니다. 첫 실행은 AMI만 만듭니다. 출력된 `KATA_IOMMU_AMI_ID`를 `scripts/config.env`에 넣고 `WITH_KATA_GPU`를 `"1"`로 바꾼 뒤, `scripts/02_create_cluster.sh`와 `scripts/kata/gpu_nodes.sh`를 차례로 다시 실행하세요.
 - **`no passthrough GPUs advertised`**: IOMMU가 꺼져 있거나 GPU Operator가 노드를 준비하지 못했습니다. 먼저 `KATA_IOMMU_AMI_ID`가 이 저장소의 스크립트로 만든 AMI인지 확인하세요. AMI가 맞다면 노드의 `nvidia.com/gpu.workload.config=vm-passthrough` 라벨과 GPU Operator pod 상태를 확인하세요.
 - **Kata GPU pod가 `ContainerCreating`에 머물고 노드 로그에 `No available IOMMU models`**: 이전 AMI에서 `vfio_iommu_type1` 모듈이 로드되지 않은 경우입니다.
-    - **새 노드용**: 지금 스크립트로 AMI를 다시 만들어 `KATA_IOMMU_AMI_ID`를 바꾸고 `scripts/02_create_cluster.sh`를 다시 실행하세요.
+    - **새 노드를 만들 때**: 지금 스크립트로 AMI를 다시 만들어 `KATA_IOMMU_AMI_ID`를 바꾸고 `scripts/02_create_cluster.sh`를 다시 실행하세요.
     - **현재 노드에서는**: `modprobe vfio_iommu_type1`을 실행하세요. 재부팅하면 다시 실행해야 합니다.
 
 자세히: [Kata](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#kata)
@@ -96,7 +96,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 - **`06_deploy_sandboxes.sh`가 `exceeded its progress deadline`으로 실패**: pod의 STATUS부터 보세요.
     - **`Pending`이나 `ContainerCreating`이면**: `kubectl -n sandbox describe pod <pod>`의 Events를 확인하세요.
     - **`Running`인데 `0/1`이면**: `kubectl -n sandbox logs <pod>`를 보세요. `device probe ok=False` 줄이 있으면 같은 줄의 `info`에서 장치 확인 실패 사유를 보고, `egress is open, refusing work:` 줄이 있으면 외부 연결 차단 설정을 확인하세요.
-- **로그에 `egress is open, refusing work: 169.254.169.254:80 (connected)`**: pod에서 EC2 인스턴스 메타데이터 서비스(IMDS) 주소로 연결이 열렸습니다. NetworkPolicy가 적용되지 않은 것입니다. `kubectl -n sandbox get networkpolicy`로 정책 목록을 보고, VPC CNI 애드온의 `enableNetworkPolicy`가 켜져 있는지 확인하세요.
+- **로그에 `egress is open, refusing work: 169.254.169.254:80 (connected)`**: pod에서 EC2 인스턴스 메타데이터 서비스(IMDS)에 연결할 수 있는 상태입니다. NetworkPolicy가 적용되지 않은 것입니다. `kubectl -n sandbox get networkpolicy`로 정책 목록을 보고, VPC CNI 애드온의 `enableNetworkPolicy`가 켜져 있는지 확인하세요.
 - **`sandbox_error`와 `no free sandbox in sandbox-<runtime>-<version>...`**: 600초 동안 평가를 맡길 pod를 찾지 못했습니다. 먼저 Ready인 pod가 있는지 확인하세요.
     - **모든 pod가 계속 평가 중이라면**: replica 수를 늘리세요. GPU pool은 pod 하나가 GPU 하나를 쓰므로, 남는 GPU가 없으면 노드 수도 함께 늘려야 합니다.
 - **401, 403 응답**: 토큰, JWKS, 허용 목록 설정 문제입니다. 오류 문구별 해결 방법은 [401, 403 응답](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답)에 있습니다.
@@ -105,8 +105,8 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 ## 학습
 
-- **TRL trainer 로그에 `CUDA out of memory`**: vLLM과 학습이 GPU 하나를 나눠 씁니다. Job 템플릿의 `args`에 `--per-device-batch=2`와 `--grad-accum=8`을 넣으세요(곱 16은 그대로입니다). 그래도 부족하면 `--max-completion-length=512`, `--vllm-gpu-memory-utilization=0.3`을 차례로 넣어 보세요.
-- **`reward_batch`에 `sandbox_error`가 많음**: `scripts/ops/verify.sh <runtime> <version>`으로 같은 pool을 점검하세요. 실패한 단계와 오류 문구를 보면 인증, 네트워크, pod 부족, 평가 시간 초과 중 어디부터 볼지 알 수 있습니다.
+- **TRL trainer 로그에 `CUDA out of memory`**: vLLM의 답안 생성과 모델 학습이 같은 GPU 메모리를 공유합니다. Job 템플릿의 `args`에 `--per-device-batch=2`와 `--grad-accum=8`을 지정하세요. 이렇게 하면 배치 크기와 누적 횟수를 곱한 값은 16으로 유지됩니다. 그래도 부족하면 `--max-completion-length=512`, `--vllm-gpu-memory-utilization=0.3`을 차례로 넣어 보세요.
+- **`reward_batch`에 `sandbox_error`가 많음**: `scripts/ops/verify.sh <runtime> <version>`으로 같은 pool을 점검하세요. 실패한 단계와 오류 문구를 보면 인증, 네트워크, pod 부족, 평가 시간 초과 중 어디부터 점검할지 알 수 있습니다.
 
 자세히: [학습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#학습)
 
@@ -137,7 +137,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 리전을 확인하거나 아래 AWS CLI 명령을 쓰기 전에 저장소 루트에서 `source scripts/config.env`를 실행하세요.
 
-- **`08_cleanup.sh`를 실행했는데 과금이 남음**: 실행한 리전이 맞는지, AMI와 스냅샷이 남았는지 확인하세요.
+- **`08_cleanup.sh`를 실행한 뒤에도 요금이 계속 발생함**: 실행한 리전이 맞는지, AMI와 스냅샷이 남았는지 확인하세요.
     - **HyperPod를 만들었다면**: `08_cleanup.sh`는 HyperPod를 지우지 않습니다. `scripts/08_cleanup.sh`보다 먼저 `scripts/hyperpod/delete.sh`를 실행해야 합니다.
     - **ECR만 남았다면**: `cdk/destroy.sh`가 출력한 ECR 삭제 명령의 저장소 이름을 확인한 뒤 실행하세요.
     - **ECR까지 한 번에 지우려면**: 처음 정리할 때 `scripts/08_cleanup.sh --images`로 실행하세요.

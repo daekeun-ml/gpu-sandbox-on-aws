@@ -15,7 +15,7 @@ Amazon EKS에서 모델 학습과 코드 채점을 별도 GPU 노드에 배치�
 
     ---
 
-    샌드박스, 격리 런타임, 강화학습을 처음 접하는 분을 위한 가이드입니다. 짧은 예시로 개념을 익히고 내 PC에서 CPU 채점을 확인합니다.
+    샌드박스, 격리 런타임, 강화학습을 처음 접하는 분을 위한 가이드입니다. 짧은 예시로 개념을 익힌 뒤 내 PC의 CPU에서 답안을 직접 채점해 봅니다.
 
     [:octicons-arrow-right-24: 초심자 가이드로 시작](beginner/index.md)
 
@@ -94,9 +94,9 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 
 ### 요청 경로
 
-- trainer는 샌드박스에 요청을 보낼 때마다 routing ConfigMap(`sandbox-routing`)의 snapshot으로 런타임과 버전을 정하고, 한 reward batch의 결과는 한 pool에서 받습니다.
-    - **학습 중에 v2로 바꾸면**: batch에 새로 채점할 답안이 있으면, 같은 batch에 든 이전 pool의 캐시 결과도 v2 pool에서 다시 채점합니다.
-    - **batch 전체가 한 pool의 캐시로 채워지면**: 전환 뒤에도 샌드박스를 부르지 않고 그 결과를 씁니다.
+- trainer는 샌드박스에 요청할 때 routing ConfigMap(`sandbox-routing`)의 snapshot을 읽어 런타임과 버전을 정합니다. 한 reward batch의 답안은 모두 같은 pool에서 채점합니다.
+    - **학습 중에 v2로 바꾸면**: batch에 새로 채점할 답안이 있으면 같은 batch에서 이전 pool의 결과가 캐시된 답안도 v2 pool에 다시 보냅니다.
+    - **배치의 모든 답안에 같은 pool의 채점 결과가 캐시돼 있으면**: 전환 뒤에도 샌드박스에 재요청할 필요 없이 캐시된 결과를 그대로 반환합니다.
     - **한 batch 안에서 전환이 거듭되면**: 세 번째 요청에서 batch 전체를 한 pool에 보내므로, 한 batch는 항상 한 버전으로 채점됩니다.
 - trainer는 headless Service를 CoreDNS로 풀어 Ready 상태인 pod에 `POST /v1/evaluate`를 직접 보냅니다. 바쁜 pod는 `503`을 돌려주고, trainer는 다른 pod로 다시 시도합니다.
 - 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있습니다.
@@ -123,7 +123,7 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 ## 검증 상태
 
 !!! warning "직접 확인해야 하는 범위"
-    - **실행한 것**: 실습 계정에서 시나리오 A(gVisor GPU, `g5`), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 pool의 런타임 벤치마크([08 런타임 벤치마크](handson/08_benchmark.md)), 공개 데모 사이트를 실행했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다.
+    - **실행한 것**: 실습 계정에서 시나리오 A(gVisor GPU, `g5`), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 pool의 런타임 벤치마크([08 런타임 벤치마크](handson/08_benchmark.md))를 실행하고 데모 사이트를 공개했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다.
     - **검증 범위**. 시나리오 A의 [학습 중 전환·롤백](handson/06_sandbox_update.md#switch-batches)과 `--finish`까지 실행했습니다. 관리형 B2에서도 HyperPod 워커로 GRPO 한 스텝을 완료했습니다.
     - **수치의 출처**: 가격과 버전 같은 수치는 직접 측정한 값이 아니라 공식 문서와 공개 자료에서 가져온 값입니다.
     - **로컬 테스트**: 확인 범위는 [시작하기](getting_started.md)에 있습니다.
@@ -132,7 +132,7 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
     GPU 인스턴스는 실행되는 동안 과금되고, `g4dn.metal`은 시간당 약 7.8 USD입니다(us-east-1과 us-west-2 온디맨드 요금). 쉬는 동안에는 GPU 노드 수를 0으로 줄이고, 실습을 마치면 [99 정리](handson/99_cleanup.md)를 반드시 실행하세요.
 
 !!! note "기준 시점: 2026-11"
-    이 가이드의 가격(온디맨드 요금), 버전(gVisor 릴리스, Kata, NVIDIA 드라이버 지원 목록, EKS와 HyperPod 지원 버전), 리전과 서비스 지원 범위는 2026-11 기준입니다. 이 값들은 자주 바뀌므로 배포 전에 공식 문서에서 다시 확인하세요. 확인할 항목과 링크는 [검증된 사실과 출처](reference/sources.md)에 모았습니다.
+    가격과 소프트웨어 버전, 리전별 서비스 지원 범위는 2026-11 기준입니다. 배포 전에는 공식 문서에서 온디맨드 요금, gVisor 릴리스와 Kata 버전, NVIDIA 드라이버 지원 목록, EKS와 HyperPod 지원 버전을 다시 확인하세요. 확인할 항목과 링크는 [검증된 사실과 출처](reference/sources.md)에 모았습니다.
 
 ## Disclaimer
 

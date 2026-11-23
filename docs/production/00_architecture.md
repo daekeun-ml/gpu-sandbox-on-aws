@@ -1,24 +1,24 @@
 # Production 레퍼런스 아키텍처
 
 !!! info "TL;DR"
-    운영 환경에서는 trainer가 sandbox gateway 하나만 호출합니다. 샌드박스 pool은 (runtime, version)마다 Deployment 하나로 배포하고, pool이 쓰는 노드는 Karpenter NodePool이 0대부터, 배치할 pod 수에 맞춰 늘리고 줄입니다.
+    운영 환경에서는 trainer가 sandbox gateway 하나만 호출합니다. (runtime, version) 조합마다 샌드박스 pool을 하나씩 만들고, 각 pool을 별도 Deployment로 배포합니다. Karpenter NodePool은 배치할 pod 수에 맞춰 노드를 0대부터 늘리거나 다시 줄입니다.
 
 ## 핸즈온을 확장할 때 생기는 문제
 
-핸즈온에서 trainer 하나로는 잘 돌아갔는데, worker를 늘리자 평가 요청이 `503`으로 돌아오고 step이 길어질 수 있습니다. worker마다 빈 pod를 고르면 여러 worker가 같은 곳을 동시에 고릅니다. 그사이 운영자가 채점 버전을 바꾸면, 요청을 따로 보내는 veRL에서는 같은 문제의 답이 다른 버전으로 채점될 수도 있습니다.
+trainer 하나로 실습할 때는 문제가 없어도 worker를 늘리면 `503` 응답이 늘고 학습 step이 길어질 수 있습니다. worker가 각자 빈 pod를 찾다 보면 동시에 같은 pod를 선택하기 때문입니다. 그사이 운영자가 채점 버전을 바꾸면, 요청을 따로 보내는 veRL에서는 같은 문제의 답이 다른 버전으로 채점될 수도 있습니다.
 
-![a: 핸즈온 구성을 그대로 확장하면 네 가지 문제가 생깁니다. trainer 프로세스가 각자 빈 pod를 판단해 요청이 샌드박스 pod A에 몰리고, 503 재시도가 늘어납니다. veRL reward worker는 샘플마다 따로 routing하므로 한 group 안에서 v1과 v2가 섞일 수 있습니다. 노드 그룹 desired 값을 수동으로 조정하면 GPU 노드 수가 부하와 맞지 않습니다(계속 실행되거나 늦게 증설). scripts/ops/sync_jwks.sh를 수동으로 실행하는 방식에서는 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 새 키로 서명한 토큰이 모두 거부됩니다(fail closed). b: Production에서는 trainer가 sandbox gateway만 호출하고, gateway가 pod마다 평가 1건만 보냅니다. 버전은 TRL이 batch 스냅샷으로 batch마다, veRL이 group_key pin으로 group마다 하나씩 씁니다. Karpenter NodePool은 자기가 만든 노드를 0부터 limits 안에서 수요에 맞춰 늘리고 줄입니다(g4dn.metal은 warm 한 대). 핸즈온 CDK가 만든 관리형 노드 그룹은 그대로 남으므로 desired 값을 직접 줄입니다. jwks-sync CronJob은 매시 17분에 ConfigMap을 갱신해 서명 키 회전을 반영합니다.](../images/figures/production-00_architecture.ko.svg)
+![a: 핸즈온 구성을 그대로 확장하면 네 가지 문제가 생깁니다. trainer 프로세스가 각자 빈 pod를 판단해 요청이 샌드박스 pod A에 몰리고, 503 재시도가 늘어납니다. veRL reward worker는 샘플마다 따로 routing하므로 한 group 안에서 v1과 v2가 섞일 수 있습니다. 노드 그룹 desired 값을 수동으로 조정하면 GPU 노드 수가 부하와 맞지 않습니다(계속 실행되거나 늦게 증설). scripts/ops/sync_jwks.sh를 수동으로 실행하는 방식에서는 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 새 키로 서명한 토큰이 모두 거부됩니다(fail closed). b: Production에서는 trainer가 sandbox gateway만 호출하고, gateway가 pod마다 평가 1건만 보냅니다. TRL은 batch 스냅샷으로 한 batch의 버전을 고정하고, veRL은 group_key pin으로 한 group의 버전을 고정합니다. Karpenter NodePool은 자신이 만든 노드 수를 수요에 따라 0대부터 limits 범위 안에서 조절합니다(g4dn.metal은 warm 한 대). 핸즈온 CDK가 만든 관리형 노드 그룹은 그대로 남으므로 desired 값을 직접 줄입니다. jwks-sync CronJob은 매시 17분에 ConfigMap을 갱신해 서명 키 회전을 반영합니다.](../images/figures/production-00_architecture.ko.svg)
 
 ## 운영 구성에서 달라지는 점
 
-gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니다. 샌드박스가 부족하면 Karpenter가 실행할 노드를 마련합니다. 두 구성 요소를 연결한 뒤에는 먼저 같은 group에 같은 버전이 쓰이는지, 다음으로 요청이 기다리는 시간이 줄었는지 확인합니다. 노드를 늘려도 버전이 섞이는 문제는 그대로 남으므로 두 결과를 따로 봐야 합니다.
+gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니다. 샌드박스가 부족하면 Karpenter가 실행할 노드를 마련합니다. 두 구성 요소를 연결한 뒤에는 먼저 같은 group의 답안이 한 버전에서 채점되는지, 그다음에는 요청 대기 시간이 줄었는지 확인합니다. 노드를 늘려도 버전이 섞이는 문제는 그대로 남으므로 두 결과를 따로 봐야 합니다.
 
 ??? note "세부 조건과 예외"
     하루 실습용으로 단순하게 짠 핸즈온 구성의 규모만 키우면, 다음 문제가 생깁니다.
 
-    - **trainer 프로세스마다 빈 pod를 따로 고름**: 이 구조가 먼저 문제가 됩니다. TRL rank 여러 개와 veRL reward worker 수십 개가 같은 pod에 요청을 보내므로 503 재시도가 늘어납니다.
+    - **trainer 프로세스마다 빈 pod를 따로 고름**: TRL rank 여러 개와 veRL reward worker 수십 개의 요청이 같은 pod에 몰리면 503 응답을 받고 재시도하는 횟수가 늘어납니다.
     - **veRL의 샘플 단위 채점**: veRL은 샘플을 하나씩 채점해 배치 단위 routing 스냅샷이 없으므로, 한 group 안에서 샌드박스 버전이 섞일 수 있습니다.
-    - **노드 그룹 desired 값을 수동으로 조정**: GPU 노드가 부하와 상관없이 계속 떠 있거나 늦게 늘어납니다.
+    - **노드 그룹 desired 값을 수동으로 조정**: 요청이 없어도 GPU 노드가 계속 실행되거나, 부하가 커져도 제때 늘어나지 않습니다.
     - **`scripts/ops/sync_jwks.sh`를 수동으로 실행**: issuer 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 샌드박스가 새 키로 서명한 토큰을 모두 거부합니다(fail closed).
 
     - **스케줄링과 버전 고정을 gateway 한곳에서 처리합니다.** gateway는 pod마다 평가를 한 번에 하나만 보내고, 배치 요청 하나를 routing 스냅샷 하나로 채점합니다. TRL은 rank마다 reward batch 하나를 한 pool의 결과로 맞추고, veRL 샘플은 `group_key` pin이 유효한 동안 같은 버전에 고정합니다.
@@ -50,7 +50,7 @@ gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니�
 
 ## 전체 구성
 
-역할을 나눠 보면 trainer는 답안을 생성하고, gateway는 평가를 맡길 pod와 버전을 고르며, 샌드박스는 답안을 실행합니다. 어느 단계에서 지연이 생겼는지 알려면 목록에 있는 AWS 리소스보다 요청 경로를 먼저 따라가세요.
+trainer는 답안을 생성하고 gateway는 채점할 pod와 버전을 고릅니다. 답안을 실행하는 곳은 샌드박스입니다. 응답이 늦으면 AWS 리소스 목록을 점검하기 전에 요청이 어느 단계에서 기다리는지 확인하세요.
 
 실선은 평가 요청, 점선은 Kubernetes API 호출이며, `aud`는 요청 토큰의 audience입니다.
 
@@ -86,19 +86,19 @@ taint, label, consolidation, `expireAfter`, userData 설정은 [01 용량과 노
 | 항목 | 핸즈온 | Production | 바꾸는 이유 |
 |---|---|---|---|
 | 노드 공급 | CDK 스택의 EKS 관리형 노드 그룹 (desired, min, max 고정) | Karpenter NodePool (0부터, `limits`, consolidation) | 표 아래 목록을 참고하세요. |
-| 호출 경로 | trainer → 샌드박스 headless Service (`SANDBOX_ROUTING_FILE`, direct 모드) | trainer → gateway (`SANDBOX_GATEWAY`) → 샌드박스 | 스케줄러와 버전 pin을 한곳에 둡니다. |
+| 호출 경로 | trainer → 샌드박스 headless Service (`SANDBOX_ROUTING_FILE`, direct 모드) | trainer → gateway (`SANDBOX_GATEWAY`) → 샌드박스 | gateway가 요청 배정과 버전 pin을 모두 담당합니다. |
 | 샌드박스 ingress | `rl-trainer`의 `gpusandbox/client=true` pod 허용 | `sandbox-gateway`의 gateway pod만 허용 (같은 이름 `allow-clients-to-sandbox-api`를 덮어씀) | 학습 요청이 샌드박스에 닿는 경로를 gateway 하나로 줄입니다. |
-| JWKS | `scripts/ops/sync_jwks.sh` 수동 실행 | `jwks-sync` CronJob (`17 * * * *`) | 서명 키가 회전되면 자동으로 반영합니다. |
+| JWKS | `scripts/ops/sync_jwks.sh` 수동 실행 | `jwks-sync` CronJob (`17 * * * *`) | 서명 키가 바뀌면 새 공개 키를 자동으로 반영합니다. |
 | 공유 저장소 | `emptyDir` (모델 캐시, 출력) | Amazon FSx 같은 공유 파일 시스템의 PVC (veRL 템플릿은 `/fsx`에 마운트) | 노드가 바뀌어도 checkpoint와 캐시가 유지됩니다. |
-| 런타임 | 실습마다 한 런타임 | 런타임별 pool, 선택적으로 CPU 계층과 GPU 계층 | 측정이 필요한 단계만 GPU를 씁니다. |
+| 런타임 | 실습마다 한 런타임 | 런타임별 pool, 선택적으로 CPU 계층과 GPU 계층 | GPU 측정이 필요한 단계만 GPU에서 실행합니다. |
 | 버전 고정 | trainer가 배치 하나를 한 버전으로 채점 | gateway가 배치 스냅샷과 `group_key` pin을 모두 제공 | 샘플 단위로 채점하는 veRL을 지원합니다. |
 | Pod 재활용 | 없음 (draining pod가 NotReady로 남음) | gateway가 draining pod를 삭제 | Kata에서는 pod를 새로 만들면 VM도 새로 만들어집니다. |
 | 용량 완충 | 없음 | warm placeholder, PDB, ResourceQuota | 요청이 metal 노드 부팅을 기다리지 않게 하고, pod 수와 리소스 사용량이 한도를 넘지 않게 합니다. |
 
-노드 공급은 다음과 같이 바뀝니다.
+노드를 추가하거나 회수하는 조건도 달라집니다.
 
 - **pool의 replica를 늘려 pod를 놓을 자리가 부족해지면**: Karpenter가 노드를 추가합니다.
-- **Karpenter가 만든 노드가 비면**: 회수 대상이 됩니다.
+- **Karpenter가 만든 노드가 비면**: Karpenter가 해당 노드를 회수할 수 있습니다.
 - **핸즈온 CDK가 만든 관리형 노드 그룹(A와 B1의 `sandbox-gvisor` 등)**: Karpenter가 줄이지 않으므로 사용량을 보고 desired 값을 직접 줄이세요.
 - **replica 수가 그대로면**: 평가 요청은 기존 pod를 기다립니다.
 
@@ -154,7 +154,7 @@ sequenceDiagram
 veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니다. gateway는 같은 key의 샘플을 첫 요청 때 만든 스냅샷으로 채점합니다(API와 pin 규칙은 [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)).
 
 !!! tip "에피소드마다 샌드박스 하나가 필요할 때"
-    multi-turn agentic RL처럼 한 에피소드가 커널을 여러 번 제출하고 피드백을 읽는다면, 요청마다 빈 pod를 고르는 이 pool보다 미리 실행해 둔 샌드박스를 에피소드마다 하나씩 할당받는 방식이 적합합니다. kubernetes-sigs/agent-sandbox의 `SandboxWarmPool`과 `SandboxClaim`을 쓰는 확장 방법은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 설명합니다. 로컬 테스트는 claim API를 대역(fake)으로 두고, loopback CPU 샌드박스 서버 두 개에서 에피소드 두 개를 끝까지 실행했습니다. 클러스터에서는 실행하지 않았습니다.
+    multi-turn agentic RL처럼 모델이 한 에피소드에서 커널을 여러 번 제출하고 피드백을 읽는다면, 요청마다 빈 pod를 고르는 이 pool보다 미리 실행해 둔 샌드박스를 에피소드마다 하나씩 할당받는 방식이 적합합니다. kubernetes-sigs/agent-sandbox의 `SandboxWarmPool`과 `SandboxClaim`을 쓰는 확장 방법은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 설명합니다. 로컬 테스트는 claim API를 대역(fake)으로 두고, loopback CPU 샌드박스 서버 두 개에서 에피소드 두 개를 끝까지 실행했습니다. 클러스터에서는 실행하지 않았습니다.
 
 ## 시나리오 B: HyperPod에서 학습할 때
 
@@ -185,7 +185,7 @@ veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니�
 - **로컬 테스트로 확인한 것:** routing이 바뀌어도 gateway의 group pin이 유지되고, 클라이언트가 loopback 샌드박스 서버 두 개에 요청을 나눠 보내는 것을 확인했습니다(`pytest`, CPU, AWS 없음).
 - **테스트가 다루지 않는 것:** 테스트는 Karpenter EC2NodeClass 템플릿(`infra/karpenter/`)을 렌더링해 NodePool과의 연결까지 확인하지만 API server에는 적용하지 않습니다. production 템플릿(`k8s/production/*.tpl`)은 렌더링하지 않습니다. `k8s/production/`의 정적 YAML(`pool-hardening.yaml`, `warm-capacity.yaml`)은 YAML 형식과 Service 노출 여부만 검사합니다.
 - **AWS에서 실행하지 않은 것:** Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity처럼 이 페이지가 핸즈온에 더하는 구성입니다. 핸즈온과 같은 스크립트를 쓰는 1, 4, 5단계는 시나리오 A 실습에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 나머지는 각 페이지의 확인 단계로 직접 검증하세요.
-- **HyperPod autoscaling과 Karpenter:** HyperPod의 Karpenter 기반 autoscaling과 오픈소스 Karpenter를 함께 쓸 때 두 기능이 서로 어떻게 동작하는지는 확인하지 않았습니다. 공식 문서로 확인하세요.
+- **HyperPod autoscaling과 Karpenter:** HyperPod의 Karpenter 기반 autoscaling과 오픈소스 Karpenter를 함께 쓸 때 두 기능이 서로 어떤 영향을 주는지는 확인하지 않았습니다. 공식 문서로 확인하세요.
 
 ## ❓ 오해
 

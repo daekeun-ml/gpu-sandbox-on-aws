@@ -2,8 +2,8 @@
 
 B1에서 모델은 SageMaker HyperPod 노드에서 학습하고, 모델이 만든 코드는 EC2의 gVisor pool에서 채점합니다. 두 작업이 다른 노드에서 이뤄지므로 **학습 노드의 이름과 채점 결과를 함께** 확인합니다.
 
-1. [리전과 쿼터](#시작-전-확인)를 확인한 뒤 [B1 단계](#b1-단계)에서 시작하세요. 이 경로는 자체 EKS 클러스터와 EC2 채점 노드를 준비합니다.
-2. HyperPod trainer가 `Schedulable`이 되고 EC2 pool이 검증되면 [한 스텝을 제출](#6-학습)하세요.
+1. [리전과 쿼터](#시작-전-확인)를 확인한 뒤 [B1 단계](#b1-단계)에서 시작하세요. B1에서는 자체 EKS 클러스터와 EC2 채점 노드를 준비합니다.
+2. HyperPod trainer가 `Schedulable`인지 확인하고 EC2 pool 검증을 마친 뒤 [한 스텝을 제출](#6-학습)하세요.
 3. [실행 화면과 로그](#확인-방법)에서 trainer pod의 노드, `reward_batch`의 판정, Job의 `Completed`를 찾으세요. 끝나면 [HyperPod를 먼저 정리](#정리)합니다.
 
 [B2 실습](07_hyperpod_b2.md)에서는 시스템 CPU, 학습 GPU, 채점 GPU를 모두 HyperPod 인스턴스 그룹에 배치합니다.
@@ -68,7 +68,7 @@ flowchart LR
 | 변수 | 예시 파일의 값 | 할 일 |
 |---|---|---|
 | `HYPERPOD_CLUSTER_NAME` | `gpu-sandbox-hp` | 그대로 써도 됩니다. execution role 이름(`<이 값>-execution`)에도 쓰입니다 |
-| `HYPERPOD_TRAINER_INSTANCE_TYPE` | `ml.g5.2xlarge` | 그대로 둡니다. job 템플릿의 nodeAffinity도 이 값을 씁니다 |
+| `HYPERPOD_TRAINER_INSTANCE_TYPE` | `ml.g5.2xlarge` | 그대로 둡니다. job 템플릿의 nodeAffinity에도 같은 인스턴스 유형이 지정돼 있습니다 |
 | `HYPERPOD_LCS_BUCKET` | `sagemaker-gpu-sandbox-lcs-__SET_ME__` | `__SET_ME__`를 고유한 값으로 바꿉니다. S3 버킷 이름은 전 세계에서 고유해야 합니다. `sagemaker-` 접두사는 유지합니다 |
 
 필요한 CLI, AWS 자격 증명, G/VT vCPU 쿼터를 한 번에 확인합니다. HyperPod 스크립트는 `git`도 사용합니다.
@@ -79,7 +79,7 @@ scripts/01_check_prereqs.sh
 
 **확인할 것:** 마지막 줄이 `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.`입니다.
 
-HyperPod 인스턴스는 EC2 쿼터 대신 `ml.<유형> for cluster usage` 쿼터를 씁니다.
+HyperPod 인스턴스를 만들 때 적용되는 쿼터는 EC2 쿼터와 별도인 `ml.<유형> for cluster usage`입니다.
 
 - **B1**: EC2 G/VT 쿼터 8 vCPU(`g5.xlarge` 2대)와 HyperPod `ml.g5.2xlarge` 1대분이 필요합니다.
 - **B2**는 `us-east-1`의 HyperPod 쿼터를 사용합니다. `system`용 `ml.m5.xlarge` 1대, `trainer`용 `ml.g5.2xlarge` 1대, `sandbox`용 `ml.g5.xlarge` 2대입니다.
@@ -128,7 +128,7 @@ HyperPod는 EKS 1.36을 지원하며 이에 맞는 x86_64 AMI를 제공합니다
 
 ### 2. 이미지
 
-sandbox, trainer, control 이미지를 빌드해 ECR에 올립니다. `HYPERPOD=1`이면 trainer 이미지에 `hyperpod-elastic-agent` 1.1.3(`hyperpodrun`)을 설치하고 빌드 중 `hyperpodrun --help`를 실행합니다. 이 경로는 vLLM 0.26.0과 PyTorch 2.11.0을 씁니다.
+sandbox, trainer, control 이미지를 빌드해 ECR에 올립니다. `HYPERPOD=1`이면 trainer 이미지에 `hyperpod-elastic-agent` 1.1.3(`hyperpodrun`)을 설치하고 빌드 중 `hyperpodrun --help`를 실행합니다. 여기서 사용하는 버전은 vLLM 0.26.0과 PyTorch 2.11.0입니다.
 
 ```bash
 HYPERPOD=1 scripts/03_build_push_images.sh
@@ -137,7 +137,7 @@ HYPERPOD=1 scripts/03_build_push_images.sh
 **확인할 것:** 끝에 `Add to scripts/config.env:` 다음으로 `export SANDBOX_IMAGE_URI=...`, `export TRAINER_IMAGE_URI=...`, `export CONTROL_IMAGE_URI=...` 세 줄이 나옵니다. 이 세 줄을 `scripts/config.env`에 추가하세요.
 
 !!! warning "IMAGE_TAG를 바꿔서 다시 빌드"
-    ECR 태그가 IMMUTABLE로 설정되어 있어서, 시나리오 A에서 같은 `IMAGE_TAG`(기본 `v1`)로 이미 push했다면 push가 거부됩니다. `scripts/config.env`의 `IMAGE_TAG`를 바꾸고(예: `v1-hp`) 다시 빌드하세요. 스크립트가 `config.env`에서 값을 읽으므로 명령줄 환경 변수로는 이 값을 덮어쓸 수 없습니다.
+    ECR 태그는 IMMUTABLE입니다. 시나리오 A에서 같은 `IMAGE_TAG`(기본 `v1`)로 이미지를 올렸다면 그 태그로 다시 올릴 수 없습니다. `scripts/config.env`의 `IMAGE_TAG`를 바꾸고(예: `v1-hp`) 다시 빌드하세요. 스크립트가 `config.env`에서 값을 읽으므로 명령줄 환경 변수로는 이 값을 덮어쓸 수 없습니다.
 
 **문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "설정과 스크립트" 항목(태그 중복, 느린 빌드)을 보세요.
 
@@ -420,7 +420,7 @@ flowchart LR
 | HyperPod EKS AMI 1.33 (x86_64) | 580.178.04 | 지원 |
 | EKS AL2023 NVIDIA AMI v20261107 (EC2 gVisor 노드) | 580.178.04 | 지원 |
 
-gVisor 개발 브랜치에도 2026-11-14 기준 595.91.07은 없습니다. 그래서 클러스터를 1.33(extended support)으로 낮추는 대신 HyperPod가 공식 지원하는 custom AMI를 씁니다. AWS 문서에 따르면 HyperPod 공개 base AMI로 만든 이미지를 인스턴스 그룹의 `ImageId`에 지정할 수 있으며, 문서는 사용 예로 "driver customizations"를 명시합니다.
+gVisor 개발 브랜치에도 2026-11-14 기준 595.91.07은 없습니다. 이 경로는 클러스터를 1.33(extended support)으로 낮추는 대신 HyperPod가 공식 지원하는 custom AMI로 샌드박스 노드를 시작하도록 설계했습니다. AWS 문서에 따르면 HyperPod 공개 base AMI로 만든 이미지를 인스턴스 그룹의 `ImageId`에 지정할 수 있으며, 문서는 사용 예로 "driver customizations"를 명시합니다.
 
 새로 설치하는 드라이버 버전은 EC2 gVisor 노드와 같은 580.178.04입니다.
 
@@ -526,12 +526,12 @@ B1과 같은 다섯 단계를 실행하되, `sandbox` 인스턴스 그룹을 추
 scripts/hyperpod/create.sh --b2
 ```
 
-`--b2`는 `infra/hyperpod/instance-group-sandbox.json.tpl`에 정의된 인스턴스 그룹 하나를 추가합니다. trainer 그룹은 기본 AMI를 그대로 씁니다.
+`--b2`는 `infra/hyperpod/instance-group-sandbox.json.tpl`에 정의된 인스턴스 그룹 하나를 추가합니다. trainer 그룹은 기본 AMI로 시작합니다.
 
 | 설정 | 값 | 이유 |
 |---|---|---|
 | `ImageId` | `${HYPERPOD_B2_AMI_ID}` | 2단계의 custom AMI |
-| `InstanceType`, `InstanceCount` | `ml.g5.xlarge`, 2 | A10G GPU가 한 개씩 있는 노드 두 대입니다. 버전을 교체할 때 v1과 v2가 한 대씩 씁니다 |
+| `InstanceType`, `InstanceCount` | `ml.g5.xlarge`, 2 | A10G GPU가 한 개씩 있는 노드 두 대입니다. 버전을 교체할 때 v1과 v2를 각각 한 대에 배치합니다 |
 | `LifeCycleConfig.OnCreate` | `on_create_sandbox.sh` | 드라이버 확인, `runsc` 등록, node guard, containerd 재시작 |
 | `ThreadsPerCore` | 2 | SMT를 켜서 vCPU가 4개입니다. 샌드박스 pod는 CPU 3개를 요청합니다(`gvisor-hyperpod.env`) |
 | `KubernetesConfig.Labels` | `gpusandbox/role=sandbox-hyperpod`, `gpusandbox/device-plugin=cdi` | RuntimeClass `gvisor-hyperpod`의 nodeSelector와 CDI device plugin이 이 label로 노드를 선택합니다 |
@@ -648,7 +648,7 @@ Kata는 pod마다 작은 VM을 띄우므로 노드에 `/dev/kvm`(KVM 가상화 �
 
 | 조건 | Kata가 요구하는 것 | HyperPod 노드 |
 |---|---|---|
-| `/dev/kvm` | QEMU와 Cloud Hypervisor는 KVM을 씁니다. AWS에서는 bare metal이나 nested virtualization 인스턴스가 필요합니다 | `ml.*.metal` 인스턴스 유형이 없습니다(`CreateCluster` 인스턴스 유형 목록) |
+| `/dev/kvm` | QEMU와 Cloud Hypervisor는 KVM으로 VM을 실행합니다. AWS에서는 bare metal이나 nested virtualization 인스턴스가 필요합니다 | `ml.*.metal` 인스턴스 유형이 없습니다(`CreateCluster` 인스턴스 유형 목록) |
 | nested virtualization | EC2에서는 C8i, M8i, R8i 등에서 CPU 옵션으로 켭니다 | 인스턴스 그룹 설정에 해당 CPU 옵션이 없고, G와 P 계열은 애초에 nested virtualization 대상이 아닙니다 |
 | GPU passthrough | IOMMU가 필요하고, 호스트에서 GPU가 `vfio-pci` 드라이버에 바인딩되어 있어야 합니다 | HyperPod AMI는 호스트에서 NVIDIA 드라이버를 로드합니다 |
 

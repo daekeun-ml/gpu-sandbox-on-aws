@@ -1,6 +1,6 @@
 # 08 채점 벤치마크
 
-EKS에서 채점을 요청한 뒤 판정이 나올 때까지 걸린 시간과, 채점 pool 전체가 초당 완료한 건수를 비교합니다. B2와 B1에서는 같은 pool에 요청을 보내는 워커를 바꿨고, A에서는 EC2 채점 런타임 다섯 개를 비교했습니다.
+EKS에서 샌드박스가 요청 한 건을 채점하는 데 걸린 시간과 채점 pool 전체가 초당 처리한 요청 수를 비교합니다. B2와 B1에서는 같은 pool에 요청을 보내는 워커를 바꿨고, A에서는 EC2 채점 런타임 다섯 개를 비교했습니다.
 
 ## 구성별 결과 { #runtime-results }
 
@@ -30,7 +30,7 @@ EKS에서 채점을 요청한 뒤 판정이 나올 때까지 걸린 시간과, �
 </table>
 </div>
 
-**표 읽기**　p50과 p95는 성공한 요청의 서버 채점 시간입니다. 처리량에는 클라이언트가 빈 Pod를 기다린 시간도 들어갑니다. 예를 들어 B2의 시스템 워커에서 보낸 한 건의 p50은 10.448초이고, 채점 Pod 두 개를 합친 처리량은 초당 0.189건입니다. GPU 종류와 Pod 수가 다른 행을 런타임 성능 순위로 해석하기는 어렵습니다.
+**표 읽기**　p50과 p95는 성공한 요청의 서버 채점 시간입니다. 처리량에는 클라이언트가 빈 Pod를 기다린 시간도 들어갑니다. 예를 들어 B2의 시스템 워커에서 보낸 요청의 p50은 10.448초이고, 채점 Pod 두 개를 합친 처리량은 초당 0.189건입니다. GPU 종류와 Pod 수가 다른 행을 런타임 성능 순위로 해석하기는 어렵습니다.
 
 [데모에서 같은 표 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results)
 
@@ -97,7 +97,7 @@ EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v
 
 **시작 전에**
 
-- 비교할 pool이 [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)으로 배포되어 있어야 합니다. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다.
+- 먼저 [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에 따라 비교할 pool을 배포하세요. v1 pod가 없는 런타임은 `bench.sh`가 건너뜁니다.
 - **Kata일 때**: [03 Kata 샌드박스](03_kata.md)에서 노드와 런타임을 준비하고, 04의 `scripts/06_deploy_sandboxes.sh`로 측정할 v1 pool을 배포합니다.
 - 세 런타임의 구조 차이는 [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에, 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
 
@@ -106,8 +106,8 @@ EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v
     - **p50, p95**: 측정값을 작은 값부터 정렬했을 때 50%와 95% 위치의 값입니다. p50은 일반적인 지연을, p95는 느린 요청의 지연(tail latency)을 나타냅니다.
     - **처리량 (throughput)**: 초당 완료한 평가 수입니다.
     - **golden 제출물**: 기대 verdict가 정해진 시험용 제출물입니다. `src/gpusandbox/golden.py`에 있습니다.
-    - **speedup, reference**: 신뢰하는 PyTorch reference 구현보다 후보 커널이 몇 배 빠른지와, 그 비교 기준이 되는 구현입니다.
-    - **hypervisor (QEMU, Cloud Hypervisor)**: Kata가 pod마다 VM을 띄울 때 쓰는 프로그램입니다. 이 저장소는 QEMU(`kata-qemu`)와 Cloud Hypervisor(`kata-clh`)를 씁니다.
+    - **speedup, reference**: reference는 정답과 실행 시간을 비교할 때 기준으로 삼는 신뢰할 수 있는 PyTorch 구현입니다. speedup은 이 기준 구현의 실행 시간을 후보 커널의 실행 시간으로 나눈 값입니다.
+    - **hypervisor (QEMU, Cloud Hypervisor)**: Kata에서 pod마다 VM을 실행하는 프로그램입니다. `kata-qemu`의 hypervisor는 QEMU이고, `kata-clh`는 Cloud Hypervisor입니다.
     - **gVisor Sentry**: gVisor에서 컨테이너의 시스템 호출을 대신 처리하는 사용자 공간 커널입니다.
     - **nested virtualization, bare metal**: VM 안에서 다시 VM을 띄우는 기능과, 하이퍼바이저 없이 물리 서버 전체를 쓰는 인스턴스(`.metal`)입니다.
     - **`overhead.podFixed`**: RuntimeClass에 지정하는 값으로, 스케줄러가 pod마다 런타임용으로 추가 예약하는 CPU와 메모리입니다.
@@ -134,7 +134,7 @@ kubectl -n sandbox get pods -L gpusandbox/runtime,gpusandbox/version
 
 ## 실행
 
-pool이 준비된 시간을 출력한 뒤, 각 v1 pool에 같은 제출물을 32번 보내고 결과 파일 경로를 출력합니다.
+스크립트는 각 pod가 생성된 뒤 마지막으로 Ready 상태가 되기까지 걸린 시간을 보여 줍니다. 이어서 v1 pool마다 같은 제출물을 32번씩 보내고 결과 파일 경로를 출력합니다.
 
 ```bash
 scripts/ops/bench.sh 32
@@ -219,7 +219,7 @@ scripts/ops/bench.sh 32
 
 표에서 gVisor는 한 건을 채점하는 데 p50이 9.984초이고 Kata QEMU는 10.789초입니다. pool 전체 처리량은 Kata QEMU가 초당 0.349건으로 더 높습니다. 동시에 일한 pod가 각각 두 개와 네 개이고 GPU도 달랐기 때문에, 처리량만으로 런타임 하나의 속도를 판단하기 어렵습니다.
 
-속도 표를 읽기 전에 런타임별로 제출이 성공했는지 확인하세요. 실패 요청이 많거나 GPU 종류가 다르면 p50이 낮아도 런타임 차이로 해석하기 어렵습니다. 같은 GPU와 입력으로 성공한 평가의 지연을 비교하세요.
+표를 읽을 때는 런타임별로 몇 건이 성공했는지 먼저 보세요. 실패가 많거나 GPU 종류가 다르면 p50이 낮은 이유를 런타임에서만 찾기 어렵습니다. 같은 GPU에서 같은 입력을 채점한 성공 건끼리 걸린 시간을 비교하세요.
 
 | 비교 | 조건 | 볼 지표 |
 |---|---|---|
@@ -238,8 +238,8 @@ scripts/ops/bench.sh 32
 - **처리량은 Ready pod 수에 따라 달라집니다.** pod 하나가 한 번에 평가 하나만 처리하기 때문입니다. 기본 replica는 `gvisor` 2, `kata-qemu` 4, `kata-clh` 2이고 CPU pool은 각 2입니다. replica 수가 다른 pool은 전체 처리량과 함께 Ready pod 수로 나눈 pod당 값도 기록해 비교하세요.
 - **요청 수를 너무 크게 정하지 마세요.** pod는 한 번에 평가를 하나만 처리하므로 클라이언트는 비어 있는 pod를 기다립니다. 대기 시간이 600초(acquire timeout)를 넘으면 그 요청은 `sandbox_error`가 되어 `ok` 수가 줄어듭니다.
 - **nested virtualization에서 얻은 숫자는 bare metal에 그대로 적용되지 않습니다.** AWS는 성능이 중요한 가상화 워크로드에 bare metal을 권장합니다. `c8i`의 CLH 대 QEMU 결과는 두 hypervisor의 상대 비교로만 쓰세요.
-- **같은 GPU 종류에서 `ref_ms_median`이 다르면** 런타임이 kernel launch와 동기화 과정에 추가 비용을 발생시킨다는 뜻일 수 있습니다(추론). 이 harness는 host clock과 `torch.cuda.synchronize()`로 측정하므로 launch 비용이 결과에 포함됩니다.
-- **KernelBench 수치와 직접 비교하지 않습니다.** KernelBench는 L2 flush와 CUDA event로 시간을 측정하고, 이 harness는 host clock과 반복마다 다른 입력을 씁니다.
+- **같은 GPU 종류에서 `ref_ms_median`이 다르면** 런타임에 따라 커널 실행을 요청하거나 동기화하는 데 걸리는 시간이 다를 수 있습니다(추론). 이 harness는 host clock과 `torch.cuda.synchronize()`로 측정하므로 launch 비용이 결과에 포함됩니다.
+- **KernelBench 수치와 직접 비교하지 않습니다.** KernelBench는 L2 flush와 CUDA event로 시간을 측정하고, 이 harness는 매번 입력을 바꿔 가며 host clock으로 시간을 잽니다.
 
 !!! question "❓ 오해: gVisor와 Kata의 숫자를 나란히 놓으면 런타임 비교가 된다"
     이 핸즈온의 gVisor pool(`g5.xlarge`, A10G)과 Kata GPU pool(`g4dn.metal`, T4)은 GPU, 인스턴스, replica 수가 모두 달라서, 두 pool의 측정값 차이 중 런타임 때문에 생긴 부분만 따로 구할 수 없습니다. 런타임을 비교할 때는 같은 노드의 Kata CLH CPU와 Kata QEMU CPU처럼 런타임 외의 조건이 모두 같은 두 pool을 쓰세요.
@@ -352,7 +352,7 @@ scripts/ops/bench.sh
 
 ### 관찰 (2026-11-18)
 
-- **같은 c8i 노드, 같은 이미지와 golden:** eval p50은 `gvisor-cpu` 3.76 s, `kata-qemu-cpu` 4.058 s, `kata-clh-cpu` 4.225 s였고, 이미지가 캐시된 상태의 cold start는 세 pool 모두 10에서 11 s였습니다. nested virtualization에서 얻은 값이므로 이 노드 안의 상대 비교로만 씁니다.
+- **같은 c8i 노드, 같은 이미지와 golden:** eval p50은 `gvisor-cpu` 3.76 s, `kata-qemu-cpu` 4.058 s, `kata-clh-cpu` 4.225 s였고, 이미지가 캐시된 상태의 cold start는 세 pool 모두 10에서 11 s였습니다. nested virtualization 환경에서 얻은 값이므로 같은 노드에서 실행한 세 런타임을 비교할 때만 참고하세요.
 - **GPU pool의 cold start:** gVisor(A10G)는 16 s, Kata QEMU(T4)는 pod마다 30에서 36 s였습니다. GPU가 다르므로(A10G 대 T4) "해석하는 방법"의 규칙대로 이 차이는 오버헤드 비교가 아닙니다.
 - **GPU별 값:** `ref_ms` 중앙값은 A10G 0.58 ms, T4 1.15 ms였고, speedup은 A10G 1.75, T4 1.79였습니다.
 

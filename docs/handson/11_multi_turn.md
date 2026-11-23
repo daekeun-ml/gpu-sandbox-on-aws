@@ -1,9 +1,9 @@
 # 11 multi-turn 에피소드 실습
 
-한 문제에 세 번 답을 제출하면 어느 샌드박스가 그 답들을 받을까요? 이 실습에서는 에피소드(한 문제를 푸는 한 번의 시도)마다 샌드박스 하나를 빌립니다. 스크립트가 정해진 답을 차례로 보내므로 모델 없이 턴과 자원 반납을 살펴볼 수 있습니다.
+한 문제에 세 번 답을 제출하면 어느 샌드박스가 그 답들을 받을까요? 이 실습에서는 에피소드(한 문제를 푸는 한 번의 시도)마다 샌드박스 하나를 빌립니다. 스크립트가 정해진 답안을 차례로 제출합니다. 모델을 띄우지 않고도 매 턴 어느 샌드박스가 답안을 받는지, 마지막에 자원을 반납하는지 확인할 수 있습니다.
 
 1. [10편의 CPU 클러스터](10_cpu_only.md)를 정리하기 전에 [준비](#준비)와 [Agent Sandbox 설치](#1단계-agent-sandbox-설치-extensionsagent_sandboxsh-install)를 진행하세요.
-2. [대기 pool 만들기](#2단계-cpu-warm-pool-만들기-extensionsagent_sandboxsh-pool)에서 `readyReplicas`가 올라온 뒤 [에피소드 실행](#3단계-multi-turn-에피소드-실행-extensionsagent_sandboxsh-episodes)으로 갑니다. 한 에피소드의 `turn` 로그들이 같은 `claim`과 `pod`를 쓰는지 대조하세요.
+2. [대기 pool 만들기](#2단계-cpu-warm-pool-만들기-extensionsagent_sandboxsh-pool)에서 `readyReplicas`가 1 이상이면 [에피소드를 실행](#3단계-multi-turn-에피소드-실행-extensionsagent_sandboxsh-episodes)하세요. 한 에피소드 안에서 `turn` 로그마다 `claim`과 `pod` 값이 같은지 비교해 보세요.
 3. `episode_end`의 `released`가 `true`인지 확인하고 [대기 pool을 정리](#정리)하세요. claim을 반납한 뒤에도 pool은 다음 에피소드용 pod를 채웁니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
@@ -58,7 +58,7 @@
 
     | 구성 요소 | 이 실습에서 | 파일 |
     |---|---|---|
-    | Job `episodes-<unix 시각>` | `rl-trainer` 네임스페이스, ServiceAccount `sandbox-episode`. Kubernetes API 토큰은 이 Job의 pod에만 마운트하고, sandbox audience 토큰과 label `gpusandbox/client=true`를 함께 씁니다 | `k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl` |
+    | Job `episodes-<unix 시각>` | `rl-trainer` 네임스페이스, ServiceAccount `sandbox-episode`. Kubernetes API 토큰은 이 Job의 pod에만 마운트합니다. pod에는 `gpusandbox/client=true` label이 있고, 샌드박스 요청에는 sandbox audience 토큰을 붙입니다 | `k8s/extensions/agent-sandbox/job-multiturn.yaml.tpl` |
     | ServiceAccount `sandbox-episode` | 토큰 자동 마운트는 기본으로 꺼져 있습니다 | `k8s/base/trainer-rbac.yaml` |
     | Role과 RoleBinding `sandbox-claims` | `sandbox` 네임스페이스의 `sandboxclaims`에 create, get, list, watch, delete 권한만 부여합니다 | `k8s/extensions/agent-sandbox/trainer-claims-rbac.yaml` |
     | SandboxTemplate과 SandboxWarmPool `kernel-eval-gvisor-cpu` | 프로필 `gvisor-cpu`(CPU 1개, 메모리 2Gi, c8i 노드). ingress는 `rl-trainer`의 `gpusandbox/client=true` pod에서 오는 TCP 8000만 허용하고, egress는 모두 차단합니다 | `k8s/extensions/agent-sandbox/template.yaml.tpl` |
@@ -89,9 +89,9 @@
     **확인할 것:**
 
     - 끝에 나오는 `SANDBOX_IMAGE_URI`와 `CONTROL_IMAGE_URI` 두 줄의 태그가 새 값입니다. 두 줄을 `scripts/config.env`에 붙여 넣으세요.
-    - 새 sandbox 이미지는 2단계에서 만드는 warm pool에만 쓰이고, 10에서 배포한 Deployment pool은 이전 이미지를 그대로 씁니다.
+    - 새 이미지는 2단계에서 만드는 warm pool에만 적용됩니다. 10편에서 배포한 Deployment pool은 이전 이미지로 계속 실행됩니다.
 
-3. **설정 값:** `scripts/config.env`에 `SANDBOX_IMAGE_URI`, `CONTROL_IMAGE_URI`, `SANDBOX_AUDIENCE`가 있어야 합니다. `pool`은 `SANDBOX_IMAGE_URI`와 `SANDBOX_AUDIENCE`를, `episodes`는 `CONTROL_IMAGE_URI`와 `SANDBOX_AUDIENCE`를 읽습니다.
+3. **환경 변수:** `scripts/config.env`에 `SANDBOX_IMAGE_URI`, `CONTROL_IMAGE_URI`, `SANDBOX_AUDIENCE`가 있어야 합니다. `pool`은 `SANDBOX_IMAGE_URI`와 `SANDBOX_AUDIENCE`를, `episodes`는 `CONTROL_IMAGE_URI`와 `SANDBOX_AUDIENCE`를 읽습니다.
 
 ## 1단계: Agent Sandbox 설치 (`extensions/agent_sandbox.sh install`)
 
@@ -227,8 +227,8 @@ kubectl -n sandbox get sandboxclaims -l gpusandbox/episode=true -w
 
 | 확인할 조건 | 볼 값 |
 |---|---|
-| 한 에피소드의 모든 turn이 claim 하나와 샌드박스 하나를 씁니다 | 에피소드 1의 `turn` 이벤트 3개에서 `claim`, `address`, `pod`가 모두 `episode_start`의 값과 같습니다. `multiturn_summary`의 `one_sandbox_per_episode`가 `true`입니다 |
-| 에피소드마다 다른 샌드박스를 씁니다 | 에피소드 1과 2의 `episode_start`에서 `claim`과 `sandbox`가 다릅니다. `claims`와 `distinct_sandboxes`가 모두 2입니다 |
+| 한 에피소드에서는 매 턴 같은 claim으로 같은 샌드박스에 요청합니다 | 에피소드 1의 `turn` 이벤트 3개에서 `claim`, `address`, `pod`가 모두 `episode_start`의 값과 같습니다. `multiturn_summary`의 `one_sandbox_per_episode`가 `true`입니다 |
+| 다음 에피소드는 새 샌드박스를 할당받습니다 | 에피소드 1과 2의 `episode_start`에서 `claim`과 `sandbox`가 다릅니다. `claims`와 `distinct_sandboxes`가 모두 2입니다 |
 | turn마다 피드백을 받습니다 | `feedback`이 `status: policy_violation`, `status: wrong_answer`, `status: ok` 순서로 바뀝니다. 오답 turn의 피드백에는 오류 메시지의 마지막 줄이 들어 있습니다 |
 | episode reward는 마지막 제출로 정해집니다 | `episode_end`의 `reward`(예시 1.316143)가 마지막 turn의 `single_turn_reward`와 같고, `first_turn_reward`(0.1)보다 큽니다. `multiturn_summary`의 `mean_reward`와 `mean_first_turn_reward`도 같은 관계입니다 |
 | 에피소드가 끝나면 claim이 삭제됩니다 | `episode_end`의 `released`가 `true`이고, 아래 명령의 출력에 claim이 없습니다 |
@@ -266,9 +266,9 @@ CLI는 다음 경우에 종료 코드 1로 끝납니다.
 
 ## 4단계: single-turn 기준선 (`episodes gvisor-cpu 2 1`)
 
-3단계에서는 동일 에피소드의 `claim`이 턴마다 유지되고, 종료 시 `released: true`가 나오는지 확인했습니다. 아래 기준선은 같은 제출 순서에서 턴 수만 하나로 제한해 첫 답에서 멈췄을 때의 결과를 보여 줍니다.
+3단계에서는 동일 에피소드의 `claim`이 턴마다 유지되고, 종료 시 `released: true`가 나오는지 확인했습니다. 이번에는 답안을 제출하는 순서는 그대로 두고 첫 번째 턴에서 멈춥니다. 이 결과를 3단계와 비교하세요.
 
-같은 warm pool에서 `max_turns`만 1로 바꿔 실행합니다. 3단계에서 claim된 샌드박스는 삭제되었으므로, `readyReplicas`가 다시 대기 수(기본 2, `pool gvisor-cpu 1`로 줄였다면 1)가 된 뒤 실행하세요.
+같은 warm pool에서 `max_turns`만 1로 바꿔 실행합니다. 3단계에서 할당받은 샌드박스는 이미 삭제됐으므로, `readyReplicas`가 다시 대기 수(기본 2, `pool gvisor-cpu 1`로 줄였다면 1)가 된 뒤 실행하세요.
 
 ```bash
 GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor-cpu 2 1
@@ -336,7 +336,7 @@ GPUSANDBOX_LOG=json scripts/extensions/agent_sandbox.sh episodes gvisor 2 3
 ```
 
 - **device는 `cuda`입니다.** scripted policy는 `read_host_file`, `relu_bias_wrong`, `relu_bias_triton` 순서로 제출하고, 정답 판정(`solved`)에는 custom Triton kernel이 필요합니다(`require_triton`).
-- **Job은 에피소드를 하나씩 실행하므로 pool 1로 실행할 수 있습니다.** 이때 스크립트는 `1 sandbox(es) Ready: later episodes wait for the pool to start replacements` 경고를 출력하고, 에피소드 2는 pool이 시작한 새 샌드박스가 Ready가 될 때까지 기다립니다(최대 600초, `EpisodeSandbox`의 `ready_timeout_s`).
+- **Job이 에피소드를 하나씩 실행하므로 대기 샌드박스가 한 개여도 됩니다.** 이때 스크립트는 `1 sandbox(es) Ready: later episodes wait for the pool to start replacements` 경고를 출력하고, 에피소드 2는 pool이 시작한 새 샌드박스가 Ready가 될 때까지 기다립니다(최대 600초, `EpisodeSandbox`의 `ready_timeout_s`).
 
 **확인할 것:**
 
@@ -397,7 +397,7 @@ reward.custom_reward_function.name=compute_score
 ```
 
 - **reward:** `compute_score`는 마지막 제출의 점수(3단계의 episode reward와 같은 규칙)를 반환합니다. 에피소드가 `sandbox_error`로 끝나면 format 점수(0.1)만 주고 `sandbox_error` flag를 1로 기록하며, 제출이 없으면 0입니다.
-- **동시 trajectory 수:** trajectory 하나는 첫 제출부터 에피소드가 끝날 때까지 샌드박스 하나(GPU pool이면 GPU 하나)를 점유합니다. 대기 샌드박스 수만큼의 trajectory는 바로 시작하고, 그 뒤의 trajectory는 pool이 보충한 샌드박스가 Ready가 될 때까지 기다립니다. GPU pool에서는 실행 중인 샌드박스마다 GPU를 하나씩 쓰므로 GPU 수가 상한입니다.
+- **동시 trajectory 수:** trajectory 하나는 첫 제출부터 에피소드가 끝날 때까지 샌드박스 하나(GPU pool이면 GPU 하나)를 점유합니다. 바로 시작할 수 있는 trajectory 수는 대기 중인 샌드박스 수와 같습니다. 나머지는 pool이 새 샌드박스를 띄워 Ready가 될 때까지 기다립니다. GPU pool에서는 실행 중인 샌드박스마다 GPU가 하나씩 필요하므로 GPU 수가 동시 실행의 상한입니다.
 
 확인하지 않은 항목(코드의 `# TODO verify`)은 다음과 같습니다.
 

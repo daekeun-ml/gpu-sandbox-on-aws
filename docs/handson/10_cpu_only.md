@@ -1,6 +1,6 @@
 # 10 c8i 단독 저비용 경로 (시나리오 C)
 
-이 실습은 GPU나 모델 없이 EKS에서 채점 pool을 교체하는 과정입니다. `c8i.2xlarge` 한 대에서 세 런타임을 비교하고, 시뮬레이터가 같은 답안을 보내는 동안 v1에서 v2로 바꿉니다.
+GPU나 모델 없이 EKS에서 채점 pool을 교체해 봅니다. `c8i.2xlarge` 한 대에서 세 런타임을 비교하고, 시뮬레이터가 같은 답안을 보내는 동안 v1에서 v2로 바꿉니다.
 
 1. [로컬 설정과 CDK 준비](#준비)부터 [이미지 빌드](#3단계-이미지-두-개만-빌드-03_build_push_imagessh)까지 진행하세요. CPU 경로는 trainer 이미지가 필요 없어 `--no-trainer`로 빌드합니다.
 2. [세 런타임 설치](#4단계-c8i-노드에-세-런타임-설치-katacpu_nodessh) 후 각 pod의 커널을 호스트와 비교하세요. 이어서 라우팅을 설정하고 [세 pool에 시험 답안](#6단계-pool-세-개-배포와-검증-06_deploy_sandboxessh-opsverifysh)을 보내세요.
@@ -150,7 +150,7 @@ export SANDBOX_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/s
 export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/control:v1"
 ```
 
-sandbox 이미지는 PyTorch CUDA 런타임 기반이고 CPU 경로에도 그대로 씁니다. 작업 PC가 arm64라면 x86_64 호스트에서 빌드하세요.
+CPU 실습에서도 PyTorch CUDA 런타임 기반의 sandbox 이미지를 그대로 실행합니다. 작업 PC가 arm64라면 x86_64 호스트에서 빌드하세요.
 
 **`04_install_gpu_stack.sh`는 건너뜁니다.** 이 스크립트는 NVIDIA device plugin 설치, GPU용 `gvisor` RuntimeClass 등록, GPU 동작 검사를 맡습니다. gVisor는 EC2의 `sandbox-gvisor` 노드와 c8i 샌드박스 노드에 부팅할 때 user data로 설치되므로, `02_create_cluster.sh`가 만든 c8i 노드에는 이미 들어 있습니다.
 
@@ -233,7 +233,7 @@ done
 
 `ops/simulate.sh`가 모델 대신 정해진 제출물을 보냅니다. 이 단계에서 확인하는 것은 학습 성능이 아니라 채점과 라우팅입니다. 전환 전후 로그에서 판정과 실제 채점 버전을 함께 비교하세요.
 
-2단계에서 SSM 터널을 연 터미널은 그대로 두고, 작업 터미널 두 개를 더 씁니다. 첫 번째 작업 터미널의 reward 루프는 30배치를 차례로 채점하고, 배치 사이에 20초씩 쉽니다. 2026-11-17 c8i 노드에서는 약 16분 걸렸습니다.
+2단계에서 연 SSM 터널은 그대로 두고 터미널 두 개를 더 여세요. 첫 번째 터미널의 reward 루프는 30개 배치를 차례로 채점하며 각 배치가 끝나면 다음 배치까지 20초를 기다립니다. 2026-11-17 c8i 노드에서는 약 16분 걸렸습니다.
 
 ```bash
 # work terminal 1
@@ -271,13 +271,13 @@ scripts/ops/rollout.sh kata-clh-cpu v1 v2
 - **교체 전후 결과가 같습니다.** 두 배치 모두 `ok` 1건, `wrong_answer` 2건, pass 33%입니다. 제출물마다 두 버전의 판정이 같은지는 `ops/rollout.sh` parity 출력의 `PASS` 줄로 확인합니다.
 
 ??? note "한 배치에서 서로 다른 버전의 채점 결과를 섞지 않는 이유"
-    학습에서 필요한 결과가 모두 같은 pool의 캐시에 있는 배치는 샌드박스를 부르지 않아 `reward_batch` 줄이 없습니다. 서로 다른 pool의 캐시가 섞이면 한 pool에서 다시 채점하고 그 줄을 남깁니다. on-policy 학습에서 한 배치의 advantage를 같은 기준으로 계산하려면 이 조건이 필요합니다.
+    배치에 필요한 채점 결과가 모두 한 pool의 캐시에 있으면 샌드박스에 다시 요청하지 않으므로 `reward_batch` 줄도 나오지 않습니다. 캐시에 서로 다른 pool의 결과가 섞여 있으면 한 pool에서 다시 채점하고 로그를 남깁니다. 이렇게 해야 on-policy 학습에서 배치 안의 모든 advantage를 같은 기준으로 계산할 수 있습니다.
 
 전체 실행 화면은 아래와 같습니다.
 
 ![simulate.sh 실행 화면: batch 1부터 6까지 kata-clh-cpu/v1, 05:37:31에 SWITCH kata-clh-cpu/v1 -> kata-clh-cpu/v2 줄, batch 7부터 16까지 kata-clh-cpu/v2, 모든 batch가 ok 1, wrong_answer 2, pass 33%](../images/terminal/simulate-switch.png)
 
-제출물은 4개인데 3건만 채점된 것은, 호스트 파일을 읽는 제출물을 trainer 쪽 AST 검사가 샌드박스에 보내기 전에 걸러 내기 때문입니다(원래 JSON의 `n`이 3). speedup(`mean_speedup`)은 CPU 측정 노이즈 때문에 배치마다 달라지므로(로컬 실행에서 0.66에서 1.65 사이) 런타임 비교에 쓰지 마세요.
+제출물 4개 중 호스트 파일을 읽는 코드 한 개는 trainer의 AST 검사에서 걸러집니다. 샌드박스에서 채점한 제출물은 3개이므로 원래 JSON에서도 `n`은 3입니다. speedup(`mean_speedup`)은 CPU 측정 노이즈 때문에 배치마다 달라지므로(로컬 실행에서 0.66에서 1.65 사이) 런타임 비교에 쓰지 마세요.
 
 v2 전환을 확인했으면 아래 명령으로 v1을 0으로 줄입니다. v1 Deployment는 남지만 replica가 0이라 요청을 받지 못합니다.
 
@@ -357,13 +357,13 @@ scripts/08_cleanup.sh
 
 - 서울 리전(ap-northeast-2)의 `c8i.2xlarge`는 시간당 0.42336 USD입니다.
 - 위 합계에 포함되지 않는 항목: access instance(`t4g.nano`), secrets용 KMS 키, CloudWatch 로그, NAT gateway(시간 요금과 처리량 요금), EBS 볼륨(system 50 GB x2, c8i 100 GB), 데이터 전송, ECR 저장 용량.
-- 시나리오 A 최소 경로의 컴퓨트(약 3.42 USD/시간)와 비교하면 약 6분의 1입니다.
+- 시간당 컴퓨트 비용은 시나리오 A의 최소 구성(약 3.42 USD/시간)의 약 6분의 1입니다.
 
 ## 적용 범위와 한계
 
 - **GPU와 Triton은 확인하지 않습니다.** nvproxy, VFIO passthrough, GPU timing(device-wide synchronize), Triton 컴파일은 GPU 경로([02](02_gvisor.md), [03](03_kata.md))에서만 확인할 수 있습니다.
 - **학습이 아닙니다.** reward 루프 시뮬레이션(`ops/simulate.sh`)에는 모델 생성과 gradient 계산이 없습니다. reward 경로와 버전 고정은 trainer와 같은 코드를 쓰지만, 실제 학습에서 vLLM 생성 시간에 따라 배치 간격이 정해지는 타이밍은 재현하지 않습니다.
-- **nested virtualization 성능은 bare metal을 대표하지 않습니다.** Kata VM이 VM 안에서 실행되므로 부팅 시간과 지연이 bare metal보다 길 수 있습니다. AWS도 성능에 민감한 가상화 워크로드에는 bare metal을 권장합니다(공식 문서 기준). 측정값은 같은 노드 안의 런타임 비교에만 쓰세요.
+- **부팅 시간과 지연을 해석할 때는 가상화 환경을 확인하세요.** Kata VM이 VM 안에서 실행되므로 부팅 시간과 지연이 bare metal보다 길 수 있습니다. AWS도 성능에 민감한 가상화 워크로드에는 bare metal을 권장합니다(공식 문서 기준). 측정값은 같은 노드 안의 런타임 비교에만 쓰세요.
 
 ## 다음 단계
 

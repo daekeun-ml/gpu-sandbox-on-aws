@@ -40,12 +40,12 @@
 ??? question "Firecracker로도 GPU를 VM에 직접 할당할 수 있다"
     **실제:** Firecracker는 GPU passthrough를 제공하지 않습니다.
 
-    Firecracker는 virtio 장치 중심의 최소 장치 모델을 씁니다. 1.13.0에서 PCI 지원이 추가됐지만 변경 이력에 VFIO GPU passthrough는 없습니다. E2B 같은 Firecracker 기반 샌드박스가 CPU 위주인 것도 이 때문입니다. 이 저장소은 GPU 샌드박스에 gVisor(nvproxy)나 Kata + QEMU(VFIO)를 씁니다. 자세히: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
+    Firecracker가 가상 머신에 제공하는 장치는 대부분 virtio 장치입니다. 1.13.0에서 PCI 지원이 추가됐지만 변경 이력에 VFIO GPU passthrough는 없습니다. E2B 같은 Firecracker 기반 샌드박스가 CPU 위주인 것도 이 때문입니다. 이 실습에서는 gVisor(nvproxy)나 Kata + QEMU(VFIO)로 GPU 코드를 실행합니다. 자세히: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
 
 ??? question "Kata + Cloud Hypervisor도 QEMU처럼 GPU를 VM에 직접 할당할 수 있다"
     **실제:** upstream은 Cloud Hypervisor의 GPU passthrough를 지원하지 않습니다. 지원되는 Kata GPU 경로는 QEMU(`kata-qemu-nvidia-gpu`)입니다.
 
-    Kata `docs/hypervisors.md`는 Cloud Hypervisor의 GPU 지원을 not supported로 표시하고, maintainer도 2025-08에 QEMU GPU runtime class를 쓰라고 답했습니다(issue #11687). 이 저장소의 `kata-clh-nvidia-gpu`는 평가용 실험 구성이고, Kata + Cloud Hypervisor는 CPU 샌드박스(`kata-clh-cpu`)로 씁니다. 자세히: [03 Kata 샌드박스](../handson/03_kata.md)
+    Kata의 `docs/hypervisors.md`에는 Cloud Hypervisor의 GPU 지원 여부가 not supported로 나옵니다. 2025-08에 유지보수 담당자도 GPU를 연결하려면 QEMU GPU runtime class를 선택하라고 안내했습니다(issue #11687). 이 저장소의 `kata-clh-nvidia-gpu`는 평가용 실험 구성이고, CPU 샌드박스(`kata-clh-cpu`)는 Kata + Cloud Hypervisor로 실행합니다. 자세히: [03 Kata 샌드박스](../handson/03_kata.md)
 
 ??? question "Kata GPU pool(T4)에서도 Triton 커널은 당연히 동작한다"
     **실제:** T4(`g4dn.metal`)에서 Triton 커널이 동작하는지는 여러분의 노드에서 golden 커널로 확인해야 합니다. 이 가이드는 Triton의 공식 지원 GPU 범위를 단정하지 않습니다.
@@ -65,14 +65,14 @@
 ## 플랫폼과 관리형 서비스
 
 ??? question "HyperPod 기본 AMI 노드에 이 샌드박스를 바로 올릴 수 있다"
-    **실습 결과**. HyperPod EKS 1.36 기본 이미지의 NVIDIA 드라이버는 `595.112.07`이었습니다. B1은 EC2에서 채점했습니다. 관리형 B2에서는 HyperPod 채점 노드 두 대에 `580.178.04`를 설치하고 재부팅한 뒤 A10G에서 gVisor를 실행했습니다. [B2 실습](../handson/07_hyperpod_b2.md)
+    관리형 B2 실습에서 확인한 HyperPod EKS 1.36 기본 이미지의 NVIDIA 드라이버는 `595.112.07`이었습니다. B1은 EC2에서 채점했습니다. 관리형 B2에서는 HyperPod 채점 노드 두 대에 `580.178.04`를 설치하고 재부팅한 뒤 A10G에서 gVisor를 실행했습니다. [B2 실습](../handson/07_hyperpod_b2.md)
 
-    - **기본 AMI의 gVisor GPU 샌드박스**: HyperPod EKS AMI(1.34~1.36)의 NVIDIA 드라이버 595.91.07이 gVisor release-20261109.0의 nvproxy 지원 목록에 없어서 쓸 수 없습니다(목록에 없는 unknown 버전은 플래그와 관계없이 실패).
-    - **기존 custom AMI 방식**. CDK 경로는 별도 AMI에 드라이버를 넣습니다. 관리형 실습은 등록된 채점 노드에 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다.
+    - **기본 AMI의 gVisor GPU 샌드박스**: HyperPod EKS AMI(1.34~1.36)의 10월 릴리스에 포함된 NVIDIA 드라이버 595.91.07도 gVisor release-20261109.0의 nvproxy 지원 목록에 없어서 쓸 수 없습니다(목록에 없는 unknown 버전은 플래그와 관계없이 실패).
+    - **기존 custom AMI 방식**에서는 CDK로 만든 EKS 클러스터를 사용하며, 별도 AMI에 드라이버를 넣습니다. 관리형 실습은 등록된 채점 노드에 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다.
     - **Kata GPU 샌드박스**: Kubernetes 버전이나 AMI와 관계없이 HyperPod 노드에서 실행할 수 없습니다. `ml.*.metal`이 없고, CreateCluster에 nested virtualization CPU 옵션이 없으며, G와 P 계열은 nested virtualization을 지원하지 않기 때문입니다.
     - **GPU 없는 Kata**: 같은 `/dev/kvm` 조건 때문에 어렵다고 보지만 검증하지 않았고(추론), 이 저장소에는 HyperPod용 Kata 구성이 없습니다.
 
-    아래 명령은 HyperPod 노드마다 debug pod를 띄워 드라이버와 gVisor 지원 여부를 출력합니다. 끝나면 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제하므로, 다른 사람이 `kubectl debug node`로 노드를 점검하는 중이면 그 작업이 끝난 뒤 실행하세요.
+    아래 명령은 CPU 시스템 노드를 제외한 HyperPod 워커에서 NVIDIA 드라이버 버전과 gVisor 지원 여부를 확인합니다. 스크립트가 점검용 pod를 띄울 임시 네임스페이스를 만들고, 점검이 끝나면 그 네임스페이스를 삭제합니다.
 
     ```bash
     scripts/hyperpod/check_gvisor.sh
@@ -80,7 +80,7 @@
 
     **확인할 것:**
 
-    - **기본 AMI 노드**: `NOT supported by gVisor ...: keep sandboxes on EC2 (mode B1)`가 출력됩니다.
+    - **이번 실습의 기본 AMI를 사용한 GPU 노드**: `NOT supported by gVisor`가 표시됩니다.
     - **B2에서 드라이버를 교체한 채점 노드**: `driver 580.178.04: SUPPORTED ...`가 출력됩니다.
 
     새 AMI나 gVisor 릴리스가 나오면 다시 실행하세요.
@@ -92,7 +92,7 @@
 ??? question "EKS Auto Mode 노드에 gVisor나 Kata를 설치하면 된다"
     **실제:** EKS 문서는 "You can't directly access or install software on instances managed by EKS Auto Mode"라고 적습니다. Auto Mode 노드에는 runsc나 kata-deploy의 런타임을 등록할 수 없습니다.
 
-    그래서 이 저장소은 핸즈온에서 managed node group을, Production에서 Karpenter NodePool을 씁니다. AWS 기술 블로그 1부도 EKS Auto Mode에서는 runsc를 등록할 수 없다고 설명합니다. 자세히: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
+    EC2 워커는 핸즈온에서 EKS 관리형 노드 그룹으로 배포합니다. 운영 환경을 위한 예제에서는 Karpenter NodePool이 EC2 노드를 관리합니다. AWS 기술 블로그 1부도 EKS Auto Mode에서는 runsc를 등록할 수 없다고 설명합니다. 자세히: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
 
 ??? question "관리형 code interpreter나 샌드박스 서비스로 GPU 샌드박스를 쓸 수 있다"
     **실제:** 이 가이드가 확인한 AWS 관리형 샌드박스는 CPU 샌드박스의 대안으로만 쓸 수 있습니다.
@@ -104,7 +104,7 @@
 ??? question "NetworkPolicy를 default deny로 두면 pod가 노드 IP에도 연결할 수 없다"
     **실제:** VPC CNI network policy agent는 kubelet probe가 차단되지 않도록 pod와 자기 노드 IP 사이의 통신을 정책과 관계없이 허용합니다(aws-network-policy-agent 소스 기준).
 
-    그래서 이 저장소은 샌드박스 노드에 iptables node guard(`GPUSANDBOX-GUARD`)를 둡니다. 또 readiness 검사에서 IMDS, API 서버, `$(NODE_IP):10250`에 연결할 수 없음을 확인한 뒤에만 pod가 Ready가 됩니다. 아래 명령은 pool의 pod에서 이 대상들이 실제로 차단되는지 확인합니다.
+    이 실습에서는 샌드박스 노드에 iptables node guard(`GPUSANDBOX-GUARD`)를 둡니다. 또 readiness 검사에서 IMDS, API 서버, `$(NODE_IP):10250`에 연결할 수 없음을 확인한 뒤에만 pod가 Ready가 됩니다. 아래 명령은 pool의 pod에서 이 대상들이 실제로 차단되는지 확인합니다.
 
     ```bash
     scripts/ops/verify.sh gvisor v1
@@ -119,23 +119,23 @@
 ??? question "정적 정책(AST 검사)이 샌드박스의 보안 경계다"
     **실제:** 정적 정책은 reward 무결성을 위한 검사이고, 노드를 보호하는 보안 경계는 gVisor나 Kata, 그리고 네트워크 통제입니다.
 
-    이 저장소은 후보 코드가 pod 안에서 임의의 Python을 실행할 수 있다고 가정합니다. 정적 정책은 timer 교체나 harness 내부 접근처럼 측정을 조작하는 간단한 방법만 차단합니다. 자세히: [04 Reward 무결성](../production/04_reward_integrity.md), [02 보안](../production/02_security.md)
+    이 가이드에서는 후보 코드가 pod 안에서 임의의 Python을 실행할 수 있다고 가정합니다. 정적 정책은 timer 교체나 harness 내부 접근처럼 측정을 조작하는 간단한 방법만 차단합니다. 자세히: [04 Reward 무결성](../production/04_reward_integrity.md), [02 보안](../production/02_security.md)
 
 ??? question "TokenReview를 통과한 토큰이면 호출을 허용해도 된다"
-    **실제:** TokenReview는 토큰이 유효한지만 증명하고, 그 subject에게 호출 권한이 있는지는 알려 주지 않습니다.
+    **실제:** TokenReview는 토큰의 유효성을 확인합니다. 그 토큰의 주체(subject)에게 호출 권한이 있는지는 별도로 확인해야 합니다.
 
-    AWS 기술 블로그 2부는 Agent Sandbox의 sandbox-router를 분석하며 이 점과 기본 인가가 allow-all이라는 점을 함께 지적했습니다. 이 저장소의 gateway는 TokenReview 다음에 `GATEWAY_ALLOWED_SUBJECTS` allowlist를 따로 확인합니다. 샌드박스 pod는 audience(`gpu-sandbox`)와 `SANDBOX_ALLOWED_SUBJECTS`를 함께 검사하고, 일치하지 않으면 요청을 거부합니다. 자세히: [03 Gateway와 샌드박스 pool](../production/03_gateway_and_pools.md), [02 보안](../production/02_security.md)
+    AWS 기술 블로그 2부에 따르면 Agent Sandbox의 sandbox-router는 기본 인가 설정이 allow-all이어서 유효한 토큰을 가진 주체의 호출을 모두 허용합니다. 이 저장소의 gateway는 TokenReview 다음에 `GATEWAY_ALLOWED_SUBJECTS` allowlist를 따로 확인합니다. 샌드박스 pod는 audience(`gpu-sandbox`)와 `SANDBOX_ALLOWED_SUBJECTS`를 함께 검사하고, 일치하지 않으면 요청을 거부합니다. 자세히: [03 Gateway와 샌드박스 pool](../production/03_gateway_and_pools.md), [02 보안](../production/02_security.md)
 
 ## 학습과 reward
 
 ??? question "샌드박스 Deployment를 rolling update로 바꾸면 학습 중에도 안전하다"
     **실제:** rolling update 동안에는 구버전과 신버전 pod가 함께 응답해서, 같은 GRPO group의 completion이 서로 다른 채점 규칙으로 점수를 받을 수 있습니다. 그러면 group 기준 advantage가 잘못 계산됩니다.
 
-    이 저장소은 (runtime, version)마다 blue/green pool을 따로 배포합니다.
+    이 실습에서는 (runtime, version) 조합마다 별도의 blue/green pool을 배포합니다.
 
     - **전환 시점**: 격리 검증과 golden parity를 통과하면 스크립트가 routing 표를 갱신합니다. trainer는 샌드박스를 부를 때마다 routing 표를 읽으므로, 변경이 반영된 뒤 샌드박스에 보내는 요청부터 새 버전 pool이 응답합니다.
     - **한 batch는 한 버전**: 한 batch의 점수는 항상 한 버전에서 나옵니다. 채점 도중 pool이 바뀌면 다른 pool에서 받은 결과를 새 pool에서 다시 채점합니다.
-    - **결과가 모두 한 pool의 캐시에 있는 batch**: 샌드박스를 부르지 않고 그 pool의 결과를 씁니다.
+    - **batch의 결과가 모두 같은 pool에 캐시된 경우**: 샌드박스에 다시 요청할 필요 없이 캐시에 있는 결과를 반환합니다.
     - **TRL 기본 설정**: batch 경계가 step 경계와 같습니다.
 
     아래 명령이 그 절차(배포, 검증, parity, 전환)를 차례로 실행합니다. 기본 시나리오 A에서는 v1이 `sandbox-gvisor` 노드 두 대의 GPU를 이미 쓰고 있으므로, 먼저 이 노드 그룹을 4대로 늘리고 노드가 `Ready`인지 확인합니다. 늘리지 않으면 v2 pod가 GPU를 받지 못해 1단계가 최대 30분 기다린 뒤 실패합니다(노드 수를 늘리는 명령은 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)의 준비 절에 있습니다).
@@ -209,7 +209,7 @@
 ??? question "Qwen2.5-Coder 계열은 모두 Apache-2.0이다"
     **실제:** `Qwen/Qwen2.5-Coder-1.5B-Instruct`와 `Qwen/Qwen2.5-Coder-7B-Instruct`는 Apache-2.0이고 gate가 없지만, `Qwen2.5-Coder-3B-Instruct`는 qwen-research 라이선스(비상업)입니다.
 
-    이 저장소은 3B를 쓰지 않습니다. 모델을 바꿀 때는 Hugging Face 모델 카드의 license 항목을 직접 확인하고, 데이터셋 라이선스도 함께 보세요. 자세히: [홈](../index.md)
+    이 실습의 학습 모델에는 3B가 포함되지 않습니다. 모델을 바꿀 때는 Hugging Face 모델 카드의 license 항목을 직접 확인하고, 데이터셋 라이선스도 함께 보세요. 자세히: [홈](../index.md)
 
 ??? question "데모 사이트는 실제 GPU 클러스터에 연결된다"
     **실제:** 데모는 정적 사이트(HTML, CSS, JS, 외부 스크립트 없음)입니다. `python -m gpusandbox.tools record`가 만든 채점 녹화(`recording.json`)를 재생하고, `demo/build_extras.py`로 만든 `extras.json`이 있으면 벤치마크와 학습 기록도 보여 줍니다. 방문자는 클러스터나 GPU에 접속하지 않습니다.

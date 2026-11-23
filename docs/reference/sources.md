@@ -1,7 +1,7 @@
 # 검증된 사실과 출처
 
 !!! info "TL;DR"
-    실습 계정에서 실행한 결과와 공식 문서와 외부 사례에서 가져온 수치를 확인할 수 있습니다.
+    실습 계정에서 무엇을 실행했고 어떤 결과를 얻었는지 정리했습니다. 공식 문서나 외부 사례에서 인용한 수치에는 출처를 표시했습니다.
 
 - **직접 실행한 범위**는 [AWS 실행 기록](#aws-실행-기록)에서 확인하세요.
 - **비용, quota, 드라이버 호환성**은 [배포 전 재확인 체크리스트](#배포-전-재확인-체크리스트)로 확인하세요.
@@ -35,7 +35,7 @@ python -m pytest -q
 
 **확인할 것:**
 
-- 실패 없이 `passed`로 끝납니다.
+- 테스트를 모두 통과하면 마지막 줄에 `passed`가 표시됩니다.
 - 이 페이지를 쓰는 동안(2026-11-13) macOS(CPU 전용)에서 전체 테스트가 통과했습니다.
 - 테스트 수는 저장소가 바뀌면 달라지므로 여기에 적지 않습니다. 현재 체크아웃의 테스트 수는 저장소 루트에서 `python -m pytest --collect-only -q`로 확인하세요(CDK 스택 테스트는 따로).
 
@@ -53,7 +53,7 @@ python -m pytest -q
 | `tests/test_demo.py` | 데모 CloudFormation 템플릿(private bucket, `AWS:SourceArn` 조건이 붙은 CloudFront 허용, TLS가 아닌 요청 거부, HTTPS 리디렉션과 보안 헤더), 외부 리소스와 HTML 주입이 없는 정적 사이트, 녹화 스키마와 reward 일관성 |
 | `cdk/tests/test_stack.py` | synth한 CDK 템플릿: private endpoint(public은 /32 opt-in만), `0.0.0.0/0` inbound 없음, 시나리오별 노드 그룹, 시나리오마다 cdk-nag 통과. 나머지는 표 아래 목록 |
 
-`cdk/tests/test_stack.py`가 더 확인하는 것은 다음과 같습니다.
+`cdk/tests/test_stack.py`에서는 다음 설정도 검사합니다.
 
 - **IMDSv2**: 시나리오 A에 Kata CPU를 추가해 synth한 모든 launch template의 IMDSv2 필수(hop limit과 EBS 볼륨은 템플릿에 명시된 경우에만 hop limit 1과 암호화를 확인)
 - **노드 그룹 설정**: c8i의 nested virtualization, Kata GPU 노드 그룹의 IOMMU AMI와 user data(이 구성의 IMDSv2는 검사하지 않음)
@@ -107,13 +107,13 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
     - **HyperPod EKS AMI**: 1.34~1.36(2026-10-16)은 595.91.07, 1.33은 580.178.04입니다.
 - [ ] **가격:** EC2 온디맨드 요금과 SageMaker AI(HyperPod `ml.*`) 요금. 이 가이드의 값(`c8i.2xlarge` 0.37484 USD/시간 등)은 2026-11 기준입니다.
 - [ ] **quota:** Running On-Demand G and VT instances(vCPU 기준, 새 계정은 0일 수 있음), Running On-Demand Standard instances, HyperPod의 `ml.<type> for cluster usage`.
-- [ ] **HyperPod가 지원하는 Kubernetes 버전:** 2026-11-22 기준 사전 요구사항에는 1.31~1.37이 명시되어 있습니다. 이 실습은 1.36을 씁니다.
+- [ ] **HyperPod가 지원하는 Kubernetes 버전:** 2026-11-22 기준 사전 요구사항에는 1.31~1.37이 명시되어 있습니다. 실습 클러스터의 Kubernetes 버전은 1.36입니다.
 - [ ] **EKS 버전:** standard support 1.37, 1.36, 1.35, 1.34.
 - [ ] **nested virtualization 지원 계열과 리전:** User Guide의 계열 목록과 리전별 지원 여부.
 - [ ] **관리형 샌드박스의 GPU 지원:** Nitro Sandboxes와 EKS isolated pods의 "GPU and other device passthrough are not supported at launch", AgentCore Code Interpreter 문서의 실행 환경 설명.
 - [ ] **Agent Sandbox CRD 필드:** 컨트롤러를 업그레이드하면 `SandboxClaim`, `SandboxTemplate`, `SandboxWarmPool` 필드 이름을 다시 확인합니다.
 - [ ] **모델 라이선스:** 사용할 모델 카드의 license 항목.
-- [ ] **데모 사이트 TLS:** 기본 `*.cloudfront.net` 인증서로는 viewer TLS 정책을 더 높은 버전으로 바꿀 수 없으므로, TLSv1.2_2021이 필요하면 custom domain과 us-east-1의 ACM 인증서를 씁니다.
+- [ ] **데모 사이트 TLS:** 기본 `*.cloudfront.net` 인증서로는 viewer TLS 정책을 더 높은 버전으로 바꿀 수 없으므로, TLSv1.2_2021이 필요하면 사용자 지정 도메인을 연결하고 us-east-1의 ACM 인증서를 지정합니다.
 
 아래 명령은 노드 드라이버가 고정한 gVisor 릴리스의 지원 목록에 있는지 확인합니다. 노드의 debug 셸(`kubectl debug node`, [문제 해결](troubleshooting.md)의 "노드에서 확인")에서 `chroot /host` 뒤에 실행하세요.
 
@@ -197,7 +197,7 @@ scripts/01_check_prereqs.sh
 | [awslabs/amazon-eks-ami v20261107](https://github.com/awslabs/amazon-eks-ami/releases/tag/v20261107) | AL2023 NVIDIA AMI: 드라이버 580.178.04 기본(595.91.07은 g7 전용), toolkit 1.20.1, containerd 2.3.7, device plugin 없음, kubelet 1.32 이상에서 CDI, user data는 nodeadm-config와 nodeadm-run 사이에 실행 |
 | [aws/aws-network-policy-agent](https://github.com/aws/aws-network-policy-agent) | 노드 IP는 ingress와 egress 맵 모두에서 허용("ensures kubelet liveness/readiness probes are never blocked") |
 | [Karpenter 문서](https://karpenter.sh/docs/), [aws/karpenter-provider-aws](https://github.com/aws/karpenter-provider-aws) | v1.15.2(LTS v1.14.3), `karpenter.sh/v1`, `karpenter.k8s.aws/v1`, IMDS hop limit 1 기본, user MIME part 병합, EC2NodeClass `spec.cpuOptions.nestedVirtualization` |
-| [eksctl 문서: Cluster Access](https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html) | "EKS does allow creating a configuration that allows only private access to be enabled, but eksctl doesn't support it during cluster creation": private endpoint만 있는 클러스터는 eksctl로 만들 수 없어서, 이 저장소은 인프라를 CDK로 만듦 |
+| [eksctl 문서: Cluster Access](https://docs.aws.amazon.com/eks/latest/eksctl/vpc-cluster-access.html) | "EKS does allow creating a configuration that allows only private access to be enabled, but eksctl doesn't support it during cluster creation": private endpoint만 있는 클러스터는 eksctl로 만들 수 없어서, 이 가이드에서는 해당 클러스터를 CDK로 배포 |
 | [aws/aws-cdk](https://github.com/aws/aws-cdk), [cdklabs/cdk-nag](https://github.com/cdklabs/cdk-nag) | `aws-cdk-lib` 2.276.0과 cdk-nag 3.0.2 고정. 2.276.0은 CDK CLI 2.1148.1과 호환되고, `aws-cdk-lib` 2.277.0으로 올리려면 CLI 2.1148.2 이상이 필요(저장소 `cdk/requirements.txt` 주석 기준) |
 | [aws/sagemaker-hyperpod-cli](https://github.com/aws/sagemaker-hyperpod-cli) | HyperPod 의존성 Helm chart(`helm_chart/HyperPodHelmChart`): health monitoring agent, deep health check RBAC, job-auto-restart, MPI operator, device plugin, Kueue |
 | [awslabs/awsome-distributed-ai veRL 예제](https://github.com/awslabs/awsome-distributed-ai/tree/main/examples/training/verl/hyperpod-eks/rlvr) | HyperPod EKS의 veRL RLVR 예제, veRL v0.6.1 고정(이전 키), 이전 aws-samples/awsome-distributed-training에서 이동 |

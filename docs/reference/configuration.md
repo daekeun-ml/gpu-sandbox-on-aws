@@ -1,7 +1,7 @@
 # 설정 값
 
 !!! info "TL;DR"
-    값을 바꿀 파일을 먼저 찾으세요. 배포된 pod는 매니페스트가 넘긴 값을 쓰고, 지정하지 않은 값은 코드 기본값을 씁니다.
+    아래 표에서 바꾸려는 설정이 어느 파일에 있는지 찾으세요. pod는 매니페스트에 지정한 값으로 실행되며, 생략한 항목에는 코드의 기본값이 적용됩니다.
 
 | 바꾸려는 것 | 수정할 곳 |
 |---|---|
@@ -46,7 +46,7 @@ flowchart LR
 | `CLUSTER_NAME` | `gpu-sandbox` | EKS 클러스터 이름. CDK 스택 이름 `<CLUSTER_NAME>-cdk`와 kubectl 컨텍스트 `<CLUSTER_NAME>-tunnel`에도 쓰임 | 전체 |
 | `K8S_VERSION` | `1.36` | EKS Kubernetes 버전 | `cdk/`, `build-iommu-ami.sh` |
 | `SCENARIO` | `A` | CDK 스택이 만들 노드 그룹 구성 | `02_create_cluster.sh`, `cdk/` |
-| `CHANGE_SCENARIO` | 없음 (스크립트 기본 `0`) | `1`이면 이미 배포된 스택의 시나리오(Outputs의 `Scenario`)와 다른 시나리오로 배포하는 것을 허용 | `cdk/deploy.sh` |
+| `CHANGE_SCENARIO` | 없음 (스크립트 기본 `0`) | 기존 스택의 Outputs에 기록된 `Scenario`와 다른 시나리오로 배포하려면 `1`로 설정 | `cdk/deploy.sh` |
 | `ADMIN_PRINCIPAL_ARN` | 비우면 `cdk/deploy.sh`가 현재 세션에서 만듦 | 클러스터 관리자 access entry를 받을 IAM 역할이나 사용자 ARN | `cdk/` |
 | `EKS_PUBLIC_ACCESS_CIDR` | 없음 (주석 처리, private만) | public endpoint를 켤 때만, IPv4 /32 하나. 다른 범위는 설정 단계에서 거부 | `cdk/` |
 | `WITH_KATA_CPU` | `0` | `1`이면 어느 시나리오에든 `sandbox-kata-cpu`(c8i) 노드 그룹을 추가. 시나리오 C에는 항상 있음 | `02_create_cluster.sh`, `cdk/` |
@@ -173,7 +173,7 @@ GPU probe는 새 프로세스에서 실행하며 120초 안에 끝나야 합니�
 egress 점검은 다음과 같이 동작합니다.
 
 - **`SANDBOX_EGRESS_PROBE_TARGETS`가 비어 있을 때**: 점검을 건너뛰고 차단된 것으로 봅니다.
-- **연결 시도**: 대상마다 2초 timeout으로 연결을 시도하고, 연결 성공과 connection refused를 둘 다 "도달 가능"으로 셉니다.
+- **연결 시도**: 대상마다 최대 2초 동안 연결을 시도합니다. 연결에 성공하거나 connection refused 응답을 받으면 해당 대상을 "도달 가능"으로 판정합니다.
 - **다시 점검하는 간격**: egress가 차단된 상태면 30초마다, 열린 상태면 5초마다 다시 점검합니다.
 
 | 경로 | 인증 | 응답 |
@@ -335,11 +335,11 @@ python -m json.tool /tmp/gs-eval/result.json
 
 주소 형식은 세 가지입니다.
 
-- **`host:port`**: headless Service DNS 이름으로 해석해 10초마다 다시 조회하고, 조회에 실패하면 마지막 결과를 씁니다.
-- **쉼표로 구분한 목록**: 그대로 씁니다(로컬 테스트용).
-- **`static:` 접두사가 붙은 값**: 그대로 씁니다(로컬 테스트용).
+- **`host:port`**: headless Service의 DNS 이름을 조회하고 결과를 10초간 보관합니다. 조회에 실패하면 마지막으로 확인한 주소 목록을 유지합니다.
+- **쉼표로 구분한 목록**: 로컬 테스트에서는 연결할 주소를 직접 나열할 수 있습니다.
+- **`static:` 접두사가 붙은 값**: 로컬 테스트에서 접두사 뒤의 주소를 고정된 목록으로 처리합니다.
 
-아래 표는 샌드박스 pod를 부르는 pool 클라이언트의 동작이며, direct 모드의 trainer와 gateway가 이 클라이언트를 씁니다.
+direct 모드의 trainer와 gateway는 모두 pool 클라이언트를 통해 샌드박스 pod에 요청을 보냅니다. 아래 표는 이 클라이언트의 설정값입니다.
 
 | 동작 | 코드 값 |
 |---|---|
@@ -382,9 +382,9 @@ gateway는 audience나 허용 목록이 비어 있으면 보호된 경로를 모
 | `GET /healthz` | 없음 | 200 |
 | `GET /readyz` | 없음 | 쓸 수 있는 routing 표가 없으면 503, 있으면 200 |
 
-- **gateway `/readyz`가 503인 경우**: 첫 읽기부터 실패했거나 활성 런타임과 버전의 pool 주소가 없을 때입니다. 다시 읽기에 실패해도 마지막 정상 표가 있으면 200입니다.
+- **gateway `/readyz`가 503인 경우**: 첫 읽기부터 실패했거나 활성 런타임과 버전의 pool 주소가 없을 때입니다. 다시 읽기에 실패해도 이전에 정상적으로 읽은 라우팅 표가 있으면 200을 반환합니다.
 
-고정 정보(pin)는 gateway 프로세스 메모리에만 저장되고, 10만 개를 넘으면 만료된 항목을 지웁니다. 그래서 매니페스트는 replica를 1로 둡니다.
+gateway는 그룹별 고정 정보(pin)를 프로세스 메모리에만 보관합니다. 그래서 매니페스트의 replica 수는 1입니다. 항목이 10만 개를 넘으면 gateway가 만료된 항목을 지웁니다.
 
 ## 7. trainer (rl/trl/train_grpo.py)
 
@@ -498,11 +498,11 @@ Deployment 템플릿이 모든 pool에 넣는 고정 값도 있습니다.
 
 템플릿에는 GPU 런타임 4개(`gvisor`, `kata-qemu`, `kata-clh`, `gvisor-hyperpod`)와 CPU 런타임 3개(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)의 `v1`, `v2` 주소가 모두 들어 있습니다. 주소가 표에 있어도 그 버전의 pool을 배포해야 요청을 받습니다.
 
-읽는 쪽은 다음과 같이 동작합니다.
+클라이언트가 라우팅 파일을 읽는 방식은 다음과 같습니다.
 
 - **내용이 바뀔 때**: `revision`이 1씩 증가합니다(키 순서를 정규화한 JSON 기준).
 - **다시 읽는 간격**: 파일은 최소 2초 간격으로 다시 읽습니다.
-- **읽기나 JSON 파싱에 실패할 때**: 마지막 정상 표를 계속 씁니다.
+- **읽기나 JSON 파싱에 실패할 때**: 마지막으로 정상적으로 읽은 라우팅 표를 유지합니다.
 - **첫 읽기부터 실패할 때**: `RoutingError`가 납니다(trainer는 시작하지 못하고, gateway는 Ready가 되지 않음).
 - **마운트 방식**: ConfigMap은 디렉터리로 마운트해야 합니다. `subPath`로 마운트하면 ConfigMap을 갱신해도 pod 안의 파일이 바뀌지 않습니다.
 

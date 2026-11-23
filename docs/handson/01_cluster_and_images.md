@@ -2,9 +2,9 @@
 
 HyperPod 마법사로 만드는 관리형 B2는 [B2 전용 절차](07_hyperpod_b2.md)를 따르세요. 이 페이지의 CDK 명령은 A, B1, C와 기존 custom AMI 경로에 적용됩니다.
 
-이 장을 마치면 내 PC에서 EKS 노드를 조회할 수 있고, 샌드박스가 실행할 이미지가 ECR에 올라갑니다. 처음 배포한다면 [로컬 Python 환경](../getting_started.md)과 [경로별 쿼터](00_overview.md#사전-준비)를 먼저 확인하세요.
+내 PC에서 EKS 노드를 조회하고 샌드박스 컨테이너 이미지를 ECR에 올립니다. 처음 배포한다면 [로컬 Python 환경](../getting_started.md)과 [경로별 쿼터](00_overview.md#사전-준비)를 먼저 확인하세요.
 
-1. [계정과 리전 설정](#준비-1-scriptsconfigenv)부터 [배포 전 점검](#사전-확인-01_check_prereqssh)까지 진행합니다. 이때 선택한 시나리오가 만들 노드를 결정합니다.
+1. [계정과 리전 설정](#준비-1-scriptsconfigenv)부터 [배포 전 점검](#사전-확인-01_check_prereqssh)까지 진행합니다. 선택한 시나리오에 따라 생성할 노드 구성이 달라집니다.
 2. [클러스터를 만든 뒤](#클러스터-생성-cdk-02_create_clustersh) 두 번째 터미널에 [SSM 터널](#터널-열기-cdktunnelsh)을 열어 두세요. 원래 터미널의 `kubectl get nodes`에서 실습 노드가 `Ready`인지 봅니다.
 3. [이미지를 빌드하고](#이미지-빌드와-push-03_build_push_imagessh) 출력된 URI를 `scripts/config.env`에 저장하세요. 02편의 시험용 pod가 이 주소에서 샌드박스 이미지를 받습니다.
 
@@ -52,7 +52,7 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 | `GVISOR_NODES` | `2` | gVisor 노드 수 (노드당 샌드박스 1개) |
 
 - **09 데모 사이트**: `demo/deploy.sh`는 `AWS_REGION` 값과 관계없이 `us-east-1`에 배포합니다.
-- **`ADMIN_PRINCIPAL_ARN`을 비우면**: `cdk/deploy.sh`가 IAM 사용자는 현재 사용자 ARN을, 역할 세션은 세션 정보로 추정한 역할 ARN을 씁니다.
+- **`ADMIN_PRINCIPAL_ARN`을 비우면**: `cdk/deploy.sh`는 IAM 사용자로 실행하면 현재 사용자 ARN을 선택합니다. 역할 세션에서는 세션 정보로 역할 ARN을 추정합니다.
 - **역할에 path가 있다면(예: IAM Identity Center가 만든 역할)**: 전체 ARN을 직접 지정합니다. `aws iam get-role --role-name <역할> --query Role.Arn --output text`로 얻은 ARN을 `ADMIN_PRINCIPAL_ARN`에 적으세요.
 
 역할의 path 유무와 관계없이 access entry에는 STS 세션 ARN을 지정할 수 없습니다.
@@ -98,10 +98,10 @@ test -f scripts/config.env || cp scripts/config.env.example scripts/config.env
 
     **확인할 것:** CloudFormation 콘솔의 `AWS_REGION` 리전에서 `CDKToolkit` 스택이 `CREATE_COMPLETE`(이미 있었다면 기존 상태)로 표시됩니다.
 
-    CDK 기본값에서는 CloudFormation 실행 역할에 `AdministratorAccess`가 연결됩니다(권한을 줄이는 방법은 [Production 09 CDK](../production/09_cdk.md)의 준비 절). `CDKToolkit`은 정리(`08_cleanup.sh`) 때도 삭제하지 않고 다음 배포에 다시 씁니다.
+    CDK 기본값에서는 CloudFormation 실행 역할에 `AdministratorAccess`가 연결됩니다(권한을 줄이는 방법은 [Production 09 CDK](../production/09_cdk.md)의 준비 절). 다음 배포에서도 `CDKToolkit`을 재사용하므로 정리 스크립트(`08_cleanup.sh`)는 이 스택을 삭제하지 않습니다.
 
 !!! warning "이 페이지의 AWS 단계"
-    이 페이지의 단계는 실습 계정에서 실행했습니다. `02_create_cluster.sh`의 Outputs, 터널 출력, 소요 시간은 시나리오 C(`--cpu-only`) 실행의 결과이고, 시나리오 A 클러스터는 아래 "문제가 생기면"의 용량 대처 순서(B2로 만든 뒤 B1, A로 업데이트)로 만들었습니다. 시나리오 A의 노드 목록 같은 나머지 "확인할 것"은 코드와 공식 문서 기준의 기대 출력이니 실제 출력과 비교하세요. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
+    이 페이지의 단계는 실습 계정에서 실행했습니다. `02_create_cluster.sh`의 Outputs, 터널 출력, 소요 시간은 시나리오 C(`--cpu-only`)를 실행했을 때의 기록입니다. 시나리오 A에서는 아래 "문제가 생기면"에 설명한 용량 부족 대처 절차에 따라 B2로 클러스터를 만든 뒤 B1, A 순서로 업데이트했습니다. 시나리오 A의 노드 목록 같은 나머지 "확인할 것"은 코드와 공식 문서 기준의 기대 출력이니 실제 출력과 비교하세요. 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 ## 사전 확인: `01_check_prereqs.sh`
 
@@ -181,7 +181,7 @@ scripts/01_check_prereqs.sh
 
 1. `ADMIN_PRINCIPAL_ARN`을 비웠을 때는 실행한 주체에 따라 다릅니다.
     - **역할 세션(STS assumed-role)으로 실행하면**: 시작할 때 `using arn:aws:iam::<account>:role/<role>; if the role has a path, set ADMIN_PRINCIPAL_ARN from: ...` 경고가 나옵니다.
-    - **IAM 사용자로 실행하면**: 경고 없이 현재 사용자 ARN을 씁니다.
+    - **IAM 사용자로 실행하면**: 현재 사용자 ARN을 선택하며 경고는 표시하지 않습니다.
     - **역할에 path가 있다면**: 4번 질문에 `n`으로 답하고, 경고에 나온 `aws iam get-role` 명령으로 얻은 ARN을 `ADMIN_PRINCIPAL_ARN`에 넣은 뒤 다시 실행하세요.
 2. IAM과 security group 변경 목록에서 inbound 규칙이 `0.0.0.0/0`에 열려 있지 않은지 확인하고 `y`를 입력합니다. 스택이 만드는 inbound 규칙은 access instance에서 control plane으로 향하는 443 포트 규칙 하나뿐입니다.
 3. 끝나면 `Outputs` 아래에 `ClusterName`, `ClusterEndpoint`, `AccessInstanceId`, `EndpointPublicAccess = false`가 나오고, 이어서 다음 안내가 출력됩니다.
@@ -207,7 +207,7 @@ EKS 콘솔의 클러스터 Networking 탭에서는 API server endpoint access가
 - `ADMIN_PRINCIPAL_ARN must list IAM role or user ARNs, not sts assumed-role ARNs`가 나오면 `arn:aws:iam::<계정>:role/<역할>` 형식으로 직접 적으세요.
 - `Cloud assembly schema version mismatch`는 CLI가 라이브러리보다 오래됐다는 뜻이니 준비 2의 1번으로 CLI를 업그레이드하세요.
 - vCPU 한도 오류, AZ 미지원, 노드 그룹 생성 실패는 [문제 해결](../reference/troubleshooting.md)의 "클러스터와 노드" 항목을 보세요.
-- GPU 노드 그룹이 인스턴스를 시작하지 못하면(`InsufficientInstanceCapacity`) CloudFormation은 약 30분을 기다린 뒤 처음 생성 전체를 롤백합니다. 이럴 때는 GPU 노드 그룹 없이 클러스터를 먼저 만들고 업데이트로 추가하세요. 업데이트가 실패하면 그 업데이트만 롤백됩니다. 마지막 줄은 config.env의 `SCENARIO`가 기본값 `A`일 때입니다.
+- 스택을 처음 만들 때 GPU 노드 그룹이 인스턴스를 시작하지 못하면(`InsufficientInstanceCapacity`), CloudFormation은 약 30분을 기다린 뒤 스택 생성 작업 전체를 롤백합니다. 이럴 때는 GPU 노드 그룹 없이 클러스터를 먼저 만들고 업데이트로 추가하세요. 업데이트가 실패하면 그 업데이트만 롤백됩니다. 마지막 줄은 config.env의 `SCENARIO`가 기본값 `A`일 때입니다.
 
     ```bash
     scripts/02_create_cluster.sh --hyperpod-b2                  # system nodes only, no GPU node groups
@@ -358,7 +358,7 @@ export GVISOR_RELEASE="20261109.0"
 export GVISOR_NVPROXY="true"
 ```
 
-AMI의 containerd(2.3.7)는 설정 스키마 v3을 씁니다. `04_install_gpu_stack.sh`가 등록하는 RuntimeClass는 위 설정의 `runtimes.runsc` 키에 맞춰 `handler: runsc`를 지정합니다.
+AMI에 설치된 containerd(2.3.7)의 설정 스키마는 v3입니다. `04_install_gpu_stack.sh`가 등록하는 RuntimeClass는 위 설정의 `runtimes.runsc` 키에 맞춰 `handler: runsc`를 지정합니다.
 
 ### gVisor 노드가 부팅하는 순서
 
@@ -399,7 +399,7 @@ iptables -w -C INPUT -i eni+ -j GPUSANDBOX-GUARD 2>/dev/null \
 
 `04_install_gpu_stack.sh` 이후 스크립트는 `scripts/render.py`로 `k8s/` 아래 템플릿(`*.tpl`)에 값을 채운 뒤 적용합니다. `${VAR}`는 환경변수와 `KEY=VALUE` 인자 값으로 치환됩니다.
 
-- **템플릿이 참조한 변수 이름이 환경이나 인자에 없으면**: envsubst와 달리 렌더링이 중단됩니다. 그래서 변수 이름의 오타 때문에 이미지 이름이나 네임스페이스가 빈 매니페스트가 만들어지지 않습니다.
+- **템플릿이 참조한 변수 이름이 환경이나 인자에 없으면**: envsubst와 달리 렌더링이 중단됩니다. 따라서 변수 이름을 잘못 입력한 채 이미지 이름이나 네임스페이스가 빈 매니페스트를 배포하는 일을 막을 수 있습니다.
 - **이미 정의된 빈 문자열(예: `ACTIVE_RUNTIME=`)**: 그대로 들어갑니다.
 - **`$$`(리터럴 `$`)와 `@@include path@@` 문법**: 설명은 [저장소 구조](../reference/repository_map.md)에 있습니다.
 
@@ -476,10 +476,10 @@ export CONTROL_IMAGE_URI="<account>.dkr.ecr.<region>.amazonaws.com/gpu-sandbox/c
 | `trainer` | `trainer/Dockerfile` | `vllm/vllm-openai:v0.33.0` (A), `v0.26.0` (HyperPod) | TRL 1.18.0, PEFT 0.21.3, `datasets>=4.7`, `gpusandbox[client]`, `rl/`, (`HYPERPOD=1`일 때) `hyperpod-elastic-agent` | 베이스 이미지 기본값 |
 | `control` | `gateway/Dockerfile` | `public.ecr.aws/docker/library/python:3.14-slim` | `gpusandbox[gateway]`, gateway와 operator 도구(`python -m gpusandbox.tools`의 `probe`, `parity`, `bench`, `sync-jwks`), torch와 GPU 없음 | uid 10001 |
 
-샌드박스 이미지는 gVisor와 Kata가 함께 씁니다.
+gVisor와 Kata에서 실행할 샌드박스 이미지는 같습니다.
 
 - **이미지에 든 것**: 자격 증명과 NVIDIA 커널 드라이버가 없고, PyTorch wheel에 포함된 CUDA user-space 라이브러리만 들어 있습니다.
-- **드라이버**: gVisor는 nvproxy를 통해 호스트의 드라이버를, Kata는 guest VM 안의 드라이버를 씁니다.
+- **드라이버**: gVisor는 nvproxy를 거쳐 호스트 드라이버에 GPU 요청을 전달합니다. Kata에서는 guest VM 안의 드라이버가 요청을 처리합니다.
 - **CUDA 12.6 빌드**: Kata의 T4(sm_75)를 지원하고, CUDA 13 빌드보다 낮은 드라이버 버전에서도 동작합니다.
 - **pod 스펙**: `runAsNonRoot`와 읽기 전용 root filesystem을 강제하고, `/work`와 `/tmp`에만 emptyDir를 마운트합니다.
 
@@ -527,7 +527,7 @@ aws ecr describe-images --region "$AWS_REGION" --repository-name "$ECR_REPO_PREF
 | `02_create_cluster.sh` | 20~30분(스크립트 안내값), 실습 계정 시나리오 C 약 20분 | EKS 컨트롤 플레인 0.10 USD/시간, NAT gateway, `m6i.large` x2 (0.192), access instance `t4g.nano`, KMS 키, 로그, `g5.xlarge` x2 (2.012, A와 B1), `g5.2xlarge` (1.212, A) |
 | `03_build_push_images.sh` | 빌드 호스트와 네트워크에 따라 다름 | ECR 저장 용량, 빌드 호스트 |
 
-`02_create_cluster.sh`를 실행한 뒤부터 컴퓨트 비용만 시간당 약 3.42 USD(시나리오 A, 추정, 온디맨드 요금)가 나갑니다. 실습을 잠시 쉴 때는 GPU 노드 그룹을 0으로 줄여 두세요(`maxSize`는 스택 값 그대로).
+`02_create_cluster.sh`를 실행한 뒤부터 시나리오 A의 온디맨드 컴퓨트 비용만 시간당 약 3.42 USD로 추정됩니다. 실습을 잠시 쉴 때는 GPU 노드 그룹을 0으로 줄여 두세요(`maxSize`는 스택 값 그대로).
 
 ```bash
 source scripts/config.env
@@ -547,7 +547,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 실습을 마치면 [99 정리](99_cleanup.md)로 스택 전체를 삭제합니다.
 
 !!! note "CDK 스택 밖에서 바꾸는 값입니다"
-    이 명령은 CloudFormation을 거치지 않으므로 노드 수가 스택의 desired 값(sandbox-gvisor 2, trainer 1)과 달라집니다. `02_create_cluster.sh`를 다시 실행하기 전에 같은 명령으로 원래 값을 되돌려 두세요. 되돌리지 않고 배포할 때 CloudFormation이 노드 수를 어떻게 처리하는지는 확인하지 않았습니다.
+    이 명령은 CloudFormation을 거치지 않으므로 노드 수가 스택의 desired 값(sandbox-gvisor 2, trainer 1)과 달라집니다. `02_create_cluster.sh`를 다시 실행하기 전에 같은 명령으로 노드 수를 원래 값으로 되돌려 두세요. 되돌리지 않고 배포할 때 CloudFormation이 노드 수를 어떻게 처리하는지는 확인하지 않았습니다.
 
 ## 다음 단계
 

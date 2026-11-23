@@ -1,17 +1,17 @@
 # 용량과 노드 관리
 
 !!! info "TL;DR"
-    샌드박스 노드는 Karpenter NodePool이 0대부터 늘리고 줄이며, 부팅이 느린 `g4dn.metal`만 warm placeholder로 한 대를 미리 띄워 둡니다. gVisor 노드의 AMI와 gVisor 릴리스는 CI에서 nvproxy 드라이버 호환성을 확인한 뒤 함께 업그레이드합니다.
+    Karpenter NodePool이 수요에 맞춰 샌드박스 노드 수를 0대부터 조절합니다. 부팅이 느린 `g4dn.metal`만 warm placeholder로 한 대를 미리 띄워 둡니다. gVisor 노드의 AMI와 gVisor 릴리스는 CI에서 nvproxy 드라이버 호환성을 확인한 뒤 함께 업그레이드합니다.
 
 ## GPU 노드를 준비하는 데 걸리는 시간
 
-학습을 시작했는데 첫 reward 배치가 몇 분째 기다린다면, 샌드박스 pod가 배치되지 않는지부터 확인하세요. `g4dn.metal`은 인스턴스가 시작된 뒤에도 Kata 설치와 GPU 준비가 끝나야 평가를 받을 수 있습니다. 반대로 gVisor 노드는 생성됐는데 샌드박스가 Ready가 되지 않는다면 AMI의 드라이버와 nvproxy 조합을 먼저 봅니다.
+학습을 시작한 뒤 몇 분이 지나도 첫 reward 배치의 채점이 시작되지 않으면, 샌드박스 pod가 노드에 배치됐는지 먼저 확인하세요. `g4dn.metal`은 인스턴스가 시작된 뒤에도 Kata 설치와 GPU 준비가 끝나야 평가를 받을 수 있습니다. gVisor 노드는 생성됐는데 샌드박스가 Ready가 되지 않는다면 AMI의 드라이버와 nvproxy 조합을 먼저 봅니다.
 
 ![a: metal 노드(sandbox-kata-gpu)에서는 reward batch가 도착한 뒤에 g4dn.metal 부팅, kata-deploy, vfio-pci 바인딩이 진행되어 수 분이 걸리고, batch는 그동안 대기합니다. gVisor 노드(sandbox-gvisor)에서는 al2023@latest의 AMI 자동 갱신(drift 교체)으로 nvproxy가 지원하지 않는 드라이버가 설치될 수 있습니다. 그러면 GPU 초기화가 실패해 샌드박스가 Ready가 되지 않고 pool 용량이 0이 됩니다. b: metal에서는 우선순위 -10인 warm placeholder가 선점되어 종료되고, 샌드박스 pod는 이미 실행 중인 노드에 배치됩니다. Karpenter는 새 예비 노드를 추가합니다. gVisor에서는 AMI를 al2023@v20261107로 고정하고, CI에서 nvproxy list-supported-drivers로 지원 여부를 확인해 통과할 때만 AMI와 GVISOR_RELEASE를 함께 승격합니다.](../images/figures/production-01_capacity_and_nodes.ko.svg)
 
 ## 런타임별 용량 관리
 
-두 상황의 해결책이 다릅니다. metal 시작 시간이 배치를 지연시키는 경우에는 노드 한 대를 미리 확보하는 비용과 첫 배치 대기 시간을 비교합니다. gVisor의 드라이버 문제는 앞당겨 부팅해도 해결되지 않습니다. AMI와 gVisor 릴리스를 함께 고정하고, 교체 전에 지원 드라이버 목록을 대조합니다.
+metal 노드의 부팅을 기다리느라 첫 배치가 늦어진다면, 한 대를 미리 띄워 두는 비용과 줄일 수 있는 대기 시간을 비교하세요. gVisor 노드를 일찍 띄워도 AMI의 드라이버와 nvproxy가 호환되지 않으면 샌드박스는 Ready 상태가 되지 않습니다. AMI와 gVisor 릴리스를 함께 고정하고, 교체 전에 지원 드라이버 목록을 대조합니다.
 
 ??? note "세부 조건과 예외"
     `g4dn.metal`은 부팅, kata-deploy 설치, GPU의 vfio-pci 바인딩까지 수 분이 걸립니다.
@@ -98,12 +98,12 @@ kubectl get ec2nodeclass,nodepool
     - GPU Operator는 `nvidia.com/gpu.workload.config=vm-passthrough`가 붙은 노드에서만 T4를 vfio-pci에 바인딩합니다.
     - `gpusandbox/role`은 RuntimeClass `gvisor`의 scheduling 규칙과 kata-deploy, 샌드박스 Deployment의 nodeSelector가 모두 사용합니다.
 - **taint로 전용 노드를 만듭니다.** toleration이 있는 pod만 배치되므로, 신뢰할 수 없는 코드가 다른 워크로드와 같은 노드에서 실행되지 않습니다.
-- **gVisor 노드는 GPU가 하나인 인스턴스만 씁니다.** 노드당 샌드박스가 하나이므로 GPU별 타이밍 측정이 다른 샌드박스의 영향을 받지 않습니다.
+- **gVisor 노드를 만들 때는 GPU가 한 장인 인스턴스만 선택합니다.** 노드당 샌드박스가 하나이므로 한 샌드박스에서 GPU 실행 시간을 잴 때 다른 샌드박스가 간섭하지 않습니다.
     - **인스턴스는 g5(A10G)로 한정**: AMI는 g5에서 proprietary 커널 모듈(GSP 꺼짐)을 로드하고, 이 조합은 gVisor 문서가 아니라 이 저장소에서 검증했습니다.
     - **대안**: g6(L4, open 드라이버)도 NodePool에 넣을 수 있습니다.
     - **다른 GPU 계열을 쓰려면**: nvproxy의 드라이버 지원 여부부터 확인하세요.
-- **GPU pool은 `WhenEmpty`를 씁니다.** 평가 중에 노드를 회수하면 진행 중인 평가를 다른 pod에서 처음부터 다시 실행해야 하고, 재시도까지 실패하면 `sandbox_error`가 됩니다. 그래서 빈 노드만 회수합니다. 노드를 다시 띄우는 비용이 작은 CPU 계층은 `WhenEmptyOrUnderutilized`와 spot을 허용합니다.
-- **metal 노드는 빈 상태로 30분이 지나야 회수 대상이 됩니다.** 비자마자 반납하면 다음 요청 때 부팅과 준비에 걸리는 수 분을 다시 기다려야 하기 때문입니다. 30분 대기 비용은 7.824 USD/시간 기준 약 3.9 USD이고, 요금은 노드가 실제로 종료될 때까지 붙습니다.
+- **GPU pool의 노드 회수 정책은 `WhenEmpty`입니다.** 평가 중에 노드를 회수하면 진행 중인 평가를 다른 pod에서 처음부터 다시 실행해야 하고, 재시도까지 실패하면 `sandbox_error`가 됩니다. 그래서 빈 노드만 회수합니다. 노드를 다시 띄우는 비용이 낮은 CPU 계층은 `WhenEmptyOrUnderutilized`와 spot을 허용합니다.
+- **metal 노드는 빈 상태로 30분이 지나야 회수 대상이 됩니다.** 비자마자 반납하면 다음 요청 때 부팅과 준비가 끝날 때까지 몇 분을 다시 기다려야 하기 때문입니다. 30분 대기 비용은 7.824 USD/시간 기준 약 3.9 USD이고, 요금은 노드가 실제로 종료될 때까지 붙습니다.
 - **`expireAfter`에 따라 노드를 주기적으로 교체합니다.** Karpenter v1.15 문서에 따르면 만료는 forceful 동작이라 `karpenter.sh/do-not-disrupt`로 만료를 막을 수 없고, drain은 PDB와 `terminationGracePeriod`를 따릅니다. 중단된 평가는 gateway가 다른 pod로 다시 보냅니다.
 
 !!! note "trainer 노드의 중단 보호"
@@ -125,7 +125,7 @@ shell 스크립트 부분은 `scripts/render.py`가 `@@include path@@` 줄 위�
 병합 후에도 이 저장소의 값이 적용됐는지, Karpenter가 만든 Kata GPU 노드 하나의 실제 kubelet 설정(`configz`)을 API server로 읽어 확인합니다.
 
 - **새 클러스터라면**: placeholder와 PDB, ResourceQuota는 `sandbox` namespace에 만들어지므로, `kubectl apply -f k8s/base/namespaces.yaml`(또는 `scripts/05_setup_namespaces_auth.sh`)로 namespace를 먼저 만드세요.
-- **metal 노드 준비**: metal 노드는 무언가가 그 자리를 요청해야 생기므로, 아래 "느린 metal을 위한 warm capacity" 절의 placeholder를 적용하고 `sandbox-kata-gpu` NodePool의 노드가 Ready가 된 뒤 실행하세요.
+- **metal 노드 준비**: metal 노드는 배치할 pod가 있어야 생성되므로, 아래 "부팅이 느린 metal 노드를 미리 확보하는 방법" 절의 placeholder를 적용하고 `sandbox-kata-gpu` NodePool의 노드가 Ready가 된 뒤 실행하세요.
 - **대상 노드 고르기**: CDK가 만든 관리형 Kata GPU 노드도 `gpusandbox/kata-gpu=true` label을 쓰므로, `karpenter.sh/nodepool` label로 대상을 고릅니다.
 
 ```bash
@@ -140,7 +140,7 @@ kubectl get --raw "/api/v1/nodes/${node}/proxy/configz" | grep -o '"runtimeReque
 
 ## GPU 스택과 런타임 설치
 
-Karpenter 노드에도 핸즈온과 같은 values 파일을 씁니다. 다만 Kata 노드 그룹은 CDK로 추가하지 않습니다(`WITH_KATA_CPU`, `WITH_KATA_GPU`를 `0`으로 설정). Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)와 Kata GPU 노드 추가(`scripts/kata/gpu_nodes.sh`) 스크립트는 노드 그룹이 없으면 중단되므로, Kata 쪽은 스크립트 안의 helm 단계만 아래처럼 직접 실행합니다.
+Karpenter 노드에도 핸즈온에서 사용한 values 파일로 설치합니다. 다만 Kata 노드 그룹은 CDK로 추가하지 않습니다(`WITH_KATA_CPU`, `WITH_KATA_GPU`를 `0`으로 설정). Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)와 Kata GPU 노드 추가(`scripts/kata/gpu_nodes.sh`) 스크립트는 노드 그룹이 없으면 중단되므로, Kata 쪽은 스크립트 안의 helm 단계만 아래처럼 직접 실행합니다.
 
 | 대상 | 방법 | Karpenter에서 그대로 동작하는 이유 |
 |---|---|---|
@@ -234,14 +234,14 @@ nvproxy는 드라이버 상태를 지원(supported), 미지원(unsupported, `--n
 | gVisor | release-20261109.0 (`GVISOR_RELEASE="20261109.0"`) |
 | 주의할 버전 | gVisor `20261109.0`은 595.91.07과 B2의 기본 드라이버 595.112.07을 인식하지 못합니다. [B2 실습](../handson/07_hyperpod_b2.md)에서는 채점 노드 두 대에 580.178.04를 설치하고 HyperPod API로 재부팅했습니다. |
 
-현재 `sandbox-gvisor` EC2NodeClass는 `alias: al2023@latest`라서, 새 EKS AMI가 나오면 Karpenter가 노드를 drift로 교체합니다. nvproxy가 새 드라이버를 인식하지 못하면 다음과 같이 됩니다.
+현재 `sandbox-gvisor` EC2NodeClass는 `alias: al2023@latest`라서, 새 EKS AMI가 나오면 Karpenter가 노드를 drift로 교체합니다. nvproxy가 새 드라이버를 인식하지 못하면 GPU 초기화에 실패합니다.
 
 - `install-gvisor.sh`가 user data 로그에 `WARNING: NVIDIA driver ... is not supported`를 남깁니다.
-- 샌드박스 pod는 GPU 초기화에 실패해 Ready가 되지 않습니다(fail closed). 이 동작은 안전하지만 pool 용량이 0이 됩니다.
+- 샌드박스 pod는 GPU 초기화에 실패해 Ready가 되지 않습니다(fail closed). 이때 pool에서 평가를 받을 수 있는 pod는 0개입니다.
 
 Karpenter 문서도 production에서는 `latest`를 권장하지 않습니다.
 
-production에서는 다음과 같이 하세요.
+운영 환경에서는 아래 순서로 버전을 고정하세요.
 
 - **alias 고정**: alias를 버전으로 고정하고(예: `alias: al2023@v20261107`, 버전 표기는 Karpenter 문서에서 재확인), AMI와 `GVISOR_RELEASE`를 같은 변경에서 함께 업그레이드하세요.
 - **바꾼 뒤 다시 검증**: 드라이버, AMI, gVisor 버전을 바꾼 뒤에는 `04_install_gpu_stack.sh`의 smoke test와 `scripts/ops/verify.sh`를 다시 실행합니다. g5의 proprietary 모듈 조합은 gVisor 문서가 아니라 이 저장소의 검증에 근거하기 때문입니다.
@@ -270,7 +270,9 @@ mkdir -p gvisor && tar -xjf gvisor.tar.bz2 -C gvisor
 
 승격한 뒤에는 새 노드 한 대에서 샌드박스 pod가 Ready가 되는지 먼저 확인하고, 그다음 나머지 노드를 교체하세요.
 
-## 느린 metal을 위한 warm capacity
+## 부팅이 느린 metal 노드를 미리 확보하는 방법
+
+<span id="느린-metal을-위한-warm-capacity"></span>
 
 [`warm-capacity.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/warm-capacity.yaml)은 AWS China 블로그(EKS + Kata + Cloud Hypervisor)에 소개된 패턴을 따릅니다.
 
@@ -300,7 +302,7 @@ kubectl apply -f k8s/production/warm-capacity.yaml
 - **계속 `Pending`이면**: `kubectl -n sandbox describe pod <pod>`의 Events와 아래 "서비스 quota" 절을 보세요.
 
 !!! warning "비용과 끄는 방법"
-    예비 `g4dn.metal` 한 대는 계속 과금되어, 7.824 USD/시간이면 하루 약 188 USD입니다(us-east-1과 us-west-2 온디맨드 요금, 서울은 9.624 USD/시간). 학습하지 않는 동안 아래 명령으로 placeholder replica를 0으로 줄이면, 노드가 빈 채로 30분이 지난 뒤 `WhenEmpty` 정책의 회수 대상이 됩니다. 과금이 끝난 시각은 노드가 실제로 종료된 시각으로 확인하세요.
+    예비 `g4dn.metal` 한 대를 계속 띄워 두면 시간당 7.824 USD, 하루 약 188 USD가 듭니다(us-east-1과 us-west-2 온디맨드 요금, 서울은 9.624 USD/시간). 학습하지 않는 동안 아래 명령으로 placeholder replica를 0으로 줄이면, 노드가 빈 채로 30분이 지난 뒤 `WhenEmpty` 정책의 회수 대상이 됩니다. 과금이 끝난 시각은 노드가 실제로 종료된 시각으로 확인하세요.
 
     ```bash
     kubectl -n sandbox scale deployment/kata-metal-warm-placeholder --replicas=0
@@ -308,7 +310,7 @@ kubectl apply -f k8s/production/warm-capacity.yaml
 
     확인할 것: `kubectl -n sandbox get deployment kata-metal-warm-placeholder`의 READY가 `0/0`입니다.
 
-- **pool pod의 priority**: `deployment.yaml.tpl`은 `priorityClassName`을 지정하지 않으므로 pool pod는 기본 priority 0으로 실행됩니다. 0도 -10보다 높으므로 선점은 동작합니다.
+- **pool pod의 priority**: `deployment.yaml.tpl`은 `priorityClassName`을 지정하지 않으므로 pool pod는 기본 priority 0으로 실행됩니다. 기본값인 0이 -10보다 높아 pool pod가 placeholder를 선점할 수 있습니다.
 - **`pool-hardening.yaml`의 `gpu-sandbox-pool`(100000)을 쓰려면**: 템플릿에 `priorityClassName`을 추가하세요.
 - **노드 전체를 예비 용량으로 확보하려면**: placeholder가 요청하지 않아 남는 CPU와 메모리에는 선점 없이도 샌드박스 pod가 배치될 수 있습니다. placeholder의 requests를 노드 allocatable에 가깝게 맞추세요.
 

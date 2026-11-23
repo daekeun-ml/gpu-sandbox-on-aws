@@ -61,15 +61,15 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
 | TRL (Production, gateway) | reward batch | gateway의 `POST /v1/evaluate_batch`가 요청마다 snapshot 하나를 씀 |
 | veRL (gateway) | `group_key` = `{task_id}:{index}` | gateway의 `POST /v1/evaluate`가 group의 첫 샘플을 채점한 버전을 `GATEWAY_GROUP_PIN_TTL_S`(기본 900 s, 15분) 동안 고정 |
 
-- **TRL (핸즈온, direct)**: `KernelRewards`는 다른 pool로 캐시된 결과를 다시 채점해 batch를 한 pool로 맞춥니다. 결과에 `routing_revision`을 기록합니다.
+- **TRL (핸즈온, direct)**: `KernelRewards`는 다른 pool에서 채점한 결과가 캐시에 있으면 해당 답안을 다시 채점해 batch 전체의 채점 pool을 일치시킵니다. 결과에 `routing_revision`을 기록합니다.
 - **veRL (gateway)**: 고정 정보는 gateway 프로세스 메모리에만 있고 TTL은 첫 요청부터 셉니다. gateway는 epoch를 읽지 않으므로, TTL이 지나거나 gateway가 재시작하면 같은 group이어도 다음 요청에서 현재 버전을 다시 고릅니다.
 
-routing 표는 ConfigMap을 마운트한 JSON 파일입니다. subPath로 마운트하면 ConfigMap 변경이 반영되지 않으므로 디렉터리로 마운트합니다. trainer는 snapshot을 만들 때 파일을 다시 읽되, 직전 확인 후 2초가 지나지 않았으면 이전 내용을 씁니다. 내용이 바뀌면 `revision`을 증가시킵니다. TRL은 프로세스마다 생성 batch 전체를 한 번에 채점하므로(TRL 1.18.0 기준), 프로세스 1개인 핸즈온에서는 reward batch 하나에 group 전체가 들어갑니다.
+routing 표는 ConfigMap을 마운트한 JSON 파일입니다. subPath로 마운트하면 ConfigMap 변경이 반영되지 않으므로 디렉터리로 마운트합니다. trainer는 snapshot을 만들 때 파일을 다시 읽되, 직전 확인 후 2초가 지나지 않았으면 이전에 읽은 내용을 유지합니다. 내용이 바뀌면 `revision`을 증가시킵니다. TRL은 프로세스마다 생성 batch 전체를 한 번에 채점하므로(TRL 1.18.0 기준), 프로세스 1개인 핸즈온에서는 reward batch 하나에 group 전체가 들어갑니다.
 
 TRL 경로의 `KernelRewards`는 채점 결과를 과제, prompt, completion으로 만든 키로 캐시하고, 결과와 함께 그 결과를 낸 pool(runtime, version)을 저장합니다.
 
-- **전환 뒤 batch에 새 completion과 이전 pool로 캐시된 completion이 함께 있으면**: 새 completion을 채점한 pool에서 캐시된 것도 다시 채점합니다.
-- **batch의 결과가 모두 캐시에 있고 그 캐시가 한 pool에서 나왔으면**: 샌드박스를 부르지 않고 그 결과를 씁니다. 이때는 전환 뒤에도 그 batch가 이전 pool 결과로 채점되고 `reward_batch` 줄도 나오지 않습니다.
+- **전환 뒤 batch에 새 completion과 이전 pool의 채점 결과가 캐시된 completion이 함께 있으면**: 새 completion을 채점한 pool에 이전 결과가 캐시된 completion도 다시 보냅니다.
+- **배치의 모든 답안에 같은 pool의 채점 결과가 캐시돼 있으면**: 샌드박스에 다시 요청하지 않고 캐시된 결과를 반환합니다. 이때는 전환 뒤에도 그 batch가 이전 pool 결과로 채점되고 `reward_batch` 줄도 나오지 않습니다.
 - **다시 채점하는 동안 전환이 또 일어나면**: 세 번째 시도에서 batch 전체를 요청 한 번으로 보냅니다.
 
 요청 한 번은 pool 하나가 처리하므로 한 batch는 항상 한 버전으로 채점됩니다.
@@ -128,7 +128,7 @@ v2 예시 설정에서는 pod가 200회 평가 후 draining 상태로 바뀝니�
 **문제가 생기면:** parity가 실패하거나 전환이 반영되지 않으면 [문제 해결](../reference/troubleshooting.md)의 "버전 전환 (routing)" 항목을 보세요.
 
 !!! question "❓ 오해: on-policy 학습 중에 채점 기준을 바꾸면 처음부터 다시 학습해야 한다"
-    on-policy는 학습 데이터를 현재 policy가 생성한다는 뜻입니다. step 사이에 reward 함수를 바꾸면 안 된다는 조건은 포함하지 않습니다. 필요한 것은 한 group 안에서 버전을 섞지 않는 것과 전환 시점을 로그에 기록하는 것입니다. INTELLECT-3 보고서에서도 환경을 "versioned independently of the trainer" 방식으로 운영합니다.
+    on-policy는 학습 데이터를 현재 policy가 생성한다는 뜻입니다. step 사이에 reward 함수를 바꾸면 안 된다는 조건은 포함하지 않습니다. 한 group의 답안은 같은 버전에서 채점하고 전환 시점은 로그에 남겨야 합니다. INTELLECT-3 보고서에서도 환경을 "versioned independently of the trainer" 방식으로 운영합니다.
 
 !!! question "❓ 오해: parity를 통과하면 v1과 v2의 reward는 같다"
     parity는 golden 제출물의 verdict와 speedup이 허용 범위 안에서 같은지만 확인합니다. v2는 seed 수와 speedup 상한을 의도적으로 바꾸므로 일부 completion의 reward는 달라집니다. 그래서 전환을 batch 경계에 맞추고 `sandbox_version_switch` 이벤트로 기록합니다. 이 기록으로 reward 곡선의 변화가 버전 전환 때문인지 확인할 수 있습니다.
@@ -168,5 +168,5 @@ v2 예시 설정에서는 pod가 200회 평가 후 draining 상태로 바뀝니�
 
 후보 코드가 segfault나 CUDA abort로 종료되면 policy의 책임이므로 `runtime_error`(0.05)로 처리합니다. reference 경로에서 `gpu_fault`가 발생하면 그 pod는 작업을 중단하고, liveness probe(컨테이너가 정상 동작하는지 kubelet이 주기적으로 확인하는 검사)가 컨테이너를 재시작합니다.
 
-!!! warning "veRL 경로는 완전히 중립적이지 않습니다"
+!!! warning "veRL에서 인프라 오류가 학습 점수에 미치는 영향"
     veRL에서 인프라 오류가 발생한 샘플은 format 점수 0.1만 받습니다. 정답 샘플보다는 낮지만 `no_code`(0점)보다는 높아서, group 평균과 샘플 순위가 실제 품질과 달라질 수 있습니다. `reward_extra_info`의 `sandbox_error` 비율이 크게 증가하면 학습 설정보다 인프라 원인을 먼저 해결하세요(TRL 경로는 `reward_batch`의 `status`에서 확인).

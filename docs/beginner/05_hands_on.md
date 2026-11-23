@@ -1,10 +1,10 @@
 # 05 직접 해 보기
 
-내 PC에서 작은 계산 과제의 답안을 채점합니다. 이 테스트는 `relu_bias`를 사용합니다. 입력에 보정값을 더하고 음수인 결과를 0으로 바꾸는 과제입니다. 예를 들어 입력 `[-3, 2]`에 `[1, 1]`을 더하면 `[-2, 3]`이므로 기대 출력은 `[0, 3]`입니다. 테스트는 준비된 답안을 두 로컬 서버에 보냅니다. 모델 학습과 AWS 배포 없이 정답, 오답, 정책 위반이 각각 예상한 판정을 받는지 확인할 수 있습니다.
+내 PC에서 `relu_bias` 과제의 답안을 채점합니다. 입력에 보정값을 더한 뒤 음수인 결과만 0으로 바꾸는 문제입니다. 예를 들어 입력 `[-3, 2]`에 `[1, 1]`을 더하면 `[-2, 3]`이므로 기대 출력은 `[0, 3]`입니다. 테스트는 준비된 답안을 두 로컬 서버에 보냅니다. 모델 학습과 AWS 배포 없이 정답, 오답, 정책 위반이 각각 예상한 판정을 받는지 확인할 수 있습니다.
 
 ![시험용 답안을 로컬 CPU 서버 두 개에서 채점하고 pytest가 예상 판정과 대조하는 흐름](../images/figures/beginner-05_hands_on--local-scoring.ko.svg)
 
-이 편은 두 곳에서 서로 다른 질문을 확인합니다. 로컬 테스트에서는 **틀린 답을 채점기가 구별하는지**, 선택 AWS 실습에서는 **같은 노드에서 각 pod가 어느 커널을 쓰는지**를 봅니다. [AWS 커널 비교로 이동](#aws-cpu)
+로컬 테스트에서는 **채점기가 틀린 답을 구별하는지** 확인합니다. AWS 실습까지 진행하면 **같은 노드에 있는 각 pod의 커널**도 비교할 수 있습니다. [AWS 커널 비교로 이동](#aws-cpu)
 
 ## 1. 설치하기
 
@@ -27,7 +27,7 @@ Linux에서 CPU용 PyTorch만 설치하려면 `uv pip install torch numpy`에 `-
 python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parity_on_cpu_pools
 ```
 
-테스트는 준비된 답안을 두 서버에 보내고, 예상한 판정이 돌아오는지와 두 서버가 같은 판정을 내리는지 확인합니다. 마지막에 `1 passed`가 나오면 이 비교를 통과한 것입니다. 전체 테스트를 보려면 `python -m pytest -q`를 실행하세요.
+테스트는 준비된 답안을 두 서버에 보내고, 예상한 판정이 돌아오는지와 두 서버가 같은 판정을 내리는지 확인합니다. 두 서버의 판정이 모두 기대와 일치하면 마지막에 `1 passed`가 나옵니다. 전체 테스트를 보려면 `python -m pytest -q`를 실행하세요.
 
 여기서 **verdict**는 채점기가 답 하나에 내린 판정입니다. 위 예시의 함수가 음수를 그대로 남겨 `[-2, 3]`을 출력하면 기준 답 `[0, 3]`과 다릅니다. 이 답안에 `wrong_answer`가 나오면 채점기가 예상대로 동작한 것입니다.
 
@@ -40,7 +40,7 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
 `ModuleNotFoundError`가 나오면 저장소 루트에서 `.venv`를 활성화했는지 확인하고 설치 명령을 다시 실행하세요.
 
 ??? note "macOS에서 서버를 직접 띄워 판정 보기"
-    Linux 호스트에서는 위의 pytest 경로를 사용하세요. 서버를 직접 띄울 때의 차이는 [로컬 실행 환경](../getting_started.md)에 설명돼 있습니다.
+    Linux 호스트에서는 위의 pytest 명령으로 테스트를 실행하세요. 서버를 직접 띄울 때의 차이는 [로컬 실행 환경](../getting_started.md)에 설명돼 있습니다.
 
     ### 서버 두 개 띄우기
 
@@ -90,7 +90,7 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
     |---|---|---|
     | `relu_bias_torch_only` | 정답 코드 | `ok` |
     | `relu_bias_wrong` | 틀린 코드 | `wrong_answer` |
-    | `relu_bias_benchmark_cheat` | 시간을 측정할 때만 계산을 제대로 하지 않는 속이기 코드 ([04편](04_rl_and_sandbox.md)의 reward hacking) | `wrong_answer` |
+    | `relu_bias_benchmark_cheat` | 시간을 측정할 때만 잘못된 결과를 내는 코드 ([04편](04_rl_and_sandbox.md)의 reward hacking) | `wrong_answer` |
     | `read_host_file` | 서버 파일을 읽으려는 코드 ([01편](01_why_sandbox.md)의 위험) | `policy_violation` (실행 전에 거절) |
 
     **지금 일어나는 일:** 채점 프로그램이 정답만 통과시키고, 위험한 코드는 실행하지 않고 거절하는지 확인합니다. 끝나면 두 서버 터미널에서 `Ctrl-C`로 서버를 끄세요.
@@ -177,7 +177,7 @@ scripts/kata/cpu_nodes.sh
 
 ### 실습 리소스 정리
 
-이 클러스터에서 [CPU pool을 배포하고 버전을 교체하는 실습](../handson/10_cpu_only.md)으로 이어갈 수 있습니다. 여기서 끝내려면 **터널을 열어 둔 상태에서** 아래 명령을 실행합니다. 확인 메시지의 계정, 리전과 클러스터 이름을 확인하세요.
+이 클러스터에서 [CPU pool을 배포하고 버전을 교체하는 실습](../handson/10_cpu_only.md)으로 이어갈 수 있습니다. 여기서 끝내려면 **터널을 열어 둔 상태에서** 아래 명령을 실행합니다. 확인 메시지에 표시된 계정, 리전, 클러스터 이름이 실습 환경과 일치하는지 보세요.
 
 ```bash
 scripts/08_cleanup.sh

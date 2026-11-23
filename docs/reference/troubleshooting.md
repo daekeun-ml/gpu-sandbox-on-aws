@@ -1,7 +1,7 @@
 # 문제 해결
 
 !!! info "TL;DR"
-    가장 먼저 보인 증상이나 실패한 단계를 고르세요. 진단 명령에서는 예시 이름을 실제 pod나 노드 이름으로 바꿉니다.
+    표에서 처음 나타난 증상이나 실패한 단계를 찾으세요. 명령을 실행할 때는 예시의 pod 이름과 노드 이름을 실습 환경에 맞게 바꾸세요.
 
 | 증상 | 먼저 볼 곳 |
 |---|---|
@@ -88,8 +88,8 @@ bash -c "source scripts/lib.sh && source scripts/lib_jobs.sh && run_tool_job pro
 출력 앞부분에는 pod마다 `{"endpoint": ..., "pod": ..., "runtime": ..., "version": ..., "kernel_release": ..., "gpu": ..., "egress_blocked": ...}` 한 줄이 나오고, 그 뒤에 golden마다 `PASS` 또는 `FAIL` 줄이 이어집니다.
 
 - **Ready가 아닌 pod**: 평가 요청에 503을 반환하므로 golden 줄이 `sandbox_error`로 FAIL 하는 것이 정상입니다.
-- **열려 있는 egress 대상**: probe 도구는 `/info`의 `egress_open_targets`를 출력하지 않습니다. 어느 대상이 열려 있는지는 서버 로그의 `egress is open` 줄에서 확인하세요.
-- **CPU pool**: `--device cpu`를 씁니다.
+- **외부 연결이 허용된 목적지**: probe 도구는 `/info`의 `egress_open_targets`를 출력하지 않습니다. 어느 목적지로 연결할 수 있는지는 서버 로그의 `egress is open` 줄에서 확인하세요.
+- **CPU pool**: 점검 명령에 `--device cpu`를 지정하세요.
 
 ### 노드에서 확인 (kubectl debug node)
 
@@ -221,7 +221,7 @@ while sleep 60; do kubectl get --raw /healthz >/dev/null || echo "$(date +%T) AP
 | `kubectl`이나 `helm`이 `Unable to connect to the server`, timeout, `127.0.0.1:8443` 연결 거부로 실패 | EKS API endpoint는 private만이라 터널 없이는 접속할 수 없음. 터널 터미널이 닫혔거나 다른 kubectl 컨텍스트를 씀 | 두 번째 터미널에서 `cdk/tunnel.sh`를 다시 실행하고, `kubectl config current-context`가 `<CLUSTER_NAME>-tunnel`인지 확인 |
 
 - **vCPU 한도 오류(HyperPod)**: HyperPod는 "ml.<type> for cluster usage" quota가 따로 있습니다.
-- **AZ에서 인스턴스 유형을 지원하지 않을 때**: CDK 스택은 리전의 AZ 두 개(`max_azs=2`)에 private subnet을 만들고 모든 노드 그룹이 둘 다 씁니다.
+- **AZ에서 인스턴스 유형을 지원하지 않을 때**: CDK 스택은 한 리전의 두 가용 영역(`max_azs=2`)에 프라이빗 서브넷을 만듭니다. 각 노드 그룹은 두 서브넷을 모두 사용합니다.
 
 **GPU 용량이 없을 때:** GPU 노드 그룹이 포함된 첫 생성은 용량 부족 하나로 전체가 롤백됩니다. GPU 노드 그룹 없는 구성으로 클러스터를 먼저 만들고, update로 노드 그룹을 하나씩 추가하세요. 실패한 update는 그 update만 롤백됩니다.
 
@@ -285,9 +285,9 @@ kubectl -n kube-system get ds nvdp-nvidia-device-plugin -o yaml | grep -A1 CDI_D
 해결 방법은 둘 중 하나입니다.
 
 - 그 드라이버를 지원하는 gVisor 릴리스로 `GVISOR_RELEASE` 값을 올립니다.
-- 지원되는 드라이버가 포함된 AMI를 씁니다.
+- gVisor가 지원하는 드라이버를 포함한 AMI를 선택합니다.
 
-어느 쪽이든 교체 전에 도입할 릴리스의 runsc(`install-gvisor.sh`가 받는 `https://storage.googleapis.com/gvisor/releases/release/<릴리스>/x86_64/gvisor.tar.bz2`)로 `runsc nvproxy list-supported-drivers`를 실행해 새 AMI의 드라이버 버전과 대조하세요. 아래 방법은 이미 부팅된 노드에 설치된 조합을 확인할 때 씁니다.
+어느 쪽이든 교체 전에 도입할 릴리스의 runsc(`install-gvisor.sh`가 받는 `https://storage.googleapis.com/gvisor/releases/release/<릴리스>/x86_64/gvisor.tar.bz2`)로 `runsc nvproxy list-supported-drivers`를 실행해 새 AMI의 드라이버 버전과 대조하세요. 이미 부팅한 노드에서 드라이버와 runsc 버전을 확인하려면 아래 명령을 실행하세요.
 
 ### 노드에서 직접 확인하기
 
@@ -491,7 +491,7 @@ kubectl -n rl-trainer create token sandbox-probe --audience gpu-sandbox --durati
 | Production에서 gateway를 배포한 뒤 `ops/verify.sh`의 probe와 `ops/rollout.sh`의 parity가 실패 | `k8s/production/gateway.yaml.tpl`이 같은 이름의 `allow-clients-to-sandbox-api`를 gateway만 허용하도록 덮어씀 | 아래처럼 `rl-trainer`에서 `app: sandbox-probe` 라벨이 붙은 pod만 허용하는 정책을 추가(저장소에 없는 예시) |
 | 다른 namespace에서 gateway로 연결되지 않음 | `allow-trainers-to-gateway`는 `rl-trainer` namespace의 pod만 TCP 8080에 허용 | 호출 위치를 `rl-trainer`로 옮기거나 정책 추가 |
 
-- **gateway 배포 뒤 probe와 parity 실패**: probe, parity, bench, simulate Job이 모두 이 라벨을 씁니다. 검증할 때만 적용하고 끝나면 지우는 방법도 있습니다.
+- **gateway 배포 뒤 probe와 parity 실패**: 이 라벨은 probe, parity, bench, simulate Job에 모두 붙습니다. 검증할 때만 적용하고 끝나면 지우는 방법도 있습니다.
 
 ```yaml
 # Example, not in the repository: lets the operator probe Jobs reach sandbox pods
@@ -553,7 +553,7 @@ spec:
     - **(2) kubelet 동기화 지연**: 스크립트 안내 기준 약 1분입니다.
     - **(3) 다른 namespace**: 다른 namespace의 ConfigMap을 바꿨습니다.
     - **(4) gateway 모드**: gateway에 마운트된 routing 표가 기준인데 `sandbox-gateway`의 ConfigMap이 갱신되지 않았습니다. TRL trainer는 gateway가 응답한 버전이 이전 batch와 다를 때 이 이벤트를 남깁니다.
-    - **(5) JSON 오류**: 마지막 정상 표를 유지합니다.
+    - **(5) JSON 오류**: 마지막으로 정상적으로 읽은 라우팅 표를 유지합니다.
 - **`sandbox_version_switch`가 나오지 않음, 요청이 있었는데도 전환이 보이지 않을 때**: 마운트 방식과 pod 안 파일을 확인하세요(direct 모드는 trainer, gateway 모드는 gateway). 이 저장소 템플릿은 디렉터리로 마운트하므로 템플릿을 고쳤다면 되돌리세요.
 - **`RoutingError: no pool`**
     - **기본 표**: 7개 런타임의 `v1`, `v2`가 모두 있습니다. 주소는 있는데 Ready pod가 없으면 이 오류가 아니라 `no free sandbox`가 나옵니다.
@@ -589,7 +589,7 @@ kubectl -n sandbox-gateway exec deploy/gateway -- cat /etc/gpusandbox/routing/ro
 
 ## Agent Sandbox와 multi-turn 에피소드
 
-multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <runtime>`)은 Job을 제출하기 전에 CRD, ServiceAccount, warm pool 상태를 확인하고, 확인에 실패하면 아래 메시지를 출력하고 멈춥니다. 실행 방법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있습니다.
+`scripts/extensions/agent_sandbox.sh episodes <runtime>`은 multi-turn 에피소드 Job을 제출하기 전에 CRD, ServiceAccount, warm pool의 상태를 점검합니다. 이 단계에서 문제가 생기면 해당 메시지를 남기고 멈춥니다. 실행 방법은 [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)에 있습니다.
 
 - **확인한 환경**: 이 경로는 시나리오 C 클러스터의 `kata-clh-cpu` warm pool로 실행해 확인했습니다.
 - **클러스터 API에 닿지 않을 때(터널이 꺼짐)**: 먼저 `cluster API not reachable`로 멈춥니다.
@@ -625,7 +625,7 @@ multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <ru
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
-| `scripts/hyperpod/check_gvisor.sh`가 `NOT supported by gVisor ...: keep sandboxes on EC2 (mode B1)` 출력 | trainer 노드라면 예상 결과: 기본 HyperPod EKS AMI의 드라이버 595.91.07이 gVisor release-20261109.0의 nvproxy 지원 목록에 없음. sandbox 노드에서 나오면 custom AMI가 적용되지 않은 것 | trainer 노드는 그대로 둠. sandbox 노드라면 `HYPERPOD_B2_AMI_ID`와 인스턴스 그룹의 `ImageId` 확인 |
+| `scripts/hyperpod/check_gvisor.sh`가 `NOT supported by gVisor` 출력 | trainer 노드라면 예상 결과: 기본 HyperPod EKS AMI의 드라이버 595.91.07이 gVisor release-20261109.0의 nvproxy 지원 목록에 없음. 기존 CDK 방식의 sandbox 노드에서 나오면 custom AMI가 적용됐는지 확인 필요 | trainer 노드는 그대로 둠. sandbox 노드라면 `HYPERPOD_B2_AMI_ID`와 인스턴스 그룹의 `ImageId` 확인 |
 | B2 `create-cluster`가 `Failed`, lifecycle 로그에 `runsc missing` 또는 `NVIDIA driver ... is not supported` | sandbox 그룹이 custom AMI로 시작되지 않았거나, AMI를 다른 `B2_NVIDIA_DRIVER_VERSION`이나 `GVISOR_RELEASE`로 빌드함 | `scripts/hyperpod/build_b2_ami.sh`를 다시 실행해 새 `HYPERPOD_B2_AMI_ID`로 클러스터를 만듦 |
 | B2 lifecycle 로그에 `unsupported or missing config version` 또는 `containerd rejected the edited` | containerd 설정 파일 위치나 schema가 예상과 다름 | 노드에서 `ps -o args= -C containerd`로 `--config` 경로를 확인하고, `on_create_sandbox.sh`의 `HYPERPOD_CONTAINERD_CONFIG`를 그 값으로 고친 뒤 lifecycle 스크립트를 다시 업로드 |
 | `scripts/hyperpod/build_b2_ami.sh`가 `customization failed` | 드라이버 교체나 gVisor 확인이 builder에서 실패 | 출력된 `get-console-output` 명령으로 `GPUSANDBOX-B2-BUILD: FAILED ...` 줄과 그 앞 로그를 보고, 정지된 builder를 `terminate-instances`로 종료 |

@@ -1,6 +1,6 @@
 # 학습 코스 고르기
 
-모델이 쓴 코드를 어디서 실행하고, 그 결과를 어떻게 학습에 쓸까요? 처음이라면 [초심자 가이드](beginner/index.md)에서 답안 하나가 채점되는 과정부터 보세요. 내 PC에서 채점까지 해 보려면 코스 2부터 시작해도 됩니다.
+모델이 작성한 코드는 어디에서 실행하고, 채점 결과는 어떻게 학습에 반영할까요? 처음이라면 [초심자 가이드](beginner/index.md)에서 답안 하나가 채점되는 과정부터 보세요. 내 PC에서 채점까지 해 보려면 코스 2부터 시작해도 됩니다.
 
 <div id="목표에-맞춰-시작하기" class="grid cards" markdown>
 
@@ -25,7 +25,7 @@
 
 [초심자 가이드 1~4편](beginner/index.md)을 읽고 [공개 데모](https://dohbsn4kn34ya.cloudfront.net/#try)에서 **ReLU 빠뜨린 오답**을 골라 채점 기록을 재생해 보세요. gVisor와 Kata가 같은 코드를 각자의 격리 환경에서 실행한 결과를 볼 수 있습니다. 읽고 둘러보는 데 1~2시간 정도 잡으세요.
 
-두 환경에 모두 **오답**(`wrong_answer`)이 표시됩니다. 코드에서 어떤 연산이 빠졌을까요? 덧셈 뒤 음수를 0으로 바꾸는 연산이 빠져서 계산 결과가 달라졌습니다. 여기서 샌드박스는 코드를 실행하고, 채점기는 기대한 답과 대조하며, trainer는 그 결과를 학습에 씁니다.
+두 환경에 모두 **오답**(`wrong_answer`)이 표시됩니다. 코드에서 어떤 연산이 빠졌을까요? 덧셈 뒤 음수를 0으로 바꾸는 연산이 빠져서 계산 결과가 달라졌습니다. 여기서 샌드박스는 코드를 실행하고, 채점기는 기대한 답과 대조하며, trainer는 그 결과를 학습 보상에 반영합니다.
 
 ??? note "격리 방식과 학습 원리를 더 읽고 싶다면"
     - GPU에서 직접 채점해야 하는 과제는 무엇일까요? [GPU 샌드박스가 필요한 경우](concepts/01_why_gpu_sandbox.md)
@@ -36,7 +36,7 @@
 
 [직접 해 보기](beginner/05_hands_on.md)의 1~2절을 따라 하세요. Git과 `uv`로 Python 3.14 환경을 준비하고, 로컬 CPU 서버 두 곳에 같은 답안을 보내는 테스트를 실행합니다. 설치를 포함해 30분~1시간 정도 걸립니다.
 
-마지막에 **`1 passed`**가 나오면 두 서버 모두 정답, 오답, 정책 위반을 예상대로 구별한 것입니다. 여기까지는 AWS 계정과 GPU가 필요 없습니다.
+두 서버 모두 정답, 오답, 정책 위반을 예상대로 구별하면 마지막에 **`1 passed`**가 나옵니다. 여기까지는 AWS 계정과 GPU가 필요 없습니다.
 
 ??? example "테스트 결과 화면과 macOS 추가 실습"
     ![로컬 CPU 서버 두 곳에 같은 답안을 보내고 1 passed로 끝난 터미널](images/learning/local-cpu-grading.png)
@@ -75,7 +75,7 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
 
 [CPU 전용 실습](handson/10_cpu_only.md)에서 `c8i.2xlarge` 한 대에 gVisor와 Kata를 띄웁니다. GPU나 모델 학습 없이, 준비된 답안을 계속 보내면서 채점 서버 묶음(pool)을 v1에서 v2로 바꿉니다.
 
-`SWITCH` 다음 `batch` 줄을 보세요. `kata-clh-cpu/v2`에서 `ok`와 `wrong_answer`가 나오면 새 pool이 실제로 답을 채점한 것입니다.
+`SWITCH` 다음 `batch` 줄을 보세요. `kata-clh-cpu/v2`에서 `ok`와 `wrong_answer`가 나오면 새 pool이 해당 배치를 채점한 것입니다.
 
 ??? example "교체 전후 두 배치의 결과 비교하기"
     배치 6은 v1, 배치 7은 v2를 사용했고 둘 다 정답 1건과 오답 2건을 돌려줬습니다.
@@ -99,7 +99,7 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
 
 ### 6. Kata VM에서 GPU 사용하기 · 코스 3 또는 4에서 추가 { #course-6 }
 
-코스 3이나 4의 클러스터를 정리하기 전에 [Kata 실습](handson/03_kata.md)의 CPU 리허설과 GPU 연결 단계를 진행하세요. [채점 pool 배포](handson/04_sandbox_pools.md) 후 `scripts/ops/verify.sh kata-qemu v1` 출력에 `Tesla T4`가 보이고 시험용 답안 여섯 개가 모두 `PASS`면 VM 안에서 GPU 채점까지 확인한 것입니다. [Kata VM의 GPU 확인 화면](handson/03_kata.md#gpu-run)
+코스 3이나 4의 클러스터를 정리하기 전에 [Kata 실습](handson/03_kata.md)을 진행하세요. 먼저 CPU 노드에서 VM을 확인한 뒤 GPU를 연결합니다. [채점 pool 배포](handson/04_sandbox_pools.md) 후 `scripts/ops/verify.sh kata-qemu v1` 출력에 `Tesla T4`가 보이고 시험용 답안 여섯 개가 모두 `PASS`면 VM 안에서 GPU 채점까지 확인한 것입니다. [Kata VM의 GPU 확인 화면](handson/03_kata.md#gpu-run)
 
 ??? note "gVisor와 Kata의 GPU 성능도 비교하려면"
     코스 4에서 학습이 멈추고 `gvisor v1`과 `kata-qemu v1` pool이 모두 Ready일 때 실행하세요. 06편에서 이미 `--finish`로 gVisor v1을 줄였다면 먼저 v1을 복구하세요. [런타임 벤치마크 절차와 결과](handson/08_benchmark.md#runtime-results)

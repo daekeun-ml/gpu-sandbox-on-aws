@@ -1,25 +1,25 @@
 # 08 비용
 
 !!! info "TL;DR"
-    비용은 trainer GPU, 샌드박스 GPU, 빈 bare metal 노드의 대기 시간, EKS control plane과 NAT gateway로 나뉩니다. 비용을 줄이는 주요 방법은 샌드박스 pool 크기를 reward 구간에 맞추고 빈 노드를 빨리 반납하는 것입니다(금액은 온디맨드 요금으로 계산한 추정치).
+    비용은 trainer GPU, 샌드박스 GPU, 빈 bare metal 노드의 대기 시간, EKS control plane과 NAT gateway로 나뉩니다. 비용을 줄이려면 샌드박스 pool 크기를 reward 구간의 수요에 맞추고 빈 노드를 일찍 반납하세요. 이 장의 금액은 온디맨드 요금으로 계산한 추정치입니다.
 
 ## 리소스가 유휴 상태일 때 드는 비용
 
-GPU 사용률을 보면 샌드박스가 쉬고 있는데 청구액은 그대로일 수 있습니다. 샌드박스에 요청은 채점 구간에 몰리지만 노드는 생성과 모델 업데이트를 기다리는 동안에도 켜져 있습니다. 한 run을 기준으로 실제 채점에 쓴 시간과 노드가 할당된 시간을 나눠 보면 비용이 남는 구간이 보입니다.
+샌드박스 GPU의 사용률이 낮아도 요금은 계속 발생할 수 있습니다. 샌드박스 요청은 채점 구간에 몰리지만, 답안을 생성하거나 모델을 업데이트할 때도 노드는 켜져 있기 때문입니다. 한 번의 학습에서 노드를 할당한 시간과 실제 채점 시간을 비교하면 채점하지 않는 시간에 얼마만큼의 노드 비용이 드는지 파악할 수 있습니다.
 
 ![a: trainer가 생성, reward 채점, 업데이트를 반복하는 동안 샌드박스 GPU는 reward 구간에만 사용되지만, 과금은 노드 단위로 계속됩니다. run이 끝난 뒤 pool을 그대로 두면 g4dn.metal이 시간당 7.824 USD로 계속 과금됩니다(주말 48시간이면 375.552 USD). g4dn.metal의 T4 8개 중 4개만 쓰면 사용한 T4당 1.956 USD/시간입니다. b: pool 크기를 reward 구간에 몰리는 요청에 맞추고, run이 끝나면 replicas를 0으로 줄입니다. 빈 노드는 consolidateAfter 30분이 지나면 반납 절차에 들어가므로 빈 기간마다 약 3.912 USD가 들고, 과금은 노드가 종료될 때까지 이어집니다. T4 8개를 모두 쓰면 T4당 0.978 USD/시간입니다.](../images/figures/production-08_cost.ko.svg)
 
 ## 비용을 줄일 수 있는 지점
 
-요청이 몰릴 때는 배치 대기를 줄일 만큼 pool을 확보하고, run 사이에는 유휴 노드가 얼마나 오래 남는지 확인합니다. 특히 metal은 노드 단위로 비용이 나므로 실제로 쓰는 T4 수에 따라 GPU당 비용이 달라집니다. 아래 금액은 공개 온디맨드 단가로 계산한 추정치입니다.
+요청이 몰릴 때는 배치 대기를 줄일 만큼 pool을 확보하고, run 사이에는 유휴 노드가 얼마나 오래 남는지 확인합니다. 특히 metal은 노드 한 대 단위로 요금이 정해지므로 실제로 사용하는 T4가 몇 장인지에 따라 GPU당 비용이 달라집니다. 아래 금액은 공개 온디맨드 단가로 계산한 추정치입니다.
 
 ??? note "세부 조건과 예외"
     - **실습을 마치고 `g4dn.metal`을 그대로 두면**: 시간당 7.824 USD, 주말 48시간이면 375.552 USD가 과금됩니다.
-    - **pool 크기를 넉넉하게 고정해 두면**: 샌드박스 GPU는 reward 구간에만 사용되고 생성과 업데이트 구간에는 사용되지 않는데도 계속 과금됩니다.
+    - **pool 크기를 넉넉하게 고정해 두면**: 샌드박스 GPU가 필요한 때는 reward 구간뿐이지만, 답안을 생성하거나 모델을 업데이트하는 동안에도 요금이 부과됩니다.
     - **metal 노드의 T4 8개 중 4개만 쓰면**: 노드 단위로 과금되므로 사용하는 T4당 단가가 두 배가 됩니다.
     - **gVisor pool의 blue/green 전환 때 두 pool을 오래 함께 실행하면**: pod마다 노드 하나를 쓰므로 그동안 샌드박스 GPU 비용도 두 배가 됩니다.
 
-    - **비용을 네 항목으로 나눕니다.** pool 크기 조정은 샌드박스 GPU를, consolidation은 빈 metal 노드의 대기 시간을 줄이는 식으로 방법마다 줄이는 항목이 다릅니다.
+    - **비용을 네 항목으로 나눕니다.** pool 크기를 조절하면 샌드박스 GPU 비용을 줄일 수 있고, consolidation을 조정하면 빈 metal 노드를 유지하는 시간을 줄일 수 있습니다.
     - **공개된 온디맨드 요금으로만 계산합니다.** 측정한 사용량이 없으므로 금액은 단가와 시간을 곱한 추정치입니다.
     - **trainer를 HyperPod로 옮길 때는 같은 GPU의 시간당 차액과 노드 복구 기능을 함께 비교합니다.**
 
@@ -28,9 +28,9 @@ GPU 사용률을 보면 샌드박스가 쉬고 있는데 청구액은 그대로�
 ??? note "용어"
     - **온디맨드 요금**: 약정이나 할인 없이 쓴 만큼 시간 단위로 내는 공개 가격입니다. 이 페이지의 모든 금액은 이 값으로 계산합니다.
     - **Savings Plans, Spot**: Savings Plans는 사용량을 약정하고 할인받는 요금제이고, Spot은 AWS의 남는 용량을 적은 비용으로 쓰는 대신 AWS가 회수할 수 있는 인스턴스입니다.
-    - **노드 단위 과금**: pod가 GPU를 몇 개 쓰든 노드 전체 시간이 과금된다는 뜻입니다. `g4dn.metal`에서 T4 4개만 써도 8개분 비용이 과금됩니다.
+    - **노드 단위 과금**: pod가 사용하는 GPU 수와 관계없이 노드가 켜져 있는 시간만큼 요금이 부과됩니다. `g4dn.metal`에서 T4 4개만 사용해도 8개를 모두 사용할 때와 요금이 같습니다.
     - **consolidateAfter**: Karpenter가 빈 노드를 반납하기 전에 새 작업을 기다리는 시간입니다.
-    - **warm placeholder**: 부팅이 느린 metal 노드를 미리 확보해 두는 빈 pod입니다. 노드 한 대 비용이 계속 과금됩니다.
+    - **warm placeholder**: 부팅이 느린 metal 노드를 미리 확보해 두는 빈 pod입니다. 미리 확보한 노드 한 대의 요금이 계속 발생합니다.
     - **NAT gateway**: private subnet의 노드가 인터넷(이미지 pull, 모델 다운로드)에 접속할 때 거치는 관리형 서비스입니다. 시간당 요금과 처리량 요금이 있습니다.
 
     더 많은 용어는 [용어 사전](../reference/glossary.md)에 있습니다.
@@ -165,11 +165,11 @@ GPU당 단가만으로 고르지는 마세요. A10G와 T4는 speedup을 서로 �
 | `g6.2xlarge` | 0.9776 | `ml.g6.2xlarge` | 1.222 | 0.2444 | 1.25 |
 | `g6e.xlarge` | 1.861 | `ml.g6e.xlarge` | 2.61 | 0.749 | 약 1.40 |
 
-차액으로 얻는 것은 관리형 노드 수명 주기입니다. health monitoring agent, deep health check(InstanceStress, InstanceConnectivity), 문제 노드를 재부팅하거나 교체하는 `NodeRecovery: Automatic`, training operator의 job 재시작과 로그 기반 hang 감지가 여기에 포함됩니다.
+HyperPod의 추가 요금에는 노드 상태 감시와 복구 기능이 포함됩니다. 예를 들면 health monitoring agent, deep health check(InstanceStress, InstanceConnectivity), 문제 노드를 재부팅하거나 교체하는 `NodeRecovery: Automatic`, training operator의 job 재시작과 로그 기반 hang 감지가 있습니다.
 
-EC2(시나리오 A)에서도 노드 교체 자체는 managed node group이나 Karpenter로 구성할 수 있습니다. 차이는 GPU 수준의 deep health check와 job 재시작을 관리형 기능으로 제공받는지 여부입니다. "차액 × run 시간"과 "예상 장애 횟수 × (마지막 checkpoint 뒤 잃는 진행 + 복구 시간) × 클러스터 시간당 비용 + 운영자 시간"을 비교해 판단하세요. 핸즈온 단일 노드(`g5.2xlarge`와 `ml.g5.2xlarge`)라면 차액이 시간당 0.303 USD, 24시간 run에 7.272 USD입니다.
+EC2(시나리오 A)에서도 노드 교체 자체는 managed node group이나 Karpenter로 구성할 수 있습니다. HyperPod에서는 GPU 수준의 deep health check와 job 재시작까지 관리형 기능으로 제공합니다. "차액 × run 시간"과 "예상 장애 횟수 × (마지막 checkpoint 뒤 잃는 진행 + 복구 시간) × 클러스터 시간당 비용 + 운영자 시간"을 비교해 판단하세요. 핸즈온 단일 노드(`g5.2xlarge`와 `ml.g5.2xlarge`)라면 차액이 시간당 0.303 USD, 24시간 run에 7.272 USD입니다.
 
-HyperPod는 EC2와 별도인 "ml.<type> for cluster usage" 한도를 씁니다. EC2의 "Running On-Demand G and VT instances" 한도는 vCPU 기준이고 기본값이 0일 수 있으니 두 한도를 함께 확인하세요(`g4dn.metal`은 96 vCPU 필요).
+HyperPod에 적용되는 "ml.<type> for cluster usage" 한도는 EC2 한도와 별개입니다. EC2의 "Running On-Demand G and VT instances" 한도는 vCPU 기준이고 기본값이 0일 수 있으니 두 한도를 함께 확인하세요(`g4dn.metal`은 96 vCPU 필요).
 
 !!! question "❓ 오해: Kata + g4dn.metal은 GPU당 훨씬 비싸다"
     T4 8개를 모두 사용하면 T4당 0.978 USD/시간으로 `g5.xlarge`의 A10G(1.006 USD/시간)와 큰 차이가 없습니다. 비용을 늘리는 요인은 노드 단위 과금(4개만 쓰면 사용한 T4당 1.956 USD)과, 여기에 추가되는 빈 노드의 30분 대기와 placeholder입니다.
@@ -231,8 +231,8 @@ aws ec2 describe-instances --region "${AWS_REGION}" \
 
 ## 적용 범위와 한계
 
-- **모든 금액은 계산입니다.** 이 저장소에는 AWS에서 측정한 사용량이나 청구 금액이 없습니다.
-- **빠진 항목이 있습니다.** EKS control plane, NAT gateway, EBS, FSx for Lustre, ECR, CloudWatch 요금은 계산에 넣지 않았습니다.
+- **표의 금액은 예상 비용입니다.** 이 저장소에는 AWS에서 측정한 사용량이나 청구 금액이 없습니다.
+- **비용 추정에서 제외한 항목:** EKS control plane, NAT gateway, EBS, FSx for Lustre, ECR, CloudWatch 요금은 표에 포함하지 않았습니다.
 - **step 시간은 직접 측정해야 합니다.** "비용을 줄이는 방법"의 step당 비용 식은 `t_generate`, `t_update`, `t_eval`을 알고 있다고 가정합니다. 이 값들은 run마다 다릅니다.
 
 ??? note "참고 자료"

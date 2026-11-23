@@ -1,16 +1,16 @@
 # 06 학습 중 샌드박스 업데이트
 
-한 문제에 낸 답들을 비교할 때 채점 기준까지 바뀌면 점수 차이를 해석하기 어렵습니다. 그래서 trainer는 한 배치에 쓸 pool 버전을 한 번 정합니다. 여기서는 [05편의 학습](05_grpo_training.md)을 계속 돌리면서 **다음 배치부터 v2로 보내는 과정**을 확인합니다.
+한 문제에 낸 답들을 비교할 때 채점 기준까지 바뀌면 점수 차이를 해석하기 어렵습니다. 그래서 trainer는 한 배치에 쓸 pool 버전을 한 번 정합니다. [05편의 학습](05_grpo_training.md)을 계속 실행하면서 **전환 후 샌드박스에 보내는 다음 배치가 v2에서 채점되는지** 확인하세요.
 
-1. [두 pool이 함께 쓸 GPU를 준비](#준비-bluegreen에-필요한-gpu)하세요. gVisor에서는 채점 노드 네 대가 `Ready`여야 합니다.
+1. [두 pool을 동시에 띄울 GPU를 준비](#준비-bluegreen에-필요한-gpu)하세요. gVisor에서는 채점 노드 네 대가 `Ready`여야 합니다.
 2. 다른 작업 터미널에서 [v2로 전환](#실행)합니다. 같은 시험 답을 v1과 v2에 보낸 결과가 [parity 검사](#rollout-parity)를 통과하면 라우팅이 바뀝니다.
 3. trainer 로그의 `SWITCH` 뒤에 [v2 배치의 판정](#switch-batches)이 나오는지 확인하세요. 실제로 채점한 결과가 있으면 [v1을 축소](#전환-확인-후-v1-정리)합니다. 모두 `sandbox_error`라면 v1을 유지하고 [롤백](#rollback)하세요.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **blue/green**: 새 버전(green)을 기존 버전(blue)과 별도로 띄워 검증한 뒤 트래픽을 한 번에 옮기는 배포 방식입니다.
     - **rolling update**: 같은 Deployment의 pod를 하나씩 새 버전으로 바꾸는 Kubernetes 기본 업데이트 방식입니다. 교체하는 동안 두 버전의 pod가 함께 실행됩니다.
-    - **golden, parity**: 기대 verdict가 정해진 시험용 제출물과, 두 버전이 그 제출물에 같은 verdict를 내는지 비교하는 검사입니다.
-    - **routing ConfigMap, snapshot, revision**: 활성 pool을 기록한 설정, trainer가 채점 요청을 보낼 때 고정하는 그 설정의 사본, 내용이 바뀔 때마다 하나씩 증가하는 번호입니다.
+    - **golden, parity**: golden은 기대 verdict가 정해진 시험용 제출물입니다. parity 검사는 두 버전이 그 제출물에 같은 verdict를 내는지 비교합니다.
+    - **routing ConfigMap, snapshot, revision**: routing ConfigMap에는 활성 pool이 기록됩니다. trainer는 채점 요청을 보낼 때 이 설정의 사본(snapshot)을 고정합니다. revision은 설정 내용이 바뀔 때마다 하나씩 증가하는 번호입니다.
     - **draining, recycler**: 새 요청을 받지 않고 교체를 기다리는 pod 상태와, 그런 pod를 지워 새 pod로 바꾸는 Production gateway의 기능입니다.
     - **rollback**: 문제가 생겼을 때 이전 버전으로 되돌리는 작업입니다.
 
@@ -84,7 +84,7 @@ scripts/ops/rollout.sh gvisor v1 v2
 | 1 배포 | `06_deploy_sandboxes.sh gvisor v2`: Deployment와 Service `sandbox-gvisor-v2`를 만들고 `rollout status`를 최대 30분 기다립니다 | v2 pod가 모두 Ready입니다 | v2에 traffic 없음, v1 유지 |
 | 2 검증 | `ops/verify.sh gvisor v2`: 커널 비교, egress 차단 확인, 인증된 API를 통한 golden verdict 확인, `default` namespace에서 v2 pod로 들어오는 연결 차단 확인 | v2가 격리되어 있고 golden 제출물에 기대한 verdict를 냅니다 | 스크립트 중단, v1 유지 |
 | 3 parity | `gpusandbox.tools parity`를 Job `parity-gvisor-v1-v2-<epoch>`로 실행 | 같은 golden set에서 두 버전의 verdict가 같고 speedup 차이가 허용 범위 안에 있습니다 | `parity failed: v2 keeps no traffic, v1 stays active` |
-| 4 전환 | `routing.json.tpl`을 `ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v2`로 렌더링해 `rl-trainer`(있으면 `sandbox-gateway`도)의 ConfigMap `sandbox-routing`에 적용 | 갱신된 routing 표를 읽은 reward batch부터 trainer가 v2를 씁니다 | |
+| 4 전환 | `routing.json.tpl`을 `ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v2`로 렌더링해 `rl-trainer`(있으면 `sandbox-gateway`도)의 ConfigMap `sandbox-routing`에 적용 | trainer가 갱신된 routing 표를 읽은 reward batch부터 v2에서 채점합니다 | |
 | 5 `--finish` | `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=0` | Deployment는 남아 있어서 rollback이 빠릅니다 | |
 
 - **1단계의 Ready**: GPU probe를 통과했고, pod 안에서 IMDS, API server, 노드 kubelet으로 가는 연결이 차단되어 있음을 확인했다는 뜻입니다.
@@ -119,7 +119,7 @@ and a later batch line on gvisor/v2 with verdicts other than sandbox_error, then
 
 ## Parity 검사
 
-parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 pool에 동시에 보내 결과를 비교합니다. GPU pool(`--device cuda`)에서는 6개, CPU pool에서는 GPU 전용 2개를 뺀 4개를 씁니다.
+parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 pool에 동시에 보내 결과를 비교합니다. GPU pool(`--device cuda`)에서는 6개를 비교하고 CPU pool에서는 GPU 전용 2개를 제외한 4개를 비교합니다.
 
 | golden | task | 기대 status | 확인하는 것 |
 |---|---|---|---|
@@ -204,7 +204,7 @@ trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용�
     *그림 요약: 한 batch는 한 버전으로 채점됩니다. 첫 전환에서는 캐시에 v1 결과만 있으므로 전환 전에 v1으로 보낸 batch N은 v1으로 끝나고, 갱신된 routing 표를 처음 읽은 batch N+1부터 v2가 채점합니다. ConfigMap 갱신이 늦으면 v1으로 채점하는 batch가 더 이어질 수 있습니다.*
 
     1. ConfigMap은 디렉터리로 마운트되어 있어서 kubelet이 파일을 갱신합니다. 갱신 지연은 최대 kubelet sync 주기와 cache 전파 지연을 더한 시간까지 걸릴 수 있습니다(Kubernetes 문서).
-    2. `RoutingTable`은 파일을 최대 2초에 한 번 다시 읽고, 내용이 바뀌면 `revision`을 1 올립니다. 파일을 쓰는 도중이라 읽지 못하면 마지막으로 정상적으로 읽은 table을 계속 씁니다.
+    2. `RoutingTable`은 파일을 최대 2초에 한 번 다시 읽고, 내용이 바뀌면 `revision`을 1 올립니다. 파일을 갱신하는 도중 읽기에 실패하면 마지막으로 읽은 정상 routing 표를 유지합니다.
     3. `KernelRewards`는 한 batch의 결과를 한 pool의 버전으로 맞춥니다. 클라이언트는 호출될 때마다 그 시점의 snapshot으로 pool을 정합니다.
         - **보내는 completion**: 기본 batch는 2 group, completion 16개이며, 이 중 샌드박스 평가가 필요한 completion만 보냅니다. 같은 pool의 캐시에 결과가 있거나, 코드가 없거나, trainer 쪽 정책 검사에서 걸린 completion은 보내지 않습니다.
         - **다른 pool로 캐시된 completion**: 이번 batch를 채점한 pool로 다시 보내므로, 한 batch에서 클라이언트를 두 번 이상 부를 수 있습니다.
@@ -225,7 +225,7 @@ trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용�
 
 ### trainer가 v2를 사용한 배치 { #switch-batches }
 
-`SWITCH`는 trainer가 새 경로를 읽었다는 신호입니다. 바로 뒤 `batch`에서 v2가 돌려준 판정까지 보세요. 한 배치 안의 답은 모두 같은 기준으로 비교해야 하므로 원본 `served_versions`에는 버전 하나만 나와야 합니다.
+`SWITCH`가 기록되면 trainer가 새 경로를 읽은 것입니다. 이어지는 `batch`에서 v2의 판정도 확인하세요. 한 배치 안의 답은 모두 같은 기준으로 비교해야 하므로 원본 `served_versions`에는 버전 하나만 나와야 합니다.
 
 배치 1~4은 v1, 5~16은 v2가 채점했습니다. 각 `reward_batch`의 `served_versions`를 확인했을 때 두 버전이 섞인 배치는 0개였습니다. [배치별 채점 기록](data/grpo-rollout-2026-11-22.json)
 
@@ -243,7 +243,7 @@ v2 pod는 평가를 200번 수행한 뒤 draining 상태가 되어 Ready에서 �
 
 v2 pod 2개의 한도는 합계 400번입니다. golden 요청 12번을 빼고 step마다 completion 16개를 한 번씩 평가하면 약 24 step분이 남습니다.
 
-- **캐시 덕분에 `n`이 작으면**: 더 오래 씁니다.
+- **캐시 덕분에 `n`이 작으면**: pod의 평가 한도에 도달하기까지 더 많은 step을 진행할 수 있습니다.
 - **다른 pool로 캐시된 결과를 다시 보내거나 batch 전체를 다시 보내면**: 더 빨리 소진됩니다.
 - **두 pod가 모두 draining 상태이면**: 요청이 `sandbox_error`가 되어 reward 계산에서 빠집니다.
 
@@ -294,7 +294,7 @@ scripts/ops/rollout.sh gvisor v2 v1
 
 parity는 두 pool이 모두 golden 기대값을 반환해야 통과합니다. 그래서 v2가 고장 나 golden 검사에 실패하면 rollback 스크립트도 3단계에서 멈춥니다. 이때는 routing만 수동으로 되돌리세요.
 
-`scripts/05_setup_namespaces_auth.sh`를 다시 실행하면 `rl-trainer`의 routing ConfigMap이 `ACTIVE_RUNTIME`, `ACTIVE_VERSION` 값(없으면 `gvisor/v1`)으로 새로 써지니, 되돌릴 pool을 이 두 값으로 지정하세요. 이 스크립트는 namespace, RBAC, NetworkPolicy, JWKS도 다시 적용합니다.
+`scripts/05_setup_namespaces_auth.sh`를 다시 실행하면 `rl-trainer`의 routing ConfigMap이 `ACTIVE_RUNTIME`, `ACTIVE_VERSION` 값(없으면 `gvisor/v1`)으로 갱신됩니다. 이 두 값으로 되돌릴 pool을 지정하세요. 이 스크립트는 namespace, RBAC, NetworkPolicy, JWKS도 다시 적용합니다.
 
 ```bash
 ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v1 scripts/05_setup_namespaces_auth.sh

@@ -1,19 +1,19 @@
 # 09 CDK로 프로비저닝하고 삭제하기
 
-이 장에서 B2 CDK 명령은 EC2 시스템 노드를 두는 이전 구성을 가리킵니다. CPU와 GPU 워커를 모두 HyperPod에 두는 실습은 [관리형 B2](../handson/07_hyperpod_b2.md)를 따르세요.
+이 장의 B2 CDK 명령은 EC2에 시스템 노드를 두던 이전 구성에만 해당합니다. CPU와 GPU 워커를 모두 HyperPod에 두는 실습은 [관리형 B2](../handson/07_hyperpod_b2.md)를 따르세요.
 
 !!! info "TL;DR"
-    핸즈온의 클러스터 생성 단계(`02_create_cluster.sh`)에서 실행하는 이 CDK 앱은 VPC, EKS(API endpoint는 private 전용), 시나리오별 노드 그룹, SSM 접속 인스턴스를 스택 하나로 만들고 명령 한 번으로 삭제합니다. synth할 때마다 cdk-nag가 보안 규칙을 검사하고, 템플릿 테스트(`cdk/tests`)는 따로 실행합니다.
+    핸즈온에서 `02_create_cluster.sh`를 실행하면 이 CDK 앱이 VPC, EKS(기본 API endpoint는 private 전용), 시나리오별 노드 그룹, SSM 접속 인스턴스를 스택 하나로 만듭니다. 이 스택은 명령 한 번으로 삭제할 수 있습니다. synth할 때마다 cdk-nag가 보안 규칙을 검사하고, 템플릿 테스트(`cdk/tests`)는 따로 실행합니다.
 
 ## 인프라를 다시 만들기 어려운 이유
 
-실습용 클러스터를 다른 계정에 다시 만들거나 삭제할 때, 어느 명령이 어떤 리소스를 만들었는지 놓치기 쉽습니다. 예를 들어 클러스터가 지워져도 별도로 만든 이미지 저장소나 AMI는 남을 수 있습니다. 반복 배포와 정리를 하려면 먼저 리소스의 관리 주체를 확인합니다.
+실습용 클러스터를 다른 계정에 다시 만들거나 삭제할 때, 어느 명령이 어떤 리소스를 만들었는지 놓치기 쉽습니다. 예를 들어 클러스터가 지워져도 별도로 만든 이미지 저장소나 AMI는 남을 수 있습니다. 환경을 다시 만들거나 정리하기 전에 스택에 포함된 리소스와 따로 관리하는 리소스를 확인하세요.
 
 ![a: 여러 스크립트를 순서대로 실행해 단계 1에서 클러스터, 단계 2에서 노드 그룹, 단계 3에서 launch template과 로그 그룹을 만듭니다. 삭제할 때도 단계마다 리소스별로 따로 삭제해야 하고, 하나라도 남으면 비용이 나가거나 다음 생성이 실패합니다. b: cdk/deploy.sh가 같은 리소스를 CDK 스택 하나(CloudFormation)로 배포하고, cdk/destroy.sh가 스택 전체를 삭제합니다. 스택 안의 리소스는 함께 삭제되고, HyperPod 클러스터, AMI, ECR은 따로 삭제합니다.](../images/figures/production-09_cdk.ko.svg)
 
 ## CDK 스택으로 관리하는 범위
 
-CDK 스택은 VPC, EKS, 관리형 노드 그룹, SSM 접속 인스턴스를 함께 배포하고 삭제합니다. HyperPod와 AMI, ECR은 생성 주체가 다른 리소스입니다. 배포 뒤에는 private API를 터널로 열어 확인하고, 정리 뒤에는 스택 상태와 별도 리소스 목록을 모두 확인합니다.
+CDK 스택은 VPC, EKS, 관리형 노드 그룹, SSM 접속 인스턴스를 함께 배포하고 삭제합니다. HyperPod 클러스터, AMI, ECR 저장소는 스택 밖에서 따로 만듭니다. 배포한 뒤에는 터널을 열어 private API에 접속해 보세요. 정리가 끝나면 스택 상태와 따로 만든 리소스가 남았는지 모두 확인하세요.
 
 ??? note "세부 조건과 예외"
     - **여러 스크립트로 나눠 만들 때**: 클러스터, 노드 그룹, launch template을 여러 스크립트로 나눠 만들면 이해하기는 쉽지만, 환경을 다시 만들거나 팀에 공유할 때 순서를 놓치기 쉽습니다.
@@ -21,9 +21,9 @@ CDK 스택은 VPC, EKS, 관리형 노드 그룹, SSM 접속 인스턴스를 함�
     - **계정 보안 점검**: 공개된 API endpoint, IMDSv1, 암호화하지 않은 볼륨, 넓게 열린 security group은 계정 보안 점검에서 바로 지적됩니다(예: Security Hub 컨트롤 EKS.1).
     - **eksctl**: private endpoint만 활성화한 클러스터를 처음부터 만들 수 없어(eksctl 문서) public endpoint가 활성화된 상태로 남습니다. 그래서 이 저장소는 eksctl을 쓰는 방법을 제거했습니다.
 
-    - **스택 하나를 삭제 단위로 씁니다.** VPC, EKS 클러스터, 관리형 노드 그룹, SSM 접속 인스턴스가 CloudFormation 스택 하나에 있어 스택과 함께 삭제됩니다. HyperPod 클러스터, AMI, ECR 저장소는 스택 밖에 있으니 따로 지워야 합니다(아래 표의 "스택 밖에서 만드는 것").
+    - **스택을 삭제하면 그 안의 리소스도 함께 삭제됩니다.** 이 CloudFormation 스택에는 VPC, EKS 클러스터, 관리형 노드 그룹, SSM 접속 인스턴스가 포함됩니다. HyperPod 클러스터, AMI, ECR 저장소는 스택 밖에 있으니 따로 지워야 합니다(아래 표의 "스택 밖에서 만드는 것").
     - **기본값이 private이고, 보안 검사를 통과해야 배포됩니다.** EKS API endpoint는 인터넷에 노출하지 않습니다(접속은 SSM Session Manager 포트 포워딩). synth할 때마다 실행되는 cdk-nag(AwsSolutions 규칙)가 예외 처리하지 않은 지적을 발견하면 배포가 중단됩니다.
-    - **핸즈온도 같은 스택을 씁니다.** `scripts/02_create_cluster.sh`가 `cdk/deploy.sh`를 호출하고 둘 다 `scripts/config.env`를 읽으므로, 인스턴스 유형과 고정 버전이 서로 달라지지 않습니다.
+    - **핸즈온 스크립트도 이 스택을 배포합니다.** `scripts/02_create_cluster.sh`가 `cdk/deploy.sh`를 호출하고 둘 다 `scripts/config.env`를 읽으므로, 인스턴스 유형과 고정 버전이 서로 달라지지 않습니다.
 
 **읽기 전에**　[00 핸즈온 전체 흐름](../handson/00_overview.md)의 아키텍처와 [00 아키텍처](00_architecture.md)를 먼저 보세요. 가장 적은 비용으로 시험하려면 시나리오 C([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md))로 배포하세요.
 
@@ -40,7 +40,7 @@ CDK 스택은 VPC, EKS, 관리형 노드 그룹, SSM 접속 인스턴스를 함�
     - **실습 계정에서 실행한 것**: 시나리오 C의 배포, 확인, 삭제와 시나리오 A(gVisor 경로), Kata GPU 노드 그룹(`scripts/kata/gpu_nodes.sh`)입니다.
     - **시나리오 C에서 확인한 것**: 클러스터와 노드 상태, private endpoint, c8i 노드의 nested virtualization과 `/dev/kvm`, 노드의 gVisor와 node guard, SSM 터널을 통한 kubectl 접속(터널은 `127.0.0.1`에서만 열림), Kata CPU 노드 추가(`scripts/kata/cpu_nodes.sh`)의 kata-deploy, `gvisor-cpu` RuntimeClass, 세 런타임의 smoke pod, 삭제 후 남은 리소스입니다.
     - **중간 단계로만 배포한 것**: B2 스택은 시나리오 A 클러스터를 만드는 중간 단계로만 배포했습니다.
-    - **AWS에서 실행하지 않은 것**. HyperPod B2 custom AMI 경로입니다.
+    - **AWS에서 확인하지 않은 구성**: HyperPod B2 custom AMI를 사용하는 경로는 실행하지 않았습니다.
     - **로컬에서 확인하는 것**: synth로 보안 기본값(`cdk/tests`, 19개)과 cdk-nag를 확인합니다.
 
     날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
@@ -70,7 +70,6 @@ flowchart LR
 | 항목 | CDK 스택 (`02_create_cluster.sh`) | `scripts/`의 스크립트 (클러스터 안쪽) |
 |---|---|---|
 | 담당 범위 | 스택 하나: VPC, 클러스터, add-on, 시나리오별 노드 그룹, access instance | device plugin, RuntimeClass, kata-deploy, GPU Operator, namespace, 샌드박스 pool, 학습 Job |
-    - **AWS에서 실행하지 않은 것**. HyperPod B2 custom AMI 경로입니다.
 | EKS API endpoint | private 전용 (public은 `EKS_PUBLIC_ACCESS_CIDR`에 /32 하나로만 opt-in) | 스택의 private endpoint를 그대로 씀 |
 | 접속 | 필요 없음 (CloudFormation이 배포) | `cdk/tunnel.sh` (SSM 포트 포워딩)를 두 번째 터미널에서 실행해 둠 |
 | 노드 그룹 추가 | `WITH_KATA_CPU=1`, `WITH_KATA_GPU=1`(`KATA_IOMMU_AMI_ID` 필요)을 설정하고 `02_create_cluster.sh`를 다시 실행하면 CDK가 변경된 부분만 반영 | `kata/cpu_nodes.sh`, `kata/gpu_nodes.sh`는 노드 그룹이 있는지 확인한 뒤 설치만 함 |
@@ -80,7 +79,7 @@ flowchart LR
 
 ## 보안 기본값
 
-각 항목은 `cdk/tests/test_stack.py`가 synth한 템플릿에서 확인합니다.
+`cdk/tests/test_stack.py`는 synth로 생성한 템플릿에서 아래 항목을 확인합니다.
 
 | 항목 | 값 | 이유 |
 |---|---|---|
@@ -140,7 +139,7 @@ cdk/deploy.sh C
 
 ![EKS 클러스터 Networking 탭: API server endpoint access Private](../images/console/eks-networking.png)
 
-control plane 로그는 CloudWatch Logs의 `/aws/eks/<CLUSTER_NAME>/cluster`에 30일 보존 설정으로 저장됩니다.
+CloudWatch Logs는 control plane 로그를 `/aws/eks/<CLUSTER_NAME>/cluster`에 30일 동안 보관합니다.
 
 ![CloudWatch 로그 그룹 /aws/eks/gpu-sandbox/cluster: 보존 기간 1개월, authenticator와 audit 로그 스트림](../images/console/cloudwatch-log-group.png)
 
@@ -169,7 +168,7 @@ kubectl get nodes -L gpusandbox/role,node.kubernetes.io/instance-type
 
 ![EKS 클러스터 개요: Kubernetes 1.36, standard support until August 2, 2027, 노드 3, 노드 그룹 2, add-on 4, access entry 4](../images/console/eks-cluster.png)
 
-관리형 노드 그룹이 nested virtualization 옵션을 노드에 전달하는 것은 문서에 없는 동작이니, c8i 노드에서 nested virtualization이 활성화됐는지도 확인하세요(아래 "적용 범위와 한계").
+관리형 노드 그룹이 nested virtualization 옵션을 노드에 전달하는지는 EKS 문서에 명시돼 있지 않습니다. c8i 노드에서 nested virtualization이 실제로 활성화됐는지 확인하세요(아래 "적용 범위와 한계").
 
 ```bash
 aws ec2 describe-instances --region "$AWS_REGION" \
@@ -216,11 +215,11 @@ aws ec2 describe-instances --region "$AWS_REGION" \
 
 정리 전에 스택이 소유한 리소스와 스크립트가 별도로 만든 리소스를 확인하세요. CloudFormation이 삭제를 마쳐도 HyperPod 클러스터나 ECR 저장소 등 스택 밖 리소스는 별도 확인이 필요합니다.
 
-삭제를 시작하기 전에 `kubectl config current-context`가 `<CLUSTER_NAME>-tunnel`인지 확인하세요. 아래 두 스크립트 모두 현재 컨텍스트를 그대로 씁니다.
+삭제를 시작하기 전에 `kubectl config current-context`가 `<CLUSTER_NAME>-tunnel`인지 확인하세요. 아래 두 스크립트에서 Kubernetes 리소스를 삭제하는 명령은 현재 컨텍스트가 가리키는 클러스터에 적용됩니다.
 
 B1과 B2에서는 이 단계 전에 `scripts/hyperpod/delete.sh`로 HyperPod 클러스터를 먼저 삭제합니다. 이 스크립트는 HyperPod CRD가 있으면 현재 컨텍스트의 `rl-trainer`에 있는 `HyperPodPyTorchJob`을 모두 지운 뒤 HyperPod 클러스터를 삭제합니다.
 
-`cdk/destroy.sh`는 다음과 같이 동작합니다.
+`cdk/destroy.sh`를 실행하면 아래 범위의 리소스를 삭제합니다.
 
 - **삭제 범위**: 현재 kubectl 컨텍스트에서 `sandbox` namespace가 보이면 그 컨텍스트의 `rl-trainer` Job 전체와 `sandbox`의 Deployment, Service 전체를 앱 label과 관계없이 먼저 삭제한 뒤, `CLUSTER_NAME`의 스택 `<CLUSTER_NAME>-cdk` 전체를 삭제합니다.
 - **컨텍스트 검사 없음**: 스크립트는 현재 컨텍스트가 `CLUSTER_NAME`의 클러스터인지 검사하지 않습니다.
@@ -234,7 +233,7 @@ cdk/destroy.sh
 
 **확인할 것:**
 
-- 마지막에 출력되는 인스턴스 표가 비어 있고, ECR 저장소를 삭제하는 명령이 안내됩니다.
+- 마지막에 출력되는 인스턴스 표가 비어 있는지 확인하세요. 이어서 ECR 저장소를 삭제할 때 실행할 명령이 표시됩니다.
 - **스크립트가 함께 정리하는 것**: 스택 밖에 생기는 Lambda 로그 그룹(`/aws/lambda/<CLUSTER_NAME>-cdk-...`, 기본 security group 정리용)도 삭제하며, secrets용 KMS 키는 7일 뒤 삭제되도록 예약됩니다.
 - **남는 것**: bootstrap 스택 `CDKToolkit`(CDK용 S3 버킷, ECR 저장소, 배포 역할)은 다음 배포에 다시 쓰므로 삭제하지 않습니다.
 - **더는 쓰지 않을 계정이라면**: 그 S3 버킷을 비우고 CloudFormation에서 `CDKToolkit` 스택을 삭제하세요.

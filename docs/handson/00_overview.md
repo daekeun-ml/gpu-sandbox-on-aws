@@ -1,6 +1,6 @@
 # 00 핸즈온 전체 흐름
 
-샌드박스가 코드를 채점하고 그 결과가 모델 학습에 쓰이는 과정을 따라갑니다. GPU가 없어도 채점과 pool 교체를 연습할 수 있습니다.
+샌드박스에서 코드를 채점하고 그 결과로 모델을 학습하는 과정을 실습합니다. GPU가 없어도 채점과 pool 교체를 연습할 수 있습니다.
 
 ## 실습 경로 고르기
 
@@ -9,7 +9,7 @@
 - **[B2 · CPU와 GPU를 모두 HyperPod에 배치](07_hyperpod_b2.md)**　HyperPod로 EKS를 구성하고, 학습 GPU에서 생성한 코드를 두 채점 GPU에 보냅니다.
 - **[C · GPU 없이 pool 교체 연습](10_cpu_only.md)**　CPU 런타임 세 개를 비교하고, 시뮬레이터가 답안을 보내는 동안 v1을 v2로 바꿉니다.
 
-경로를 정했다면 **노드와 채점 pool을 차례로 확인**하세요. 노드의 `Ready`는 Kubernetes가 pod를 배치할 수 있다는 뜻입니다. 그 노드에 띄운 pool의 `verified`는 시험 답안이 기대한 판정을 받았다는 뜻입니다. 두 결과는 실습 중 서로 다른 시점에 확인합니다.
+경로를 정했다면 **노드와 채점 pool을 차례로 확인**하세요. 먼저 노드가 `Ready`인지 보세요. 이 상태가 되면 Kubernetes가 pod를 배치할 수 있습니다. 그다음 pool을 배포하고 검증 스크립트를 실행하세요. 시험 답안의 판정과 나머지 검사가 모두 통과하면 마지막 줄에 `verified`가 표시됩니다.
 
 ## 배포 전 확인 { #사전-준비 }
 
@@ -56,7 +56,7 @@ scripts/01_check_prereqs.sh
     1. **[클러스터와 이미지 준비](01_cluster_and_images.md)**　`SCENARIO=A`에서 `scripts/02_create_cluster.sh`를 실행합니다. 터널을 연 뒤 `kubectl get nodes`에서 trainer 한 대와 gVisor 노드 두 대가 `Ready`인지 확인합니다. `scripts/03_build_push_images.sh`가 출력한 이미지 URI 세 개를 설정 파일에 넣습니다.
     2. **[GPU 확인](02_gvisor.md)**　`scripts/04_install_gpu_stack.sh`로 gVisor와 GPU 연결을 확인합니다. 시험용 pod가 `cuda ok:`와 GPU 이름을 출력해야 합니다.
     3. **[채점 pool 배포와 검증](04_sandbox_pools.md)**　`scripts/05_setup_namespaces_auth.sh`로 네임스페이스와 인증을 준비하고 `scripts/06_deploy_sandboxes.sh gvisor v1`로 pool을 만듭니다. `scripts/ops/verify.sh gvisor v1`의 마지막 줄이 `pool sandbox-gvisor-v1 verified`인지 확인합니다.
-    4. **[GRPO 학습](05_grpo_training.md)**　`scripts/07_run_grpo.sh`를 실행합니다. `routing`은 trainer가 사용할 pool을 읽었다는 신호입니다. `batch` 줄(원본 JSON에서는 `reward_batch`)에 제출물의 판정이 나오고 학습 스텝이 진행되는지 봅니다.
+    4. **[GRPO 학습](05_grpo_training.md)**　`scripts/07_run_grpo.sh`를 실행합니다. `routing` 로그에서 trainer가 선택한 pool을 확인하세요. 이어서 `batch` 줄(원본 JSON에서는 `reward_batch`)에 제출물의 판정이 기록되는지, 학습 스텝이 진행되는지 보세요.
     5. **[학습 중 v2로 전환](06_sandbox_update.md)**　v1과 v2가 동시에 GPU를 쓸 수 있게 샌드박스 노드를 먼저 네 대로 늘립니다. 학습이 진행되는 동안 다른 작업 터미널에서 `scripts/ops/rollout.sh gvisor v1 v2`를 실행합니다. 새 배치가 v2에서 채점된 뒤 `--finish`로 v1을 줄입니다.
 
     ??? note "A 구성도 · 학습 노드와 채점 노드"
@@ -100,7 +100,7 @@ scripts/01_check_prereqs.sh
 
 - **[03 · Kata에서 GPU 확인](03_kata.md)**　gVisor와 VM 격리를 비교하려면 Kata + QEMU 게스트 안에서 T4를 확인하세요. 먼저 IOMMU용 AMI를 만든 뒤 `WITH_KATA_GPU=1`로 `g4dn.metal` 노드를 추가합니다. CPU만 비교할 때는 `WITH_KATA_CPU=1`과 `c8i.2xlarge`를 사용합니다.
 - **[08 · 런타임 벤치마크](08_benchmark.md#runtime-results)**　비교할 v1 pool을 검증하고 학습이 끝난 뒤 같은 코드를 반복 채점합니다. 요청 한 건의 채점 시간과 pool 전체의 초당 처리량을 비교합니다.
-- **[11 · 여러 턴에 걸쳐 코드 고치기](11_multi_turn.md)**　C 경로에서 에피소드마다 샌드박스를 하나씩 빌립니다. 같은 에피소드의 턴들이 같은 pod에서 실행되고 종료 시 claim이 반납되는지 확인합니다.
+- **[11 · 여러 턴에 걸쳐 코드 고치기](11_multi_turn.md)**　C 경로에서 에피소드마다 샌드박스를 하나씩 빌립니다. 한 에피소드의 답안을 매 턴 같은 pod에서 실행하는지, 에피소드가 끝나면 claim을 반납하는지 확인합니다.
 - **[09 · 채점 기록 재생](09_demo_site.md)**　클러스터를 띄우기 전에 결과를 보고 싶으면 [공개 데모](https://dohbsn4kn34ya.cloudfront.net/)를 열어 보세요. 내 기록을 S3와 CloudFront로 배포하는 절차는 09편에 있습니다.
 
 ## 실습 리소스 정리 { #다음-단계 }

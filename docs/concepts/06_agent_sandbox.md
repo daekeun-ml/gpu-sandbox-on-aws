@@ -1,11 +1,11 @@
 # 06 Agent Sandbox로 확장
 
 !!! info "TL;DR"
-    한 에피소드에서 여러 번 코드를 고쳐 실행한다면, 그동안 같은 샌드박스를 쓰는 편이 자연스럽습니다. Agent Sandbox는 샌드박스를 할당하고 회수합니다. 실행 격리는 gVisor나 Kata 같은 런타임이 맡습니다.
+    한 에피소드에서 코드를 여러 번 고쳐 실행할 때 같은 샌드박스를 유지하면 이전 작업을 이어갈 수 있습니다. Agent Sandbox는 샌드박스를 할당하고 회수합니다. 실행 격리는 gVisor나 Kata 같은 런타임이 맡습니다.
 
 ## 에피소드마다 샌드박스를 할당하는 이유
 
-에이전트가 첫 턴에서 파일을 만들고 다음 턴에서 실행 결과를 읽은 뒤 코드를 고친다고 해 봅시다. 턴마다 새 샌드박스를 받으면 앞 턴의 파일을 다시 준비해야 합니다. 에피소드 동안 하나를 쓰면 이전 작업을 이어갈 수 있고 다음 에피소드에는 새 샌드박스를 할당할 수 있습니다.
+에이전트가 첫 턴에서 파일을 만들고 다음 턴에서 실행 결과를 읽은 뒤 코드를 고친다고 해 봅시다. 턴마다 새 샌드박스를 받으면 앞 턴의 파일을 다시 준비해야 합니다. 에피소드가 끝날 때까지 같은 샌드박스에 연결하면 이전 작업을 이어갈 수 있습니다. 다음 에피소드에는 새 샌드박스를 할당할 수 있습니다.
 
 이 저장소의 채점 서버는 제출마다 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드 동안 같은 pod, GPU, 채점 버전을 쓰되 턴마다 코드 전체를 다시 제출합니다. 기존 reward pool에서는 턴마다 다른 pod가 답을 채점할 수 있습니다.
 
@@ -76,7 +76,7 @@ kubectl -n sandbox get pods -o wide
 
 ### Python에서 보는 할당의 범위
 
-아래는 클러스터 안에서 실행되는 에피소드 Job의 호출 구조입니다. `first_code`와 `revised_code`는 같은 문제의 완전한 제출 코드이고, `token_file`은 샌드박스 채점 API가 검증할 토큰 파일 경로입니다. `with`에 들어갈 때 claim을 만들고 블록에서 나올 때 반납합니다. 두 번째 호출도 같은 `episode` 인스턴스를 사용합니다.
+아래는 클러스터 안에서 실행되는 에피소드 Job의 호출 구조입니다. `first_code`와 `revised_code`는 같은 문제의 완전한 제출 코드이고, `token_file`은 샌드박스 채점 API가 검증할 토큰 파일 경로입니다. `with` 블록을 시작할 때 claim을 만들고, 블록이 끝나면 반납합니다. 두 번째 호출도 같은 `episode` 인스턴스를 사용합니다.
 
 ```python
 from gpusandbox.agent_sandbox import EpisodeSandbox
@@ -96,7 +96,7 @@ Agent Sandbox는 pod의 수명과 할당을 관리하고, 격리 방식은 podTe
 | 조합 | 근거 | 상태 |
 |---|---|---|
 | Kata on AKS | upstream 예제 `kata-aks`, `kata-aks-sandbox` | upstream 예제 |
-| Kata on GKE (`kata-qemu`, 선택으로 `kata-clh`) | upstream 예제 `kata-gke-sandbox`. N2 노드의 nested virtualization을 씁니다 | upstream 예제 |
+| Kata on GKE (`kata-qemu`, 선택 사항 `kata-clh`) | upstream 예제 `kata-gke-sandbox`. N2 노드에서 nested virtualization으로 VM을 실행합니다 | upstream 예제 |
 | gVisor + L4 GPU on GKE | upstream 예제 `gpu-l4-snapshot-sandbox`. GKE Sandbox(gVisor)와 Pod snapshot으로 GPU 메모리까지 저장하고 복원합니다 | upstream 예제. snapshot은 GKE 기능이며, 이 문서는 EKS에서 같은 기능을 확인하지 않았습니다 |
 | gVisor on EKS (CPU) | AWS 블로그 1부, 2부: Agent Sandbox v1.0.5, gVisor release-20260928.0, EKS 1.36, `m7i.xlarge` | 블로그 저자가 구성하고 측정 |
 | Kata on EKS | AWS 블로그 3부: 에이블리는 현재 runc로 운영하고, Agent Sandbox API는 유지한 채 런타임만 Kata(microVM)로 바꾸는 평가를 계획 | 계획 단계 |
@@ -165,9 +165,9 @@ reward.custom_reward_function.name=compute_score
 
 veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습니다(코드의 `# TODO verify`).
 
-- **tool 전체의 동작과 `SandboxToolAgentLoop` 등록.** 등록은 `AgentLoopWorker`가 `default_agent_loop`를 찾기 전에 tool(즉 이 module)을 먼저 load한다는 전제에 의존합니다. 이 전제는 v0.9.1 `agent_loop.py`를 읽고 판단한 것입니다.
+- **tool 전체의 동작과 `SandboxToolAgentLoop` 등록.** `SandboxToolAgentLoop`가 등록되려면 `AgentLoopWorker`가 `default_agent_loop`를 찾기 전에 tool 모듈을 먼저 불러와야 합니다. 이 순서는 v0.9.1 `agent_loop.py` 코드를 읽고 판단했습니다.
 - **Ray worker의 `PYTHONPATH`에 `rl/verl`을 넣는 방법.** RayCluster pod의 env와 `ray job submit --runtime-env-json`의 `env_vars` 중 어느 쪽이 동작하는지 클러스터에서 확인해야 합니다.
-- **`extra_fields`가 `extra_info`로 전달되는 경로.** reward-loop manager(naive, remote, limited)에서만 소스로 확인했습니다.
+- **`extra_fields`가 `extra_info`로 전달되는 경로.** 소스 코드에서 전달 경로를 확인한 범위는 reward-loop manager(naive, remote, limited)입니다.
 - **rollout worker의 실행 조건.** `k8s/production/raycluster-verl.yaml.tpl`의 worker에는 `gpusandbox/client=true` label과 `grpo-trainer` ServiceAccount가 이미 있습니다. 이 계정은 warm pool의 기본 허용 subject이고, `install`이 적용하는 `sandbox-claims` RoleBinding에도 들어 있습니다. 빠진 것은 다음과 같습니다.
     - Kubernetes API 토큰(`automountServiceAccountToken: false`)
     - veRL 이미지의 `kubernetes` Python 패키지(`client` extra만 설치)
@@ -192,7 +192,7 @@ veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습�
     | gVisor의 오버헤드는 syscall 수에 비례합니다. syscall당 시간은 약 0.18 us에서 2.2 us로, 파일 작업과 프로세스 생성은 4.7~6.5배, exec는 0.6 ms에서 3.8 ms로 늘었고, 순수 연산은 차이가 없었습니다 (2부) | 이 harness는 요청마다 새 프로세스 트리를 만들므로 평가마다 고정 오버헤드가 늘어날 수 있습니다(추론) | [08 런타임 벤치마크](../handson/08_benchmark.md)로 직접 측정합니다 |
     | pause는 Pod를 삭제하고 Sandbox 객체와 PVC를 유지하며, 메모리 상태는 보존하지 않습니다 (2부) | pause하면 GPU가 해제되지만, resume은 cold start이므로 Kata GPU라면 몇 분이 걸릴 수 있습니다(추론) | 이 확장은 pause를 쓰지 않고, 에피소드가 끝나면 claim을 삭제합니다 |
     | `SandboxClaim.spec.env`를 쓰면 warm pool을 거치지 않고 template으로 Sandbox를 새로 만듭니다 (3부, upstream v1.0.8). v1.0.11 소스 주석에도 같은 내용이 있고, claim에 `volumeClaimTemplates`를 지정해도 cold start가 발생합니다 | GPU 샌드박스에서는 cold start에 몇 분이 걸릴 수 있습니다 | `envVarsInjectionPolicy: Disallowed`로 claim에서 env를 지정하지 못하게 하고, `EpisodeSandbox`는 env와 볼륨을 지정하지 않습니다 |
-    | 에이블리는 전용 on-demand Karpenter NodePool에 `karpenter.sh/do-not-disrupt`와 일정 기반 disruption budget을 씁니다 (3부) | 에피소드 도중 노드가 종료되면 그 에피소드는 폐기해야 합니다 | GPU 샌드박스 NodePool은 `consolidationPolicy: WhenEmpty`라 샌드박스가 실행 중인 노드를 consolidation하지 않습니다. `sandbox-kata-cpu`는 `WhenEmptyOrUnderutilized`이므로, CPU 계층에서 에피소드 샌드박스를 실행한다면 `do-not-disrupt`를 검토하세요 |
+    | 에이블리는 전용 on-demand Karpenter NodePool에 `karpenter.sh/do-not-disrupt`와 일정 기반 disruption budget을 설정합니다 (3부) | 에피소드 도중 노드가 종료되면 그 에피소드는 폐기해야 합니다 | GPU 샌드박스 NodePool은 `consolidationPolicy: WhenEmpty`라 샌드박스가 실행 중인 노드를 consolidation하지 않습니다. `sandbox-kata-cpu`는 `WhenEmptyOrUnderutilized`이므로, CPU 계층에서 에피소드 샌드박스를 실행한다면 `do-not-disrupt`를 검토하세요 |
 
     - **SandboxTemplate의 기본 정책 (2부)**: 인터넷 접근이 허용되므로 이 정책으로는 데이터 유출, C2 통신, 채굴을 차단할 수 없습니다. 블로그는 사용자 정의 정책, egress proxy, AWS Network Firewall을 권장합니다.
     - **sandbox-router와 port-forward (2부)**: TokenReview는 토큰의 유효성만 확인하고 권한은 확인하지 않습니다. port-forward(Tunnel 모드)는 NetworkPolicy를 우회하고, 30초를 넘는 명령은 502 오류가 발생했습니다. 이 저장소에서는 `sandbox` 네임스페이스의 `pods/portforward`, `pods/exec` 권한을 최소한으로 부여하세요.
@@ -201,7 +201,7 @@ veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습�
     gVisor 프로필은 `g5.xlarge` 한 대에 샌드박스 하나를 실행하므로, 대기 샌드박스 하나가 시간당 1.006 USD인 노드 한 대를 점유합니다. Kata GPU 샌드박스는 `g4dn.metal`(시간당 7.824 USD, T4 8개)의 T4 하나를 쓰므로, 단순 나눗셈으로 계산하면 T4 하나에 시간당 약 0.978 USD입니다(가격은 us-east-1과 us-west-2 온디맨드 요금).
 
 ??? note "AI on EKS의 Agent Sandbox 솔루션과 비교"
-    awslabs의 AI on EKS 프로젝트에 있는 [Agent Sandbox on EKS](https://awslabs.github.io/ai-on-eks/ko/docs/infra/agents/agent-sandbox) 솔루션도 kubernetes-sigs/agent-sandbox를 씁니다. 이 솔루션은 모델이 생성한 코드를 실행하는 에이전트를 대상으로 하고, 페이지에는 GPU 언급이 없습니다(2026-11 확인). 이 저장소는 GPU 커널 채점을 대상으로 합니다.
+    awslabs의 AI on EKS 프로젝트에 있는 [Agent Sandbox on EKS](https://awslabs.github.io/ai-on-eks/ko/docs/infra/agents/agent-sandbox) 솔루션도 kubernetes-sigs/agent-sandbox를 기반으로 합니다. 이 솔루션은 모델이 생성한 코드를 실행하는 에이전트를 대상으로 하고, 페이지에는 GPU 언급이 없습니다(2026-11 확인). 이 저장소는 GPU 커널 채점을 대상으로 합니다.
 
     | 항목 | AI on EKS Agent Sandbox 솔루션 | 이 저장소 |
     |---|---|---|

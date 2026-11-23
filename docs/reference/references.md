@@ -1,6 +1,6 @@
 # 참고 자료 모음
 
-가이드에서 공통으로 쓰는 자료를 주제별로 모았습니다. 문서 속 수치와 AWS 실행 기록의 근거는 [검증된 사실과 출처](sources.md)에서 확인할 수 있습니다.
+여러 장에서 함께 참고하는 자료를 주제별로 모았습니다. 문서 속 수치와 AWS 실행 기록의 근거는 [검증된 사실과 출처](sources.md)에서 확인할 수 있습니다.
 
 <span id="ref-beginner-02-container-vs-sandbox"></span>
 <span id="ref-beginner-03-gpu-sandbox"></span>
@@ -12,10 +12,10 @@
 
 ## 격리 런타임 { #runtimes }
 
-- pod의 런타임 지정 방식. [Kubernetes RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/)
+- pod를 실행할 런타임을 지정하는 방법. [Kubernetes RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/)
 - nvproxy가 지원하는 드라이버와 GPU. [gVisor GPU 지원](https://gvisor.dev/docs/user_guide/gpu/)
 - QEMU와 Cloud Hypervisor의 기능 차이. [Kata hypervisor 지원 표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md)
-- Kata CPU에 쓸 수 있는 인스턴스 조건. [EC2 nested virtualization](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html)
+- Kata CPU 샌드박스를 실행할 EC2 인스턴스의 조건. [EC2 nested virtualization](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html)
 
 <span id="ref-beginner-05-hands-on"></span>
 <span id="ref-concepts-04-platforms-and-instances"></span>
@@ -39,9 +39,9 @@
 
 ## AWS 배포와 운영 { #aws }
 
-- private 클러스터 접속 조건. [EKS API endpoint](https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html)
+- EKS의 프라이빗 API 엔드포인트에 접속하려면 갖춰야 할 조건. [EKS API endpoint](https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html)
 - 스택 준비, 배포, 삭제. [AWS CDK v2](https://docs.aws.amazon.com/cdk/v2/guide/home.html)
-- 권한과 클러스터 준비 조건. [HyperPod EKS 사전 요구 사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html)
+- HyperPod 클러스터를 만들기 전에 준비할 권한과 EKS 설정. [HyperPod EKS 사전 요구 사항](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-eks-prerequisites.html)
 - 학습 Job과 재시작 설정. [HyperPod training operator](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-eks-operator.html)
 - NodePool과 노드 회수. [Karpenter](https://karpenter.sh/docs/)
 - 노드 비용 계산에 쓰는 단가. [EC2 On-Demand 요금](https://aws.amazon.com/ec2/pricing/on-demand/)
@@ -56,13 +56,13 @@
 
 ## 접근 제어와 에피소드 { #security-agents }
 
-- VPC CNI의 네트워크 정책 활성화. [EKS NetworkPolicy](https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html)
+- VPC CNI에서 네트워크 정책을 켜는 방법. [EKS NetworkPolicy](https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html)
 - 노드 자격 증명과 pod 권한. [EKS IAM 모범 사례](https://docs.aws.amazon.com/eks/latest/best-practices/identity-and-access-management.html)
 - SandboxClaim과 warm pool. [Kubernetes Agent Sandbox](https://github.com/kubernetes-sigs/agent-sandbox)
 
 ## AWS 기술 블로그 { #aws-technical-blogs }
 
-**AWS에서 AI 에이전트 실행 환경 격리하기**는 EKS 기반 구성과 운영 사례에서 관리형 샌드박스 선택까지 이어지는 한국어 시리즈입니다.
+**AWS에서 AI 에이전트 실행 환경 격리하기**는 EKS에서 샌드박스를 구성하고 운영한 사례와 관리형 샌드박스를 선택할 때의 판단 기준을 다룬 한국어 시리즈입니다.
 
 - EKS와 Agent Sandbox의 격리 구조, pod와 노드에서 적용할 통제. [1부: EKS와 Agent Sandbox의 개념과 구성](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-1/)
 - NetworkPolicy, sandbox-router 인가, warm pool 동작을 확인한 실험. [2부: 네트워크, 인가, warm pool 검증](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/)

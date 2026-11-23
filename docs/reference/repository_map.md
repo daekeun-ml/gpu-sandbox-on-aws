@@ -1,6 +1,6 @@
 # 저장소 구조
 
-실행할 명령은 [스크립트 레퍼런스](scripts.md)에서, 변경할 환경 변수는 [설정 값](configuration.md)에서 찾을 수 있습니다. 여기서는 동작을 바꾸거나 실행 경로를 따라갈 때 열어 볼 코드를 안내합니다.
+실행할 명령은 [스크립트 레퍼런스](scripts.md)에서, 변경할 환경 변수는 [설정 값](configuration.md)에서 찾을 수 있습니다. 아래 표에서 살펴보거나 바꾸려는 기능의 소스 파일을 찾으세요.
 
 ## 작업별 시작 위치
 
@@ -14,15 +14,17 @@
 | AWS 노드와 클러스터 배치 바꾸기 | [`cdk/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/cdk), [`infra/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/infra) |
 | multi-turn 에피소드 또는 데모 확인 | [`agent_sandbox.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/agent_sandbox.py), [`demo/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/demo) |
 
-## 값과 템플릿이 합쳐지는 흐름
+## 설정값이 매니페스트에 반영되는 과정
 
-`scripts/06_deploy_sandboxes.sh`는 `scripts/config.env`의 계정별 값, `k8s/sandbox/profiles/`의 런타임별 값, `k8s/sandbox/versions/`의 버전별 값을 읽습니다. `scripts/render.py`가 이 값으로 템플릿을 채우고, 스크립트가 결과를 `kubectl apply`에 넘깁니다. VPC와 EKS 자체는 같은 `config.env`를 읽는 `cdk/deploy.sh`로 배포합니다.
+<span id="값과-템플릿이-합쳐지는-흐름"></span>
+
+`scripts/06_deploy_sandboxes.sh`는 `scripts/config.env`의 계정별 값, `k8s/sandbox/profiles/`의 런타임별 값, `k8s/sandbox/versions/`의 버전별 값을 읽습니다. `scripts/render.py`가 이 값으로 템플릿을 채우면 배포 스크립트가 완성된 매니페스트를 `kubectl apply`에 전달합니다. CDK 경로에서는 `cdk/deploy.sh`가 같은 `config.env`를 읽어 VPC와 EKS 클러스터를 배포합니다.
 
 ## 평가 요청을 따라 읽는 순서
 
-1. `rl/trl/train_grpo.py`가 답을 생성하고, `src/gpusandbox/rewards.py`가 채점 결과를 reward로 바꿉니다. 분산 학습의 진입점은 `rl/verl/`에 있습니다.
-2. `src/gpusandbox/client/`가 라우팅을 읽습니다. 운영 구성에서는 `src/gpusandbox/gateway/app.py`가 pool과 버전을 고릅니다.
-3. `src/gpusandbox/server/app.py`가 평가 요청을 받고, `harness/evaluate.py`가 별도 프로세스의 `harness/runner.py`에 제출 코드를 실행시킵니다. `evaluate.py`가 기준 결과와 비교해 verdict를 반환합니다.
+1. `rl/trl/train_grpo.py`가 답을 생성하고, `src/gpusandbox/rewards.py`가 채점 결과를 reward로 바꿉니다. 분산 학습을 시작하는 코드는 `rl/verl/`에 있습니다.
+2. `src/gpusandbox/client/`의 클라이언트가 라우팅 설정을 읽습니다. 운영 구성에서는 `src/gpusandbox/gateway/app.py`가 pool과 버전을 고릅니다.
+3. `src/gpusandbox/server/app.py`가 평가 요청을 받고, `harness/evaluate.py`가 `harness/runner.py`를 별도 프로세스에서 시작해 제출된 코드를 실행합니다. `evaluate.py`가 기준 결과와 비교해 verdict를 반환합니다.
 
 ## 테스트 { #tests }
 

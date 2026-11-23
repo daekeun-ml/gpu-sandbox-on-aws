@@ -1,11 +1,11 @@
 # 06 veRL로 확장
 
 !!! info "TL;DR"
-    단일 GPU TRL 루프를 veRL 0.9.1을 써서 여러 GPU로 확장하려면 전용 이미지, parquet 데이터, gateway의 `group_key` 고정을 쓰는 async reward 함수, KubeRay `RayCluster`, 공유 스토리지 기반 재개가 필요합니다.
+    GPU 한 장에서 실행하던 TRL 학습을 veRL 0.9.1로 여러 GPU에서 실행하려면 전용 이미지와 parquet 데이터를 준비하고 KubeRay `RayCluster`를 구성합니다. async reward 함수는 gateway에 `group_key`를 보내 채점 버전을 고정합니다. 중단한 학습을 이어 가려면 checkpoint를 공유 스토리지에 저장합니다.
 
 ## 한 장의 GPU에서 여러 노드로
 
-GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 메모리와 step 시간 외에 채점 요청이 도착하는 방식도 달라집니다. worker 여러 개가 동시에 답을 보내면 같은 문제의 답들이 각기 다른 요청으로 들어오고, 샌드박스 pool의 대기도 늘어날 수 있습니다.
+GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 필요한 메모리와 step당 소요 시간뿐 아니라 채점 요청을 받는 방식도 달라집니다. worker 여러 개가 동시에 답을 보내면 같은 문제의 답들이 각기 다른 요청으로 들어오고, 샌드박스 pool에서 채점을 기다리는 시간도 늘어날 수 있습니다.
 
 ![a: trainer A10G 한 장(24 GB)의 vLLM 생성, 별도 샌드박스 GPU의 reward 채점, trainer의 업데이트가 차례로 이어집니다. 샌드박스를 부를 때마다 routing snapshot 하나를 잡으므로 한 batch는 한 버전으로 채점됩니다. GPU 메모리 24 GB 가운데 7B bf16 가중치만 약 15 GB를 차지합니다. b: RayCluster verl(rl-trainer)의 GPU worker(actor, vLLM rollout, reward worker) ×N이 샘플마다 POST /v1/evaluate 요청에 group_key를 붙여 sandbox gateway로 보냅니다. gateway가 group_key마다 버전을 고정하므로, 같은 group은 같은 버전의 샌드박스 pool(runtime별, version별)에서 채점됩니다.](../images/figures/production-06_scaling_with_verl.ko.svg)
 
@@ -13,17 +13,17 @@ GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 메모리와 ste
 
 <span id="같은-샌드박스-풀로-확장하기"></span>
 
-기존 EKS pool을 유지하고 Ray worker가 gateway를 호출하도록 연결합니다. 같은 문제의 답에는 같은 `group_key`를 붙여 버전을 고정합니다. 첫 운영 run에서는 생성 처리량과 함께 채점 대기, `sandbox_error`, 버전 일관성을 확인합니다. 중단 후 재개가 필요하면 새 pod에서도 읽을 수 있는 공유 스토리지에 checkpoint를 저장합니다.
+기존 EKS pool을 유지하고 Ray worker가 gateway를 호출하도록 연결합니다. 같은 문제의 답에는 같은 `group_key`를 붙여 버전을 고정합니다. 운영 환경에서 처음 학습할 때는 답안 생성 처리량과 채점 대기 시간을 살피고 `sandbox_error`가 얼마나 자주 발생하는지 확인하세요. 같은 문제의 답안을 같은 버전에서 채점했는지도 살펴보세요. 중단 후 재개가 필요하면 새 pod에서도 읽을 수 있는 공유 스토리지에 checkpoint를 저장합니다.
 
 ??? note "세부 조건과 예외"
     핸즈온은 1.5B 모델을 LoRA로 A10G 한 장(24 GB)에서 학습합니다.
 
     - **긴 step**: 이 GPU에서 vLLM이 응답을 생성하면 별도 샌드박스 GPU가 후보 코드를 채점하고, 결과를 받은 trainer가 LoRA를 업데이트합니다. 세 단계가 차례로 이어지므로 step이 길어집니다.
     - **7B 모델의 메모리**: `Qwen/Qwen2.5-Coder-7B-Instruct`는 파라미터가 약 7.6B라 bf16 가중치만 약 15 GB입니다. 생성과 학습을 한 GPU에서 실행하는 colocate 방식으로는 메모리 여유가 거의 없습니다.
-    - **여러 GPU에서의 reward 호출**: 여러 GPU로 옮기면 reward 호출 방식도 달라집니다. veRL은 샘플을 하나씩 채점해서 TRL처럼 batch 전체를 한 버전으로 채점할 수 없습니다.
+    - **샘플별 채점 요청**: veRL은 샘플을 하나씩 채점해서 TRL처럼 batch 전체를 한 버전으로 채점할 수 없습니다.
 
     - **같은 EKS 클러스터에서 확장합니다.** KubeRay로 Ray를 배포하면 기존 샌드박스 pool, gateway, NetworkPolicy, 토큰 인증을 그대로 쓸 수 있습니다.
-    - **샘플 단위 채점에서도 on-policy 일관성을 유지합니다.** reward 함수가 요청마다 `group_key`를 붙이면 gateway가 같은 group의 샘플을 같은 샌드박스 버전으로 보냅니다.
+    - **샘플을 따로 보내더라도 group의 채점 버전은 고정합니다.** reward 함수가 요청마다 `group_key`를 붙이면 gateway는 이 키를 기준으로 샘플을 같은 샌드박스 버전으로 보냅니다.
     - **긴 run을 중단 지점부터 재개합니다.** checkpoint를 공유 PVC에 두고 `trainer.resume_mode=auto`를 쓰면, HyperPod가 노드를 교체한 뒤 같은 `CKPT_DIR`로 job을 다시 제출할 때 마지막 checkpoint부터 이어서 학습합니다.
 
 **읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 TRL 루프와 [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)의 gateway API, group pin을 먼저 보세요.
@@ -41,7 +41,7 @@ GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 메모리와 ste
 
 ## TRL 경로와 veRL 경로
 
-여러 worker로 확장하면 같은 문제의 답들이 서로 다른 요청으로 들어올 수 있습니다. veRL 경로에서는 `group_key`로 묶음을 구분하고, gateway가 그 묶음에 같은 채점 버전을 유지합니다. 처리량과 채점 버전 일관성을 각각 확인하세요.
+여러 worker로 확장하면 같은 문제의 답들이 서로 다른 요청으로 들어올 수 있습니다. veRL 경로에서는 `group_key`로 묶음을 구분하고, gateway가 같은 묶음의 답안을 한 버전에서 채점하도록 합니다. 처리량과 채점 버전 일관성을 각각 확인하세요.
 
 | 항목 | TRL (핸즈온) | veRL (Production) |
 |---|---|---|
@@ -103,7 +103,7 @@ kubectl get nodes -l gpusandbox/role=system -o jsonpath='{range .items[*]}{.meta
 
 veRL 0.9.1의 `[vllm]` extra는 vllm 0.24.0, torch 2.11.0, transformers 5.9.0을 고정하므로 TRL 이미지(vllm 0.33.0, torch 2.14.0)와 한 이미지에 함께 설치할 수 없습니다. `rl/verl/Dockerfile`은 다음 순서로 이미지를 만듭니다.
 
-1. `vllm/vllm-openai:v0.24.0`을 base image로 씁니다.
+1. 기본 이미지는 `vllm/vllm-openai:v0.24.0`입니다.
 2. 이미 설치된 torch, vllm, triton 버전을 constraints 파일로 고정해 pip가 바꾸지 못하게 합니다.
 3. `verl[vllm]==0.9.1`을 설치합니다.
 
@@ -147,7 +147,7 @@ docker run --rm "${registry}/${ECR_REPO_PREFIX}/verl:${IMAGE_TAG}" python3 -c "i
 
 `ground_truth`에는 task ID가, `prompt`에는 모델이 다시 작성할 PyTorch reference 코드가 들어갑니다. 기준 출력과 실행 시간은 샌드박스가 자체 이미지의 reference로 계산합니다.
 
-데이터는 veRL 이미지로 일회성 Job을 실행해 공유 PVC에 씁니다. 아래 예시 매니페스트(저장소에 없음)의 `<VERL_IMAGE_URI>`와 `<SHARED_PVC>`를 채워 `kubectl apply -f <파일>`로 적용하세요.
+veRL 이미지로 일회성 Job을 실행해 데이터를 공유 PVC에 저장합니다. 아래 예시 매니페스트(저장소에 없음)의 `<VERL_IMAGE_URI>`와 `<SHARED_PVC>`를 채워 `kubectl apply -f <파일>`로 적용하세요.
 
 ```yaml
 apiVersion: batch/v1
@@ -191,10 +191,10 @@ spec:
 ??? info "group_key와 pin TTL의 관계"
     `index`는 데이터셋의 행 번호이므로 다음 epoch에 같은 값이 다시 나옵니다(기본값이면 640행을 step당 64개씩 사용해 10 step마다 반복). gateway 고정은 `GATEWAY_GROUP_PIN_TTL_S`(기본 900초)가 지나야 해제됩니다.
 
-    - **epoch가 TTL보다 짧으면**: 다음 epoch의 같은 group이 이전 고정을 그대로 씁니다.
+    - **epoch가 TTL보다 짧으면**: 다음 epoch에서도 같은 group은 이전에 고정한 버전으로 채점합니다.
     - **채점 도중에 고정이 만료되면**: group 안에서 버전이 달라질 수 있습니다.
     - **대응**: "한 group을 채점하는 시간 < TTL < epoch 길이"가 되도록 TTL을 조정하거나, `group_key`에 step이나 epoch를 구분하는 값을 넣는 것을 고려하세요(veRL이 `kwargs`로 무엇을 전달하는지는 릴리스마다 재확인).
-    - **검증 group**: `prepare_data.py`는 `val.parquet`의 `index`도 0부터 매기므로, 검증 group은 학습 데이터 앞 10행과 같은 `task_id:index`를 씁니다. TTL만으로는 학습 group과 검증 group을 구분할 수 없으니, 둘을 따로 전환하거나 버전을 대조하려면 데이터 분할을 구분하는 값도 `group_key`에 넣어야 합니다.
+    - **검증 group**: `prepare_data.py`는 `val.parquet`의 `index`도 0부터 매기므로, 검증 group의 `task_id:index` 값은 학습 데이터 앞 10행과 겹칩니다. TTL만으로는 학습 group과 검증 group을 구분할 수 없으니, 둘을 따로 전환하거나 버전을 대조하려면 데이터 분할을 구분하는 값도 `group_key`에 넣어야 합니다.
 
 ## RayCluster
 
@@ -279,10 +279,10 @@ ray job logs <submission-id> --address http://127.0.0.1:8265 --follow
 | `N_RESP_PER_PROMPT` | 8 | GRPO group 크기 (`rollout.n`) |
 | `TOTAL_STEPS` | 200 | `trainer.total_training_steps` |
 
-reward 설정은 veRL 0.9.1의 `reward.*` 키를 씁니다: `reward.custom_reward_function.path=/opt/gpusandbox/rl/verl/reward_fn.py`, `reward.custom_reward_function.name=compute_score`, `reward.num_workers=8`.
+veRL 0.9.1에서는 `reward.*` 아래에 reward 함수와 worker 수를 지정합니다. 이 스크립트의 설정은 `reward.custom_reward_function.path=/opt/gpusandbox/rl/verl/reward_fn.py`, `reward.custom_reward_function.name=compute_score`, `reward.num_workers=8`입니다.
 
 !!! warning "예전 예제의 설정 키"
-    AWS veRL 샘플(`awslabs/awsome-distributed-ai`의 `examples/training/verl/hyperpod-eks/rlvr`)은 veRL v0.6.1에서 테스트되었고 top-level `custom_reward_function.path`와 `.name`을 씁니다. v0.9.1의 기본 config는 reward 설정을 `reward.*`(`verl/trainer/config/reward/reward.yaml`) 아래에 두고, 하위 호환용 `legacy_reward_impl`에 예전 top-level 키도 남겨 두었습니다. 두 형식을 섞지 말고, 설치한 릴리스가 어느 쪽을 읽는지 확인하세요.
+    AWS veRL 샘플(`awslabs/awsome-distributed-ai`의 `examples/training/verl/hyperpod-eks/rlvr`)은 veRL v0.6.1에서 테스트한 예제로, `custom_reward_function.path`와 `.name`을 최상위에 지정합니다. v0.9.1의 기본 config는 reward 설정을 `reward.*`(`verl/trainer/config/reward/reward.yaml`) 아래에 두고, 하위 호환용 `legacy_reward_impl`에 예전 top-level 키도 남겨 두었습니다. 두 형식을 섞지 말고, 설치한 릴리스가 어느 쪽을 읽는지 확인하세요.
 
 ## 사이징 (조건부 안내)
 
@@ -337,14 +337,14 @@ Ray on HyperPod 문서는 port-forward 없이 인증된 브라우저 링크로 �
 - **로컬에서 확인한 것:** `prepare_data.py`의 기본 출력(train 640행, val 10행)은 로컬 실행으로, reward 함수가 쓰는 정적 정책(`harness/policy.py`)과 gateway의 group pin은 `pytest`로 확인했습니다. `rl/verl/reward_fn.py`의 `compute_score`는 가짜 gateway 클라이언트로 정상, 코드 없음, 정책 위반, 인프라 오류일 때의 반환값과 키 구성을 `pytest`로 확인했습니다. 실제 veRL job과의 통합은 확인하지 않았습니다.
 - **실행하지 않은 것:** 저자는 veRL 이미지 빌드, RayCluster, veRL job을 AWS에서 실행하지 않았으니 위 "확인 방법"으로 검증하세요.
 - **문서 기준인 것:** `reward.*` 설정 키는 veRL 0.9.1 기본 config 기준이고, reward worker 배치, 동시 요청 수, 로그의 `reward_extra_info` 형식은 릴리스마다 다를 수 있으니 재확인하세요.
-- **확인하지 않은 기능:** Ray on HyperPod의 인증된 dashboard 링크와 resilient training 기능은 이 저장소에서 써 보지 않았습니다.
-- **사이징 값은 계산입니다.** "사이징" 절의 식과 숫자는 스크립트 기본값으로 계산한 값이고 측정값이 아니니, `t_eval`은 직접 측정하세요.
+- **확인하지 않은 기능:** Ray on HyperPod의 인증된 dashboard 링크와 resilient training 기능은 이 저장소의 검증 범위에 포함되지 않았습니다.
+- **필요한 자원 수는 계산으로 추정했습니다.** "사이징" 절의 식과 숫자는 스크립트 기본값으로 계산한 값이고 측정값이 아니니, `t_eval`은 직접 측정하세요.
 
 ## 비용과 정리
 
-8 GPU trainer 노드가 비용의 대부분입니다(단가와 계산은 [08 비용](08_cost.md)). 학습이 끝나면 `kubectl -n rl-trainer delete raycluster verl`로 RayCluster를 삭제해 worker pod를 종료하고 GPU 할당을 풀어 주세요.
+GPU 8장을 장착한 trainer 노드가 비용의 대부분을 차지합니다(단가와 계산은 [08 비용](08_cost.md)). 학습이 끝나면 `kubectl -n rl-trainer delete raycluster verl`로 RayCluster를 삭제해 worker pod를 종료하고 GPU 할당을 풀어 주세요.
 
-- **Karpenter trainer NodePool이 만든 노드**: 빈 상태로 15분이 지나면 회수 대상이 되고(`consolidateAfter: 15m`), 요금은 노드가 실제로 종료될 때까지 붙습니다.
+- **Karpenter trainer NodePool이 만든 노드**: 빈 상태로 15분이 지나면 회수 대상이 되고(`consolidateAfter: 15m`), 실제로 노드가 종료될 때까지는 요금이 부과됩니다.
 - **시나리오 A의 CDK 관리형 trainer 노드 그룹**: pod를 지워도 인스턴스가 계속 실행되므로 직접 줄이세요(`aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name trainer --scaling-config minSize=0,maxSize=1,desiredSize=0`).
 - **HyperPod 인스턴스 그룹**: 인스턴스 수를 줄이거나 클러스터를 삭제할 때까지 과금됩니다(핸즈온 클러스터는 `scripts/hyperpod/delete.sh`로 삭제).
 - **구버전 샌드박스 pool**: [05 샌드박스 버전 관리](05_sandbox_updates.md)의 `--finish`로 0으로 줄입니다.

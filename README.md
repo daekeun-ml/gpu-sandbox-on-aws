@@ -13,12 +13,12 @@
   </picture>
 </a>
 
-그림에서 **A**는 EC2에서, **B1**은 SageMaker HyperPod에서 모델을 학습합니다. 두 구성 모두 EC2의 샌드박스가 코드를 채점합니다. **B2**에서는 시스템 CPU와 학습·채점 GPU를 모두 HyperPod에 둡니다. [B2 구성도와 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
+그림의 학습 노드는 **A**에서는 EC2 인스턴스이고 **B1**에서는 SageMaker HyperPod 워커입니다. 두 구성 모두 EC2의 샌드박스가 코드를 채점합니다. **B2**에서는 시스템 CPU와 학습·채점 GPU를 모두 HyperPod에 둡니다. [B2 구성도와 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
 
 <details>
 <summary><b>채점 요청 한 건 따라가기</b></summary>
 
-학습 노드는 모델이 생성한 커널 코드를 선택한 샌드박스 pool로 보냅니다. 같은 프롬프트에서 나온 답안 묶음은 같은 버전의 pool에서 채점합니다. 샌드박스가 정확도와 속도 향상 값을 돌려주면 트레이너가 그 값으로 학습 보상을 계산합니다.
+모델이 커널 코드를 생성하면 학습 노드가 해당 코드를 지정된 샌드박스 pool로 보냅니다. 같은 프롬프트에서 나온 답안 묶음은 같은 버전의 pool에서 채점합니다. 샌드박스가 정확도와 속도 향상 값을 돌려주면 트레이너는 이를 바탕으로 학습 보상을 계산합니다.
 
 ![학습 노드가 샌드박스 pool에 커널 코드를 보내고 정확도와 속도 향상 값을 받는 흐름. 그림의 gVisor와 Kata + QEMU는 GPU에서, Kata + Cloud Hypervisor는 CPU에서 채점합니다.](docs/images/figures/index--what-we-build.ko.svg)
 
@@ -72,9 +72,9 @@ A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 
 
 ### 요청 경로
 
-- trainer는 샌드박스에 요청을 보낼 때마다 routing ConfigMap(`sandbox-routing`)의 snapshot으로 런타임과 버전을 정하고, 한 reward batch의 결과는 한 pool에서 받습니다.
-    - **학습 중에 v2로 바꾸면**: batch에 새로 채점할 답안이 있으면, 같은 batch에 든 이전 pool의 캐시 결과도 v2 pool에서 다시 채점합니다.
-    - **batch 전체가 한 pool의 캐시로 채워지면**: 전환 뒤에도 샌드박스를 부르지 않고 그 결과를 씁니다.
+- trainer는 샌드박스에 요청할 때 routing ConfigMap(`sandbox-routing`)의 snapshot을 읽어 런타임과 버전을 정합니다. 한 reward batch의 답안은 모두 같은 pool에서 채점합니다.
+    - **학습 중에 v2로 바꾸면**: batch에 새로 채점할 답안이 있으면 같은 batch에서 이전 pool의 결과가 캐시된 답안도 v2 pool에 다시 보냅니다.
+    - **배치의 모든 답안에 같은 pool의 채점 결과가 캐시돼 있으면**: 전환 뒤에도 샌드박스에 재요청할 필요 없이 캐시된 결과를 그대로 반환합니다.
     - **한 batch 안에서 전환이 거듭되면**: 세 번째 요청에서 batch 전체를 한 pool에 보내므로, 한 batch는 항상 한 버전으로 채점됩니다.
 - trainer는 headless Service를 CoreDNS로 풀어 Ready 상태인 pod에 `POST /v1/evaluate`를 직접 보냅니다. 바쁜 pod는 `503`을 돌려주고, trainer는 다른 pod로 다시 시도합니다.
 - 요청에는 audience가 `gpu-sandbox`인 projected ServiceAccount 토큰이 붙고, pod는 JWKS로 토큰을 오프라인 검증합니다. `sandbox` 네임스페이스는 default-deny라서 `rl-trainer`에서 label이 붙은 pod만 접속할 수 있습니다.

@@ -1,17 +1,17 @@
 # 07 Observability와 운영
 
 !!! info "TL;DR"
-    샌드박스와 gateway의 Prometheus 지표와 trainer의 JSON 이벤트를 함께 모니터링하고, reward 품질 신호에 경보를 설정합니다. 경보가 발생하면 증상별 런북으로 대응합니다.
+    샌드박스와 gateway에서 수집한 Prometheus 지표를 trainer의 JSON 이벤트와 함께 확인합니다. 채점 오류 비율이나 정답률이 달라지면 알아차릴 수 있도록 경보를 설정하고, 경보가 울리면 아래 런북에서 해당 증상을 찾으세요.
 
 ## 학습이 계속돼도 채점은 실패할 수 있습니다
 
-step 번호는 계속 올라가는데 학습이 나아지지 않거나 배치 시간이 늘어날 수 있습니다. 이때 `reward_batch`를 먼저 보면 실행 결과가 틀렸는지, 샌드박스가 채점 자체를 못 했는지 구분할 수 있습니다. 후자가 늘어나면 모델보다 평가 경로부터 살펴봅니다.
+step 번호는 계속 올라가는데 모델 성능은 그대로이거나 배치 처리 시간이 길어질 수 있습니다. 이때 `reward_batch`를 먼저 보면 실행 결과가 틀렸는지, 샌드박스가 채점을 완료하지 못했는지 구분할 수 있습니다. 채점을 완료하지 못한 요청이 늘면 샌드박스로 요청을 보내고 응답을 받는 과정을 먼저 점검하세요.
 
 ![a: 인증 실패(401 응답이 대량으로 발생)가 나면 sandbox_error 샘플이 None으로 제외되고 그 샘플의 advantage는 0이 됩니다. 모든 샘플이 제외되면 학습 신호 없이 step만 진행됩니다. pool이 줄면 Ready가 아닌 pod가 DNS에서 빠지고 남은 pod로 요청이 몰려 step만 느려집니다. reward hacking은 flag가 verdict에만 기록되고 지표로 집계되지 않아 reward가 오르는 것처럼 보입니다. 세 경우 모두 학습은 멈추지 않습니다. b: 같은 세 고장을 각각 경보에 연결합니다. status.sandbox_error / n으로 sandbox_error 비율 경보(TRL 5% 초과, 3 batch 연속)를, 활성 pool Deployment별 available과 desired replicas 비교로 Ready pod 부족 경보(available이 desired 미만인 상태 10분)를, flag 개수(저장소에 없는 확장, 점선)로 reward hacking 신호 경보(flag 비율 상승 추세)를 만듭니다.](../images/figures/production-07_observability_and_operations.ko.svg)
 
 ## 계층별 로그와 지표
 
-`sandbox_error`가 늘면 trainer가 본 오류를 gateway의 상태와 대조하고, pool에서 준비된 pod가 줄었는지 확인합니다. 반대로 reward가 갑자기 좋아지면 verdict에 남은 측정 flag를 살펴봅니다. 이 flag는 기본 지표로 집계되지 않습니다. 아래 지표와 런북에서 각 신호를 어디서 읽고 어떤 조치를 할지 연결합니다.
+`sandbox_error`가 늘면 trainer에 기록된 오류를 gateway 상태와 대조하고, pool에서 Ready 상태인 pod가 줄었는지 확인하세요. reward가 갑자기 높아졌다면 verdict의 측정 flag도 살펴보세요. 이 flag는 기본 지표로 집계되지 않습니다. 증상별 런북에는 어느 로그를 열고 어떤 설정을 점검할지 정리해 두었습니다.
 
 ??? note "세부 조건과 예외"
     샌드박스 쪽에 장애가 생겨도 대개 학습은 중단되지 않습니다.
@@ -22,7 +22,7 @@ step 번호는 계속 올라가는데 학습이 나아지지 않거나 배치 �
 
     - **세 계층을 함께 모니터링합니다.** 샌드박스 pod(평가 하나), gateway(스케줄과 버전 고정), trainer(reward batch와 step)가 각각 다른 범위의 상태를 보고합니다.
     - **지표 엔드포인트도 인증합니다.** `/metrics`도 `/v1/evaluate`와 같은 토큰 검증을 거치며, 인증 없이 호출할 수 있는 경로는 kubelet probe용 `/healthz`, `/readyz`뿐입니다.
-    - **reward 품질 신호를 기준으로 경보를 설정합니다.** 학습에 문제가 생기기 시작하면 CPU나 메모리보다 `sandbox_error` 비율, pass rate, flag 같은 reward 품질 신호가 먼저 변합니다.
+    - **채점 결과의 변화에도 경보를 설정합니다.** 학습에 문제가 생기면 CPU나 메모리 사용량보다 `sandbox_error` 비율이나 pass rate, verdict의 flag가 먼저 달라집니다. flag 발생 빈도까지 감시하려면 집계 기능을 추가해야 합니다.
 
 **읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 `reward_batch` 로그, [02 보안](02_security.md)의 인증 설계, [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)의 gateway 동작을 먼저 보세요.
 
@@ -45,7 +45,7 @@ flowchart LR
     L --> A
 ```
 
-*그림 요약: 경보는 지표(gateway, 샌드박스)와 로그(trainer) 두 경로에서 오고, 지표 수집기는 audience가 맞는 토큰이 있어야 읽습니다.*
+*그림 요약: 경보는 지표(gateway, 샌드박스)와 로그(trainer) 두 경로에서 오고, 수집기가 지표를 읽으려면 audience가 맞는 토큰이 필요합니다.*
 
 ## 증상별 첫 점검
 
@@ -129,9 +129,11 @@ spec:
       ports: [{protocol: TCP, port: 8000}]
 ```
 
-## trainer 쪽 JSON 이벤트
+## trainer가 기록하는 JSON 이벤트
 
-`KernelRewards`(`src/gpusandbox/rewards.py`)와 `train_grpo.py`는 한 줄에 JSON 하나를 stdout에 씁니다. `KernelRewards`의 `reward_batch`와 `sandbox_version_switch`는 `--metrics-file`(job 템플릿에서는 `/outputs/grpo/sandbox_metrics.jsonl`)에도 기록되고, `train_grpo.py`의 `routing`과 `done`은 stdout에만 나옵니다. TRL은 reward 함수별 값(`format_reward`, `correctness_reward`, `speedup_reward`)을 따로 기록합니다.
+<span id="trainer-쪽-json-이벤트"></span>
+
+`KernelRewards`(`src/gpusandbox/rewards.py`)와 `train_grpo.py`는 JSON 이벤트를 한 줄에 하나씩 표준 출력(stdout)으로 내보냅니다. `KernelRewards`의 `reward_batch`와 `sandbox_version_switch`는 `--metrics-file`(job 템플릿에서는 `/outputs/grpo/sandbox_metrics.jsonl`)에도 기록되고, `train_grpo.py`의 `routing`과 `done`은 stdout에만 나옵니다. TRL은 reward 함수별 값(`format_reward`, `correctness_reward`, `speedup_reward`)을 따로 기록합니다.
 
 | event | 언제 | 주요 필드 |
 |---|---|---|
@@ -173,14 +175,14 @@ verdict의 `flags` 목록(`implausible_speedup`, `timed_output_mismatch`, `trito
 "flags": dict(Counter(f for r in results for f in r.get("flags") or [])),
 ```
 
-확장하지 않아도 간접적으로 확인할 수 있는 신호가 있습니다.
+코드를 수정하기 전에도 다음 두 flag의 영향은 기존 지표에서 간접적으로 확인할 수 있습니다.
 
 - **`timed_output_mismatch`**: 이 flag가 붙은 결과는 `wrong_answer`로 집계됩니다.
 - **`implausible_speedup`**: 이 flag가 붙으면 speedup이 1.0으로 바뀌므로, `custom_kernel_rate`는 높은데 `mean_speedup`이 1.0 근처에 머뭅니다(위협 유형은 [04 Reward 무결성](04_reward_integrity.md) 참고).
 
 ## 권장 경보
 
-아래 조건 값은 실제 run에서 정한 값이 아니라 처음 적용할 때 쓰는 예시 값입니다. 몇 시간 동안 기준선 데이터를 모은 뒤 조정하세요.
+아래 임계값은 경보를 처음 설정할 때 참고하는 예시입니다. 실제 학습에서 몇 시간 동안 평소 값을 수집한 뒤 환경에 맞게 조정하세요.
 
 | 경보 | 신호 | 시작 조건 (예시) | 먼저 볼 곳 |
 |---|---|---|---|
@@ -192,9 +194,9 @@ verdict의 `flags` 목록(`implausible_speedup`, `timed_output_mismatch`, `trito
 | 강제 종료 프로세스 증가 | `sandbox_reaped_processes_total` | 최근 30분 증가량(`increase`)이 0보다 큼 | 데몬을 남기는 후보 코드 검토 |
 | recycle 과다 | `gateway_recycled_pods_total` | 횟수 기반 재활용을 켠 버전(v2)의 평가 수 ÷ `SANDBOX_MAX_EVALS`의 2배 | `gpu_fault`, 노드 GPU 상태 |
 
-- **`sandbox_error` 비율에 들어가는 것**: TRL 값에는 gateway가 거부한 응답(401, 403)이 포함되고, veRL 값에는 호출자 인증 실패가 포함됩니다. gateway `status="sandbox_error"` 비율은 인증을 통과해 pool로 전달된 요청만 집계합니다.
+- **`sandbox_error` 비율의 집계 범위**: TRL 값에는 gateway가 거부한 응답(401, 403)이 포함되고, veRL 값에는 호출자 인증 실패가 포함됩니다. gateway `status="sandbox_error"` 비율은 인증을 통과해 pool로 전달된 요청만 집계합니다.
 - **Ready pod 부족에 `sandbox_ready`를 쓰지 않는 이유**: `sandbox_ready`에는 runtime과 version label이 없어 합계에 다른 pool의 pod도 들어갑니다.
-- **Ready pod 부족의 추가 경보**: routing이 replica 0인 pool을 가리키면 두 값이 모두 0이라 이 비교가 거짓이므로, 트래픽을 받을 활성 pool에는 available이 0인 경보도 따로 둡니다. 수집 대상이 모두 사라지면 시계열도 없어지므로 지표 누락 경보를 따로 둡니다.
+- **Ready pod가 하나도 없을 때**: routing이 replica 0인 pool을 가리키면 available과 desired가 모두 0이라 두 값을 비교하는 경보가 울리지 않습니다. 트래픽을 받을 활성 pool에는 available이 0일 때 울리는 경보도 설정하세요. 수집 대상이 모두 사라질 때는 시계열도 없어지므로 지표 누락을 감지하는 경보가 필요합니다.
 - **recycle 카운터의 범위**: 재활용 카운터에는 runtime과 version label이 없어, 여러 버전을 함께 운영하면 v1의 `gpu_fault` 재활용도 함께 셉니다.
 - **recycle 기준의 분모**: gateway 평가 수에는 빈 pod를 얻지 못해 pod에 닿지 않은 요청이 들어가고, probe Job이 pool에 직접 보낸 평가는 빠지므로 이 분모는 근사값입니다.
 
@@ -259,7 +261,7 @@ fields @timestamp, @message
 - **probe로 재현되지 않는 것**: probe는 `sandbox-probe` 주체로 샌드박스를 직접 호출하므로, allowlist에서 trainer 주체만 빠져서 생긴 403이나 gateway가 거부한 401, 403은 재현되지 않습니다.
 - **gateway가 거부하면**: trainer 쪽 `error`에는 HTTP 상태만 남으니, 실제 호출 주체의 토큰으로 gateway를 호출해 응답 본문을 확인하세요.
 
-JWKS 변경을 자동으로 반영하려면 `k8s/production/jwks-sync.yaml.tpl`의 CronJob(매시 17분)을 쓰고, `sandbox-gateway` 네임스페이스를 먼저 만들어 두세요. 아래 명령은 CronJob을 적용하고 Job 하나를 바로 실행해 결과를 확인한 뒤, 비교를 위해 두 namespace의 routing 표를 출력합니다.
+JWKS 변경을 자동으로 반영하려면 `sandbox-gateway` 네임스페이스를 먼저 만든 뒤 `k8s/production/jwks-sync.yaml.tpl`의 CronJob(매시 17분)을 배포하세요. 아래 명령은 CronJob을 적용하고 Job 하나를 바로 실행해 결과를 확인한 뒤, 비교를 위해 두 namespace의 routing 표를 출력합니다.
 
 ```bash
 source scripts/config.env

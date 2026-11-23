@@ -1,6 +1,6 @@
 # B2 · CPU와 GPU 워커를 모두 HyperPod에 두기
 
-모델이 코드를 만들면 별도의 GPU 샌드박스가 코드를 실행해 점수를 돌려줍니다. B2에서는 학습과 채점뿐 아니라 CoreDNS 같은 공용 Pod도 SageMaker HyperPod 인스턴스에서 실행합니다. Amazon EKS는 Kubernetes API와 스케줄러를 제공합니다.
+모델이 코드를 만들면 별도의 GPU 샌드박스가 그 코드를 실행해 채점 결과를 돌려줍니다. B2에서는 학습과 채점뿐 아니라 CoreDNS 같은 공용 Pod도 SageMaker HyperPod 인스턴스에서 실행합니다. Amazon EKS는 Kubernetes API와 스케줄러를 제공합니다.
 
 [![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
@@ -46,7 +46,7 @@ export ECR_REPO_PREFIX="gpu-sandbox-b2"
 export HYPERPOD_LCS_BUCKET="sagemaker-gpu-sandbox-b2-$(aws sts get-caller-identity --query Account --output text)-use1"
 ```
 
-다음 명령은 SageMaker 콘솔에서 **Create HyperPod cluster → Orchestrated by Amazon EKS**를 선택할 때 쓰는 AWS CloudFormation 템플릿을 호출합니다. 이 단계에서 VPC, EKS 제어 영역과 세 HyperPod 그룹을 함께 만듭니다. `scripts/02_create_cluster.sh`와 `cdk/tunnel.sh`는 기존 CDK 경로용입니다.
+다음 명령은 SageMaker 콘솔에서 **Create HyperPod cluster → Orchestrated by Amazon EKS**를 선택했을 때와 같은 AWS CloudFormation 템플릿으로 스택을 생성합니다. 이 단계에서 VPC, EKS 제어 영역과 세 HyperPod 그룹을 함께 만듭니다. `scripts/02_create_cluster.sh`와 `cdk/tunnel.sh`는 기존 CDK 경로용입니다.
 
 ```bash
 source scripts/config.env
@@ -83,7 +83,7 @@ aws eks list-nodegroups --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME"
 [![HyperPod에 등록된 워커 네 대의 역할과 인스턴스 타입, 비어 있는 EKS 관리형 노드 그룹 목록](../images/terminal/hyperpod-b2-nodes.png)](../images/terminal/hyperpod-b2-nodes.png)
 
 ??? note "쿼터가 남았는데 GPU가 배정되지 않을 때"
-    이 실습에서 `ml.g5.xlarge`와 `ml.g5.2xlarge`의 첫 요청에는 `INSUFFICIENT_CAPACITY_ERROR`가 기록됐습니다. `Continuous` 모드에서 HyperPod가 다시 요청해 같은 가용 영역에서 세 GPU를 모두 확보했습니다. `Pending` 노드에 실제 `InstanceId`가 생기는지 확인하세요. 그룹을 새로 만드는 동안 두 요청이 겹칠 수 있습니다.
+    이 실습에서 `ml.g5.xlarge`와 `ml.g5.2xlarge`의 인스턴스를 처음 요청했을 때 `INSUFFICIENT_CAPACITY_ERROR`가 기록됐습니다. `Continuous` 모드에서 HyperPod가 다시 요청해 같은 가용 영역에서 세 GPU를 모두 확보했습니다. `Pending` 노드에 `InstanceId`가 할당되는지 확인하세요. 그룹을 새로 만드는 동안 두 요청이 겹칠 수 있습니다.
 
     ```bash
     aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME" \
@@ -122,7 +122,7 @@ scripts/ops/verify.sh gvisor-hyperpod v1
 [![두 gVisor 채점 Pod가 Ready이고 별도 커널에서 A10G를 인식한 화면](../images/terminal/hyperpod-b2-pool.png)](../images/terminal/hyperpod-b2-pool.png)
 
 ??? example "기준 사례와 격리 검사 결과 보기"
-    기준 사례 6개에서 각각 예상한 판정이 나왔습니다. 샌드박스에서 인스턴스 메타데이터, Kubernetes API, kubelet, 외부 S3 주소에 보낸 연결은 모두 차단됐습니다. `default` 네임스페이스의 Pod도 샌드박스 API에 접속하지 못했습니다.
+    기준 사례 6개가 모두 예상대로 채점됐습니다. 샌드박스에서 인스턴스 메타데이터, Kubernetes API, kubelet, 외부 S3 주소로 접속을 시도했지만 모두 차단됐습니다. `default` 네임스페이스의 Pod도 샌드박스 API에 접속하지 못했습니다.
 
     [![기준 사례 6개 PASS와 네트워크 차단을 확인한 로그](../images/terminal/hyperpod-b2-verify.png)](../images/terminal/hyperpod-b2-verify.png)
 
@@ -134,7 +134,7 @@ scripts/hyperpod/run_grpo.sh 1
 kubectl -n rl-trainer wait --for=condition=Completed "hyperpodpytorchjob/grpo-${RUN_ID}" --timeout=30m
 ```
 
-학습 Pod는 `ml.g5.2xlarge`에서 실행됐습니다. `reward_batch`에 기록된 런타임은 `gvisor-hyperpod`이고 코드 12개가 모두 v1 pool에 도착했습니다. 결과는 정답 1개, 오답 2개, 실행 오류 8개, 컴파일 오류 1개였습니다. `Completed=True`는 이 판정들을 보상으로 받아 학습 한 스텝을 마쳤다는 뜻입니다. TRL이 기록한 학습 시간은 51.07초였습니다.
+학습 Pod는 `ml.g5.2xlarge`에서 실행됐습니다. `reward_batch`에 기록된 런타임은 `gvisor-hyperpod`이고 코드 12개가 모두 v1 pool에 도착했습니다. 결과는 정답 1개, 오답 2개, 실행 오류 8개, 컴파일 오류 1개였습니다. Job의 `Completed=True` 상태로 학습 한 스텝이 끝났음을 확인했습니다. trainer는 이 판정들로 보상을 계산했습니다. TRL이 기록한 학습 시간은 51.07초였습니다.
 
 [![HyperPod Job의 완료 상태와 코드 12개의 채점 결과가 함께 보이는 화면](../images/terminal/hyperpod-b2-training.png)](../images/terminal/hyperpod-b2-training.png)
 
@@ -151,7 +151,7 @@ kubectl -n rl-trainer wait --for=condition=Completed "hyperpodpytorchjob/grpo-${
 scripts/hyperpod/bench_b2.sh 32
 ```
 
-학습이 끝난 뒤 CPU 시스템 노드가 먼저 32건, 학습 노드가 이어서 32건을 보냅니다. 두 Job은 같은 `relu_bias_triton` 커널을 사용하고, 같은 채점 Pod 두 개가 A10G 한 장씩을 맡습니다. [벤치마크 결과](08_benchmark.md#hyperpod-b2)
+학습이 끝난 뒤 CPU 시스템 노드가 먼저 32건, 학습 노드가 이어서 32건을 보냅니다. 두 Job 모두 `relu_bias_triton` 커널을 같은 채점 Pod 두 개에 보냅니다. 각 Pod에는 A10G 한 장이 할당돼 있습니다. [벤치마크 결과](08_benchmark.md#hyperpod-b2)
 
 CPU 워커와 학습 워커 모두 32건 중 32건에 성공했습니다. pool 처리량은 각각 초당 0.189건과 0.190건이었습니다.
 

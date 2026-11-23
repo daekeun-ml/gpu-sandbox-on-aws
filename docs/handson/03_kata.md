@@ -1,15 +1,15 @@
 # 03 Kata 샌드박스 (CLH, QEMU)
 
-Kata는 pod마다 가상 머신(VM)을 띄웁니다. [클러스터와 이미지](01_cluster_and_images.md)가 준비됐다면 먼저 CPU에서 **pod가 어느 커널을 쓰는지** 확인하세요. GPU가 필요한 실습만 2단계로 이어집니다.
+Kata는 pod마다 가상 머신(VM)을 띄웁니다. [클러스터와 이미지](01_cluster_and_images.md)가 준비됐다면 먼저 CPU에서 **pod가 어느 커널을 쓰는지** 확인하세요. GPU 연결까지 실습하려면 2단계로 넘어가세요.
 
-1. [CPU 리허설](#1단계-nested-virtualization으로-리허설-katacpu_nodessh)에서 `scripts/kata/cpu_nodes.sh`를 실행합니다. [커널 출력](#cpu-run)에서 Kata pod 안의 게스트 커널과 마지막 줄의 EC2 호스트 커널을 비교하세요. CPU 코스는 여기까지입니다.
+1. [CPU 노드 실습](#1단계-nested-virtualization으로-리허설-katacpu_nodessh)에서 `scripts/kata/cpu_nodes.sh`를 실행합니다. [커널 출력](#cpu-run)에서 Kata pod 안의 게스트 커널과 마지막 줄의 EC2 호스트 커널을 비교하세요. CPU 코스는 여기까지입니다.
 2. [GPU 연결](#2단계-g4dnmetal-gpu-passthrough-katagpu_nodessh)에서는 `g4dn.metal`을 추가합니다. 노드가 GPU를 제공하는지 확인한 뒤 [QEMU 채점 pool](04_sandbox_pools.md)을 배포하세요. [게스트 안의 `Tesla T4`와 시험 답안 판정](#gpu-run)까지 확인하면 GPU 실습이 끝납니다.
 
 ??? note "CPU 노드와 GPU 노드의 차이"
     CPU 실습은 중첩 가상화가 가능한 `c8i.2xlarge` 한 대에서 Cloud Hypervisor와 QEMU를 비교합니다. GPU 실습은 별도 `g4dn.metal`에서 QEMU VM에 T4를 한 장씩 연결합니다. metal 노드 한 대를 추가하면 시간당 7.824 USD가 더 듭니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
-    - **Kata Containers**: pod마다 작은 VM을 만들어 그 안에서 컨테이너를 실행하는 런타임입니다. 그래서 pod마다 별도의 guest 커널을 씁니다.
+    - **Kata Containers**: pod마다 작은 VM을 만들어 그 안에서 컨테이너를 실행하는 런타임입니다. 각 pod의 컨테이너는 해당 VM의 guest 커널에서 실행됩니다.
     - **QEMU, Cloud Hypervisor(CLH)**: Kata가 VM을 만들 때 쓰는 hypervisor 두 가지입니다. 업스트림은 QEMU에서만 GPU passthrough를 지원합니다.
     - **KVM, `/dev/kvm`**: Linux의 하드웨어 가상화 기능과 그 장치 파일입니다. 이것이 있어야 노드에서 VM을 실행할 수 있습니다.
     - **nested virtualization**: VM 안에서 다시 VM을 실행하는 기능입니다. EC2에서는 일부 인스턴스 계열에 `/dev/kvm`을 제공합니다.
@@ -17,7 +17,7 @@ Kata는 pod마다 가상 머신(VM)을 띄웁니다. [클러스터와 이미지]
     - **IOMMU**: 장치가 직접 메모리에 접근(DMA)할 수 있는 범위를 제한하는 하드웨어입니다. GPU를 VM에 직접 할당할 때 접근 범위를 그 VM의 메모리로 한정합니다.
     - **VFIO, vfio-pci**: 물리 장치를 VM에 안전하게 직접 할당하는 Linux 프레임워크와, 그 장치에 바인딩되는 드라이버입니다.
     - **cold-plug**: VM을 시작하기 전에 장치를 연결하는 방식입니다.
-    - **Go shim, runtime-rs**: Kata 런타임의 두 구현입니다. runtime-rs(Rust)가 4.0.0부터 기본이지만, 여기서는 GPU 때문에 Go shim을 씁니다.
+    - **Go shim, runtime-rs**: Kata 런타임의 두 구현입니다. runtime-rs(Rust)가 4.0.0부터 기본이지만, 이 GPU 실습에서는 Go shim을 선택합니다.
     - **kata-deploy**: 노드에 Kata 바이너리와 설정을 설치하고 RuntimeClass를 만드는 Helm 차트입니다.
     - **GPU Operator, vfio-manager, `nvidia.com/pgpu`**: NVIDIA GPU 구성 요소를 관리하는 operator, 그중 GPU를 vfio-pci에 바인딩하는 구성 요소, 그리고 VM에 직접 할당할 수 있는 GPU를 나타내는 리소스 이름입니다.
     - **NVRC**: kata-deploy가 함께 배포하는 NVIDIA guest 스택의 초기화 프로그램입니다.
@@ -66,7 +66,7 @@ scripts/kata/cpu_nodes.sh    # kata-deploy, the gvisor-cpu RuntimeClass, smoke p
 
 **문제가 생기면:**
 
-- **`no sandbox-kata-cpu node group: set WITH_KATA_CPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`**: 노드 그룹 조회가 실패하면 원인과 관계없이 나옵니다. 위의 `aws eks describe-nodegroup` 명령을 직접 실행해 원인을 나누세요.
+- **`no sandbox-kata-cpu node group: set WITH_KATA_CPU=1 in scripts/config.env and run scripts/02_create_cluster.sh again`**: 노드 그룹 조회에 실패하면 원인과 관계없이 이 메시지가 나옵니다. 위의 `aws eks describe-nodegroup` 명령을 직접 실행해 어떤 오류가 나는지 확인하세요.
     - **`ResourceNotFoundException`이면**: `CLUSTER_NAME`과 `AWS_REGION`을 확인한 뒤 위 명령으로 `02_create_cluster.sh`를 다시 실행하세요.
     - **`AccessDeniedException`이면**: `eks:DescribeNodegroup` 권한을 확인하세요.
 - **그 리전의 `c8i.2xlarge`가 nested virtualization을 지원하지 않으면**: 노드 그룹 생성이 실패하거나 smoke pod가 완료되지 않습니다. `01_check_prereqs.sh`의 `SupportedFeatures` 출력과 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목을 보세요.
@@ -163,11 +163,11 @@ pod "kata-qemu-smoke-34567" deleted
 **문제가 생기면:** 스크립트가 `kata runtime classes missing`으로 멈추거나 smoke pod가 완료되지 않으면 [문제 해결](../reference/troubleshooting.md)의 "Kata" 항목에서 nested virtualization과 Kata 구성 요소 점검 명령을 보세요.
 
 !!! question "❓ 오해: pod 안 `/proc/cpuinfo`에 `hypervisor` flag가 보이면 Kata VM 안에서 실행된 것이다"
-    `c8i.2xlarge`는 그 자체가 가상 인스턴스라 일반 runc 컨테이너에서도 보통 `hypervisor` flag가 보입니다. 그래서 이 노드에서는 flag 대신, guest 커널 버전이 호스트 커널과 다른지로 Kata VM 안에서 실행됐는지 확인합니다. `g4dn.metal` 같은 bare metal 호스트에는 이 flag가 없으므로, bare metal에서는 flag로도 확인할 수 있습니다.
+    `c8i.2xlarge`는 그 자체가 가상 인스턴스라 일반 runc 컨테이너에서도 보통 `hypervisor` flag가 보입니다. 이 노드에서는 guest 커널 버전을 호스트 커널 버전과 비교해 Kata VM 안에서 실행됐는지 확인합니다. `g4dn.metal` 같은 bare metal 호스트에는 이 flag가 없으므로, bare metal에서는 flag로도 확인할 수 있습니다.
 
 ### CPU 노드에서 확인한 세 커널 { #cpu-run }
 
-여기서 비교할 것은 같은 EC2 노드 위 pod들이 보고한 커널입니다. Kata의 두 VM은 같은 게스트 커널 버전을 표시할 수도 있습니다. 서로 버전 문자열이 같아도 각 pod는 자기 VM에서 실행됩니다.
+같은 EC2 노드에서 각 pod가 출력한 커널을 비교하세요. Kata의 두 VM은 같은 게스트 커널 버전을 표시할 수도 있습니다. 서로 버전 문자열이 같아도 각 pod는 자기 VM에서 실행됩니다.
 
 `c8i.2xlarge`에서 nested virtualization이 `enabled`인 것을 확인하고 세 smoke pod 안에서 `uname -r`를 실행했습니다. 화면 마지막 줄에는 비교할 호스트 커널이 나옵니다.
 
@@ -235,7 +235,7 @@ flowchart LR
     - **`intel_iommu=on`**: AL2023 커널은 `CONFIG_INTEL_IOMMU_DEFAULT_ON`이 꺼져 있어서, 이 인자가 커널 명령줄에 있어야 VFIO가 GPU를 VM에 직접 할당할 수 있습니다.
     - **`iommu=pt`**: 호스트가 직접 쓰는 장치의 IOMMU 변환을 건너뛰게 합니다.
     - **빌더 인스턴스 타입**: 커널 인자는 인스턴스 타입과 무관해서 `m6i.large`에서 빌드해도 됩니다.
-    - **`vfio_iommu_type1` 모듈**: AL2023 커널은 VFIO type1 IOMMU backend도 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하는데, 2026-11-18의 `g4dn.metal` 노드에서는 아무것도 이 모듈을 로드하지 않았습니다. 그래서 2번 단계에서 `modules-load.d` 설정을 AMI에 넣습니다.
+    - **`vfio_iommu_type1` 모듈**: AL2023 커널은 VFIO type1 IOMMU backend도 모듈(`CONFIG_VFIO_IOMMU_TYPE1=m`)로 빌드하는데, 2026-11-18의 `g4dn.metal` 노드에서는 이 모듈이 자동으로 로드되지 않았습니다. 그래서 2단계에서 AMI에 `modules-load.d` 설정을 추가합니다.
 
 !!! note "이전 버전 스크립트로 실패했다면"
     이전 버전에서 `Waiter InstanceStopped failed ... "pending"`으로 멈췄다면 빌더가 남아 있을 수 있습니다. `<CLUSTER_NAME>-iommu-ami-builder` 이름의 인스턴스가 있는지 확인하고 terminate하세요.
@@ -301,7 +301,7 @@ trainer와 gVisor 노드에는 `nvidia.com/gpu.deploy.operands=false` label이 �
 
 ### kata-qemu-nvidia-gpu와 VM 크기
 
-`kata-qemu-nvidia-gpu`는 4.0.0부터 기본값인 runtime-rs 대신 Kata의 Go shim을 씁니다.
+`kata-qemu-nvidia-gpu`는 4.0.0부터 기본값인 runtime-rs 대신 Kata의 Go shim으로 실행됩니다.
 
 ??? note "Go shim과 cold-plug를 쓰는 이유"
     - runtime-rs의 GPU cold-plug에는 IOMMUFD가 필요한데, AL2023 커널에 `CONFIG_IOMMUFD`가 없습니다.
@@ -443,7 +443,7 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
     - **초기화되지 않으면**: `False`를 출력합니다.
     - **로그가 없으면**: `no logs: the VM probably never started` 경고가 나옵니다.
 
-5. **pool 배포(선택).** CUDA가 초기화되면 `scripts/06_deploy_sandboxes.sh kata-clh`로 실험 pool을 배포합니다. `kata-clh` 프로필은 `kata-qemu`와 같은 `g4dn.metal` 노드를 함께 씁니다(기본 replicas 2, `KATA_CLH_REPLICAS`).
+5. **pool 배포(선택).** CUDA가 초기화되면 `scripts/06_deploy_sandboxes.sh kata-clh`로 실험 pool을 배포합니다. `kata-clh` 프로필의 pod는 `kata-qemu`와 같은 `g4dn.metal` 노드에 배치됩니다(기본 replicas 2, `KATA_CLH_REPLICAS`).
 
 !!! warning "다시 실행할 때 환경변수를 빠뜨리지 마세요"
     `kata/gpu_nodes.sh`를 `ENABLE_EXPERIMENTAL_CLH_GPU=1` 없이 다시 실행하면 `helm upgrade`가 기본 values 파일만으로 실행되어 실험 runtime과 `kata-clh-nvidia-gpu` RuntimeClass가 제거됩니다. `kata/cpu_nodes.sh`는 이 환경변수를 읽지 않으므로, 실험 뒤에 `kata/cpu_nodes.sh`를 다시 실행해도 실험 runtime이 제거됩니다.
@@ -463,7 +463,7 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
 ## 적용 범위와 한계
 
 - **업스트림 검증 범위:** NVIDIA의 Kata CI는 A100과 H100을 테스트하고 T4는 테스트하지 않습니다. NVIDIA가 EKS에서 검증한 OS는 Ubuntu이고 AL2023은 목록에 없습니다. 그래서 `g4dn.metal` + AL2023으로 구성한 이 환경은 업스트림에서 검증되지 않은 조합입니다.
-- **이 저장소의 실행:** Kata GPU 경로(`g4dn.metal` + AL2023 + `kata-qemu-nvidia-gpu`)는 실습 계정(EKS 1.36)에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). `vfio_iommu_type1` 수정 뒤 `kata-qemu` pod 4개가 Ready가 되었고 `ops/verify.sh kata-qemu v1`이 통과했습니다. 한 번의 실행 결과이며, 업스트림 검증을 대신하지 않습니다.
+- **이 저장소의 실행:** Kata GPU 경로(`g4dn.metal` + AL2023 + `kata-qemu-nvidia-gpu`)는 실습 계정(EKS 1.36)에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). `vfio_iommu_type1` 수정 뒤 `kata-qemu` pod 4개가 Ready가 되었고 `ops/verify.sh kata-qemu v1`이 통과했습니다. 이 구성에서 한 차례 확인한 결과입니다.
 - **제3자 보고:** Ubuntu 24.04의 `g4dn.metal`에서 `intel_iommu=on iommu=pt`로 T4 8개가 vfio-pci에 바인딩되고 IOMMU 그룹도 passthrough에 쓸 수 있었다는 보고가 있습니다. 이 저장소는 AL2023에서 같은 바인딩(T4 8개, IOMMU group 257개)을 확인했고, Ubuntu는 확인하지 않았습니다.
 - **문서로 확인하지 않은 동작:** 재부팅 뒤 Kata handler 유지(containerd `imports`)와 `CpuOptions.NestedVirtualization` 전달은 바뀔 수 있으니, 1단계의 재부팅 확인과 `describe-instances` 확인을 건너뛰지 마세요.
 - **Cloud Hypervisor + GPU:** 실험 경로입니다. 이 저장소의 실행에서는 artifact 경로를 채운 뒤에도 VM이 시작되지 않았고(`create container timeout`), 동작하는 구성은 확인하지 못했습니다.
