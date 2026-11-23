@@ -76,7 +76,7 @@ kubectl -n sandbox get pods -o wide
 
 ### Python에서 보는 할당의 범위
 
-아래는 클러스터 안에서 실행되는 에피소드 Job의 호출 구조입니다. `first_code`와 `revised_code`는 같은 문제의 완전한 제출 코드이고, `token_file`은 샌드박스 채점 API가 검증할 토큰 파일 경로입니다. `with` 블록을 시작할 때 claim을 만들고, 블록이 끝나면 반납합니다. 두 번째 호출도 같은 `episode` 인스턴스를 사용합니다.
+아래는 클러스터 안에서 실행되는 에피소드 Job의 호출 구조입니다. `first_code`와 `revised_code`는 같은 문제의 완전한 제출 코드이고, `token_file`은 샌드박스 채점 API가 검증할 토큰 파일 경로입니다. `with` 블록을 시작할 때 claim을 만들고 블록이 끝나면 반납합니다. 두 번째 호출도 같은 `episode` 인스턴스를 사용합니다.
 
 ```python
 from gpusandbox.agent_sandbox import EpisodeSandbox

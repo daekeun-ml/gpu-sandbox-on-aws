@@ -107,7 +107,7 @@ EKS 1.36에서 EC2 `g5.xlarge` 두 대에 A10G 한 장씩을 배정해 `gvisor/v
     - **처리량 (throughput)**: 초당 완료한 평가 수입니다.
     - **golden 제출물**: 기대 verdict가 정해진 시험용 제출물입니다. `src/gpusandbox/golden.py`에 있습니다.
     - **speedup, reference**: reference는 정답과 실행 시간을 비교할 때 기준으로 삼는 신뢰할 수 있는 PyTorch 구현입니다. speedup은 이 기준 구현의 실행 시간을 후보 커널의 실행 시간으로 나눈 값입니다.
-    - **hypervisor (QEMU, Cloud Hypervisor)**: Kata에서 pod마다 VM을 실행하는 프로그램입니다. `kata-qemu`의 hypervisor는 QEMU이고, `kata-clh`는 Cloud Hypervisor입니다.
+    - **hypervisor (QEMU, Cloud Hypervisor)**: Kata에서 pod마다 VM을 실행하는 프로그램입니다. `kata-qemu`의 hypervisor는 QEMU이고 `kata-clh`는 Cloud Hypervisor입니다.
     - **gVisor Sentry**: gVisor에서 컨테이너의 시스템 호출을 대신 처리하는 사용자 공간 커널입니다.
     - **nested virtualization, bare metal**: VM 안에서 다시 VM을 띄우는 기능과, 하이퍼바이저 없이 물리 서버 전체를 쓰는 인스턴스(`.metal`)입니다.
     - **`overhead.podFixed`**: RuntimeClass에 지정하는 값으로, 스케줄러가 pod마다 런타임용으로 추가 예약하는 CPU와 메모리입니다.
