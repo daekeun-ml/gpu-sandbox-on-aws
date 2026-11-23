@@ -45,19 +45,19 @@ Kata GPU 실습에서는 pod가 `nvidia.com/pgpu`로 물리 GPU를 요청합니�
 | Kata + QEMU GPU | EC2 `g4dn.metal` | GPU passthrough용 AMI와 IOMMU 설정 |
 | Kata CPU (QEMU, Cloud Hypervisor) | EC2 `c8i.2xlarge` | 중첩 가상화 활성화 |
 
-격리 경계는 실행 경로의 일부입니다. 풀 접근 권한과 네트워크 제어도 함께 확인해야 합니다. 직접 비교하려면 [gVisor 핸즈온](../handson/02_gvisor.md)과 [Kata 핸즈온](../handson/03_kata.md)을 보세요.
+격리 경계는 실행 경로의 일부입니다. pool 접근 권한과 네트워크 제어도 함께 확인해야 합니다. 직접 비교하려면 [gVisor 핸즈온](../handson/02_gvisor.md)과 [Kata 핸즈온](../handson/03_kata.md)을 보세요.
 
 ## 같은 노드에서 런타임 비교하기
 
-GPU 두 풀이 서로 다른 장치를 쓰면 장치 차이와 런타임 차이가 함께 결과에 들어갑니다. 런타임 선택에서 무엇이 달라지는지 보려면 먼저 CPU 비교를 보세요. 아래 세 풀은 `c8i.2xlarge` 한 대에 있었고 Ready pod가 한 개씩이었습니다. 같은 `relu_bias_torch_only` 답안을 풀마다 32번 채점한 결과입니다.
+GPU 두 pool이 서로 다른 장치를 쓰면 장치 차이와 런타임 차이가 함께 결과에 들어갑니다. 런타임 선택에서 무엇이 달라지는지 보려면 먼저 CPU 비교를 보세요. 아래 세 pool은 `c8i.2xlarge` 한 대에 있었고 Ready pod가 한 개씩이었습니다. 같은 `relu_bias_torch_only` 답안을 pool마다 32번 채점한 결과입니다.
 
-| 풀 | 파일·메모리 요청을 받는 곳 | 성공 | 채점 p50 |
+| pool | 파일·메모리 요청을 받는 곳 | 성공 | 채점 p50 |
 |---|---|---:|---:|
 | `gvisor-cpu` | Sentry | 32/32 | 3.576초 |
 | `kata-clh-cpu` | Cloud Hypervisor VM의 게스트 커널 | 32/32 | 4.043초 |
 | `kata-qemu-cpu` | QEMU VM의 게스트 커널 | 32/32 | 3.819초 |
 
-세 풀 모두 요청을 처리할 준비가 된 상태에서 잰 값입니다. VM 부팅 시간을 알고 싶다면 pod 생성부터 Ready까지를 재야 합니다. 이 비교를 새 노드에서 되풀이할 때는 이미지 캐시 상태, pod 수, RuntimeClass의 CPU·메모리 예약량도 기록하세요. [벤치마크 조건](../handson/08_benchmark.md#runtime-results) · [직접 커널을 확인하는 실습](../beginner/05_hands_on.md#aws-cpu)
+세 pool 모두 요청을 처리할 준비가 된 상태에서 잰 값입니다. VM 부팅 시간을 알고 싶다면 pod 생성부터 Ready까지를 재야 합니다. 이 비교를 새 노드에서 되풀이할 때는 이미지 캐시 상태, pod 수, RuntimeClass의 CPU·메모리 예약량도 기록하세요. [벤치마크 조건](../handson/08_benchmark.md#runtime-results) · [직접 커널을 확인하는 실습](../beginner/05_hands_on.md#aws-cpu)
 
 <a id="더-살펴보기"></a>
 

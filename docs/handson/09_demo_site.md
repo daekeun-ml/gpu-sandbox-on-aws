@@ -3,13 +3,13 @@
 [공개 데모](https://dohbsn4kn34ya.cloudfront.net/#try)에서 답안을 하나 고르고 **채점 기록 재생**을 누르세요. 브라우저는 저장된 실행을 재생하므로 AWS 계정 없이 gVisor와 Kata의 판정, 학습 로그, 벤치마크를 볼 수 있습니다.
 
 - **내 PC에서 보기**　[로컬 미리보기](#1-로컬에서-미리-보기)로 샘플을 열고 정답과 오답을 하나씩 재생하세요. CPU 샘플과 공개 데모의 GPU 기록은 출처가 다릅니다.
-- **내 실습 결과 공개하기**　[GPU 기록 만들기](#2-클러스터에서-gpu-기록-만들기)로 시작해 [공개할 파일 검토](#25-공개하기-전에-검토하기) 후 [CloudFront에 배포](#4-배포-demodeploysh)하세요. 배포 주소에서 같은 답안을 골라 내 기록의 풀 이름과 판정이 나오는지 확인합니다.
+- **내 실습 결과 공개하기**　[GPU 기록 만들기](#2-클러스터에서-gpu-기록-만들기)로 시작해 [공개할 파일 검토](#25-공개하기-전에-검토하기) 후 [CloudFront에 배포](#4-배포-demodeploysh)하세요. 배포 주소에서 같은 답안을 골라 내 기록의 pool 이름과 판정이 나오는지 확인합니다.
 
 <details class="note" markdown="1">
 <summary>직접 기록을 만들 때 필요한 환경과 로그</summary>
 
 - 로컬 Python 환경([시작하기](../getting_started.md) 2장)이 필요합니다.
-- **GPU 기록**: [04](04_sandbox_pools.md)에서 배포한 풀이 필요합니다.
+- **GPU 기록**: [04](04_sandbox_pools.md)에서 배포한 pool이 필요합니다.
 - **4절의 GRPO 차트**: [05](05_grpo_training.md)의 학습 로그가 필요합니다.
 - **4절의 버전 전환 차트**: [06](06_sandbox_update.md)의 전환을 거친 학습 로그나 [10](10_cpu_only.md)의 CPU 시뮬레이션 로그로 만들 수 있습니다.
 - verdict와 reward의 의미는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 설명합니다.
@@ -45,33 +45,33 @@
 | 맨 위 | 핵심 수치와 둘러보기 영상(무음, 한국어 자막) | `recording.json`, `extras.json`, `media/tour-ko.mp4`와 `tour-en.mp4` |
 | 1. 아키텍처 | 구성 요소를 누르면 설명과 측정값이 열리는 구성도와 재생 버튼 | 페이지의 설명과 `extras.json`의 측정값 |
 | 2. 채점 체험 | golden 제출물을 골라 재생하면 진행 막대가 차고 verdict, reward 구성 요소, 판정 이유가 나옵니다 | `recording.json`의 golden 평가 결과와, trainer와 같은 `score_verdict`로 계산한 reward |
-| 3. 공격 차단 | 풀마다 샌드박스 안 커널과 노드 커널, GPU, egress 차단 여부. 격리와 채점 검증 결과 카드 8개와 터미널 출력 재생 | `recording.json`의 `/info`, `extras.json`의 터미널 기록(verify.sh, gVisor 스모크 테스트, rollout.sh) |
+| 3. 공격 차단 | pool마다 샌드박스 안 커널과 노드 커널, GPU, egress 차단 여부. 격리와 채점 검증 결과 카드 8개와 터미널 출력 재생 | `recording.json`의 `/info`, `extras.json`의 터미널 기록(verify.sh, gVisor 스모크 테스트, rollout.sh) |
 | 4. 학습 | EC2의 5스텝과 HyperPod B1·B2의 한 스텝에서 모델이 제출한 코드와 판정을 비교합니다. 버전 전환 차트는 CPU 모의 실행 기록입니다. | `extras.json`의 `training`, `b1.training`, `b2.training`, `simulation` |
-| 5. 벤치마크 | EKS 다섯 풀의 처리량, B1·B2에서 요청을 보낸 노드별 채점 시간, 이미지 캐시에 따른 시작 시간 | `extras.json`의 `runtime_run`, `b1.bench`, `b2.bench`, `bench` |
+| 5. 벤치마크 | EKS 다섯 pool의 처리량, B1·B2에서 요청을 보낸 노드별 채점 시간, 이미지 캐시에 따른 시작 시간 | `extras.json`의 `runtime_run`, `b1.bench`, `b2.bench`, `bench` |
 | 패턴별 아키텍처 (`architecture.html`) | 시나리오 A, B1, B2, C를 AWS 아이콘으로 그린 구성도 | 페이지에 들어 있는 정적 데이터(`arch.js`). 데이터 파일을 읽지 않습니다 |
 
-- **맨 위의 핵심 수치**: GPU 런타임 수, 기대 판정과 일치한 golden 수, 두 풀의 `verify.sh` 기록에서 막힌 연결 수, 벤치마크 정상 응답 수입니다.
-- **1절의 재생 버튼**: reward 요청 한 건이 trainer, reward 함수, 라우팅 표, 샌드박스 풀을 지나는 순서를 보여 줍니다.
-- **2절의 채점 체험**: golden 제출물은 정답, 오답, 벤치마크 구간에서만 틀리는 코드, 호스트 파일 읽기 등입니다. 진행 막대는 풀마다 기록된 평가 시간(`duration_s`)을 기준으로 차고(기본 4배속, 실제 속도나 결과만 보기도 선택 가능), reward 구성 요소는 format, correctness, speedup, 합계입니다.
+- **맨 위의 핵심 수치**: GPU 런타임 수, 기대 판정과 일치한 golden 수, 두 pool의 `verify.sh` 기록에서 막힌 연결 수, 벤치마크 정상 응답 수입니다.
+- **1절의 재생 버튼**: reward 요청 한 건이 trainer, reward 함수, 라우팅 표, 샌드박스 pool을 지나는 순서를 보여 줍니다.
+- **2절의 채점 체험**: golden 제출물은 정답, 오답, 벤치마크 구간에서만 틀리는 코드, 호스트 파일 읽기 등입니다. 진행 막대는 pool마다 기록된 평가 시간(`duration_s`)을 기준으로 차고(기본 4배속, 실제 속도나 결과만 보기도 선택 가능), reward 구성 요소는 format, correctness, speedup, 합계입니다.
 - **3절의 카드 8개**: 샌드박스 안에서 시도한 IMDS, Kubernetes API, kubelet, 인터넷 연결, `default` namespace에서 샌드박스로 들어오는 연결, 샌드박스 안과 노드의 커널 비교, golden 제출물의 호스트 파일 읽기와 벤치마크 치팅입니다. 카드를 누르면 터미널 출력 재생에서 그 줄을 강조합니다.
 - **패턴별 아키텍처**: 패턴마다 "준비와 배포", "학습 한 step", "버전 바꾸기" 흐름을 단계별로 재생하고, 요청과 결과가 선을 따라 움직입니다. 기본 한국어이고 `?lang=en`이나 `EN` 버튼으로 영어로 바뀝니다.
 
 공개되는 데이터와 기록은 다음과 같습니다.
 
 - **공개되는 파일**: HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다.
-- **저장소의 `recording.json` 샘플**: 노트북의 CPU 풀에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요.
+- **저장소의 `recording.json` 샘플**: 노트북의 CPU pool에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요.
 - 공개 데모의 GPU 채점 재생은 `demo/recordings/2026-11-18-eks-gpu.json`을 사용합니다. B1에서는 EC2가, B2에서는 HyperPod가 생성 코드를 채점했습니다. 두 벤치마크는 각 클러스터에서 요청을 보낸 노드만 바꿔 비교합니다. [B1 결과](08_benchmark.md#hyperpod-b1) · [B2 결과](08_benchmark.md#hyperpod-b2)
 - **2절의 진행 막대**: 기록된 전체 평가 시간입니다. 단계별 시간은 기록에 없어서 단계 표시는 평가가 끝난 뒤 판정에 맞춰 채워집니다.
 
 </details>
 
-[데모에서 EKS 벤치마크 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results)
+[데모에서 B2·B1·A 벤치마크 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results)
 
-![다섯 EKS 풀의 노드 구성, 성공 건수, 채점 p50·p95와 처리량을 보여 주는 데모 화면](../images/demo/runtime-results-ko.png)
+![B2·B1의 요청 워커 네 행과 A의 런타임 다섯 행을 한 표로 비교하는 화면](../images/demo/runtime-results-ko.png)
 
 [공개 데모에서 B1 벤치마크 열기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1) · [B2 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b2)
 
-![EKS와 HyperPod에서 같은 커널의 채점을 요청했을 때 걸린 시간과 풀 처리량을 보여 주는 데모 화면](../images/demo/hyperpod-b1-benchmark-ko.png)
+![EKS와 HyperPod에서 같은 커널의 채점을 요청했을 때 걸린 시간과 pool 처리량을 보여 주는 데모 화면](../images/demo/hyperpod-b1-benchmark-ko.png)
 
 ```mermaid
 flowchart LR
@@ -110,19 +110,19 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 **확인할 것:**
 
 - **채점 재생에 사용한 기록**을 펼치면 `Local CPU smoke run on a laptop`으로 시작하는 설명과 기록 시각이 나옵니다.
-- 핵심 수치 타일은 세 개입니다. 샘플 기록에는 GPU 풀이 없어서 GPU 샌드박스 풀 타일은 나오지 않습니다.
+- 핵심 수치 타일은 세 개입니다. 샘플 기록에는 GPU pool이 없어서 GPU 샌드박스 pool 타일은 나오지 않습니다.
     - `8/8`: 예상대로 나온 채점 결과
-    - `10`은 두 풀의 `verify.sh` 로그에 남은 차단 건수입니다. 샌드박스에서 외부로 시도한 연결 8건과 `default` 네임스페이스에서 들어온 연결 2건입니다.
-    - `160/160`은 다섯 EKS 풀이 처리한 벤치마크 요청의 성공 건수입니다. 숫자를 누르면 결과표로 이동합니다.
+    - `10`은 두 pool의 `verify.sh` 로그에 남은 차단 건수입니다. 샌드박스에서 외부로 시도한 연결 8건과 `default` 네임스페이스에서 들어온 연결 2건입니다.
+    - `160/160`은 다섯 EKS pool이 처리한 벤치마크 요청의 성공 건수입니다. 숫자를 누르면 결과표로 이동합니다.
 - 2절에 제출 코드 카드 네 개(PyTorch만 사용, ReLU 빠뜨린 오답, 속도 측정 속이기, 서버 파일 읽기)가 있고, 재생하면 `local-cpu v1`, `local-cpu v2` 두 줄이 채워집니다. 코드는 문법 색상과 줄 번호로 표시됩니다.
 - 3절에 공격 카드 여덟 개와 터미널 탭 네 개(verify.sh gvisor, verify.sh kata-qemu, gVisor GPU 동작 확인, rollout.sh v1 → v2)가 있습니다.
 - 4절 아래 차트의 요약이 "배치 30개가 하나도 빠지지 않고 채점됐습니다. step 8에서 kata-clh-cpu/v1에서 kata-clh-cpu/v2로 바뀌었고"로 시작합니다.
-- 5절 표에서 다섯 EKS 풀의 성공 건수가 각각 32/32인지 확인하세요. 표 아래 링크로 실행 조건과 원본 JSONL을 볼 수 있습니다.
+- 5절 표에서 다섯 EKS pool의 성공 건수가 각각 32/32인지 확인하세요. 표 아래 링크로 실행 조건과 원본 JSONL을 볼 수 있습니다.
 - 기본 언어는 한국어입니다. 주소에 `?lang=en`을 붙이거나 오른쪽 위 `EN` 버튼을 누르면 영어로 바뀌고, 고른 언어는 주소에 남아 새로고침해도 유지됩니다.
 - 터미널에는 파일마다 200 응답 로그가 출력됩니다.
 
 ??? note "확인한 환경과 각 절의 데이터 출처"
-    풀 카드는 golden 채점 기록을, 학습·벤치마크·터미널 재생은 `extras.json`을 읽습니다. 패턴별 아키텍처 페이지에는 각 구성에서 확인한 실행 범위가 표시됩니다.
+    pool 카드는 golden 채점 기록을, 학습·벤치마크·터미널 재생은 `extras.json`을 읽습니다. 패턴별 아키텍처 페이지에는 각 구성에서 확인한 실행 범위가 표시됩니다.
 
 **문제가 생기면:**
 
@@ -133,7 +133,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d demo/site
 
 ## 2. 클러스터에서 GPU 기록 만들기
 
-`python -m gpusandbox.tools record`는 풀마다 다음 정보를 모아 JSON 파일 하나에 저장합니다.
+`python -m gpusandbox.tools record`는 pool마다 다음 정보를 모아 JSON 파일 하나에 저장합니다.
 
 - 첫 Ready pod의 `/info`: runtime, 샌드박스 버전, 커널 버전, GPU 이름, egress 차단 여부
 - golden set의 verdict(`--device cuda`면 6개): status, correct, custom_kernel, speedup, 기준과 후보의 ms, flags, 정책 위반(최대 3개), 오류(끝 400자), 소요 시간, 버전
@@ -163,7 +163,7 @@ pod IP와 endpoint 주소는 별도 필드로 저장하지 않고, 토큰도 넣
 recorder pod는 trainer 이미지(`rl-trainer`)로 `sleep`만 실행하는 pod입니다.
 
 - **갖춘 설정**: label `gpusandbox/client: "true"`, ServiceAccount `grpo-trainer`, audience `gpu-sandbox`인 projected token, Pod Security restricted(uid 2000)
-- **실행 위치**: GPU 없이 system 노드에서 실행되고, golden set은 샌드박스 풀에서 실행됩니다.
+- **실행 위치**: GPU 없이 system 노드에서 실행되고, golden set은 샌드박스 pool에서 실행됩니다.
 
 ??? info "probe Job 템플릿(`k8s/probe/job-probe.yaml.tpl`)으로 기록하지 않는 이유"
     probe Job은 `rl-trainer` 네임스페이스, client label, audience 토큰 조건은 갖췄지만, 기록 파일을 만들거나 밖으로 복사할 수 없습니다.
@@ -179,10 +179,10 @@ recorder pod는 trainer 이미지(`rl-trainer`)로 `sleep`만 실행하는 pod�
 - **학습 Job이 없으면 recorder pod로 기록합니다(2.2).** 이때 기록에는 학습 이벤트가 들어가지 않습니다. 4절의 버전 전환 차트는 `extras.json`의 `simulation`을 먼저 쓰고, 없을 때만 기록의 학습 이벤트를 씁니다. 둘 다 없으면 이 차트는 표시되지 않습니다.
 - **trainer pod로 기록할 때는 학습 Job이 Running인 동안 실행합니다.** Job이 끝나면 컨테이너가 종료되어 emptyDir에 있는 이벤트 파일을 복사할 수 없습니다([05 On-policy GRPO 학습](05_grpo_training.md)).
 - **학습 이벤트에 버전 전환을 넣으려면** [06](06_sandbox_update.md)의 `scripts/ops/rollout.sh gvisor v1 v2`로 routing을 바꾸고, trainer 로그에 `sandbox_version_switch`가 나온 뒤 기록하세요. `record`는 기록할 때 `--training-events` 파일에 있는 이벤트만 읽습니다.
-    - **두 풀의 golden도 기록하려면**: `--pool`로 넘긴 주소는 golden을 실행할 대상이라, `--finish`로 v1을 줄이기 전에 2.3의 예처럼 v1과 v2 주소를 각각 `--pool`로 넘기세요.
+    - **두 pool의 golden도 기록하려면**: `--pool`로 넘긴 주소는 golden을 실행할 대상이라, `--finish`로 v1을 줄이기 전에 2.3의 예처럼 v1과 v2 주소를 각각 `--pool`로 넘기세요.
     - **B2에서는**: Service 이름에 `gvisor-hyperpod`를 씁니다(`sandbox-gvisor-hyperpod-v1`).
     - **4절 차트에 내 전환을 표시하려면**: 4절 차트는 `extras.json`의 `simulation`을 먼저 쓰므로, 2.6에서 `extras.json`을 만들 때 `--simulation-log`를 빼세요.
-- **학습이 잠깐 느려질 수 있습니다.** 기록과 학습이 같은 풀을 쓰고 pod는 한 번에 평가를 하나만 처리하므로, golden 평가가 reward 평가 사이에 추가로 실행됩니다.
+- **학습이 잠깐 느려질 수 있습니다.** 기록과 학습이 같은 pool을 쓰고 pod는 한 번에 평가를 하나만 처리하므로, golden 평가가 reward 평가 사이에 추가로 실행됩니다.
 
 ### 2.2 trainer pod 찾기
 
@@ -217,7 +217,7 @@ POD=demo-recorder
 
 ### 2.3 trainer pod 안에서 record 실행
 
-GPU 풀마다 golden set을 실행하고 결과를 pod의 `/tmp/rec.json`에 저장합니다. `--pool`은 `라벨=주소` 형식이며, 라벨은 페이지의 카드 제목으로 그대로 쓰입니다.
+GPU pool마다 golden set을 실행하고 결과를 pod의 `/tmp/rec.json`에 저장합니다. `--pool`은 `라벨=주소` 형식이며, 라벨은 페이지의 카드 제목으로 그대로 쓰입니다.
 
 ```bash
 # Run the golden set on each GPU pool and write the recording inside the trainer pod.
@@ -233,7 +233,7 @@ kubectl -n rl-trainer exec "${POD}" -c trainer --\
 ```
 
 - 첫 줄 끝의 `--\`는 kubectl 인자 구분자 `--` 뒤에서 줄을 이은 표기입니다([문제 해결](../reference/troubleshooting.md)과 같은 방식).
-- **배포한 풀만 넣으세요.** Ready pod가 없는 주소를 넣으면 golden마다 최대 600초(클라이언트의 acquire timeout)를 기다린 뒤 `sandbox_error`로 기록됩니다. `/info`도 비어 있어서 페이지에 egress가 "열림"으로 표시됩니다.
+- **배포한 pool만 넣으세요.** Ready pod가 없는 주소를 넣으면 golden마다 최대 600초(클라이언트의 acquire timeout)를 기다린 뒤 `sandbox_error`로 기록됩니다. `/info`도 비어 있어서 페이지에 egress가 "열림"으로 표시됩니다.
 - **v1과 v2를 함께 넣으려면** 라벨에 버전을 붙입니다. 예: `--pool "gvisor v1=sandbox-gvisor-v1.sandbox.svc.cluster.local:8000" --pool "gvisor v2=sandbox-gvisor-v2.sandbox.svc.cluster.local:8000"`.
 - **`--source`는 "기록 출처" 줄에 그대로 나옵니다.** 리전, 인스턴스, 날짜 같은 기록 조건을 적으세요.
 
@@ -275,13 +275,13 @@ python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['schema'] 
 | 항목 | 확인할 것 |
 |---|---|
 | `source` | 직접 쓴 설명입니다. 계정 정보나 사람 이름이 들어 있지 않은지 |
-| `pools[].info.egress_blocked` | 모든 풀이 `true`인지 |
+| `pools[].info.egress_blocked` | 모든 pool이 `true`인지 |
 | `pools[].results[].status`와 `expected_status` | golden마다 같은지 |
 | `pools[].results[].error`, `violations` | 평가된 코드나 연결 오류가 만든 문자열(오류 끝 400자, 위반 최대 3개)입니다. pod 주소, 내부 경로, 호스트 이름이 들어 있지 않은지 |
 | `training` | `reward_batch`와 `sandbox_version_switch` 이벤트만 들어갑니다. 버전 이름과 routing revision을 공개해도 되는지 |
 
-- **`egress_blocked` 값이 없거나 `false`면**: 페이지에 "열림"으로 나옵니다. 그대로 공개하지 말고 풀부터 고치세요.
-- **status와 `expected_status`가 다르면**: verdict가 기대값과 다른 것이니 [04](04_sandbox_pools.md)의 풀 검증(`scripts/ops/verify.sh`)으로 원인부터 찾습니다.
+- **`egress_blocked` 값이 없거나 `false`면**: 페이지에 "열림"으로 나옵니다. 그대로 공개하지 말고 pool부터 고치세요.
+- **status와 `expected_status`가 다르면**: verdict가 기대값과 다른 것이니 [04](04_sandbox_pools.md)의 pool 검증(`scripts/ops/verify.sh`)으로 원인부터 찾습니다.
 
 다음 스크립트가 요약을 출력합니다.
 
@@ -302,8 +302,8 @@ PY
 
 **확인할 것:**
 
-- 풀마다 `egress_blocked: True`이고, golden 줄이 모두 `as expected`입니다.
-- **2026-11-18 기록에서는**: 두 풀 모두 `egress_blocked: True`였고, verdict 12개가 모두 `expected_status`와 같았으며, 파일에 IP, 계정 ID, 호스트 이름이 없었습니다.
+- pool마다 `egress_blocked: True`이고, golden 줄이 모두 `as expected`입니다.
+- **2026-11-18 기록에서는**: 두 pool 모두 `egress_blocked: True`였고, verdict 12개가 모두 `expected_status`와 같았으며, 파일에 IP, 계정 ID, 호스트 이름이 없었습니다.
 - **저장소의 샘플 기록으로 실행하면**: `local-cpu v1`, `local-cpu v2`와 golden 4개씩, `training events: 7`이 나옵니다(로컬 확인).
 
 브라우저로 확인하려면 사이트를 임시 폴더에 복사한 뒤 로컬 서버로 실행합니다.
@@ -324,7 +324,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 
 | 데이터 | 만드는 방법 | 옵션 |
 |---|---|---|
-| EKS 결과표 | `bench.sh`의 JSONL과 실행 당시 풀별 노드 유형, Ready pod 수 | `--runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json` |
+| EKS 결과표 | `bench.sh`의 JSONL과 실행 당시 pool별 노드 유형, Ready pod 수 | `--runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json` |
 | 이미지 캐시 전후 비교 | `scripts/ops/bench.sh 32`의 출력을 `tee`로 `bench.log`에 저장 | `--bench-log pass1=bench.log --bench-pass pass2`, 노드 정보는 `--node` (아래 예시) |
 | GRPO 학습 | `kubectl -n rl-trainer logs job/<job> > grpo.log`. reward 함수의 `reward_batch` JSON 줄과 trainer의 metric 줄(`{'loss': ...}`)을 읽습니다 | `--training-log grpo.log --model <model-id>` |
 | HyperPod B1 | 공개용 B1 학습 로그 요약과 고정 커널 벤치마크 결과 | `--b1-record docs/handson/data/hyperpod-b1.json` |
@@ -368,7 +368,7 @@ python3 demo/build_extras.py --out demo/site/data/extras.json \
 
 ### 2.7 둘러보기 영상 다시 만들기 (선택)
 
-`demo/record_tour.py`는 Chromium에서 채점 재생, GRPO 학습, EKS 결과표, B1 클라이언트 비교, 배포 구성도를 차례로 녹화합니다. 언어별 MP4 영상에는 자막을 넣고, 표지로는 같은 언어의 B1 구성도를 캡처합니다.
+`demo/record_tour.py`는 Chromium에서 채점 재생, GRPO 학습, B2·B1·A 결과표, B2 클라이언트 비교, 배포 구성도를 차례로 녹화합니다. 언어별 MP4 영상에는 자막을 넣고, 표지로는 같은 언어의 B1 구성도를 캡처합니다.
 
 - **페이지 제공**: 페이지는 녹화하는 동안만 `127.0.0.1`에서 제공됩니다.
 - **녹화 전 검사**: `--site`의 데이터 파일에 2.6과 같은 검사를 하고, 문제가 있으면 녹화하지 않습니다.
@@ -620,8 +620,8 @@ CloudFront는 S3에 올린 기록만 제공합니다. 배포 전 2.5단계에서
 배포한 뒤 다음을 순서대로 확인합니다.
 
 1. `deploy.sh`의 마지막 줄이 `[demo] live: https://...`입니다.
-2. 그 URL을 브라우저로 열면 "기록 출처" 줄에 직접 쓴 `--source` 문구가 보이고, 3절의 모든 풀 카드에서 외부 연결 차단이 "확인됨"입니다. 이 표시는 서버의 `egress_blocked` 값입니다.
-    - **GPU 클러스터 기록이면**: 해당 풀의 `verify.sh` 차단 기록과 대조하세요.
+2. 그 URL을 브라우저로 열면 "기록 출처" 줄에 직접 쓴 `--source` 문구가 보이고, 3절의 모든 pool 카드에서 외부 연결 차단이 "확인됨"입니다. 이 표시는 서버의 `egress_blocked` 값입니다.
+    - **GPU 클러스터 기록이면**: 해당 pool의 `verify.sh` 차단 기록과 대조하세요.
     - **로컬 CPU 샘플은**: egress 검사 대상이 없어 검사를 하지 않아도 "확인됨"으로 표시됩니다.
     - 맨 위 영상이 재생되는지도 확인하세요(`curl -sI https://<distribution-domain>/media/tour-ko.mp4`의 `content-type`이 `video/mp4`).
 3. 응답에 보안 헤더 여섯 개가 있습니다.
@@ -679,7 +679,7 @@ GPU 노드와 클러스터 정리는 [99 정리](99_cleanup.md)에 있습니다.
 ## 적용 범위와 한계
 
 - **AWS에서 실행했습니다.** recorder pod에서 `record`로 GPU 기록(gVisor A10G, Kata QEMU T4)을 만들고, `deploy.sh`로 us-east-1에 공개한 뒤 외부 점검까지 했습니다("보안 설계"의 검증 상태). 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
-    - 공개한 기록은 실제 GPU 풀의 기록이며, 학습 이벤트는 들어 있지 않습니다.
+    - 공개한 기록은 실제 GPU pool의 기록이며, 학습 이벤트는 들어 있지 않습니다.
     - 4절의 GRPO 차트는 시나리오 A의 5 step 학습 로그에서, 버전 전환 차트는 시나리오 C의 시뮬레이션(golden 제출물이 모델 출력을 대신함, 학습 아님)에서 나옵니다.
 - **방문자가 코드를 실행해 볼 수는 없습니다.** 2절은 기록을 재생하는 것이고, 단계별 시간은 기록에 없습니다. 3절의 공격 카드는 `verify.sh`가 실제로 시도한 항목과 golden 제출물로 한정됩니다.
 - **`record`는 trainer 이미지로 만든 pod에서 실행합니다.** 기록의 학습 이벤트는 학습 중인 trainer pod에서 기록할 때만 들어갑니다(2절).
@@ -688,7 +688,7 @@ GPU 노드와 클러스터 정리는 [99 정리](99_cleanup.md)에 있습니다.
 - **기본 `*.cloudfront.net` 인증서에서는 viewer TLS 정책이 TLSv1로 고정됩니다.** 2026-11-18 배포에서 TLS 1.0과 1.1 handshake가 성공했습니다. `TLSv1.2_2021`은 custom domain에서만 적용됩니다(5절).
 - **WAF는 트래픽이 없어도 고정 비용이 듭니다**("소요 시간과 비용"). 로그 버킷은 정리 뒤에도 남습니다(6절).
 - **`PriceClass_100`을 씁니다.** 기본값(모든 edge location)보다 범위가 좁으므로, 방문자가 많은 지역에 맞는 price class를 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)에서 확인하세요.
-- **저장소의 샘플 기록(`demo/site/data/recording.json`)은 여전히 노트북의 CPU 풀에서 만든 기록입니다.** 샘플의 수치는 GPU 샌드박스 성능과 관계가 없으며, 페이지 footer에도 이 내용이 적혀 있습니다.
+- **저장소의 샘플 기록(`demo/site/data/recording.json`)은 여전히 노트북의 CPU pool에서 만든 기록입니다.** 샘플의 수치는 GPU 샌드박스 성능과 관계가 없으며, 페이지 footer에도 이 내용이 적혀 있습니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

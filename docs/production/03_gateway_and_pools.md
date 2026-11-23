@@ -1,9 +1,13 @@
-# Gateway와 샌드박스 풀
+# Gateway와 샌드박스 pool
+
+<span id="gateway와-샌드박스-풀"></span>
 
 !!! info "TL;DR"
     sandbox gateway는 모든 trainer 프로세스의 요청을 받아 호출자를 인증하고, 배치나 GRPO group 단위로 샌드박스 버전을 고정하는 단일 스케줄러입니다. pod마다 평가를 한 번에 하나만 보내고, draining pod는 새 pod로 교체합니다.
 
-## trainer가 풀에 직접 연결할 때
+## trainer가 pool에 직접 연결할 때
+
+<span id="trainer가-풀에-직접-연결할-때"></span>
 
 worker 두 개가 동시에 같은 pod를 빈 것으로 판단하면, 한 요청은 평가를 받고 다른 요청은 `503`을 받아 다시 시도합니다. worker가 늘수록 이 충돌이 배치 시간을 늘릴 수 있습니다. 여기에 채점 중 버전 전환까지 겹치면, 같은 group이 서로 다른 기준으로 비교될 수 있습니다.
 
@@ -42,9 +46,9 @@ gateway는 완료되지 않은 요청을 세고, 빈 pod를 고른 뒤 버전을
 | `POST /v1/evaluate` | Bearer | `{task_id, code, request_id?, group_key, runtime?}` | verdict 하나 | 샘플 단위, `group_key` pin (veRL) |
 | `GET /v1/routing` | Bearer | | `{runtime, version, revision}` | 현재 routing 확인 |
 | `GET /metrics` | Bearer | | Prometheus 형식 | 모니터링 |
-| `GET /healthz`, `GET /readyz` | 없음 | | `readyz`는 유효한 routing 표가 없거나 active 풀의 주소가 표에 없으면 503(표 아래) | kubelet probe |
+| `GET /healthz`, `GET /readyz` | 없음 | | `readyz`는 유효한 routing 표가 없거나 active pool의 주소가 표에 없으면 503(표 아래) | kubelet probe |
 
-- **`readyz`가 503을 반환할 때**: 유효한 routing 표를 한 번도 읽지 못했거나 active 풀의 주소가 표에 없으면 503입니다. 정상 표를 읽은 뒤의 파일 읽기나 JSON 파싱 오류에는 마지막 정상 표를 씁니다.
+- **`readyz`가 503을 반환할 때**: 유효한 routing 표를 한 번도 읽지 못했거나 active pool의 주소가 표에 없으면 503입니다. 정상 표를 읽은 뒤의 파일 읽기나 JSON 파싱 오류에는 마지막 정상 표를 씁니다.
 - **필드 길이**: `task_id` 64자, `code` 32,768자, `request_id` 128자, `group_key` 256자, `runtime` 32자까지입니다.
 - **pod가 평가를 마친 결과**: 샌드박스 verdict(`status`, `correct`, `custom_kernel`, `speedup`, `flags` 등)와 gateway가 붙인 `sandbox_version`, `runtime`, `routing_revision`과 `pod`, `endpoint`, `attempts`, `draining`이 포함됩니다.
 - **`sandbox_error` 결과**: 빈 pod를 얻지 못했거나 샌드박스가 4xx를 반환한 결과에는 `status`, `error`와 gateway가 붙인 세 필드만 있으므로, `status`와 `error`를 먼저 읽고 나머지 필드는 있을 때만 쓰세요.
@@ -64,7 +68,7 @@ gateway 메트릭은 `gateway_evaluations_total{runtime, version, status}`, `gat
 
 ## Group pin과 TTL
 
-**Group pin**은 같은 문제에서 생성한 답을 채점하는 동안 사용할 풀의 버전을 기억하는 기능입니다. **TTL**은 그 기록을 유지하는 시간입니다. 요청이 여러 worker에서 오더라도 같은 group의 비교가 성립하려면 pin이 마지막 평가까지 남아 있어야 합니다.
+**Group pin**은 같은 문제에서 생성한 답을 채점하는 동안 사용할 pool의 버전을 기억하는 기능입니다. **TTL**은 그 기록을 유지하는 시간입니다. 요청이 여러 worker에서 오더라도 같은 group의 비교가 성립하려면 pin이 마지막 평가까지 남아 있어야 합니다.
 
 ```mermaid
 sequenceDiagram
@@ -89,15 +93,15 @@ sequenceDiagram
 - runtime도 첫 요청 때 고정되므로, pin이 생긴 뒤에는 gateway가 요청의 `runtime` 값을 무시합니다.
 - pin은 gateway 메모리에만 저장되므로 gateway가 재시작하면 사라집니다. 이때 진행 중이던 group은 버전이 섞일 수 있습니다.
 - TTL은 group 하나를 채점하는 최대 시간보다 길어야 합니다(TTL이 더 짧으면 마지막 샘플이 새 스냅샷으로 채점됩니다).
-- 이전 풀은 pin이 모두 만료될 때까지 유지하세요. ([05 샌드박스 버전 관리](05_sandbox_updates.md))
-    - **전환 직후 `scripts/ops/rollout.sh <runtime> <from> <to> --finish`로 이전 풀을 0으로 줄이면**: 이전 버전에 고정된 group의 요청을 처리할 pod가 없습니다. gateway는 빈 pod를 최대 600초 기다리지만, veRL 단건 요청은 클라이언트가 기본 300초 안에 응답을 받지 못하면 먼저 `sandbox_error`로 끝납니다.
+- 이전 pool은 pin이 모두 만료될 때까지 유지하세요. ([05 샌드박스 버전 관리](05_sandbox_updates.md))
+    - **전환 직후 `scripts/ops/rollout.sh <runtime> <from> <to> --finish`로 이전 pool을 0으로 줄이면**: 이전 버전에 고정된 group의 요청을 처리할 pod가 없습니다. gateway는 빈 pod를 최대 600초 기다리지만, veRL 단건 요청은 클라이언트가 기본 300초 안에 응답을 받지 못하면 먼저 `sandbox_error`로 끝납니다.
     - **전환을 마무리하는 시점**: TTL(기본 15분)과 진행 중인 배치가 끝나는 시간만큼 기다린 뒤 전환을 마무리합니다.
 
 `evaluate_batch`는 group pin 없이 배치 전체에 스냅샷 하나를 사용합니다.
 
 - **프로세스 하나가 group의 completion을 모두 한 배치로 보낸다면**: 이것으로 충분합니다.
 - **여러 rank로 학습해 한 group의 completion이 여러 rank에 나뉘면(TRL 설정에 따라 다름)**: 스냅샷도 rank마다 따로 만들어집니다. 이 경우 전환 시점에 한 group이 두 버전으로 채점될 수 있습니다.
-- **확인 방법**: 같은 `global_step`에서 모든 rank의 `reward_batch` 이벤트를 모아 `version`과 `served_versions`를 비교하세요. 이 필드는 그 프로세스가 실제로 보낸 항목만 세고, 전부 캐시로 채점한 rank는 이벤트를 남기지 않으므로 그 rank가 어느 풀의 결과를 썼는지는 이 이벤트로 알 수 없습니다.
+- **확인 방법**: 같은 `global_step`에서 모든 rank의 `reward_batch` 이벤트를 모아 `version`과 `served_versions`를 비교하세요. 이 필드는 그 프로세스가 실제로 보낸 항목만 세고, 전부 캐시로 채점한 rank는 이벤트를 남기지 않으므로 그 rank가 어느 pool의 결과를 썼는지는 이 이벤트로 알 수 없습니다.
 
 ## 스케줄링
 
@@ -110,7 +114,7 @@ sequenceDiagram
 
 GPU 타이밍 측정이 다른 평가의 영향을 받지 않도록 pod당 요청을 하나로 제한합니다. 평가 하나가 GPU 하나를 독점하므로 동시 평가 수는 Ready 샌드박스 pod 수와 같습니다. 배치 하나에 걸리는 시간은 대략 ⌈항목 수 / pod 수⌉ × 평가 시간입니다.
 
-[08 런타임 벤치마크](../handson/08_benchmark.md)의 AWS 측정값은 gateway 없이 샌드박스 풀을 직접 호출한 결과입니다. gateway를 거친 배치 시간은 측정하지 않았으니 직접 측정하세요.
+[08 런타임 벤치마크](../handson/08_benchmark.md)의 AWS 측정값은 gateway 없이 샌드박스 pool을 직접 호출한 결과입니다. gateway를 거친 배치 시간은 측정하지 않았으니 직접 측정하세요.
 
 ## Recycling
 
@@ -123,7 +127,7 @@ GPU 타이밍 측정이 다른 평가의 영향을 받지 않도록 pod당 요�
 
 ## 배포
 
-아래 명령은 핸즈온의 `scripts/05_setup_namespaces_auth.sh`(namespace, JWKS, routing 표)와 `scripts/06_deploy_sandboxes.sh`(풀)를 이미 실행했고, `scripts/config.env`에 `CONTROL_IMAGE_URI`(`scripts/03_build_push_images.sh`의 출력)가 있다고 가정합니다. 저장소 루트에서 실행하세요.
+아래 명령은 핸즈온의 `scripts/05_setup_namespaces_auth.sh`(namespace, JWKS, routing 표)와 `scripts/06_deploy_sandboxes.sh`(pool)를 이미 실행했고, `scripts/config.env`에 `CONTROL_IMAGE_URI`(`scripts/03_build_push_images.sh`의 출력)가 있다고 가정합니다. 저장소 루트에서 실행하세요.
 
 ```bash
 source scripts/config.env   # CONTROL_IMAGE_URI, SANDBOX_AUDIENCE
@@ -154,7 +158,7 @@ kubectl -n sandbox get networkpolicy allow-clients-to-sandbox-api -o jsonpath='{
 - **gateway pod가 Ready가 되지 않으면**: [07 Observability와 운영](07_observability_and_operations.md)의 런북을 보세요.
 
 - gateway pod는 `sandbox-routing` ConfigMap이 생길 때까지 ContainerCreating 상태로 있다가 2단계가 끝난 뒤에 시작합니다.
-- 2단계는 `rl-trainer`의 routing 표를 그대로 복사하므로 gateway도 trainer와 같은 active 풀(예: B2의 `gvisor-hyperpod`, C의 `kata-clh-cpu`)을 씁니다. gateway의 `/readyz`는 routing 표를 읽을 수 있는지만 확인하고, active 풀이 실제로 배포돼 있는지는 확인하지 않습니다.
+- 2단계는 `rl-trainer`의 routing 표를 그대로 복사하므로 gateway도 trainer와 같은 active pool(예: B2의 `gvisor-hyperpod`, C의 `kata-clh-cpu`)을 씁니다. gateway의 `/readyz`는 routing 표를 읽을 수 있는지만 확인하고, active pool이 실제로 배포돼 있는지는 확인하지 않습니다.
 - `scripts/05_setup_namespaces_auth.sh`는 routing ConfigMap을 `rl-trainer`에만 만들고, 이후 전환 때는 `scripts/ops/rollout.sh`가 `rl-trainer`와 `sandbox-gateway`를 함께 갱신합니다.
 - `GATEWAY_ALLOWED_SUBJECTS`는 gateway를 호출할 ServiceAccount를 쉼표로 구분한 목록이고, TRL Job과 veRL RayCluster 템플릿은 둘 다 `rl-trainer:grpo-trainer`를 씁니다.
 
@@ -170,7 +174,7 @@ kubectl -n sandbox get networkpolicy allow-clients-to-sandbox-api -o jsonpath='{
 replica 1은 의도한 설계입니다. replica를 늘려야 한다면 다음 순서로 검토하세요.
 
 1. **먼저 수직 확장합니다.** gateway는 대부분 응답을 기다리기만 하므로 병목은 대개 샌드박스 pod 수입니다. limits를 올리고 TokenReview 캐시(60초)가 효과가 있는지 확인합니다.
-2. **풀 단위로 gateway를 나눕니다.** runtime마다 gateway를 따로 두면 pin과 in-flight 정보가 섞이지 않습니다. 이때 trainer마다 다른 `SANDBOX_GATEWAY`를 지정합니다.
+2. **pool 단위로 gateway를 나눕니다.** runtime마다 gateway를 따로 두면 pin과 in-flight 정보가 섞이지 않습니다. 이때 trainer마다 다른 `SANDBOX_GATEWAY`를 지정합니다.
 3. **여러 replica에는 외부 pin 저장소가 필요합니다.** 템플릿 주석에 적힌 대로 group pin을 replica 외부의 공유 저장소로 옮겨야 합니다. 그리고 `group_key` 해시로 같은 group을 같은 replica에 보내거나, 샌드박스의 503 응답과 재시도에 의존해야 합니다(이 저장소에는 구현되어 있지 않습니다).
 
 replica가 1개이므로 gateway가 재시작하는 동안에는 요청이 실패합니다. trainer는 `sandbox_error`를 받습니다. TRL에서는 그 샘플이 reward 계산에서 제외되고, veRL에서는 그 샘플이 format 점수와 오류 표시만 받습니다([04 Reward 무결성](04_reward_integrity.md)).
@@ -243,12 +247,12 @@ volumes:
 | gateway가 403 | subject가 `GATEWAY_ALLOWED_SUBJECTS`에 없음 | 401과 같음 | ServiceAccount를 allowlist에 추가 |
 | 샌드박스가 gateway에 401, 403 | gateway subject가 `SANDBOX_ALLOWED_SUBJECTS`에 없음, JWKS가 갱신되지 않음 | 해당 항목 `sandbox_error` (재시도 없음) | allowlist와 `jwks-sync` CronJob 상태 확인 |
 | 오래 걸린 뒤 `no free sandbox` | Ready pod 없음(0으로 줄임, NotReady), 모두 사용 중 | 최대 600초 뒤 `sandbox_error`(veRL 단건 요청은 클라이언트 timeout 300초) | replicas, NodePool 상한, ResourceQuota, pod readiness 확인 |
-| 배치 전체가 바로 실패 | routing 표에 없는 runtime과 version 조합 | gateway가 500, 그 요청에 실린 항목 모두 `sandbox_error` | `routing.json.tpl`과 배포된 풀을 일치시킴 |
+| 배치 전체가 바로 실패 | routing 표에 없는 runtime과 version 조합 | gateway가 500, 그 요청에 실린 항목 모두 `sandbox_error` | `routing.json.tpl`과 배포된 pool을 일치시킴 |
 | 연결 오류 | gateway 재시작이나 장애 | `sandbox_error`, 진행 중인 group pin 사라짐 | gateway pod 상태와 이벤트 확인 |
 | draining pod가 남음 | pod 삭제 실패 (RBAC, API 오류) | 처리량 감소 | gateway 로그의 `could not recycle`과 Role 확인 |
 | `gpu_fault` 표시 | reference 경로의 CUDA 오류 | 해당 항목 `sandbox_error` | pod가 재활용되는지, 같은 노드에서 반복되는지 확인 |
 
-- **gateway가 401, 403을 반환할 때 캐시 항목**: 다른 풀의 결과라서 다시 채점하려고 보낸 캐시 항목도 `sandbox_error`에 포함됩니다. TRL에서 로컬로 판정한 항목과 그 요청에 싣지 않은 캐시 항목은 기존 결과를 유지합니다.
+- **gateway가 401, 403을 반환할 때 캐시 항목**: 다른 pool의 결과라서 다시 채점하려고 보낸 캐시 항목도 `sandbox_error`에 포함됩니다. TRL에서 로컬로 판정한 항목과 그 요청에 싣지 않은 캐시 항목은 기존 결과를 유지합니다.
 
 ## ❓ 오해
 

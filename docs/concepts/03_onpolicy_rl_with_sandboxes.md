@@ -27,7 +27,7 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
 
 같은 답인데 채점기 버전에 따라 점수가 다르다면 두 답의 점수 차이가 코드 때문인지 채점기 때문인지 알기 어렵습니다. trainer는 배치에 사용할 샌드박스 버전을 먼저 정하고 그 배치가 끝날 때까지 유지합니다. 새 버전으로 전환하는지는 다음 배치에서 확인할 수 있습니다.
 
-예를 들어 v2에서 더 엄격한 정확도 기준을 적용했다고 가정해 봅시다. 성능이 같은 두 답을 각각 v1과 v2로 채점하면 점수 차이에 채점 기준의 변화가 섞입니다. 실습에서는 v2 풀을 따로 띄워 기준 답안으로 비교한 뒤 라우팅을 바꿉니다. 판정이 다르면 기존 풀을 유지한 채 차이의 원인을 확인할 수 있습니다.
+예를 들어 v2에서 더 엄격한 정확도 기준을 적용했다고 가정해 봅시다. 성능이 같은 두 답을 각각 v1과 v2로 채점하면 점수 차이에 채점 기준의 변화가 섞입니다. 실습에서는 v2 pool을 따로 띄워 기준 답안으로 비교한 뒤 라우팅을 바꿉니다. 판정이 다르면 기존 pool을 유지한 채 차이의 원인을 확인할 수 있습니다.
 
 ### v1에서 v2로 전환하는 순서
 
@@ -39,7 +39,7 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
 
 코드가 틀렸다면 그 결과를 점수에 반영합니다. 이 실습의 TRL 경로에서는 샌드박스 장애로 실행 결과를 얻지 못했다면 `sandbox_error`로 남기고 해당 답을 group 평균 계산에서 제외합니다. 이렇게 해야 일시적인 장애가 답의 품질에 대한 신호로 들어가지 않습니다.
 
-[GRPO 핸즈온](../handson/05_grpo_training.md)에서는 `reward_batch`와 학습 step을 함께 보고 [풀 교체 핸즈온](../handson/06_sandbox_update.md)에서는 두 버전을 비교한 뒤 다음 배치가 새 풀을 쓰는지 확인합니다.
+[GRPO 핸즈온](../handson/05_grpo_training.md)에서는 `reward_batch`와 학습 step을 함께 보고 [pool 교체 핸즈온](../handson/06_sandbox_update.md)에서는 두 버전을 비교한 뒤 다음 배치가 새 pool을 쓰는지 확인합니다.
 
 ## `reward_batch` 한 줄로 확인하는 전환
 
@@ -49,7 +49,7 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
 {"batch": 5, "global_step": 4, "version": "v2", "served_versions": {"v2": 14}, "n": 14, "status": {"compile_error": 6, "runtime_error": 8}, "pass_rate": 0.0}
 ```
 
-`served_versions`의 14건이 모두 `v2`이므로 이번 배치가 새 풀로 넘어갔습니다. 컴파일 오류 6건과 실행 오류 8건이어서, 정상적으로 채점했어도 정답 비율은 0입니다. 이 로그의 `pass_rate`는 `ok` 건수를 이번 호출에 들어간 평가 결과 수(`n`)로 나눈 값입니다. TRL이 학습에서 `sandbox_error`의 reward를 제외하는 규칙은 아래 표에서 따로 확인할 수 있습니다. [배치별 원본](../handson/data/grpo-rollout-2026-11-22.json) · [버전 전환 화면](../handson/06_sandbox_update.md#switch-batches)
+`served_versions`의 14건이 모두 `v2`이므로 이번 배치가 새 pool로 넘어갔습니다. 컴파일 오류 6건과 실행 오류 8건이어서, 정상적으로 채점했어도 정답 비율은 0입니다. 이 로그의 `pass_rate`는 `ok` 건수를 이번 호출에 들어간 평가 결과 수(`n`)로 나눈 값입니다. TRL이 학습에서 `sandbox_error`의 reward를 제외하는 규칙은 아래 표에서 따로 확인할 수 있습니다. [배치별 원본](../handson/data/grpo-rollout-2026-11-22.json) · [버전 전환 화면](../handson/06_sandbox_update.md#switch-batches)
 
 <a id="더-살펴보기"></a>
 
@@ -61,18 +61,18 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
 | TRL (Production, gateway) | reward batch | gateway의 `POST /v1/evaluate_batch`가 요청마다 snapshot 하나를 씀 |
 | veRL (gateway) | `group_key` = `{task_id}:{index}` | gateway의 `POST /v1/evaluate`가 group의 첫 샘플을 채점한 버전을 `GATEWAY_GROUP_PIN_TTL_S`(기본 900 s, 15분) 동안 고정 |
 
-- **TRL (핸즈온, direct)**: `KernelRewards`는 다른 풀로 캐시된 결과를 다시 채점해 batch를 한 풀로 맞춥니다. 결과에 `routing_revision`을 기록합니다.
+- **TRL (핸즈온, direct)**: `KernelRewards`는 다른 pool로 캐시된 결과를 다시 채점해 batch를 한 pool로 맞춥니다. 결과에 `routing_revision`을 기록합니다.
 - **veRL (gateway)**: 고정 정보는 gateway 프로세스 메모리에만 있고 TTL은 첫 요청부터 셉니다. gateway는 epoch를 읽지 않으므로, TTL이 지나거나 gateway가 재시작하면 같은 group이어도 다음 요청에서 현재 버전을 다시 고릅니다.
 
 routing 표는 ConfigMap을 마운트한 JSON 파일입니다. subPath로 마운트하면 ConfigMap 변경이 반영되지 않으므로 디렉터리로 마운트합니다. trainer는 snapshot을 만들 때 파일을 다시 읽되, 직전 확인 후 2초가 지나지 않았으면 이전 내용을 씁니다. 내용이 바뀌면 `revision`을 증가시킵니다. TRL은 프로세스마다 생성 batch 전체를 한 번에 채점하므로(TRL 1.18.0 기준), 프로세스 1개인 핸즈온에서는 reward batch 하나에 group 전체가 들어갑니다.
 
-TRL 경로의 `KernelRewards`는 채점 결과를 과제, prompt, completion으로 만든 키로 캐시하고, 결과와 함께 그 결과를 낸 풀(runtime, version)을 저장합니다.
+TRL 경로의 `KernelRewards`는 채점 결과를 과제, prompt, completion으로 만든 키로 캐시하고, 결과와 함께 그 결과를 낸 pool(runtime, version)을 저장합니다.
 
-- **전환 뒤 batch에 새 completion과 이전 풀로 캐시된 completion이 함께 있으면**: 새 completion을 채점한 풀에서 캐시된 것도 다시 채점합니다.
-- **batch의 결과가 모두 캐시에 있고 그 캐시가 한 풀에서 나왔으면**: 샌드박스를 부르지 않고 그 결과를 씁니다. 이때는 전환 뒤에도 그 batch가 이전 풀 결과로 채점되고 `reward_batch` 줄도 나오지 않습니다.
+- **전환 뒤 batch에 새 completion과 이전 pool로 캐시된 completion이 함께 있으면**: 새 completion을 채점한 pool에서 캐시된 것도 다시 채점합니다.
+- **batch의 결과가 모두 캐시에 있고 그 캐시가 한 pool에서 나왔으면**: 샌드박스를 부르지 않고 그 결과를 씁니다. 이때는 전환 뒤에도 그 batch가 이전 pool 결과로 채점되고 `reward_batch` 줄도 나오지 않습니다.
 - **다시 채점하는 동안 전환이 또 일어나면**: 세 번째 시도에서 batch 전체를 요청 한 번으로 보냅니다.
 
-요청 한 번은 풀 하나가 처리하므로 한 batch는 항상 한 버전으로 채점됩니다.
+요청 한 번은 pool 하나가 처리하므로 한 batch는 항상 한 버전으로 채점됩니다.
 
 !!! note "group이 여러 프로세스에 나뉘는 구성"
     프로세스마다 snapshot을 따로 만들므로 전환 직후에는 한 group이 두 버전으로 나뉘어 채점될 수 있습니다. `routing_revision`은 프로세스마다 따로 세는 값이라 rank끼리 비교할 수 없습니다. 같은 `global_step`에서 모든 rank의 `version`과 `served_versions`를 비교하거나, veRL 경로처럼 `group_key` 단위로 고정하세요.
@@ -90,7 +90,7 @@ TRL 경로의 `KernelRewards`는 채점 결과를 과제, prompt, completion으�
     - **`--finish`**: v1의 replica 수를 0으로 줄이고 Deployment는 삭제하지 않습니다. gateway 경로(veRL)에서는 전환 뒤 `GATEWAY_GROUP_PIN_TTL_S`(기본 900초)가 지나 v1에 고정된 요청이 끝난 다음에 실행하세요.
     - **롤백**: 인자 순서를 바꿔 실행하면 v1 설정으로 돌아갑니다. 스크립트는 v1을 현재 `SANDBOX_IMAGE_URI`로 다시 배포하므로, 이미지도 바꾸는 배포라면 버전 파일마다 그 버전의 이미지 URI를 고정해 두세요([Production 05](../production/05_sandbox_updates.md)).
 
-기본 gVisor 풀에서는 `g5.xlarge` 2대의 GPU를 v1 pod 2개가 이미 쓰고 있습니다. 그대로 실행하면 v2 pod가 Pending에 머물고, 진행 없이 30분(Deployment `progressDeadlineSeconds` 1800초)이 지나면 1단계의 `rollout status`가 실패해 전환까지 가지 못합니다. 먼저 노드 그룹 `sandbox-gvisor`를 4대로 늘리세요. 시나리오 A에서는 이때 G/VT 쿼터가 24 vCPU 필요합니다(절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)).
+기본 gVisor pool에서는 `g5.xlarge` 2대의 GPU를 v1 pod 2개가 이미 쓰고 있습니다. 그대로 실행하면 v2 pod가 Pending에 머물고, 진행 없이 30분(Deployment `progressDeadlineSeconds` 1800초)이 지나면 1단계의 `rollout status`가 실패해 전환까지 가지 못합니다. 먼저 노드 그룹 `sandbox-gvisor`를 4대로 늘리세요. 시나리오 A에서는 이때 G/VT 쿼터가 24 vCPU 필요합니다(절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)).
 
 아래 첫 번째 명령은 1~4단계, 두 번째 명령은 5단계, 세 번째 명령은 롤백을 실행합니다.
 
@@ -135,8 +135,8 @@ v2 예시 설정에서는 pod가 200회 평가 후 draining 상태로 바뀝니�
 
 ## 적용 범위와 한계
 
-- **로컬 테스트로 확인한 것:** routing 표의 reload와 `revision` 증가, `sandbox_error`를 `None`으로 처리하는 reward, 두 CPU 풀 사이의 golden probe와 parity, routing 전환 중 gateway의 group 고정을 pytest로 확인했습니다. TRL 경로는 프로세스 1개 dry run으로 구성 요소 연결만 확인했습니다.
-- **AWS에서 실행한 것:** 실습 계정에서 gVisor v1 풀을 배포해 `scripts/ops/verify.sh gvisor v1`을 통과했고, `g5.2xlarge` trainer로 GRPO 5 step을 마쳤습니다([실행 기록](../reference/sources.md#aws-실행-기록)).
+- **로컬 테스트로 확인한 것:** routing 표의 reload와 `revision` 증가, `sandbox_error`를 `None`으로 처리하는 reward, 두 CPU pool 사이의 golden probe와 parity, routing 전환 중 gateway의 group 고정을 pytest로 확인했습니다. TRL 경로는 프로세스 1개 dry run으로 구성 요소 연결만 확인했습니다.
+- **AWS에서 실행한 것:** 실습 계정에서 gVisor v1 pool을 배포해 `scripts/ops/verify.sh gvisor v1`을 통과했고, `g5.2xlarge` trainer로 GRPO 5 step을 마쳤습니다([실행 기록](../reference/sources.md#aws-실행-기록)).
 - **학습 중 버전 전환**　16스텝 동안 배치 1~4는 v1, 5~16은 v2에서 채점됐고, 학습이 끝난 뒤 v1으로 복구했습니다. [전환과 롤백](../handson/06_sandbox_update.md#rollback-run)
 
 ??? note "참고 자료"

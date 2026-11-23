@@ -1,7 +1,7 @@
 # Production 레퍼런스 아키텍처
 
 !!! info "TL;DR"
-    운영 환경에서는 trainer가 sandbox gateway 하나만 호출합니다. 샌드박스 풀은 (runtime, version)마다 Deployment 하나로 배포하고, 풀이 쓰는 노드는 Karpenter NodePool이 0대부터, 배치할 pod 수에 맞춰 늘리고 줄입니다.
+    운영 환경에서는 trainer가 sandbox gateway 하나만 호출합니다. 샌드박스 pool은 (runtime, version)마다 Deployment 하나로 배포하고, pool이 쓰는 노드는 Karpenter NodePool이 0대부터, 배치할 pod 수에 맞춰 늘리고 줄입니다.
 
 ## 핸즈온을 확장할 때 생기는 문제
 
@@ -21,15 +21,15 @@ gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니�
     - **노드 그룹 desired 값을 수동으로 조정**: GPU 노드가 부하와 상관없이 계속 떠 있거나 늦게 늘어납니다.
     - **`scripts/ops/sync_jwks.sh`를 수동으로 실행**: issuer 서명 키가 바뀌면 새 공개 키를 반영하기 전까지 샌드박스가 새 키로 서명한 토큰을 모두 거부합니다(fail closed).
 
-    - **스케줄링과 버전 고정을 gateway 한곳에서 처리합니다.** gateway는 pod마다 평가를 한 번에 하나만 보내고, 배치 요청 하나를 routing 스냅샷 하나로 채점합니다. TRL은 rank마다 reward batch 하나를 한 풀의 결과로 맞추고, veRL 샘플은 `group_key` pin이 유효한 동안 같은 버전에 고정합니다.
+    - **스케줄링과 버전 고정을 gateway 한곳에서 처리합니다.** gateway는 pod마다 평가를 한 번에 하나만 보내고, 배치 요청 하나를 routing 스냅샷 하나로 채점합니다. TRL은 rank마다 reward batch 하나를 한 pool의 결과로 맞추고, veRL 샘플은 `group_key` pin이 유효한 동안 같은 버전에 고정합니다.
     - **노드 수가 샌드박스 pod 수에 맞춰 바뀝니다.** Karpenter NodePool이 샌드박스 노드를 0대부터 띄우고, 부팅이 느린 `g4dn.metal`은 warm placeholder로 한 대를 미리 확보해 둡니다.
-    - **학습 요청은 gateway를 거쳐서만 샌드박스에 닿습니다.** 운영 구성의 NetworkPolicy는 샌드박스 pod로 들어오는 연결 중 gateway pod만 허용합니다. 검증과 parity를 실행하는 `sandbox-probe` Job은 별도 정책으로 허용해야 합니다([03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)).
+    - **학습 요청은 gateway를 거쳐서만 샌드박스에 닿습니다.** 운영 구성의 NetworkPolicy는 샌드박스 pod로 들어오는 연결 중 gateway pod만 허용합니다. 검증과 parity를 실행하는 `sandbox-probe` Job은 별도 정책으로 허용해야 합니다([03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)).
 
-**읽기 전에**　이 페이지는 핸즈온 구성과 비교하며 설명하므로 [핸즈온 00 전체 흐름](../handson/00_overview.md), [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md), [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)를 먼저 읽으세요.
+**읽기 전에**　이 페이지는 핸즈온 구성과 비교하며 설명하므로 [핸즈온 00 전체 흐름](../handson/00_overview.md), [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md), [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)를 먼저 읽으세요.
 
 ??? note "용어"
     - **sandbox gateway**: trainer와 샌드박스 pod 사이에 있는 HTTP 서비스입니다. 호출자를 인증하고, 요청을 보낼 pod를 고르고, 샌드박스 버전을 고정합니다.
-    - **샌드박스 풀**: 같은 runtime과 version으로 실행되는 샌드박스 pod 묶음입니다. Deployment 하나와 headless Service 하나로 구성합니다.
+    - **샌드박스 pool**: 같은 runtime과 version으로 실행되는 샌드박스 pod 묶음입니다. Deployment 하나와 headless Service 하나로 구성합니다.
     - **Karpenter NodePool**: 어떤 EC2 인스턴스를 언제 띄우고 언제 반납할지 정하는 Karpenter 규칙입니다.
     - **RuntimeClass**: pod를 어떤 컨테이너 런타임(runc, gVisor, Kata)으로 실행할지 지정하는 Kubernetes 객체입니다.
     - **headless Service**: 가상 IP 없이, DNS가 Ready pod의 IP 목록을 그대로 반환하는 Service입니다. 클라이언트가 pod를 직접 고를 수 있습니다.
@@ -46,7 +46,7 @@ gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니�
 
 사용자나 worker를 늘리기 전에는 [보안 경계](02_security.md)와 [gateway의 요청 흐름](03_gateway_and_pools.md)을 함께 검토하세요. 응답을 받기 시작하면 [채점 기준](04_reward_integrity.md)과 [로그에서 볼 신호](07_observability_and_operations.md)를 확인해, step이 진행되는 동안 학습에 쓸 점수가 실제로 들어오는지 봅니다.
 
-이미 운영 중인 run을 바꾸는 경우에는 [버전 전환](05_sandbox_updates.md)의 확인과 롤백 절차부터 읽으세요. worker를 늘릴 계획이라면 [veRL 확장](06_scaling_with_verl.md)의 풀 용량과 checkpoint 조건을, 노드를 미리 켜 둘지 고민한다면 [비용](08_cost.md)의 대기 시간 계산을 참고하세요.
+이미 운영 중인 run을 바꾸는 경우에는 [버전 전환](05_sandbox_updates.md)의 확인과 롤백 절차부터 읽으세요. worker를 늘릴 계획이라면 [veRL 확장](06_scaling_with_verl.md)의 pool 용량과 checkpoint 조건을, 노드를 미리 켜 둘지 고민한다면 [비용](08_cost.md)의 대기 시간 계산을 참고하세요.
 
 ## 전체 구성
 
@@ -54,7 +54,7 @@ gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니�
 
 실선은 평가 요청, 점선은 Kubernetes API 호출이며, `aud`는 요청 토큰의 audience입니다.
 
-![rl-trainer namespace(trainer NodePool g6e, p5 또는 HyperPod 인스턴스 그룹)의 TRL ranks(Job)와 veRL Ray workers(RayCluster)는 aud가 gpu-sandbox-gateway인 토큰으로 sandbox-gateway namespace(system 노드)의 sandbox gateway만 호출합니다. sandbox gateway는 TokenReview, routing, group pin, pod당 요청 1건, recycling을 처리합니다. gateway는 aud가 gpu-sandbox인 토큰으로 sandbox namespace의 풀을 호출합니다. 풀은 sandbox-kata-qemu-v1(kata-qemu-nvidia-gpu), sandbox-gvisor-v1, v2(gvisor), sandbox-kata-clh-cpu-v1(kata-clh)이고, warm placeholder가 metal 노드 한 대를 확보해 둡니다. 풀 아래에는 Karpenter NodePool sandbox-kata-gpu(g4dn.metal), sandbox-gvisor(g5.xlarge, g5.2xlarge), sandbox-kata-cpu(c8i, m8i, r8i)가 있습니다. 점선은 Kubernetes API 호출입니다. gateway는 TokenReview와 draining pod 삭제를 호출하고, jwks-sync CronJob은 JWKS 읽기와 ConfigMap patch를 호출합니다.](../images/figures/production-00_architecture--overview.ko.svg)
+![rl-trainer namespace(trainer NodePool g6e, p5 또는 HyperPod 인스턴스 그룹)의 TRL ranks(Job)와 veRL Ray workers(RayCluster)는 aud가 gpu-sandbox-gateway인 토큰으로 sandbox-gateway namespace(system 노드)의 sandbox gateway만 호출합니다. sandbox gateway는 TokenReview, routing, group pin, pod당 요청 1건, recycling을 처리합니다. gateway는 aud가 gpu-sandbox인 토큰으로 sandbox namespace의 pool을 호출합니다. pool은 sandbox-kata-qemu-v1(kata-qemu-nvidia-gpu), sandbox-gvisor-v1, v2(gvisor), sandbox-kata-clh-cpu-v1(kata-clh)이고, warm placeholder가 metal 노드 한 대를 확보해 둡니다. pool 아래에는 Karpenter NodePool sandbox-kata-gpu(g4dn.metal), sandbox-gvisor(g5.xlarge, g5.2xlarge), sandbox-kata-cpu(c8i, m8i, r8i)가 있습니다. 점선은 Kubernetes API 호출입니다. gateway는 TokenReview와 draining pod 삭제를 호출하고, jwks-sync CronJob은 JWKS 읽기와 ConfigMap patch를 호출합니다.](../images/figures/production-00_architecture--overview.ko.svg)
 
 *그림: trainer는 gateway만 호출하고, trainer의 평가 요청은 gateway를 거쳐 샌드박스 pod에 전달됩니다.*
 
@@ -64,7 +64,7 @@ gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니�
 |---|---|---|---|
 | Trainer | `rl-trainer` | rollout을 만들고 reward 계산을 위해 gateway를 호출합니다. | [`job-grpo.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/trainer/job-grpo.yaml.tpl) (TRL), [`raycluster-verl.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/raycluster-verl.yaml.tpl) (veRL) |
 | Sandbox gateway | `sandbox-gateway` | TokenReview 인증, routing 스냅샷, group pin, pod당 요청 1건, draining pod 재활용 | [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py), [`gateway.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/gateway.yaml.tpl) |
-| 샌드박스 풀 | `sandbox` | (runtime, version)마다 Deployment 하나와 headless Service 하나 | [`deployment.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/deployment.yaml.tpl) |
+| 샌드박스 pool | `sandbox` | (runtime, version)마다 Deployment 하나와 headless Service 하나 | [`deployment.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/deployment.yaml.tpl) |
 | JWKS 동기화 | `sandbox-gateway` | 매시 17분에 issuer 공개 키를 `sandbox-auth-jwks` ConfigMap에 반영 | [`jwks-sync.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/jwks-sync.yaml.tpl) |
 | 용량 보호 장치 | `sandbox` | PriorityClass, PDB, ResourceQuota, warm placeholder | [`pool-hardening.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/pool-hardening.yaml), [`warm-capacity.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/warm-capacity.yaml) |
 | NodePool, EC2NodeClass | 클러스터 범위 | 샌드박스 노드 세 종류와 trainer 노드 | [`nodepools.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodepools.yaml), [`nodeclasses.yaml.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/karpenter/nodeclasses.yaml.tpl) |
@@ -90,14 +90,14 @@ taint, label, consolidation, `expireAfter`, userData 설정은 [01 용량과 노
 | 샌드박스 ingress | `rl-trainer`의 `gpusandbox/client=true` pod 허용 | `sandbox-gateway`의 gateway pod만 허용 (같은 이름 `allow-clients-to-sandbox-api`를 덮어씀) | 학습 요청이 샌드박스에 닿는 경로를 gateway 하나로 줄입니다. |
 | JWKS | `scripts/ops/sync_jwks.sh` 수동 실행 | `jwks-sync` CronJob (`17 * * * *`) | 서명 키가 회전되면 자동으로 반영합니다. |
 | 공유 저장소 | `emptyDir` (모델 캐시, 출력) | Amazon FSx 같은 공유 파일 시스템의 PVC (veRL 템플릿은 `/fsx`에 마운트) | 노드가 바뀌어도 checkpoint와 캐시가 유지됩니다. |
-| 런타임 | 실습마다 한 런타임 | 런타임별 풀, 선택적으로 CPU 계층과 GPU 계층 | 측정이 필요한 단계만 GPU를 씁니다. |
+| 런타임 | 실습마다 한 런타임 | 런타임별 pool, 선택적으로 CPU 계층과 GPU 계층 | 측정이 필요한 단계만 GPU를 씁니다. |
 | 버전 고정 | trainer가 배치 하나를 한 버전으로 채점 | gateway가 배치 스냅샷과 `group_key` pin을 모두 제공 | 샘플 단위로 채점하는 veRL을 지원합니다. |
 | Pod 재활용 | 없음 (draining pod가 NotReady로 남음) | gateway가 draining pod를 삭제 | Kata에서는 pod를 새로 만들면 VM도 새로 만들어집니다. |
 | 용량 완충 | 없음 | warm placeholder, PDB, ResourceQuota | 요청이 metal 노드 부팅을 기다리지 않게 하고, pod 수와 리소스 사용량이 한도를 넘지 않게 합니다. |
 
 노드 공급은 다음과 같이 바뀝니다.
 
-- **풀의 replica를 늘려 pod를 놓을 자리가 부족해지면**: Karpenter가 노드를 추가합니다.
+- **pool의 replica를 늘려 pod를 놓을 자리가 부족해지면**: Karpenter가 노드를 추가합니다.
 - **Karpenter가 만든 노드가 비면**: 회수 대상이 됩니다.
 - **핸즈온 CDK가 만든 관리형 노드 그룹(A와 B1의 `sandbox-gvisor` 등)**: Karpenter가 줄이지 않으므로 사용량을 보고 desired 값을 직접 줄이세요.
 - **replica 수가 그대로면**: 평가 요청은 기존 pod를 기다립니다.
@@ -125,8 +125,8 @@ EC2 문서가 성능에 민감한 가상화 워크로드에 bare metal을 권장
     **직접 만들어야 하는 것:** 두 단계 파이프라인 자체입니다.
 
     - **harness와 이미지**: harness에는 "컴파일만 하는" 모드가 없고, 샌드박스 이미지(`pytorch/pytorch:*-runtime`)에는 보통 `nvcc`가 없습니다(태그별 포함 여부 재확인).
-    - **version 이름**: routing 문서의 active version 하나가 모든 runtime에 적용되므로 CPU 풀도 GPU 풀과 같은 version 이름으로 배포하세요.
-    - **CPU 풀 배포**: [`routing.json.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/routing.json.tpl)은 CPU runtime 세 종류(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)에도 `v1`과 `v2` 주소를 모두 등록해 두지만, 그 주소의 풀은 직접 배포해야 합니다. active version을 바꾸기 전에 사용할 CPU 풀의 해당 버전부터 배포하세요.
+    - **version 이름**: routing 문서의 active version 하나가 모든 runtime에 적용되므로 CPU pool도 GPU pool과 같은 version 이름으로 배포하세요.
+    - **CPU pool 배포**: [`routing.json.tpl`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/base/routing.json.tpl)은 CPU runtime 세 종류(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)에도 `v1`과 `v2` 주소를 모두 등록해 두지만, 그 주소의 pool은 직접 배포해야 합니다. active version을 바꾸기 전에 사용할 CPU pool의 해당 버전부터 배포하세요.
 
 ## 요청 흐름
 
@@ -151,14 +151,14 @@ sequenceDiagram
 
 *그림: 배치 요청 하나는 routing 스냅샷 하나로 채점되고, pod 하나에는 한 번에 평가 하나만 갑니다.*
 
-veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니다. gateway는 같은 key의 샘플을 첫 요청 때 만든 스냅샷으로 채점합니다(API와 pin 규칙은 [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)).
+veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니다. gateway는 같은 key의 샘플을 첫 요청 때 만든 스냅샷으로 채점합니다(API와 pin 규칙은 [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)).
 
 !!! tip "에피소드마다 샌드박스 하나가 필요할 때"
-    multi-turn agentic RL처럼 한 에피소드가 커널을 여러 번 제출하고 피드백을 읽는다면, 요청마다 빈 pod를 고르는 이 풀보다 미리 실행해 둔 샌드박스를 에피소드마다 하나씩 할당받는 방식이 적합합니다. kubernetes-sigs/agent-sandbox의 `SandboxWarmPool`과 `SandboxClaim`을 쓰는 확장 방법은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 설명합니다. 로컬 테스트는 claim API를 대역(fake)으로 두고, loopback CPU 샌드박스 서버 두 개에서 에피소드 두 개를 끝까지 실행했습니다. 클러스터에서는 실행하지 않았습니다.
+    multi-turn agentic RL처럼 한 에피소드가 커널을 여러 번 제출하고 피드백을 읽는다면, 요청마다 빈 pod를 고르는 이 pool보다 미리 실행해 둔 샌드박스를 에피소드마다 하나씩 할당받는 방식이 적합합니다. kubernetes-sigs/agent-sandbox의 `SandboxWarmPool`과 `SandboxClaim`을 쓰는 확장 방법은 [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)에서 설명합니다. 로컬 테스트는 claim API를 대역(fake)으로 두고, loopback CPU 샌드박스 서버 두 개에서 에피소드 두 개를 끝까지 실행했습니다. 클러스터에서는 실행하지 않았습니다.
 
 ## 시나리오 B: HyperPod에서 학습할 때
 
-- **B1**: trainer만 HyperPod 인스턴스 그룹으로 옮기고, 샌드박스 풀은 같은 EKS 클러스터의 EC2 NodePool에 둡니다. veRL RayCluster 템플릿은 `VERL_NODE_SELECTOR`로 HyperPod 노드를 지정합니다.
+- **B1**: trainer만 HyperPod 인스턴스 그룹으로 옮기고, 샌드박스 pool은 같은 EKS 클러스터의 EC2 NodePool에 둡니다. veRL RayCluster 템플릿은 `VERL_NODE_SELECTOR`로 HyperPod 노드를 지정합니다.
 - **B2**는 시스템 Pod, 학습, gVisor 채점을 모두 HyperPod 워커에서 실행합니다. 두 채점 노드는 지원 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다. [관리형 B2 배포](../handson/07_hyperpod_b2.md)
 
 ## 적용 순서
@@ -171,14 +171,14 @@ veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니�
 4. `scripts/05_setup_namespaces_auth.sh`로 namespace, NetworkPolicy, JWKS, routing 표를 만듭니다. 이 스크립트는 최초 구성 때 실행합니다.
     - **7단계에서 gateway를 배포한 뒤 다시 실행하면**: `allow-clients-to-sandbox-api` NetworkPolicy가 trainer pod의 직접 접근을 허용하는 핸즈온 정책으로 돌아가고, `rl-trainer`의 routing 표도 `ACTIVE_VERSION`(기본 `v1`)으로 다시 만들어집니다.
     - **그 뒤에 공개 키만 갱신할 때**: `scripts/ops/sync_jwks.sh`를 쓰세요.
-5. `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]`로 풀을 배포합니다. 스크립트가 rollout 후 출력하는 pod 목록에서 모든 pod가 READY `1/1`이어야 합니다.
-    - **Kata GPU 풀(`kata-qemu`)을 처음 배포할 때 metal 노드가 0대이면**: 6단계의 placeholder(`pool-hardening.yaml`, `warm-capacity.yaml`)를 먼저 적용하세요.
+5. `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]`로 pool을 배포합니다. 스크립트가 rollout 후 출력하는 pod 목록에서 모든 pod가 READY `1/1`이어야 합니다.
+    - **Kata GPU pool(`kata-qemu`)을 처음 배포할 때 metal 노드가 0대이면**: 6단계의 placeholder(`pool-hardening.yaml`, `warm-capacity.yaml`)를 먼저 적용하세요.
     - **이유**: pod가 요청하는 `nvidia.com/pgpu` 리소스와 RuntimeClass가 고르는 `nvidia.com/cc.ready.state` label은 metal 노드에서 GPU Operator가 만들기 때문에, 그런 노드가 없으면 Karpenter가 노드를 띄우지 않습니다. placeholder는 CPU와 메모리만 요청하므로 Karpenter가 metal 노드를 띄웁니다.
 6. pool hardening과 warm capacity를 적용합니다. ([01 용량과 노드 관리](01_capacity_and_nodes.md))
-7. gateway와 JWKS CronJob을 배포하고 trainer를 gateway 모드로 바꿉니다. ([03 Gateway와 샌드박스 풀](03_gateway_and_pools.md))
+7. gateway와 JWKS CronJob을 배포하고 trainer를 gateway 모드로 바꿉니다. ([03 Gateway와 샌드박스 pool](03_gateway_and_pools.md))
 8. 보안 통제와 reward 통제를 점검합니다. ([02 보안](02_security.md), [04 Reward 무결성](04_reward_integrity.md))
 
-진행 중에 문제가 생기면 [문제 해결](../reference/troubleshooting.md)에서 증상으로 원인을 찾으세요. 예를 들어 5단계에서 pod가 `0/1`로 남으면 "샌드박스 풀과 readiness" 표를 보세요.
+진행 중에 문제가 생기면 [문제 해결](../reference/troubleshooting.md)에서 증상으로 원인을 찾으세요. 예를 들어 5단계에서 pod가 `0/1`로 남으면 "샌드박스 pool과 readiness" 표를 보세요.
 
 ## 적용 범위와 한계
 
@@ -196,7 +196,7 @@ veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니�
     NetworkPolicy와 토큰 검증은 서로 독립된 방어 층입니다. 한 층이 잘못 설정돼도 다른 층이 요청을 차단하도록 둘 다 적용합니다. 샌드박스 pod는 gateway 토큰(audience `gpu-sandbox`)을 JWKS로 직접 검증하고 허용 목록 밖의 subject를 거부합니다.
 
 !!! question "❓ 오해: gateway replica를 늘리면 평가 처리량이 늘어난다"
-    처리량 상한은 Ready 상태인 샌드박스 pod 수로 정해집니다(pod당 평가 1건). gateway는 group pin과 pod별 in-flight 정보를 메모리에 저장하므로 의도적으로 replica 1개로 운영합니다. 확장 방법은 [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)에서 설명합니다.
+    처리량 상한은 Ready 상태인 샌드박스 pod 수로 정해집니다(pod당 평가 1건). gateway는 group pin과 pod별 in-flight 정보를 메모리에 저장하므로 의도적으로 replica 1개로 운영합니다. 확장 방법은 [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)에서 설명합니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

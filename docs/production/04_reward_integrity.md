@@ -198,7 +198,7 @@ flowchart LR
 | 정책 위반 | trainer에서 미리 검사해 샌드박스 왕복 없이 `policy_violation` | 같음 (`check_source`) |
 | `sandbox_error` | 세 요소 모두 `None`. TRL은 모두 `None`인 샘플을 채점 불가로 보고 group baseline에서 제외하며 advantage를 0으로 설정 | "skip" 신호가 없어서 format 점수 0.1과 `sandbox_error: 1`을 반환 |
 
-- **TRL의 배치 호출 횟수**: 보통 1회입니다. 한 풀의 캐시로 끝나면 0회, 버전 전환으로 재채점하면 최대 3회입니다.
+- **TRL의 배치 호출 횟수**: 보통 1회입니다. 한 pool의 캐시로 끝나면 0회, 버전 전환으로 재채점하면 최대 3회입니다.
 
 veRL에서 인프라 오류가 난 샘플은 0.1을 받습니다. 같은 group의 정상 채점 샘플보다 낮을 수 있고, 코드를 내지 않은 `no_code`(0점)보다는 높습니다. 이 차이의 영향과 대응 방법은 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 설명합니다.
 
@@ -212,8 +212,8 @@ verdict의 `flags`는 아직 지표로 집계되지 않으니, reward hacking �
 2. **대응 코드를 넣고 로컬 테스트를 추가합니다.** harness나 정책을 고친 뒤 `tests/test_policy.py`나 `tests/test_harness_cpu.py`에 같은 사례를 추가합니다.
 3. **새 버전으로 배포합니다.** 측정 계약이 바뀌므로 `HARNESS_VERSION`을 올리고 새 이미지로 새 샌드박스 버전을 배포합니다.
     - **parity가 실패하는 경우**: 구버전이 새 사례의 기대 `status`나 `custom_kernel` 값을 내지 못하면 `parity`가 실패합니다.
-    - **parity가 비교하는 값**: 기대 `status`, 지정한 `custom_kernel`, 두 풀의 speedup 차이뿐이라, 새 `flags`만 붙는 변경이면 parity는 통과하고 그 flag는 따로 확인해야 합니다.
-    - **parity가 실패하면**: `scripts/ops/rollout.sh`는 전환하지 않습니다. 이때는 `scripts/ops/verify.sh`로 새 풀을 검증한 뒤 [05 샌드박스 버전 관리](05_sandbox_updates.md)의 routing 갱신 명령으로 전환하고, "reward가 의도적으로 바뀌는 harness 변경" 절차에 따라 기록하세요.
+    - **parity가 비교하는 값**: 기대 `status`, 지정한 `custom_kernel`, 두 pool의 speedup 차이뿐이라, 새 `flags`만 붙는 변경이면 parity는 통과하고 그 flag는 따로 확인해야 합니다.
+    - **parity가 실패하면**: `scripts/ops/rollout.sh`는 전환하지 않습니다. 이때는 `scripts/ops/verify.sh`로 새 pool을 검증한 뒤 [05 샌드박스 버전 관리](05_sandbox_updates.md)의 routing 갱신 명령으로 전환하고, "reward가 의도적으로 바뀌는 harness 변경" 절차에 따라 기록하세요.
 
 ## 확인 방법
 
@@ -252,7 +252,7 @@ verdict를 reward로 바꾸는 부분은 `tests/test_routing_and_rewards.py`가 
 
 ### 클러스터에서
 
-아래 명령은 풀의 격리, egress 차단, 인증된 API로 보낸 golden verdict, 다른 namespace의 접속 차단을 차례로 확인합니다. 2026년 11월 18일 us-west-2 EKS에서 gVisor v1 풀(A10G)과 Kata GPU v1 풀(T4)에 실행해 golden 6개가 모두 `PASS`였습니다.
+아래 명령은 pool의 격리, egress 차단, 인증된 API로 보낸 golden verdict, 다른 namespace의 접속 차단을 차례로 확인합니다. 2026년 11월 18일 us-west-2 EKS에서 gVisor v1 pool(A10G)과 Kata GPU v1 pool(T4)에 실행해 golden 6개가 모두 `PASS`였습니다.
 
 ```bash
 scripts/ops/verify.sh gvisor v1
@@ -261,9 +261,9 @@ scripts/ops/verify.sh gvisor v1
 **확인할 것:**
 
 - 3단계 출력에서 golden마다 `PASS` 줄이 출력되어야 합니다.
-- GPU 풀에서는 6개, CPU 풀(`*-cpu`)에서는 GPU 전용 2개를 제외한 4개가 실행됩니다.
+- GPU pool에서는 6개, CPU pool(`*-cpu`)에서는 GPU 전용 2개를 제외한 4개가 실행됩니다.
 
-아래 형식은 `src/gpusandbox/tools.py`의 출력 형식이고, speedup 값은 풀마다 다릅니다.
+아래 형식은 `src/gpusandbox/tools.py`의 출력 형식이고, speedup 값은 pool마다 다릅니다.
 
 ```text
 PASS vector_add_triton            status=ok                speedup=<value>
@@ -277,10 +277,10 @@ PASS read_host_file               status=policy_violation  speedup=None
 - `vector_add_triton`과 `relu_bias_triton`의 PASS는 그 노드에서 Triton 커널이 컴파일, 실행되고 커스텀 커널로 판정됐다는 뜻입니다.
 - `relu_bias_benchmark_cheat`는 네 번째 `forward` 호출부터 오답을 냅니다. probe는 `status`만 비교합니다.
     - **정확성 seed가 3개인 v1**: 정확성 검사를 통과하고 측정 구간의 checksum 비교에서 `wrong_answer`가 됩니다.
-    - **seed가 5개인 v2**: 정확성 검사에서 이미 `wrong_answer`가 되므로, v2 풀의 `PASS`만으로는 checksum 검사가 작동했다고 판정할 수 없습니다.
-- Kata GPU 풀은 `scripts/ops/verify.sh kata-qemu v1`로 같은 확인을 합니다.
+    - **seed가 5개인 v2**: 정확성 검사에서 이미 `wrong_answer`가 되므로, v2 pool의 `PASS`만으로는 checksum 검사가 작동했다고 판정할 수 없습니다.
+- Kata GPU pool은 `scripts/ops/verify.sh kata-qemu v1`로 같은 확인을 합니다.
 
-**문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness", "401, 403 응답" 표를 보세요.
+**문제가 생기면:** [문제 해결](../reference/troubleshooting.md)의 "샌드박스 pool과 readiness", "401, 403 응답" 표를 보세요.
 
 ## 적용 범위와 한계
 
@@ -290,10 +290,10 @@ PASS read_host_file               status=policy_violation  speedup=None
 - **측정 입력은 요청마다 새 seed로 만듭니다.** 후보가 그 입력을 미리 알아낼 수 없다는 가정은 정적 정책과 프로세스 분리에 의존합니다. 이 가정이 깨질 때의 마지막 안전장치는 v2의 10배 상한이고, v1에는 상한이 없습니다.
 - **L2 cache를 비우지 않습니다.** KernelBench는 CUDA event로 측정할 때 L2를 flush하지만, 이 harness는 iteration마다 입력만 바꾸고 flush하지 않습니다. 그 영향은 측정하지 않았습니다.
 - **실행 시간이 아주 짧은 커널은 측정 해상도가 낮습니다.** host clock은 launch overhead를 포함하므로, 실행 시간이 짧은 커널일수록 speedup이 1에 가깝게 보일 수 있습니다(추론).
-- **speedup은 측정한 GPU에서만 의미가 있습니다.** A10G(gVisor 풀)와 T4(Kata 풀)의 speedup은 서로 다른 reward 함수로 다루세요.
-- **GPU 경로는 로컬 테스트 범위 밖입니다.** Triton launch counter, CUDA stream을 쓰는 제출물, 실제 speedup은 CPU 테스트로 확인할 수 없습니다. 2026년 11월 18일 EKS의 v1 풀에서는 A10G와 T4 모두 Triton 커널이 커스텀 커널로 판정됐고, `relu_bias_triton`의 speedup은 A10G 1.7819, T4 1.7882였습니다. 추가 CUDA stream을 쓰는 제출물은 GPU에서 실행하지 않았습니다.
+- **speedup은 측정한 GPU에서만 의미가 있습니다.** A10G(gVisor pool)와 T4(Kata pool)의 speedup은 서로 다른 reward 함수로 다루세요.
+- **GPU 경로는 로컬 테스트 범위 밖입니다.** Triton launch counter, CUDA stream을 쓰는 제출물, 실제 speedup은 CPU 테스트로 확인할 수 없습니다. 2026년 11월 18일 EKS의 v1 pool에서는 A10G와 T4 모두 Triton 커널이 커스텀 커널로 판정됐고, `relu_bias_triton`의 speedup은 A10G 1.7819, T4 1.7882였습니다. 추가 CUDA stream을 쓰는 제출물은 GPU에서 실행하지 않았습니다.
 
-관련 페이지: [02 보안](02_security.md), [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md), [05 샌드박스 버전 관리](05_sandbox_updates.md), [07 Observability와 운영](07_observability_and_operations.md), [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
+관련 페이지: [02 보안](02_security.md), [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md), [05 샌드박스 버전 관리](05_sandbox_updates.md), [07 Observability와 운영](07_observability_and_operations.md), [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
 
 ??? note "참고 자료"
     | 주제 | 링크 |

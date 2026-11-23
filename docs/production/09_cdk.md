@@ -69,7 +69,7 @@ flowchart LR
 
 | 항목 | CDK 스택 (`02_create_cluster.sh`) | `scripts/`의 스크립트 (클러스터 안쪽) |
 |---|---|---|
-| 담당 범위 | 스택 하나: VPC, 클러스터, add-on, 시나리오별 노드 그룹, access instance | device plugin, RuntimeClass, kata-deploy, GPU Operator, namespace, 샌드박스 풀, 학습 Job |
+| 담당 범위 | 스택 하나: VPC, 클러스터, add-on, 시나리오별 노드 그룹, access instance | device plugin, RuntimeClass, kata-deploy, GPU Operator, namespace, 샌드박스 pool, 학습 Job |
     - **AWS에서 실행하지 않은 것**. HyperPod B2 custom AMI 경로입니다.
 | EKS API endpoint | private 전용 (public은 `EKS_PUBLIC_ACCESS_CIDR`에 /32 하나로만 opt-in) | 스택의 private endpoint를 그대로 씀 |
 | 접속 | 필요 없음 (CloudFormation이 배포) | `cdk/tunnel.sh` (SSM 포트 포워딩)를 두 번째 터미널에서 실행해 둠 |
@@ -197,7 +197,7 @@ aws ec2 describe-instances --region "$AWS_REGION" \
 | B1, B2 | `scripts/hyperpod/create.sh`로 HyperPod 클러스터 생성. B2는 custom AMI를 먼저 준비(표 아래 "B1, B2" 목록) |
 
 - **시나리오 C**:
-    1. [10 c8i 단독](../handson/10_cpu_only.md)의 준비 2대로 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가합니다(CPU 프로필의 기본 replica 2로는 풀 4개가 `c8i.2xlarge` 한 대에 들어가지 않음).
+    1. [10 c8i 단독](../handson/10_cpu_only.md)의 준비 2대로 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가합니다(CPU 프로필의 기본 replica 2로는 pool 4개가 `c8i.2xlarge` 한 대에 들어가지 않음).
     2. `scripts/kata/cpu_nodes.sh`를 실행합니다(kata-deploy, `gvisor-cpu` RuntimeClass, smoke pod. 실습 계정에서 약 14분).
     3. `ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`를 실행합니다.
     4. 그다음 [10 c8i 단독](../handson/10_cpu_only.md)의 6단계부터 이어 갑니다.

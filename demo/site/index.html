@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GPU Sandbox on AWS: Replay Demo</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="style.css?v=bench-pools">
+  <script src="app.js?v=bench-pools" defer></script>
 </head>
 <body>
   <nav class="topnav" aria-label="sections">
@@ -166,7 +166,6 @@
       <article id="runtime-results" class="panel" aria-labelledby="results-title" hidden>
         <div class="panel-head">
           <h3 id="results-title" data-i18n="resultsTitle"></h3>
-          <span id="results-source" class="muted small"></span>
         </div>
         <div class="results-scroll" tabindex="0" role="region" aria-labelledby="results-title">
           <table class="results-table" aria-labelledby="results-title">
@@ -182,29 +181,6 @@
           </table>
         </div>
         <p class="muted small" data-i18n="resultsNote"></p>
-        <div class="results-links">
-          <a id="results-guide" data-i18n="resultsGuide"></a>
-          <a id="results-jsonl" data-i18n="resultsRaw"></a>
-        </div>
-      </article>
-      <article id="hyperpod-b1" class="panel" hidden>
-        <div class="panel-head">
-          <h3 data-i18n="b1Title"></h3>
-          <span id="b1-source" class="muted small"></span>
-        </div>
-        <p id="b1-setup"></p>
-        <div id="b1-clients" class="cards"></div>
-        <p class="muted small" data-i18n="b1Note"></p>
-        <a id="b1-pattern" href="architecture.html?pattern=b1" data-i18n="b1Diagram"></a>
-      </article>
-      <article id="hyperpod-b2" class="panel" hidden>
-        <div class="panel-head">
-          <h3 data-i18n="b2Title"></h3>
-          <span id="b2-source" class="muted small"></span>
-        </div>
-        <p id="b2-setup"></p>
-        <div id="b2-clients" class="cards"></div>
-        <a id="b2-guide" data-i18n="b2Guide"></a>
       </article>
       <h3 id="runtime-bench" data-i18n="runtimeComparison"></h3>
       <p id="runtime-source" class="muted small"></p>

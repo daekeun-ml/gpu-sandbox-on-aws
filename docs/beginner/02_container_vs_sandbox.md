@@ -36,6 +36,6 @@
 
 메모리 안에서 오래 계산하는 프로그램과 작은 파일을 자주 여는 프로그램은 커널에 요청하는 횟수가 다릅니다. AWS 기술 블로그의 같은 `m7i.xlarge` 비교에서는 CPU 반복 계산이 runc 0.144초, gVisor 0.146초였고, `getppid` 20만 번은 각각 0.035초와 0.444초였습니다. 한 종류의 작업에서 나온 비율을 다른 프로그램에 그대로 적용하기는 어렵습니다. [AWS 비교 조건](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/)
 
-Kata는 pod를 시작할 때 VM을 부팅합니다. 이미 실행 중인 pod에 제출을 보낼 때에는 그 VM을 다시 띄우지 않습니다. 풀을 고를 때에는 첫 pod가 Ready가 될 때까지의 시간과, 준비된 pod가 한 답을 채점하는 시간을 따로 보세요. [런타임 벤치마크](../handson/08_benchmark.md#runtime-results)
+Kata는 pod를 시작할 때 VM을 부팅합니다. 이미 실행 중인 pod에 제출을 보낼 때에는 그 VM을 다시 띄우지 않습니다. pool을 고를 때에는 첫 pod가 Ready가 될 때까지의 시간과, 준비된 pod가 한 답을 채점하는 시간을 따로 보세요. [런타임 벤치마크](../handson/08_benchmark.md#runtime-results)
 
 [다음 편](03_gpu_sandbox.md)에서는 파일 대신 GPU를 사용하면 요청 경로가 어떻게 달라지는지 봅니다.

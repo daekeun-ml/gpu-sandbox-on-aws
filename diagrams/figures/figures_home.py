@@ -11,7 +11,7 @@ GREEN = '#267047'
 TEXT = {
     'ko': dict(pc='운영자 PC', vpc='Amazon VPC', private='프라이빗 서브넷', relay='접속용 EC2',
                endpoint='프라이빗 엔드포인트', endpoint_short='프라이빗 전용', lookup='DNS로 Ready pod 조회', tunnel='SSM 터널', deploy='워크로드 배포', pull='이미지 pull',
-               workers='Amazon EKS 워커 노드', trainer='학습 노드', sandbox='GPU 채점 풀',
+               workers='Amazon EKS 워커 노드', trainer='학습 노드', sandbox='GPU 채점 pool',
                submit='코드 채점 요청', result='채점 결과', metrics='판정 · 속도', default='기본', optional='선택'),
     'en': dict(pc='Operator', vpc='Amazon VPC', private='Private subnets', relay='Access EC2',
                endpoint='Private endpoint', endpoint_short='Private access', lookup='Resolve Ready pod IPs', tunnel='SSM tunnel', deploy='Deploy workloads', pull='Pull images',

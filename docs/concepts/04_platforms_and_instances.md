@@ -16,7 +16,7 @@
 | A | EC2 GPU trainer | EC2 GPU | EKS에서 학습과 GPU 채점 연결 |
 | B1 | HyperPod trainer | EC2 GPU | trainer 노드 복구와 Job 재시작 |
 | B2 | HyperPod `trainer` | HyperPod `sandbox` | 시스템 Pod, 학습, 채점을 각각의 HyperPod 그룹에 배치 |
-| C | 모델 없이 시뮬레이터 실행 | EC2 `c8i.2xlarge`의 CPU 풀 | GPU 없이 런타임 비교, 채점, 버전 교체 |
+| C | 모델 없이 시뮬레이터 실행 | EC2 `c8i.2xlarge`의 CPU pool | GPU 없이 런타임 비교, 채점, 버전 교체 |
 
 A, B1, C는 `us-west-2`에서, [관리형 B2](../handson/07_hyperpod_b2.md)는 `us-east-1`에서 실행했습니다.
 
@@ -30,7 +30,7 @@ B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타�
 
     ![같은 EKS 클러스터에서 trainer와 GPU 샌드박스가 별도의 EC2 노드 그룹에 배치됩니다.](../images/architecture/scenario-a.drawio.png)
 
-    **그림 설명**　운영 PC에서 `kubectl tunnel`을 따라가면 SSM을 거쳐 private EKS API에 연결됩니다. 학습 중에는 `GRPO trainer Job`이 `kernel code` 화살표를 따라 gVisor 풀로 제출 코드를 보냅니다. 풀은 GPU에서 정확도와 속도를 확인하고 판정을 돌려줍니다. trainer는 그 결과를 reward로 사용합니다.
+    **그림 설명**　운영 PC에서 `kubectl tunnel`을 따라가면 SSM을 거쳐 private EKS API에 연결됩니다. 학습 중에는 `GRPO trainer Job`이 `kernel code` 화살표를 따라 gVisor pool로 제출 코드를 보냅니다. pool은 GPU에서 정확도와 속도를 확인하고 판정을 돌려줍니다. trainer는 그 결과를 reward로 사용합니다.
 
     **차이점**　학습과 채점 모두 EC2에서 직접 운영하는 기본 GPU 구성입니다. [시나리오 A 실습](../handson/01_cluster_and_images.md)
 
@@ -38,7 +38,7 @@ B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타�
 
     ![HyperPod trainer와 EC2 GPU 샌드박스가 같은 EKS 클러스터에 연결됩니다.](../images/architecture/scenario-b1.drawio.png)
 
-    **그림 설명**　EKS에 제출한 `HyperPodPyTorchJob`을 training operator가 HyperPod trainer 노드에 배치합니다. 그 뒤 `kernel code` 화살표는 A와 마찬가지로 같은 클러스터의 EC2 풀을 향합니다. 샌드박스는 같은 방식으로 코드를 실행해 판정을 돌려줍니다.
+    **그림 설명**　EKS에 제출한 `HyperPodPyTorchJob`을 training operator가 HyperPod trainer 노드에 배치합니다. 그 뒤 `kernel code` 화살표는 A와 마찬가지로 같은 클러스터의 EC2 pool을 향합니다. 샌드박스는 같은 방식으로 코드를 실행해 판정을 돌려줍니다.
 
     **차이점**　A에서 trainer만 HyperPod로 옮겨 노드 복구와 Job 재시작 기능을 사용합니다. [시나리오 B1 실습](../handson/07_hyperpod.md)
 
@@ -50,9 +50,9 @@ B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타�
 
 === "C: CPU 전용"
 
-    ![시스템 노드의 시뮬레이터가 c8i 노드의 CPU 샌드박스 풀에 평가를 요청합니다.](../images/architecture/scenario-c.drawio.png)
+    ![시스템 노드의 시뮬레이터가 c8i 노드의 CPU 샌드박스 pool에 평가를 요청합니다.](../images/architecture/scenario-c.drawio.png)
 
-    **그림 설명**　시스템 노드의 `simulate and probe Jobs`에서 `golden code` 화살표를 따라가면 c8i 노드의 Kata CPU v1 풀에 닿습니다. 시뮬레이터는 모델이 만든 답 대신 예상 판정을 아는 답을 보내고, 라우팅을 바꾼 뒤에는 v2 결과를 로그에 남깁니다. 같은 노드의 gVisor와 Kata + QEMU CPU 풀은 검증과 벤치마크에 쓰입니다.
+    **그림 설명**　시스템 노드의 `simulate and probe Jobs`에서 `golden code` 화살표를 따라가면 c8i 노드의 Kata CPU v1 pool에 닿습니다. 시뮬레이터는 모델이 만든 답 대신 예상 판정을 아는 답을 보내고, 라우팅을 바꾼 뒤에는 v2 결과를 로그에 남깁니다. 같은 노드의 gVisor와 Kata + QEMU CPU pool은 검증과 벤치마크에 쓰입니다.
 
     **차이점**　모델 학습과 GPU 없이 gVisor와 Kata의 채점 및 버전 교체를 실습합니다. [시나리오 C 실습](../handson/10_cpu_only.md)
 
@@ -64,9 +64,9 @@ HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 
 
 ## B1에서 학습 GPU와 채점 GPU 구분하기
 
-B1 실습에서 `ml.g5.2xlarge`의 A10G 한 장은 모델의 답을 생성하고 가중치를 업데이트하는 데 쓰였습니다. 생성된 코드 12개를 실행한 곳은 EC2 `g5.xlarge` 두 대의 gVisor 풀이었습니다. trainer의 Job이 `Completed`인지와 샌드박스가 어떤 판정을 냈는지는 별개로 읽습니다. 이 한 스텝에서 정답은 한 개였습니다. [학습 노드 배치와 완료 로그](../handson/07_hyperpod.md#확인-방법)
+B1 실습에서 `ml.g5.2xlarge`의 A10G 한 장은 모델의 답을 생성하고 가중치를 업데이트하는 데 쓰였습니다. 생성된 코드 12개를 실행한 곳은 EC2 `g5.xlarge` 두 대의 gVisor pool이었습니다. trainer의 Job이 `Completed`인지와 샌드박스가 어떤 판정을 냈는지는 별개로 읽습니다. 이 한 스텝에서 정답은 한 개였습니다. [학습 노드 배치와 완료 로그](../handson/07_hyperpod.md#확인-방법)
 
-샌드박스를 그대로 두고 요청을 보내는 노드만 바꾸면 무엇을 비교할 수 있을까요? 학습을 멈춘 상태에서 EKS 시스템 노드와 HyperPod trainer가 차례로 고정 커널을 32번씩 보냈습니다. 중앙 채점 시간은 각각 9.918초와 9.937초, 풀 처리량은 모두 초당 0.199건이었습니다. 두 클라이언트가 같은 풀에 도달해 요청을 처리했다는 기록입니다. 노드 교체 후 학습 재개를 검증하려면 체크포인트를 저장하고 복구하는 별도의 시험이 필요합니다. [B1 클라이언트 비교](../handson/08_benchmark.md#hyperpod-b1)
+샌드박스를 그대로 두고 요청을 보내는 노드만 바꾸면 무엇을 비교할 수 있을까요? 학습을 멈춘 상태에서 EKS 시스템 노드와 HyperPod trainer가 차례로 고정 커널을 32번씩 보냈습니다. 중앙 채점 시간은 각각 9.918초와 9.937초, pool 처리량은 모두 초당 0.199건이었습니다. 두 클라이언트가 같은 pool에 도달해 요청을 처리했다는 기록입니다. 노드 교체 후 학습 재개를 검증하려면 체크포인트를 저장하고 복구하는 별도의 시험이 필요합니다. [B1 클라이언트 비교](../handson/08_benchmark.md#hyperpod-b1)
 
 <a id="더-살펴보기"></a>
 
@@ -140,7 +140,7 @@ gVisor의 GPU 연결 기능인 nvproxy에는 드라이버 버전별 지원 목�
     - **이 저장소의 검증**: 580.178.04는 runsc `release-20261109.0`의 지원 목록(`runsc nvproxy list-supported-drivers`)에 있습니다. 실습 계정에서 `g5.xlarge`로 gVisor smoke test(`cuda ok: NVIDIA A10G 2048.0`)와 `scripts/ops/verify.sh gvisor v1`이 통과했고, `g5.2xlarge` trainer로 GRPO 5 step을 마쳤습니다. 즉 이 조합은 gVisor가 문서화한 것이 아니라 이 저장소가 검증한 것입니다.
     - **드라이버, AMI, gVisor 버전을 바꾸면**: 다시 확인하세요.
     - **`04_install_gpu_stack.sh`의 smoke test**: GPU 하나를 쓰는 pod를 따로 만들므로 gVisor 노드에 빈 GPU가 있을 때 실행하세요.
-    - **이미 배포한 풀**: `scripts/ops/verify.sh gvisor v1`로 확인합니다.
+    - **이미 배포한 pool**: `scripts/ops/verify.sh gvisor v1`로 확인합니다.
 
     `g6`(L4)는 지원하는 대안입니다. AMI가 open 모듈 580.178.04를 로드하므로 gVisor 문서와 일치하고, 요금도 낮습니다(`g6.xlarge` 0.8048, `g6.2xlarge` 0.9776). 쓰려면 `scripts/config.env`에서 `GVISOR_INSTANCE_TYPE`과 `TRAINER_INSTANCE_TYPE`(HyperPod는 `HYPERPOD_*`)을 바꿔 쓰세요.
 
@@ -222,7 +222,7 @@ Standard quota가 더 필요한 경우는 다음과 같습니다.
 ## 적용 범위와 한계
 
 - 시나리오 A의 `g5` 구성은 실습 계정에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). gVisor 샌드박스(1 replica)와 `scripts/ops/verify.sh gvisor v1`이 통과했고, trainer 설정(1.5B + LoRA + vLLM colocate on A10G 하나)으로 GRPO 5 step을 마쳤습니다.
-- 다른 클러스터 구성에서는 `g4dn.metal`의 Kata + QEMU(`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`)를 실행했고, `scripts/ops/bench.sh 32`로 GPU 풀 2개와 CPU 풀 3개를 측정했습니다.
+- 다른 클러스터 구성에서는 `g4dn.metal`의 Kata + QEMU(`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`)를 실행했고, `scripts/ops/bench.sh 32`로 GPU pool 2개와 CPU pool 3개를 측정했습니다.
 - 시나리오 A에서 학습 중 gVisor 버전을 전환했습니다. 관리형 B2에서는 HyperPod에서 한 스텝 학습을 완료했습니다. [전환 기록](../handson/06_sandbox_update.md#switch-batches)
 - `c8i.2xlarge`는 us-east-1과 us-west-2에서 시간당 0.37484 USD, 서울 리전에서 0.42336 USD입니다. GPU 없이 이 노드만 쓰는 시나리오 C는 [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)에 있습니다.
 

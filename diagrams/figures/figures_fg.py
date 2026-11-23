@@ -15,7 +15,7 @@ T = {
         "b": "multi-turn 에피소드: 모든 turn을 claim한 샌드박스 하나에서 채점",
         "trainer": "GRPO trainer", "trainer_sub": "completion마다 채점 1회",
         "submit": ["completion 1개 제출"], "verdict1": ["verdict 1개"],
-        "pool": "reward 풀",
+        "pool": "reward pool",
         "pod": "유휴 pod", "pod_sub": "요청마다 새로 선택",
         "cleared": "요청 후 작업 디렉터리, 남은 프로세스 정리",
         "agent": "에이전트 (모델)", "agent_sub": "에피소드 1개",

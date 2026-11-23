@@ -12,10 +12,10 @@
 | 하려는 작업 | 스크립트 |
 |---|---|
 | AWS 설정 확인, EKS 생성, 이미지 준비 | [01~03과 터널](#기본-순서) |
-| 런타임 설치와 채점 풀 배포 | [04~06](#scripts04_install_gpu_stacksh), [Kata](#kata) |
+| 런타임 설치와 채점 pool 배포 | [04~06](#scripts04_install_gpu_stacksh), [Kata](#kata) |
 | EKS에서 GRPO 실행 (A) | [07_run_grpo.sh](#scripts07_run_grposh) |
 | HyperPod에서 GRPO 실행 (B1과 B2) | [hyperpod/run_grpo.sh](#scriptshyperpodrun_grposh) |
-| 풀 검증, GPU 없는 시뮬레이션 (C), 버전 전환, 지연 측정 | [검증과 운영](#검증과-운영) |
+| pool 검증, GPU 없는 시뮬레이션 (C), 버전 전환, 지연 측정 | [검증과 운영](#검증과-운영) |
 | 에피소드마다 샌드박스 할당 | [Agent Sandbox 확장](#확장) |
 | 평가 기록을 웹에 공개 | [데모 사이트](#데모-사이트) |
 | 실습 리소스 삭제 | [정리 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/99_cleanup/) |
@@ -68,29 +68,29 @@
 - **사용법**: `scripts/04_install_gpu_stack.sh` (인자 없음). 스택이 시나리오 B2나 C로 배포됐으면 RuntimeClass와 smoke pod를 건너뜁니다.
 - **언제**: `03_build_push_images.sh` 다음, `05_setup_namespaces_auth.sh` 전에 실행합니다. A와 B1은 전체를, B2는 device plugin만 씁니다. C는 이 단계 대신 `kata/cpu_nodes.sh`를 실행합니다.
 - **시간과 과금**: device plugin은 Helm `--wait`, smoke pod timeout은 15분입니다. 새로 과금되는 리소스는 없습니다.
-- **다시 실행할 때**: `helm upgrade --install`과 `kubectl apply`로 다시 적용하고, smoke pod는 새 이름으로 만든 뒤 끝나면 지웁니다. sandbox-gvisor 노드의 GPU가 모두 쓰이고 있으면(`06_deploy_sandboxes.sh`의 풀) smoke pod를 만들기 전에 `every GPU on the sandbox-gvisor nodes is in use`로 멈추니, 안내된 `kubectl -n sandbox scale ... --replicas=0`으로 GPU를 비운 뒤 실행하고 `06_deploy_sandboxes.sh gvisor v1`로 풀을 되돌리세요.
+- **다시 실행할 때**: `helm upgrade --install`과 `kubectl apply`로 다시 적용하고, smoke pod는 새 이름으로 만든 뒤 끝나면 지웁니다. sandbox-gvisor 노드의 GPU가 모두 쓰이고 있으면(`06_deploy_sandboxes.sh`의 pool) smoke pod를 만들기 전에 `every GPU on the sandbox-gvisor nodes is in use`로 멈추니, 안내된 `kubectl -n sandbox scale ... --replicas=0`으로 GPU를 비운 뒤 실행하고 `06_deploy_sandboxes.sh gvisor v1`로 pool을 되돌리세요.
 - **성공 신호**: `gpusandbox/device-plugin=cdi` 노드마다 GPU 1(재시작 직후에는 잠시 `0`), 이어서 smoke pod 로그의 `cuda ok: NVIDIA A10G 2048.0`이 나옵니다. smoke pod가 실패해도 스크립트는 경고만 내고 끝나므로 이 줄을 직접 확인하세요(B2와 C는 `skipping the gvisor RuntimeClass and the smoke pod`로 끝남).
 - **막히면**: [문제 해결: gVisor](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#gvisor), [02 gVisor GPU 샌드박스](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/02_gvisor/)
 
 ### `scripts/05_setup_namespaces_auth.sh`
 
 - **하는 일**: 네임스페이스(Pod Security), trainer RBAC, NetworkPolicy를 적용하고, `ops/sync_jwks.sh`로 JWKS ConfigMap을 만든 뒤 `rl-trainer`에 routing ConfigMap `sandbox-routing`을 씁니다.
-- **사용법**: `scripts/05_setup_namespaces_auth.sh`. 처음 쓸 풀은 `ACTIVE_RUNTIME`과 `ACTIVE_VERSION`(기본 `gvisor`, `v1`)으로 정합니다. 예: C는 `ACTIVE_RUNTIME=kata-clh-cpu`, B2는 `ACTIVE_RUNTIME=gvisor-hyperpod`.
+- **사용법**: `scripts/05_setup_namespaces_auth.sh`. 처음 쓸 pool은 `ACTIVE_RUNTIME`과 `ACTIVE_VERSION`(기본 `gvisor`, `v1`)으로 정합니다. 예: C는 `ACTIVE_RUNTIME=kata-clh-cpu`, B2는 `ACTIVE_RUNTIME=gvisor-hyperpod`.
 - **언제**: `04_install_gpu_stack.sh`(C는 `kata/cpu_nodes.sh`) 다음, `06_deploy_sandboxes.sh` 전에 실행합니다. 모든 시나리오에서 씁니다.
 - **시간과 과금**: 짧음. 과금되는 리소스는 없습니다.
-- **다시 실행할 때**: 모두 `kubectl apply`지만, routing 표의 active 풀을 `ACTIVE_RUNTIME`과 `ACTIVE_VERSION`(없으면 `gvisor/v1`)으로 다시 쓰고 `sandbox`의 NetworkPolicy를 핸즈온 규칙으로 되돌립니다. 버전 교체 뒤나 시나리오 C에서는 지금 쓰는 값을 지정해 실행하고, 서명 키만 갱신할 때는 `ops/sync_jwks.sh`를 쓰세요(production gateway를 쓰면 gateway 매니페스트도 다시 적용).
-- **성공 신호**: 마지막에 출력되는 routing.json 앞부분의 `"active"`가 처음 쓸 풀입니다. A와 B1은 `{"runtime": "gvisor", "version": "v1"}`입니다.
-- **막히면**: [문제 해결: 401, 403 응답](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답), [문제 해결: NetworkPolicy](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#networkpolicy), [04 샌드박스 풀 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/04_sandbox_pools/)
+- **다시 실행할 때**: 모두 `kubectl apply`지만, routing 표의 active pool을 `ACTIVE_RUNTIME`과 `ACTIVE_VERSION`(없으면 `gvisor/v1`)으로 다시 쓰고 `sandbox`의 NetworkPolicy를 핸즈온 규칙으로 되돌립니다. 버전 교체 뒤나 시나리오 C에서는 지금 쓰는 값을 지정해 실행하고, 서명 키만 갱신할 때는 `ops/sync_jwks.sh`를 쓰세요(production gateway를 쓰면 gateway 매니페스트도 다시 적용).
+- **성공 신호**: 마지막에 출력되는 routing.json 앞부분의 `"active"`가 처음 쓸 pool입니다. A와 B1은 `{"runtime": "gvisor", "version": "v1"}`입니다.
+- **막히면**: [문제 해결: 401, 403 응답](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답), [문제 해결: NetworkPolicy](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#networkpolicy), [04 샌드박스 pool 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/04_sandbox_pools/)
 
 ### `scripts/06_deploy_sandboxes.sh`
 
-- **하는 일**: 런타임 프로필(`k8s/sandbox/profiles/<runtime>.env`)과 버전 파일(`k8s/sandbox/versions/<version>.env`)로 샌드박스 풀 `sandbox-<runtime>-<version>`(Deployment와 headless Service)을 배포하고 rollout이 끝나기를 기다립니다.
+- **하는 일**: 런타임 프로필(`k8s/sandbox/profiles/<runtime>.env`)과 버전 파일(`k8s/sandbox/versions/<version>.env`)로 샌드박스 pool `sandbox-<runtime>-<version>`(Deployment와 headless Service)을 배포하고 rollout이 끝나기를 기다립니다.
 - **사용법**: `scripts/06_deploy_sandboxes.sh <runtime> [version] [replicas]`. runtime은 `gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`(실험), `gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`이고, version은 `v1`(기본) 또는 `v2`, replicas를 생략하면 프로필 값을 씁니다.
-- **언제**: `05_setup_namespaces_auth.sh` 다음에 풀마다 실행합니다. A와 B1은 `gvisor`, B2는 `gvisor-hyperpod`, C는 CPU 풀 세 개를 씁니다.
+- **언제**: `05_setup_namespaces_auth.sh` 다음에 pool마다 실행합니다. A와 B1은 `gvisor`, B2는 `gvisor-hyperpod`, C는 CPU pool 세 개를 씁니다.
 - **시간과 과금**: rollout timeout은 30분입니다. 기존 노드를 쓰므로 새로 과금되는 리소스는 없습니다.
-- **다시 실행할 때**: `kubectl apply`라 매니페스트가 같으면 바뀌지 않고, 이미지나 설정이 바뀌었으면 Deployment가 pod를 새로 만듭니다. replica 수가 인자나 프로필 값으로 돌아가므로, 0으로 줄인 풀(`ops/rollout.sh --finish`, `04_install_gpu_stack.sh`의 안내)을 되살릴 때도 이 명령을 씁니다.
+- **다시 실행할 때**: `kubectl apply`라 매니페스트가 같으면 바뀌지 않고, 이미지나 설정이 바뀌었으면 Deployment가 pod를 새로 만듭니다. replica 수가 인자나 프로필 값으로 돌아가므로, 0으로 줄인 pool(`ops/rollout.sh --finish`, `04_install_gpu_stack.sh`의 안내)을 되살릴 때도 이 명령을 씁니다.
 - **성공 신호**: rollout이 끝나고 pod가 `1/1 Running`입니다.
-- **막히면**: [문제 해결: 샌드박스 풀과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-풀과-readiness), [04 샌드박스 풀 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/04_sandbox_pools/)
+- **막히면**: [문제 해결: 샌드박스 pool과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-pool과-readiness), [04 샌드박스 pool 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/04_sandbox_pools/)
 
 ### `scripts/07_run_grpo.sh`
 
@@ -104,7 +104,7 @@
 
 ### `scripts/08_cleanup.sh`
 
-- **하는 일**: 클러스터 이름을 입력받은 뒤 `cdk/destroy.sh --yes`로 풀, Job, CDK 스택을 지우고, `config.env`에 ID가 있는 AMI(`KATA_IOMMU_AMI_ID`, `HYPERPOD_B2_AMI_ID`)와 스냅샷을 하나씩 확인한 뒤 지웁니다. 마지막에 남은 인스턴스를 조회합니다.
+- **하는 일**: 클러스터 이름을 입력받은 뒤 `cdk/destroy.sh --yes`로 pool, Job, CDK 스택을 지우고, `config.env`에 ID가 있는 AMI(`KATA_IOMMU_AMI_ID`, `HYPERPOD_B2_AMI_ID`)와 스냅샷을 하나씩 확인한 뒤 지웁니다. 마지막에 남은 인스턴스를 조회합니다.
 - **사용법**: `scripts/08_cleanup.sh`, ECR 저장소까지 지우려면 `--images`. 시나리오 B는 먼저 `scripts/hyperpod/delete.sh`를 실행합니다.
 - **언제**: 실습을 마칠 때 실행합니다. 모든 시나리오에서 쓰며, 터널을 켜 두면 클러스터 안의 워크로드부터 지웁니다.
 - **시간과 과금**: 기록 없음(CloudFormation 삭제를 기다림). CDK 스택 리소스의 과금이 끝나고, secrets용 KMS 키는 7일 삭제 대기에 들어갑니다.
@@ -160,17 +160,17 @@
 
 ### `scripts/ops/verify.sh`
 
-- **하는 일**: 풀 하나에 네 가지를 검사합니다. 샌드박스 안과 노드의 커널 비교, 샌드박스 안에서의 연결 차단(instance metadata, Kubernetes API, kubelet, 인터넷), 인증된 API의 golden verdict(probe Job), 다른 네임스페이스에서의 접속 차단입니다.
+- **하는 일**: pool 하나에 네 가지를 검사합니다. 샌드박스 안과 노드의 커널 비교, 샌드박스 안에서의 연결 차단(instance metadata, Kubernetes API, kubelet, 인터넷), 인증된 API의 golden verdict(probe Job), 다른 네임스페이스에서의 접속 차단입니다.
 - **사용법**: `scripts/ops/verify.sh <runtime> [version]` (version 기본 `v1`)
-- **언제**: `06_deploy_sandboxes.sh`로 풀을 배포할 때마다 실행하고, `ops/rollout.sh`가 2단계에서 실행합니다. 모든 시나리오에서 씁니다.
+- **언제**: `06_deploy_sandboxes.sh`로 pool을 배포할 때마다 실행하고, `ops/rollout.sh`가 2단계에서 실행합니다. 모든 시나리오에서 씁니다.
 - **시간과 과금**: 수 분(probe Job 포함). 과금되는 리소스는 없습니다.
 - **다시 실행할 때**: 검사만 하므로 안전합니다. 실행할 때마다 probe Job(`probe-<runtime>-<version>-<시각>`, 끝나고 1시간 뒤 삭제)과 `default`의 임시 pod(`--rm`)를 새로 만듭니다.
 - **성공 신호**: 마지막 줄이 `pool sandbox-<runtime>-<version> verified`입니다. 1번 커널 비교는 스크립트가 판정하지 않으니 출력된 두 값이 다른지 직접 확인하세요.
-- **막히면**: [문제 해결: 샌드박스 풀과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-풀과-readiness), [문제 해결: 401, 403 응답](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답), [문제 해결: NetworkPolicy](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#networkpolicy)
+- **막히면**: [문제 해결: 샌드박스 pool과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-pool과-readiness), [문제 해결: 401, 403 응답](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답), [문제 해결: NetworkPolicy](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#networkpolicy)
 
 ### `scripts/ops/rollout.sh`
 
-- **하는 일**: 학습 중에 blue/green으로 샌드박스 버전을 바꿉니다. `<to>` 풀 배포, 검증, `<from>`과의 parity 검사, routing 표 전환(`rl-trainer`와, 있으면 `sandbox-gateway`) 순서이고, `--finish`는 `<from>` 풀을 0으로 줄입니다.
+- **하는 일**: 학습 중에 blue/green으로 샌드박스 버전을 바꿉니다. `<to>` pool 배포, 검증, `<from>`과의 parity 검사, routing 표 전환(`rl-trainer`와, 있으면 `sandbox-gateway`) 순서이고, `--finish`는 `<from>` pool을 0으로 줄입니다.
 - **사용법**: `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]`. 예: `scripts/ops/rollout.sh gvisor v1 v2`, 전환을 확인한 뒤 같은 명령에 `--finish`를 붙입니다. rollback은 `<from>`과 `<to>`를 바꿔 실행합니다.
 - **언제**: `07_run_grpo.sh`(A), `hyperpod/run_grpo.sh`(B), `ops/simulate.sh`(C)가 실행 중일 때 씁니다.
 - **시간과 과금**: [06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/06_sandbox_update/) 참고. gVisor는 v2용 `g5.xlarge` 2대(시간당 2.012 USD, 노드 그룹을 4대로 늘린 동안)가 더 필요하고, Kata QEMU는 추가 노드가 없습니다.
@@ -180,25 +180,25 @@
 
 ### `scripts/ops/simulate.sh`
 
-- **하는 일**: 모델 없이, routing ConfigMap이 가리키는 풀에 golden 제출물을 배치 단위로 보내는 Job을 실행하고 `reward_batch`, `sandbox_version_switch` 이벤트를 보여 줍니다. 학습이 아닙니다.
+- **하는 일**: 모델 없이, routing ConfigMap이 가리키는 pool에 golden 제출물을 배치 단위로 보내는 Job을 실행하고 `reward_batch`, `sandbox_version_switch` 이벤트를 보여 줍니다. 학습이 아닙니다.
 - **사용법**: `scripts/ops/simulate.sh [steps] [interval_s]` (기본 30배치, 20초)
-- **언제**: 시나리오 C에서 풀 배포와 `ops/verify.sh` 다음에 실행하고, 두 번째 터미널의 `ops/rollout.sh`와 함께 씁니다.
+- **언제**: 시나리오 C에서 pool 배포와 `ops/verify.sh` 다음에 실행하고, 두 번째 터미널의 `ops/rollout.sh`와 함께 씁니다.
 - **시간과 과금**: 기본 30배치에 배치 사이 20초 대기가 29회입니다. 2026-11-17 실행(`kata-clh-cpu`)은 약 16분 걸렸습니다. 과금되는 리소스는 없습니다.
-- **다시 실행할 때**: 실행할 때마다 새 Job(`simulate-<시각>`)을 만들고 그 시점의 active 풀을 읽습니다. 여러 개를 동시에 실행하면 같은 풀에 요청이 겹칩니다.
+- **다시 실행할 때**: 실행할 때마다 새 Job(`simulate-<시각>`)을 만들고 그 시점의 active pool을 읽습니다. 여러 개를 동시에 실행하면 같은 pool에 요청이 겹칩니다.
 - **성공 신호**: 배치마다 `batch <n>  <runtime>/<version>  ...` 줄이 나옵니다. 버전 교체 뒤에는 `SWITCH ...` 한 줄과 `MIXED VERSIONS`가 없는 `batch` 줄이 이어집니다.
 - **막히면**: [문제 해결: 버전 전환 (routing)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing), [10 c8i 단독 저비용 경로](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/10_cpu_only/)
 
 ### `scripts/ops/bench.sh`
 
-- **하는 일**: v1 pod가 있는 풀마다 cold start(pod 생성부터 Ready까지)를 출력하고, 같은 golden kernel(GPU는 `relu_bias_triton`, CPU는 `relu_bias_torch_only`)로 지연 p50, p95, 처리량, speedup을 측정합니다. 결과는 `bench-<시각>.jsonl`에 씁니다.
+- **하는 일**: v1 pod가 있는 pool마다 cold start(pod 생성부터 Ready까지)를 출력하고, 같은 golden kernel(GPU는 `relu_bias_triton`, CPU는 `relu_bias_torch_only`)로 지연 p50, p95, 처리량, speedup을 측정합니다. 결과는 `bench-<시각>.jsonl`에 씁니다.
 - **사용법**: `scripts/ops/bench.sh [requests]` (기본 32)
-- **언제**: 풀을 배포하고 검증한 뒤, 학습이 실행 중이 아닐 때 실행합니다. 모든 시나리오에서 선택 단계입니다.
-- **시간과 과금**: 2026-11-18 2차 측정에서 평가 구간은 풀마다 약 100~300 s, 다섯 풀 합계 약 13분이었습니다(Job 생성과 풀 재시작 제외). 새로 과금되는 리소스는 없고, 그동안의 노드 요금이 나갑니다.
-- **다시 실행할 때**: 실행할 때마다 새 결과 파일과 풀마다 새 bench Job을 만듭니다. cold start는 지금 있는 pod의 생성 시각으로 계산하므로, pod를 재시작하지 않으면 같은 값이 다시 나옵니다([08](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)의 재측정 방법).
-- **성공 신호**: 풀마다 `bench  <runtime>  ok <n>/<requests>  p50 ...` 한 줄이 나오고, 끝에 `results: <파일>`이 나옵니다.
-- **막히면**: [문제 해결: 샌드박스 풀과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-풀과-readiness), [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)
+- **언제**: pool을 배포하고 검증한 뒤, 학습이 실행 중이 아닐 때 실행합니다. 모든 시나리오에서 선택 단계입니다.
+- **시간과 과금**: 2026-11-18 2차 측정에서 평가 구간은 pool마다 약 100~300 s, 다섯 pool 합계 약 13분이었습니다(Job 생성과 pool 재시작 제외). 새로 과금되는 리소스는 없고, 그동안의 노드 요금이 나갑니다.
+- **다시 실행할 때**: 실행할 때마다 새 결과 파일과 pool마다 새 bench Job을 만듭니다. cold start는 지금 있는 pod의 생성 시각으로 계산하므로, pod를 재시작하지 않으면 같은 값이 다시 나옵니다([08](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)의 재측정 방법).
+- **성공 신호**: pool마다 `bench  <runtime>  ok <n>/<requests>  p50 ...` 한 줄이 나오고, 끝에 `results: <파일>`이 나옵니다.
+- **막히면**: [문제 해결: 샌드박스 pool과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-pool과-readiness), [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)
 
-EKS 실습에서 다섯 풀에 32건씩 보내 160건 모두 성공했습니다. [결과표와 실행 조건](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/#runtime-results)
+EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다. [결과표와 실행 조건](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/#runtime-results)
 
 ### `scripts/ops/sync_jwks.sh`
 
@@ -247,7 +247,7 @@ EKS 실습에서 다섯 풀에 32건씩 보내 160건 모두 성공했습니다.
 
 - **하는 일**. CPU 시스템 그룹을 제외한 HyperPod 워커에서 NVIDIA 드라이버의 gVisor 지원 여부를 확인합니다. 검사할 때마다 임시 네임스페이스를 만들고 검사가 끝나면 지웁니다.
 - **사용법**: `scripts/hyperpod/check_gvisor.sh` (인자 없음)
-- **언제**: B2에서 `hyperpod/create.sh --b2` 다음, 풀 배포 전에 실행합니다.
+- **언제**: B2에서 `hyperpod/create.sh --b2` 다음, pool 배포 전에 실행합니다.
 - **시간과 과금**: 문서에 기록 없음(노드마다 gVisor를 내려받음). 과금되는 리소스는 없습니다.
 - **성공 신호**: sandbox 노드 두 대에서 `driver 580.178.04: SUPPORTED by gVisor ...`이 나옵니다. trainer 노드의 `driver 595.91.07: NOT supported ...`는 정상입니다.
 - **막히면**: [문제 해결: HyperPod](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#hyperpod), [07 HyperPod 시나리오의 B2](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/#b2)
@@ -256,21 +256,21 @@ EKS 실습에서 다섯 풀에 32건씩 보내 160건 모두 성공했습니다.
 
 ### `scripts/hyperpod/run_grpo.sh`
 
-B1과 B2에서 **HyperPod trainer에 GRPO Job을 제출**합니다. 기존 샌드박스 풀은 모델이 생성한 코드를 채점하고, trainer는 그 점수로 모델을 업데이트합니다.
+B1과 B2에서 **HyperPod trainer에 GRPO Job을 제출**합니다. 기존 샌드박스 pool은 모델이 생성한 코드를 채점하고, trainer는 그 점수로 모델을 업데이트합니다.
 
-**준비**　[HyperPod 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/)에서 training operator, trainer 노드, 샌드박스 풀을 준비하세요. `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드한 이미지에는 Job의 실행 명령인 `hyperpodrun`이 들어 있습니다. `scripts/config.env`에 `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, `HYPERPOD_TRAINER_INSTANCE_TYPE`이 필요합니다.
+**준비**　[HyperPod 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/)에서 training operator, trainer 노드, 샌드박스 pool을 준비하세요. `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드한 이미지에는 Job의 실행 명령인 `hyperpodrun`이 들어 있습니다. `scripts/config.env`에 `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, `HYPERPOD_TRAINER_INSTANCE_TYPE`이 필요합니다.
 
 ```bash
 scripts/hyperpod/run_grpo.sh 5
 ```
 
-`5`는 optimizer step 수입니다. 생략하면 60이고 기본 모델은 `Qwen/Qwen2.5-Coder-1.5B-Instruct`입니다. 스크립트는 설정을 `k8s/trainer/hyperpod-job-grpo.yaml.tpl`에 넣어 `rl-trainer`에 `grpo-<RUN_ID>`라는 `HyperPodPyTorchJob`을 제출합니다. operator가 스케줄 가능한 trainer 노드에 GPU 한 장을 요청하는 pod를 띄우고, 컨테이너는 라우팅 ConfigMap과 인증 토큰을 읽어 샌드박스 풀에 연결합니다.
+`5`는 optimizer step 수입니다. 생략하면 60이고 기본 모델은 `Qwen/Qwen2.5-Coder-1.5B-Instruct`입니다. 스크립트는 설정을 `k8s/trainer/hyperpod-job-grpo.yaml.tpl`에 넣어 `rl-trainer`에 `grpo-<RUN_ID>`라는 `HyperPodPyTorchJob`을 제출합니다. operator가 스케줄 가능한 trainer 노드에 GPU 한 장을 요청하는 pod를 띄우고, 컨테이너는 라우팅 ConfigMap과 인증 토큰을 읽어 샌드박스 pool에 연결합니다.
 
 | 확인할 것 | 출력으로 알 수 있는 것 |
 |---|---|
 | `HyperPodPyTorchJob grpo-<RUN_ID> submitted` | API가 Job을 받았습니다. pod 상태는 별도로 확인하세요. |
 | `routing` 이벤트 | trainer가 샌드박스 경로를 읽었습니다. 템플릿은 시작 후 20분 안에 이 이벤트를 기대합니다. |
-| `reward_batch` 이벤트와 학습 step | 샌드박스 평가 요청이 처리되고 학습이 진행되는지 확인할 수 있습니다. `sandbox_error`가 반복되면 풀을 점검하세요. |
+| `reward_batch` 이벤트와 학습 step | 샌드박스 평가 요청이 처리되고 학습이 진행되는지 확인할 수 있습니다. `sandbox_error`가 반복되면 pool을 점검하세요. |
 
 B1 trainer가 GRPO 한 스텝을 완료했고, EC2 gVisor 샌드박스 두 개가 제출 코드 12개를 채점했습니다. [Job 상태와 학습 로그](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/#확인-방법)
 
@@ -301,7 +301,7 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](https://daekeun-ml
 
 - **하는 일**: Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 빌려 씁니다. `install`은 controller와 CRD(기본 v1.0.11), claim RBAC를, `pool`은 SandboxTemplate과 SandboxWarmPool을 만들고, `claim`은 샌드박스 하나를 빌려 주소를 출력한 뒤 돌려주며, `episodes`는 모델 없이 multi-turn 에피소드를 실행하는 Job을 만듭니다.
 - **사용법**: `scripts/extensions/agent_sandbox.sh install`, `pool <runtime> [n]` (기본 1, 버전 파일은 `VERSION_FILE`, 기본 `v1`), `claim <runtime>`, `episodes <runtime> [episodes] [max_turns]` (기본 2와 3, `max_turns` 1은 single-turn). 버전은 `AGENT_SANDBOX_VERSION`으로 바꿉니다.
-- **언제**: 풀을 검증한 뒤 선택 단계로 씁니다. 모든 시나리오에서 쓸 수 있고, 실행 기록은 시나리오 C의 `kata-clh-cpu`입니다([11](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/11_multi_turn/)).
+- **언제**: pool을 검증한 뒤 선택 단계로 씁니다. 모든 시나리오에서 쓸 수 있고, 실행 기록은 시나리오 C의 `kata-clh-cpu`입니다([11](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/11_multi_turn/)).
 - **시간과 과금**: 시나리오 C의 `kata-clh-cpu`에서 에피소드 두 개를 각각 3턴씩 실행하는 데 약 25초 걸렸습니다. 새 노드는 없지만 대기 중인 warm sandbox도 가속기를 하나씩 점유합니다.
 - **다시 실행할 때**: `install`은 `kubectl apply`라 안전합니다. `pool`은 템플릿을 다시 적용하지만 이미 떠 있는 warm sandbox는 시작할 때의 env를 유지하고(`OnReplenish`), 인자를 생략하면 replica 1과 `v1`로 다시 써집니다. `claim`과 `episodes`는 실행할 때마다 새 claim과 새 Job(`episodes-<시각>`)을 만들고, 쓴 샌드박스는 돌려주며 지워집니다.
 - **성공 신호**: `install`은 CRD 4개, `pool`은 `warm pool kernel-eval-<runtime>: <n> sandbox(es); ...` 로그, `claim`은 `sandbox: ...  address: ...`, `episodes`는 `summary  solved <n>/<n> ...` 줄과 종료 코드 0입니다.

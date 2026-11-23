@@ -258,7 +258,7 @@ CPU에서는 Triton 커널이 필요한 golden을 제외하고 아래 4개만 �
 **문제가 생기면:**
 
 - **`FAIL` 줄이 있거나 연결 오류가 나면**: 두 서버의 기동 로그에 `device probe ok=True`가 있는지 먼저 확인하세요.
-- **클러스터에서 실패하면**: [문제 해결](reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
+- **클러스터에서 실패하면**: [문제 해결](reference/troubleshooting.md)의 "샌드박스 pool과 readiness" 항목을 보세요.
 
 ### 4.3 TRL GRPO dry run
 
@@ -278,7 +278,7 @@ python rl/trl/train_grpo.py --dry-run \
 - `--dry-run`은 vLLM 없이 CPU에서 2 step만 실행하고 completion을 32 token으로 자릅니다.
 - `--output-dir`는 쓰기 가능한 경로여야 합니다(기본값 `/outputs/grpo`는 pod 기준).
 - `--allow-torch-only`는 Triton 커널이 없어도 정답이면 correctness 점수 1.0을 주는 옵션입니다. 끄면 PyTorch만 쓴 정답은 0.3을 받습니다. CPU에서는 Triton 커널을 실행할 수 없어서 이 dry run에서는 켭니다.
-- 로컬에서는 `SANDBOX_ADDRESS`에 쉼표로 나열한 두 서버 주소를 그대로 사용합니다. 클러스터 Job은 이 변수 대신 `SANDBOX_ROUTING_FILE`이 가리키는 routing 표(ConfigMap)에서 현재 풀의 Service 주소를 읽습니다.
+- 로컬에서는 `SANDBOX_ADDRESS`에 쉼표로 나열한 두 서버 주소를 그대로 사용합니다. 클러스터 Job은 이 변수 대신 `SANDBOX_ROUTING_FILE`이 가리키는 routing 표(ConfigMap)에서 현재 pool의 Service 주소를 읽습니다.
 - LoRA는 모델 가중치 전체 대신 작은 어댑터 행렬만 학습하는 방법이고, trainer가 기본으로 씁니다.
 
 **확인할 것:**
@@ -346,7 +346,7 @@ scripts/01_check_prereqs.sh
 
 **확인할 것:** AWS identity 표, 도구 버전, G and VT quota, `c8i.2xlarge`의 nested virtualization 지원 여부, GPU 인스턴스 타입의 AZ별 제공 여부가 차례로 출력됩니다. 스크립트는 후보 인스턴스 타입을 모두 조회하므로, 고른 시나리오에서 만들 노드만 확인하세요.
 
-- **G and VT quota**: quota 표의 `Running On-Demand G and VT instances` 값이 시나리오 A는 16, B1은 8 이상인지 (B2와 C는 0). Kata GPU를 추가하면 어느 시나리오든 96을 더하고, gVisor 풀을 v1에서 v2로 교체하는 동안에는 `g5.xlarge` 두 대분 8이 더 필요합니다
+- **G and VT quota**: quota 표의 `Running On-Demand G and VT instances` 값이 시나리오 A는 16, B1은 8 이상인지 (B2와 C는 0). Kata GPU를 추가하면 어느 시나리오든 96을 더하고, gVisor pool을 v1에서 v2로 교체하는 동안에는 `g5.xlarge` 두 대분 8이 더 필요합니다
 - **Standard quota**: 관리형 B2의 일반 EC2 워커 필요량은 0입니다. CDK 경로는 값이 6 이상인지 확인하세요 (시나리오 C이거나 Kata CPU까지 하면 14 이상. 기존 CDK 경로에서 custom AMI를 빌드하는 B2와 Kata GPU는 2를 더해 8, c8i와 함께 쓰면 16 이상)
 - **c8i를 쓴다면(시나리오 C, Kata CPU)**: nested virtualization 줄에 `nested-virtualization`이 들어 있는지
 - **GPU 노드의 AZ**: 만들 GPU 노드의 인스턴스 타입(A는 `g5.2xlarge`와 `g5.xlarge`, B1은 `g5.xlarge`, Kata GPU는 `g4dn.metal`) 옆의 AZ 목록에, CDK 스택이 쓰는 두 AZ(CDK가 조회한 리전 AZ 목록의 앞 두 곳) 중 한 곳 이상이 있는지. 스크립트는 리전 전체를 조회하므로 다른 AZ 이름만 나와도 노드를 만들 수 없습니다

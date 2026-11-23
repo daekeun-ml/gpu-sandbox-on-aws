@@ -1,8 +1,8 @@
 # 06 학습 중 샌드박스 업데이트
 
-한 문제에 낸 답들을 비교할 때 채점 기준까지 바뀌면 점수 차이를 해석하기 어렵습니다. 그래서 trainer는 한 배치에 쓸 풀 버전을 한 번 정합니다. 여기서는 [05편의 학습](05_grpo_training.md)을 계속 돌리면서 **다음 배치부터 v2로 보내는 과정**을 확인합니다.
+한 문제에 낸 답들을 비교할 때 채점 기준까지 바뀌면 점수 차이를 해석하기 어렵습니다. 그래서 trainer는 한 배치에 쓸 pool 버전을 한 번 정합니다. 여기서는 [05편의 학습](05_grpo_training.md)을 계속 돌리면서 **다음 배치부터 v2로 보내는 과정**을 확인합니다.
 
-1. [두 풀이 함께 쓸 GPU를 준비](#준비-bluegreen에-필요한-gpu)하세요. gVisor에서는 채점 노드 네 대가 `Ready`여야 합니다.
+1. [두 pool이 함께 쓸 GPU를 준비](#준비-bluegreen에-필요한-gpu)하세요. gVisor에서는 채점 노드 네 대가 `Ready`여야 합니다.
 2. 다른 작업 터미널에서 [v2로 전환](#실행)합니다. 같은 시험 답을 v1과 v2에 보낸 결과가 [parity 검사](#rollout-parity)를 통과하면 라우팅이 바뀝니다.
 3. trainer 로그의 `SWITCH` 뒤에 [v2 배치의 판정](#switch-batches)이 나오는지 확인하세요. 실제로 채점한 결과가 있으면 [v1을 축소](#전환-확인-후-v1-정리)합니다. 모두 `sandbox_error`라면 v1을 유지하고 [롤백](#rollback)하세요.
 
@@ -10,12 +10,12 @@
     - **blue/green**: 새 버전(green)을 기존 버전(blue)과 별도로 띄워 검증한 뒤 트래픽을 한 번에 옮기는 배포 방식입니다.
     - **rolling update**: 같은 Deployment의 pod를 하나씩 새 버전으로 바꾸는 Kubernetes 기본 업데이트 방식입니다. 교체하는 동안 두 버전의 pod가 함께 실행됩니다.
     - **golden, parity**: 기대 verdict가 정해진 시험용 제출물과, 두 버전이 그 제출물에 같은 verdict를 내는지 비교하는 검사입니다.
-    - **routing ConfigMap, snapshot, revision**: 활성 풀을 기록한 설정, trainer가 채점 요청을 보낼 때 고정하는 그 설정의 사본, 내용이 바뀔 때마다 하나씩 증가하는 번호입니다.
+    - **routing ConfigMap, snapshot, revision**: 활성 pool을 기록한 설정, trainer가 채점 요청을 보낼 때 고정하는 그 설정의 사본, 내용이 바뀔 때마다 하나씩 증가하는 번호입니다.
     - **draining, recycler**: 새 요청을 받지 않고 교체를 기다리는 pod 상태와, 그런 pod를 지워 새 pod로 바꾸는 Production gateway의 기능입니다.
     - **rollback**: 문제가 생겼을 때 이전 버전으로 되돌리는 작업입니다.
 
 ??? note "실습 계정에서 확인한 범위"
-    시나리오 A의 GRPO 학습 중 gVisor 풀을 v1에서 v2로 전환했습니다. 첫 v2 채점은 배치 5였습니다. v1을 `--finish`로 축소하고, 학습이 끝난 뒤 v1으로 롤백했습니다.
+    시나리오 A의 GRPO 학습 중 gVisor pool을 v1에서 v2로 전환했습니다. 첫 v2 채점은 배치 5였습니다. v1을 `--finish`로 축소하고, 학습이 끝난 뒤 v1으로 롤백했습니다.
 
 ## v1과 v2의 차이
 
@@ -39,7 +39,7 @@ v2는 v1보다 엄격해서 같은 completion이 v1에서는 `ok`, v2에서는 `
 
 ## 준비: blue/green에 필요한 GPU
 
-blue/green은 전환 동안 두 버전의 풀을 함께 띄우므로 GPU가 두 배 필요합니다.
+blue/green은 전환 동안 두 버전의 pool을 함께 띄우므로 GPU가 두 배 필요합니다.
 
 | 런타임 | v1 기본 replica | v2 추가분 | 준비 |
 |---|---|---|---|
@@ -65,7 +65,7 @@ G/VT On-Demand vCPU 쿼터도 더 필요합니다. 시나리오 A에서는 train
 **문제가 생기면:** 노드가 늘지 않으면 [문제 해결](../reference/troubleshooting.md)의 "클러스터와 노드" 항목(vCPU 한도, 용량 부족)을 보세요.
 
 !!! note "routing 템플릿에 v2가 있는 런타임"
-    `k8s/base/routing.json.tpl`에는 GPU 런타임(`gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`)과 CPU 프로필(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) 일곱 개 모두의 v1, v2 주소가 있습니다. 템플릿을 고치지 않고 어느 런타임이든 전환할 수 있습니다. CPU 풀로 리허설하는 명령은 [10 c8i 단독 저비용 경로](10_cpu_only.md)의 7단계에 있습니다.
+    `k8s/base/routing.json.tpl`에는 GPU 런타임(`gvisor`, `gvisor-hyperpod`, `kata-qemu`, `kata-clh`)과 CPU 프로필(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`) 일곱 개 모두의 v1, v2 주소가 있습니다. 템플릿을 고치지 않고 어느 런타임이든 전환할 수 있습니다. CPU pool로 리허설하는 명령은 [10 c8i 단독 저비용 경로](10_cpu_only.md)의 7단계에 있습니다.
 
 ## 실행
 
@@ -114,12 +114,12 @@ and a later batch line on gvisor/v2 with verdicts other than sandbox_error, then
 
 **문제가 생기면:**
 
-- **1, 2단계 실패**: [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)의 "문제가 생기면" 표를 보세요.
+- **1, 2단계 실패**: [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)의 "문제가 생기면" 표를 보세요.
 - **parity 실패나 전환이 반영되지 않을 때**: [문제 해결](../reference/troubleshooting.md)의 "버전 전환 (routing)" 항목을 보세요.
 
 ## Parity 검사
 
-parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 풀에 동시에 보내 결과를 비교합니다. GPU 풀(`--device cuda`)에서는 6개, CPU 풀에서는 GPU 전용 2개를 뺀 4개를 씁니다.
+parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 pool에 동시에 보내 결과를 비교합니다. GPU pool(`--device cuda`)에서는 6개, CPU pool에서는 GPU 전용 2개를 뺀 4개를 씁니다.
 
 | golden | task | 기대 status | 확인하는 것 |
 |---|---|---|---|
@@ -137,7 +137,7 @@ parity는 `src/gpusandbox/golden.py`의 golden 제출물을 두 풀에 동시에
 
 통과 조건은 네 가지입니다.
 
-1. 두 풀 모두 각 golden의 기대 status를 반환합니다.
+1. 두 pool 모두 각 golden의 기대 status를 반환합니다.
 2. 기대값이 정해진 golden은 `custom_kernel` 여부도 일치합니다.
 3. baseline과 candidate의 status가 같습니다.
 4. 둘 다 `ok`이고 speedup이 있으면 `|candidate / baseline - 1| <= 0.35`입니다(스크립트가 쓰는 `--speedup-tolerance` 기본값).
@@ -160,17 +160,17 @@ PASS read_host_file               v1=policy_violation v2=policy_violation
 speedup은 같은 GPU 종류에서도 pod마다 달라지므로, 이 검사는 허용 범위를 넉넉히 두고 verdict 변화와 큰 timing 변화만 검출합니다.
 
 !!! tip "학습 중 parity가 `sandbox_error`로 실패할 때"
-    parity는 학습 중인 v1 풀에도 요청을 보냅니다.
+    parity는 학습 중인 v1 pool에도 요청을 보냅니다.
 
     - **v1 pod가 바쁘면**: 503(busy) 응답이 옵니다. 클라이언트는 그 pod를 5초 동안 제외하고 다시 시도하며, 첫 시도를 포함해 요청당 최대 4번 보냅니다.
-    - **그래도 실패하면**: `expected ok, got sandbox_error: <pod-ip>:8000 busy/draining` 같은 줄이 나옵니다. 이 실패는 v1 풀의 용량이 부족해서 생기므로 스크립트를 다시 실행하세요.
+    - **그래도 실패하면**: `expected ok, got sandbox_error: <pod-ip>:8000 busy/draining` 같은 줄이 나옵니다. 이 실패는 v1 pool의 용량이 부족해서 생기므로 스크립트를 다시 실행하세요.
     - **재실행하면**: 1, 2단계는 같은 manifest를 다시 적용하고 검증만 반복합니다.
 
 ### 전환을 허용한 parity 검사 { #rollout-parity }
 
-A10G 샌드박스 노드를 네 대로 늘려 v1과 v2에 두 대씩 배정했습니다. 두 풀의 golden 판정이 일치한 뒤 `sandbox-routing`의 active 버전이 `v2`로 바뀌었습니다.
+A10G 샌드박스 노드를 네 대로 늘려 v1과 v2에 두 대씩 배정했습니다. 두 pool의 golden 판정이 일치한 뒤 `sandbox-routing`의 active 버전이 `v2`로 바뀌었습니다.
 
-![v1과 v2 golden parity, 전환된 ConfigMap과 양쪽 풀의 Ready 상태](../images/terminal/rollout-parity-replay.png)
+![v1과 v2 golden parity, 전환된 ConfigMap과 양쪽 pool의 Ready 상태](../images/terminal/rollout-parity-replay.png)
 
 ## Trainer가 전환을 받는 과정
 
@@ -205,15 +205,15 @@ trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용�
 
     1. ConfigMap은 디렉터리로 마운트되어 있어서 kubelet이 파일을 갱신합니다. 갱신 지연은 최대 kubelet sync 주기와 cache 전파 지연을 더한 시간까지 걸릴 수 있습니다(Kubernetes 문서).
     2. `RoutingTable`은 파일을 최대 2초에 한 번 다시 읽고, 내용이 바뀌면 `revision`을 1 올립니다. 파일을 쓰는 도중이라 읽지 못하면 마지막으로 정상적으로 읽은 table을 계속 씁니다.
-    3. `KernelRewards`는 한 batch의 결과를 한 풀의 버전으로 맞춥니다. 클라이언트는 호출될 때마다 그 시점의 snapshot으로 풀을 정합니다.
-        - **보내는 completion**: 기본 batch는 2 group, completion 16개이며, 이 중 샌드박스 평가가 필요한 completion만 보냅니다. 같은 풀의 캐시에 결과가 있거나, 코드가 없거나, trainer 쪽 정책 검사에서 걸린 completion은 보내지 않습니다.
-        - **다른 풀로 캐시된 completion**: 이번 batch를 채점한 풀로 다시 보내므로, 한 batch에서 클라이언트를 두 번 이상 부를 수 있습니다.
-        - **채점 중에 풀이 다시 바뀌면**: 세 번째 호출에서 batch 전체를 한 요청으로 보내므로, 한 batch는 항상 한 버전으로 끝납니다.
-        - **필요한 결과가 모두 한 풀의 캐시에 있으면**: 샌드박스를 부르지 않고 `reward_batch` 줄도 나오지 않습니다.
+    3. `KernelRewards`는 한 batch의 결과를 한 pool의 버전으로 맞춥니다. 클라이언트는 호출될 때마다 그 시점의 snapshot으로 pool을 정합니다.
+        - **보내는 completion**: 기본 batch는 2 group, completion 16개이며, 이 중 샌드박스 평가가 필요한 completion만 보냅니다. 같은 pool의 캐시에 결과가 있거나, 코드가 없거나, trainer 쪽 정책 검사에서 걸린 completion은 보내지 않습니다.
+        - **다른 pool로 캐시된 completion**: 이번 batch를 채점한 pool로 다시 보내므로, 한 batch에서 클라이언트를 두 번 이상 부를 수 있습니다.
+        - **채점 중에 pool이 다시 바뀌면**: 세 번째 호출에서 batch 전체를 한 요청으로 보내므로, 한 batch는 항상 한 버전으로 끝납니다.
+        - **필요한 결과가 모두 한 pool의 캐시에 있으면**: 샌드박스를 부르지 않고 `reward_batch` 줄도 나오지 않습니다.
         - **`reward_batch`의 `n`**: 샌드박스로 보낸 서로 다른 completion 수입니다.
     4. v1 snapshot으로 보낸 요청은 v1이 채점합니다. 어느 경우든 `--finish`는 v1으로 보낸 batch가 끝난 뒤에 실행합니다.
         - **처음 전환할 때**: 캐시에 v1 결과만 있으므로, 전환 전에 v1으로 보낸 batch는 v1에서 끝납니다.
-        - **다른 풀로 캐시된 결과가 있어 한 번 더 호출하는 사이 routing이 바뀌면**: 마지막 호출의 풀로 batch 전체를 다시 채점합니다.
+        - **다른 pool로 캐시된 결과가 있어 한 번 더 호출하는 사이 routing이 바뀌면**: 마지막 호출의 pool로 batch 전체를 다시 채점합니다.
     5. 새 snapshot을 처음 쓰는 batch의 결과를 받은 뒤, 그 batch의 `reward_batch` 바로 앞에 전환 이벤트가 한 번 나옵니다. `07_run_grpo.sh` 터미널에서는 첫 줄처럼, pod 로그와 `GPUSANDBOX_LOG=json`에서는 둘째 줄처럼 보입니다.
 
     ```text
@@ -221,7 +221,7 @@ trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용�
     {"event": "sandbox_version_switch", "from": "gvisor/v1", "to": "gvisor/v2", "routing_revision": <int>, "global_step": <int>, "ts": <float>}
     ```
 
-    그 뒤 `batch` 줄의 풀이 `gvisor/v2`가 됩니다. 원래 JSON에서는 `reward_batch`의 `version`이 `v2`, `served_versions`가 `{"v2": <int>}`입니다. 요약 줄에 `MIXED VERSIONS`가 붙으면 한 batch를 두 버전이 채점한 것입니다. `global_step`(요약의 `step`)으로 학습 곡선에 전환 시점을 표시하세요.
+    그 뒤 `batch` 줄의 pool이 `gvisor/v2`가 됩니다. 원래 JSON에서는 `reward_batch`의 `version`이 `v2`, `served_versions`가 `{"v2": <int>}`입니다. 요약 줄에 `MIXED VERSIONS`가 붙으면 한 batch를 두 버전이 채점한 것입니다. `global_step`(요약의 `step`)으로 학습 곡선에 전환 시점을 표시하세요.
 
 ### trainer가 v2를 사용한 배치 { #switch-batches }
 
@@ -238,20 +238,20 @@ trainer는 배치 시작 시 읽은 라우팅 설정을 해당 배치에 적용�
 
 v2 pod는 평가를 200번 수행한 뒤 draining 상태가 되어 Ready에서 제외됩니다. 전환 전 2, 3단계에서 보낸 golden 요청도 이 200번에 포함됩니다.
 
-- **Production에서는**: gateway의 recycler가 이런 pod를 지웁니다([03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md)).
+- **Production에서는**: gateway의 recycler가 이런 pod를 지웁니다([03 Gateway와 샌드박스 pool](../production/03_gateway_and_pools.md)).
 - **핸즈온의 direct 모드에서는**: pod가 Ready가 아닌 채로 남습니다.
 
 v2 pod 2개의 한도는 합계 400번입니다. golden 요청 12번을 빼고 step마다 completion 16개를 한 번씩 평가하면 약 24 step분이 남습니다.
 
 - **캐시 덕분에 `n`이 작으면**: 더 오래 씁니다.
-- **다른 풀로 캐시된 결과를 다시 보내거나 batch 전체를 다시 보내면**: 더 빨리 소진됩니다.
+- **다른 pool로 캐시된 결과를 다시 보내거나 batch 전체를 다시 보내면**: 더 빨리 소진됩니다.
 - **두 pod가 모두 draining 상태이면**: 요청이 `sandbox_error`가 되어 reward 계산에서 빠집니다.
 
 학습을 오래 실행할 때는 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod를 직접 지우세요. 아래 pod도 `0/1`로 보이니 구분하세요.
 
 - **시작 중인 pod나 GPU probe, egress 검사에 실패한 pod**: `0/1`로 보입니다.
 - **평가 중 `gpu_fault`가 난 pod**: `0/1`이 되지만, liveness probe가 30초 안팎에 컨테이너를 다시 시작하므로 `RESTARTS`가 늘어납니다.
-- **egress 검사에 실패하는 pod**: 실패하는 동안 서버는 5초마다 검사하고 실패할 때마다 `egress is open, refusing work`를 기록합니다. `kubectl -n sandbox logs <pod> --since=1m`처럼 최근 로그에 이 줄이 계속 나오면 지우지 말고 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목부터 보세요.
+- **egress 검사에 실패하는 pod**: 실패하는 동안 서버는 5초마다 검사하고 실패할 때마다 `egress is open, refusing work`를 기록합니다. `kubectl -n sandbox logs <pod> --since=1m`처럼 최근 로그에 이 줄이 계속 나오면 지우지 말고 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 pool과 readiness" 항목부터 보세요.
 
 아래 첫 명령으로 v2 pod를 확인하고, 둘째 명령은 한동안 `1/1`로 평가를 처리하다 READY가 `0/1`이 된 v2 pod에만 실행하세요.
 
@@ -266,7 +266,7 @@ kubectl -n sandbox delete pod <READY-0/1-pod-name>
 
 ## 전환 확인 후 v1 정리
 
-라우팅이 v2로 바뀐 것은 새 요청을 어느 풀로 보낼지 정했다는 뜻입니다. v1을 줄이기 전에는 v2가 실제 답안을 채점했는지 로그에서 확인합니다.
+라우팅이 v2로 바뀐 것은 새 요청을 어느 pool로 보낼지 정했다는 뜻입니다. v1을 줄이기 전에는 v2가 실제 답안을 채점했는지 로그에서 확인합니다.
 
 trainer 로그에서 v2가 처리한 `reward_batch`에 `sandbox_error` 이외의 평가 결과가 하나 이상 있는지 확인하세요. 확인했다면 아래 명령으로 v1의 replica를 0으로 줄입니다.
 
@@ -292,15 +292,15 @@ scripts/ops/rollout.sh gvisor v2 v1
 - **`--finish`로 v1을 0으로 줄였다면**: 1단계가 profile의 replica 수만큼 v1 pod를 다시 만들므로 GPU 용량이 다시 필요합니다.
 - **`--finish` 전이라면**: v1이 아직 실행 중이라 1단계가 바로 끝납니다.
 
-parity는 두 풀이 모두 golden 기대값을 반환해야 통과합니다. 그래서 v2가 고장 나 golden 검사에 실패하면 rollback 스크립트도 3단계에서 멈춥니다. 이때는 routing만 수동으로 되돌리세요.
+parity는 두 pool이 모두 golden 기대값을 반환해야 통과합니다. 그래서 v2가 고장 나 golden 검사에 실패하면 rollback 스크립트도 3단계에서 멈춥니다. 이때는 routing만 수동으로 되돌리세요.
 
-`scripts/05_setup_namespaces_auth.sh`를 다시 실행하면 `rl-trainer`의 routing ConfigMap이 `ACTIVE_RUNTIME`, `ACTIVE_VERSION` 값(없으면 `gvisor/v1`)으로 새로 써지니, 되돌릴 풀을 이 두 값으로 지정하세요. 이 스크립트는 namespace, RBAC, NetworkPolicy, JWKS도 다시 적용합니다.
+`scripts/05_setup_namespaces_auth.sh`를 다시 실행하면 `rl-trainer`의 routing ConfigMap이 `ACTIVE_RUNTIME`, `ACTIVE_VERSION` 값(없으면 `gvisor/v1`)으로 새로 써지니, 되돌릴 pool을 이 두 값으로 지정하세요. 이 스크립트는 namespace, RBAC, NetworkPolicy, JWKS도 다시 적용합니다.
 
 ```bash
 ACTIVE_RUNTIME=gvisor ACTIVE_VERSION=v1 scripts/05_setup_namespaces_auth.sh
 ```
 
-- **Production gateway를 쓰는 클러스터에서는**: 위 스크립트를 쓰지 마세요. gateway가 읽는 `sandbox-gateway`의 routing 표는 v2로 남고, `sandbox`의 `allow-clients-to-sandbox-api`는 핸즈온 규칙으로 돌아갑니다. 대신 v1 풀이 Ready인지 확인한 뒤 [Production 05의 급한 롤백](../production/05_sandbox_updates.md#롤백) 명령으로 두 namespace의 routing 표를 v1으로 되돌리세요.
+- **Production gateway를 쓰는 클러스터에서는**: 위 스크립트를 쓰지 마세요. gateway가 읽는 `sandbox-gateway`의 routing 표는 v2로 남고, `sandbox`의 `allow-clients-to-sandbox-api`는 핸즈온 규칙으로 돌아갑니다. 대신 v1 pool이 Ready인지 확인한 뒤 [Production 05의 급한 롤백](../production/05_sandbox_updates.md#롤백) 명령으로 두 namespace의 routing 표를 v1으로 되돌리세요.
 
 **확인할 것:**
 

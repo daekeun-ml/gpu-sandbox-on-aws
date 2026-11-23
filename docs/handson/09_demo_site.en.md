@@ -67,7 +67,7 @@ The published data and recordings are these.
 
 [View the EKS benchmark results](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results)
 
-![Five EKS pools with their node types, successful requests, p50, p95 and throughput](../images/demo/runtime-results-en.png)
+![One table comparing four HyperPod client runs and five EC2 runtime runs](../images/demo/runtime-results-en.png)
 
 [Open the public B1 benchmark](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1) · [Open the B2 results](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b2)
 
@@ -368,7 +368,7 @@ The page shows terminal output verbatim, so read it once more with the same crit
 
 ### 2.7 Re-record the tour video (optional)
 
-`demo/record_tour.py` records the scoring replay, GRPO runs, EKS results table, B1 client comparison and deployment diagrams in Chromium. Each language gets an MP4 with captions and a JPEG poster captured from its B1 diagram.
+`demo/record_tour.py` records the scoring replay, GRPO runs, B2, B1 and A results table, B2 client comparison and deployment diagrams in Chromium. Each language gets an MP4 with captions and a JPEG poster captured from its B1 diagram.
 
 - **Serving the page**: the page is served on `127.0.0.1` only while recording.
 - **Scan before recording**: it runs the scan from 2.6 on the data files in `--site` and refuses to record on any finding.

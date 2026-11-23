@@ -42,8 +42,8 @@ CAPTIONS = {
         "grpo": "실제 모델(Qwen2.5-Coder-1.5B)로 GRPO 학습 5 step: 채점 결과와 점수",
         "switch": "CPU 모의 실행에서 샌드박스를 v1에서 v2로 바꿨습니다. 30개 배치가 모두 채점됐습니다.",
         "b1grpo": "HyperPod의 GRPO 1스텝에서 모델이 만든 코드 12개를 EC2 gVisor 샌드박스가 채점했습니다.",
-        "b1bench": "같은 EC2 샌드박스 풀에 EKS 시스템 노드와 HyperPod 학습 노드에서 차례로 고정 커널을 보냈습니다.",
-        "results": "EKS 다섯 풀에서 32건씩 채점했습니다. 표에서 요청 성공 건수와 풀별 처리량을 확인할 수 있습니다.",
+        "b2bench": "B2의 두 HyperPod 워커가 같은 채점 노드에 보낸 64건이 모두 성공했습니다.",
+        "results": "HyperPod B2와 B1은 시스템·학습 노드에서 각각 32건씩, EC2는 다섯 런타임에 32건씩 보냈습니다.",
         "bench": "성능 비교: 런타임별 채점 시간, 시작 시간, 처리량",
         "patterns": "패턴별 아키텍처: trainer와 샌드박스를 어디에 두는지 네 가지 패턴으로 보여 줍니다.",
         "patterns2": "HyperPod 학습(B1)에서 학습 한 step을 재생합니다. 요청과 결과가 선을 따라 움직입니다.",
@@ -63,8 +63,8 @@ CAPTIONS = {
         "grpo": "Five GRPO steps of a real model (Qwen2.5-Coder-1.5B): verdicts and reward",
         "switch": "In a separate CPU simulation, all 30 batches were scored across the v1 to v2 switch.",
         "b1grpo": "One GRPO step on HyperPod generated 12 submissions for the EC2 gVisor sandboxes.",
-        "b1bench": "The EKS system node and HyperPod trainer node took turns sending a fixed kernel to the same EC2 sandbox pool.",
-        "results": "Five EKS pools scored 32 requests each. The table shows successful requests and throughput for each pool.",
+        "b2bench": "In B2, both HyperPod clients sent 32 requests to the same grading pool. All 64 passed.",
+        "results": "B2 and B1 each ran 32 requests from two clients. Five EC2 runtimes ran 32 each.",
         "bench": "Benchmark: eval latency, cold start and throughput per runtime",
         "patterns": "Architecture patterns: four ways to place the trainer and the sandboxes.",
         "patterns2": "Replaying one training step of HyperPod training (B1): requests and results move along the lines.",
@@ -192,9 +192,9 @@ class Tour:
             await self.scroll("#runtime-results", "center")
             await self.caption("results")
             await p.wait_for_timeout(5200)
-        if await p.locator("#hyperpod-b1").is_visible():
-            await self.scroll("#hyperpod-b1", "center")
-            await self.caption("b1bench")
+        if await p.locator("#hyperpod-b2").is_visible():
+            await self.scroll("#hyperpod-b2", "center")
+            await self.caption("b2bench")
             await p.wait_for_timeout(5200)
         await self.scroll("#runtime-bench")
         await self.caption("bench")

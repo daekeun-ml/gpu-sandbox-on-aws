@@ -72,3 +72,21 @@
 
 /* Architecture diagrams open at full size when clicked. */
 .md-typeset a > img[src*="images/architecture/"] { cursor: zoom-in; }
+
+.bench-scroll { max-width: 100%; overflow-x: auto; }
+.bench-results { width: 100%; border-collapse: collapse; font-size: .76rem; font-variant-numeric: tabular-nums; }
+.bench-results th, .bench-results td { padding: .34rem .42rem; text-align: right; }
+.bench-results td, .bench-results thead th { white-space: nowrap; }
+.bench-results th:first-child { text-align: left; }
+.bench-results thead th { border-bottom: .09rem solid var(--md-default-fg-color--lighter); }
+.bench-results small { color: var(--md-default-fg-color--light); font-weight: normal; }
+.bench-results tbody small { display: block; }
+.bench-results tbody tr + tr { border-bottom: .05rem solid var(--md-default-fg-color--lightest); }
+.bench-results [scope="rowgroup"] { background: var(--md-default-fg-color--lightest); }
+.bench-results [scope="rowgroup"] small { display: inline-block; margin-left: .6rem; }
+.bench-results tbody[id] { scroll-margin-top: 4rem; }
+@media (max-width: 35em) {
+  .bench-results { font-size: .66rem; }
+  .bench-results th, .bench-results td { padding: .32rem .16rem; }
+  .bench-results thead small, .bench-results [scope="rowgroup"] small { display: block; margin: 0; }
+}

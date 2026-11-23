@@ -7,19 +7,21 @@
 
 에이전트가 첫 턴에서 파일을 만들고 다음 턴에서 실행 결과를 읽은 뒤 코드를 고친다고 해 봅시다. 턴마다 새 샌드박스를 받으면 앞 턴의 파일을 다시 준비해야 합니다. 에피소드 동안 하나를 쓰면 이전 작업을 이어갈 수 있고 다음 에피소드에는 새 샌드박스를 할당할 수 있습니다.
 
-이 저장소의 채점 서버는 제출마다 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드 동안 같은 pod, GPU, 채점 버전을 쓰되 턴마다 코드 전체를 다시 제출합니다. 기존 reward 풀에서는 턴마다 다른 pod가 답을 채점할 수 있습니다.
+이 저장소의 채점 서버는 제출마다 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드 동안 같은 pod, GPU, 채점 버전을 쓰되 턴마다 코드 전체를 다시 제출합니다. 기존 reward pool에서는 턴마다 다른 pod가 답을 채점할 수 있습니다.
 
-![요청마다 풀에서 pod를 선택하는 방식과 에피소드의 여러 제출을 같은 샌드박스로 보내는 방식 비교](../images/figures/concepts-06_agent_sandbox.ko.svg)
+![요청마다 pool에서 pod를 선택하는 방식과 에피소드의 여러 제출을 같은 샌드박스로 보내는 방식 비교](../images/figures/concepts-06_agent_sandbox.ko.svg)
 
-## 채점 풀과 에피소드 할당의 차이
+## 채점 pool과 에피소드 할당의 차이
 
-| 비교 항목 | 일반 reward 풀 | Agent Sandbox 확장 |
+<span id="채점-풀과-에피소드-할당의-차이"></span>
+
+| 비교 항목 | 일반 reward pool | Agent Sandbox 확장 |
 |---|---|---|
 | 샌드박스를 고르는 시점 | 제출을 받을 때마다 준비된 pod를 고릅니다. | 에피소드 시작에 하나를 요청합니다. |
 | 다음 제출의 실행 위치 | 다른 pod로 갈 수 있습니다. | 같은 에피소드라면 할당받은 pod를 사용합니다. |
 | 작업이 끝난 뒤 | pod는 다음 제출의 채점에 다시 쓰입니다. | 에피소드가 끝나면 할당된 pod도 정리합니다. |
 
-에피소드 전체를 같은 환경에서 평가해야 할 때 할당 방식이 유용합니다. 요청마다 독립적으로 점수만 필요하다면 기존 reward 풀을 쓸 수 있습니다.
+에피소드 전체를 같은 환경에서 평가해야 할 때 할당 방식이 유용합니다. 요청마다 독립적으로 점수만 필요하다면 기존 reward pool을 쓸 수 있습니다.
 
 ## 샌드박스 할당에 쓰는 리소스
 
@@ -33,11 +35,11 @@
 
 미리 띄우면 첫 턴의 대기 시간을 줄일 수 있지만 대기 중에도 CPU나 GPU를 점유합니다. GPU warm pool을 얼마나 크게 둘지는 대기 시간과 비용을 함께 보고 결정합니다.
 
-[Multi-turn 핸즈온](../handson/11_multi_turn.md)에서는 CPU 풀로 시작합니다. 로그에서 `claim`이 한 에피소드의 턴 동안 같은지, 마지막에 `released: true`가 나오는지 확인할 수 있습니다. 이 저장소의 AWS 실습에서는 Kata GPU 템플릿과 veRL 연동을 검증하지 않았습니다.
+[Multi-turn 핸즈온](../handson/11_multi_turn.md)에서는 CPU pool로 시작합니다. 로그에서 `claim`이 한 에피소드의 턴 동안 같은지, 마지막에 `released: true`가 나오는지 확인할 수 있습니다. 이 저장소의 AWS 실습에서는 Kata GPU 템플릿과 veRL 연동을 검증하지 않았습니다.
 
 ## 템플릿에서 반납까지 따라가기
 
-[CPU 에피소드 실습](../handson/11_multi_turn.md)의 준비 단계에서 `sandbox`와 `rl-trainer` 네임스페이스, 인증 설정, CPU 노드와 이미지가 준비됐다고 가정합니다. 아래 명령으로 controller를 설치하고 대기 풀을 만든 뒤, 에피소드가 샌드박스를 할당받아 반납하는 과정을 확인합니다.
+[CPU 에피소드 실습](../handson/11_multi_turn.md)의 준비 단계에서 `sandbox`와 `rl-trainer` 네임스페이스, 인증 설정, CPU 노드와 이미지가 준비됐다고 가정합니다. 아래 명령으로 controller를 설치하고 대기 pool을 만든 뒤, 에피소드가 샌드박스를 할당받아 반납하는 과정을 확인합니다.
 
 ```bash
 scripts/extensions/agent_sandbox.sh install
@@ -70,7 +72,7 @@ kubectl -n sandbox get pods -o wide
 
 ### 템플릿을 바꾸면 다음 에피소드는 어느 버전을 쓸까요?
 
-이 저장소의 template 이름은 런타임별로 고정돼 있습니다. `VERSION_FILE=v2`로 같은 풀을 다시 적용하면 이후에 만들어지는 샌드박스의 설정이 바뀝니다. warm pool의 `OnReplenish` 정책에서는 이미 대기 중인 샌드박스가 할당되거나 정리될 때까지 이전 버전이 남을 수 있습니다. 같은 GRPO group의 모든 에피소드에 같은 버전이 필요하다면 `turn.version`을 확인하고, 버전별 template과 pool을 나누어 같은 group의 claim을 같은 풀로 보내는 방법을 검토하세요.
+이 저장소의 template 이름은 런타임별로 고정돼 있습니다. `VERSION_FILE=v2`로 같은 pool을 다시 적용하면 이후에 만들어지는 샌드박스의 설정이 바뀝니다. warm pool의 `OnReplenish` 정책에서는 이미 대기 중인 샌드박스가 할당되거나 정리될 때까지 이전 버전이 남을 수 있습니다. 같은 GRPO group의 모든 에피소드에 같은 버전이 필요하다면 `turn.version`을 확인하고, 버전별 template과 pool을 나누어 같은 group의 claim을 같은 pool로 보내는 방법을 검토하세요.
 
 ### Python에서 보는 할당의 범위
 
@@ -203,7 +205,7 @@ veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습�
 
     | 항목 | AI on EKS Agent Sandbox 솔루션 | 이 저장소 |
     |---|---|---|
-    | 구성 | gVisor 커널 격리, agent-sandbox CRD(`Sandbox`, `SandboxTemplate`, `SandboxWarmPool`, `SandboxClaim`, `v1beta1`), FQDN 기반 egress 제어 | gVisor + nvproxy 또는 Kata + VFIO GPU 샌드박스와 Deployment 기반 reward 풀. 에피소드 단위 SandboxClaim은 선택 확장 |
+    | 구성 | gVisor 커널 격리, agent-sandbox CRD(`Sandbox`, `SandboxTemplate`, `SandboxWarmPool`, `SandboxClaim`, `v1beta1`), FQDN 기반 egress 제어 | gVisor + nvproxy 또는 Kata + VFIO GPU 샌드박스와 Deployment 기반 reward pool. 에피소드 단위 SandboxClaim은 선택 확장 |
     | 런타임 계층 | `standard`(runc), `gvisor`(Standard EKS만, Auto Mode는 gVisor를 지원하지 않음), `isolated-sandbox`(Nitro Sandboxes, EKS Auto Mode의 Kubernetes 1.36 이상 또는 custom AMI를 쓰는 Standard EKS). Kata + Firecracker는 향후 계층으로 적혀 있고 포함되지 않음 | `gvisor`, `kata-qemu`, `kata-clh`, `kata-clh-cpu`, `kata-qemu-cpu` 프로필 |
     | egress | 허용한 도메인으로만 허용. Standard EKS는 Cilium(aws-cni chaining 모드)의 FQDN 필터, Auto Mode는 `ApplicationNetworkPolicy` | template의 `networkPolicy.egress: []`로 모두 차단. DNS 트래픽도 차단 |
     | 리소스 구성 | KRO가 여러 리소스를 `AgentSandbox` 리소스 하나로 묶음 | `template.yaml.tpl`을 프로필마다 렌더링 |
@@ -222,8 +224,8 @@ veRL에서 실행하지 않았으므로 다음 항목은 확인되지 않았습�
 - **trainer에서 바로 쓰려면 추가 준비가 필요합니다.** 위 조건 표에 있는 API 토큰과 `kubernetes` 패키지를 준비하고, broker 사용 여부를 결정하세요.
 - **template 이름에 버전이 없습니다.** `VERSION_FILE=v2`로 `pool`을 다시 적용하면 같은 `kernel-eval-<runtime>` template이 수정됩니다. `OnReplenish`는 대기 중인 이전 버전 샌드박스를 claim되거나 삭제될 때까지 유지하므로, 전환 중에는 claim마다 v1과 v2가 섞일 수 있습니다(upstream 주석 기준 추론).
     - **`multiturn` CLI에서는**: 각 `turn` 이벤트의 `version`으로 확인할 수 있습니다.
-    - **veRL tool에서는**: veRL tool은 에피소드 요약과 `compute_score` 결과에 버전을 싣지 않으므로, GRPO group 안에서 버전이 섞이면 안 되는 veRL 학습이라면 그 값을 직접 기록하거나 버전마다 이름이 다른 template과 pool을 만들어 group의 claim을 한 풀로 보내세요(둘 다 이 저장소에 없음).
-- **template에는 livenessProbe가 없습니다.** Deployment 풀과 달리 GPU 오류로 draining된 샌드박스를 kubelet이 다시 시작하지 않습니다. 그 에피소드의 남은 평가는 `sandbox_error`가 되므로(코드 기준), 에피소드를 폐기하고 새 claim을 만드세요.
+    - **veRL tool에서는**: veRL tool은 에피소드 요약과 `compute_score` 결과에 버전을 싣지 않으므로, GRPO group 안에서 버전이 섞이면 안 되는 veRL 학습이라면 그 값을 직접 기록하거나 버전마다 이름이 다른 template과 pool을 만들어 group의 claim을 한 pool로 보내세요(둘 다 이 저장소에 없음).
+- **template에는 livenessProbe가 없습니다.** Deployment pool과 달리 GPU 오류로 draining된 샌드박스를 kubelet이 다시 시작하지 않습니다. 그 에피소드의 남은 평가는 `sandbox_error`가 되므로(코드 기준), 에피소드를 폐기하고 새 claim을 만드세요.
 - **`loop`를 전달하지 않은 `EpisodeSandbox`는 인스턴스마다 이벤트 루프 스레드를 하나 만들고 닫지 않습니다.** 한 프로세스에서 에피소드를 매우 많이 실행하면 스레드가 계속 늘어나므로, `BackgroundLoop` 하나를 `loop`로 전달하세요(코드 검토 결과). `multiturn` CLI와 veRL tool은 루프 하나를 공유합니다.
 - **upstream이 빠르게 변경되고 있습니다.** 필드 이름은 v1.0.11의 `sandboxclaim_types.go`를 따릅니다.
 

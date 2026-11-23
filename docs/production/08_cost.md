@@ -1,25 +1,25 @@
 # 08 비용
 
 !!! info "TL;DR"
-    비용은 trainer GPU, 샌드박스 GPU, 빈 bare metal 노드의 대기 시간, EKS control plane과 NAT gateway로 나뉩니다. 비용을 줄이는 주요 방법은 샌드박스 풀 크기를 reward 구간에 맞추고 빈 노드를 빨리 반납하는 것입니다(금액은 온디맨드 요금으로 계산한 추정치).
+    비용은 trainer GPU, 샌드박스 GPU, 빈 bare metal 노드의 대기 시간, EKS control plane과 NAT gateway로 나뉩니다. 비용을 줄이는 주요 방법은 샌드박스 pool 크기를 reward 구간에 맞추고 빈 노드를 빨리 반납하는 것입니다(금액은 온디맨드 요금으로 계산한 추정치).
 
 ## 리소스가 유휴 상태일 때 드는 비용
 
 GPU 사용률을 보면 샌드박스가 쉬고 있는데 청구액은 그대로일 수 있습니다. 샌드박스에 요청은 채점 구간에 몰리지만 노드는 생성과 모델 업데이트를 기다리는 동안에도 켜져 있습니다. 한 run을 기준으로 실제 채점에 쓴 시간과 노드가 할당된 시간을 나눠 보면 비용이 남는 구간이 보입니다.
 
-![a: trainer가 생성, reward 채점, 업데이트를 반복하는 동안 샌드박스 GPU는 reward 구간에만 사용되지만, 과금은 노드 단위로 계속됩니다. run이 끝난 뒤 풀을 그대로 두면 g4dn.metal이 시간당 7.824 USD로 계속 과금됩니다(주말 48시간이면 375.552 USD). g4dn.metal의 T4 8개 중 4개만 쓰면 사용한 T4당 1.956 USD/시간입니다. b: 풀 크기를 reward 구간에 몰리는 요청에 맞추고, run이 끝나면 replicas를 0으로 줄입니다. 빈 노드는 consolidateAfter 30분이 지나면 반납 절차에 들어가므로 빈 기간마다 약 3.912 USD가 들고, 과금은 노드가 종료될 때까지 이어집니다. T4 8개를 모두 쓰면 T4당 0.978 USD/시간입니다.](../images/figures/production-08_cost.ko.svg)
+![a: trainer가 생성, reward 채점, 업데이트를 반복하는 동안 샌드박스 GPU는 reward 구간에만 사용되지만, 과금은 노드 단위로 계속됩니다. run이 끝난 뒤 pool을 그대로 두면 g4dn.metal이 시간당 7.824 USD로 계속 과금됩니다(주말 48시간이면 375.552 USD). g4dn.metal의 T4 8개 중 4개만 쓰면 사용한 T4당 1.956 USD/시간입니다. b: pool 크기를 reward 구간에 몰리는 요청에 맞추고, run이 끝나면 replicas를 0으로 줄입니다. 빈 노드는 consolidateAfter 30분이 지나면 반납 절차에 들어가므로 빈 기간마다 약 3.912 USD가 들고, 과금은 노드가 종료될 때까지 이어집니다. T4 8개를 모두 쓰면 T4당 0.978 USD/시간입니다.](../images/figures/production-08_cost.ko.svg)
 
 ## 비용을 줄일 수 있는 지점
 
-요청이 몰릴 때는 배치 대기를 줄일 만큼 풀을 확보하고, run 사이에는 유휴 노드가 얼마나 오래 남는지 확인합니다. 특히 metal은 노드 단위로 비용이 나므로 실제로 쓰는 T4 수에 따라 GPU당 비용이 달라집니다. 아래 금액은 공개 온디맨드 단가로 계산한 추정치입니다.
+요청이 몰릴 때는 배치 대기를 줄일 만큼 pool을 확보하고, run 사이에는 유휴 노드가 얼마나 오래 남는지 확인합니다. 특히 metal은 노드 단위로 비용이 나므로 실제로 쓰는 T4 수에 따라 GPU당 비용이 달라집니다. 아래 금액은 공개 온디맨드 단가로 계산한 추정치입니다.
 
 ??? note "세부 조건과 예외"
     - **실습을 마치고 `g4dn.metal`을 그대로 두면**: 시간당 7.824 USD, 주말 48시간이면 375.552 USD가 과금됩니다.
-    - **풀 크기를 넉넉하게 고정해 두면**: 샌드박스 GPU는 reward 구간에만 사용되고 생성과 업데이트 구간에는 사용되지 않는데도 계속 과금됩니다.
+    - **pool 크기를 넉넉하게 고정해 두면**: 샌드박스 GPU는 reward 구간에만 사용되고 생성과 업데이트 구간에는 사용되지 않는데도 계속 과금됩니다.
     - **metal 노드의 T4 8개 중 4개만 쓰면**: 노드 단위로 과금되므로 사용하는 T4당 단가가 두 배가 됩니다.
-    - **gVisor 풀의 blue/green 전환 때 두 풀을 오래 함께 실행하면**: pod마다 노드 하나를 쓰므로 그동안 샌드박스 GPU 비용도 두 배가 됩니다.
+    - **gVisor pool의 blue/green 전환 때 두 pool을 오래 함께 실행하면**: pod마다 노드 하나를 쓰므로 그동안 샌드박스 GPU 비용도 두 배가 됩니다.
 
-    - **비용을 네 항목으로 나눕니다.** 풀 크기 조정은 샌드박스 GPU를, consolidation은 빈 metal 노드의 대기 시간을 줄이는 식으로 방법마다 줄이는 항목이 다릅니다.
+    - **비용을 네 항목으로 나눕니다.** pool 크기 조정은 샌드박스 GPU를, consolidation은 빈 metal 노드의 대기 시간을 줄이는 식으로 방법마다 줄이는 항목이 다릅니다.
     - **공개된 온디맨드 요금으로만 계산합니다.** 측정한 사용량이 없으므로 금액은 단가와 시간을 곱한 추정치입니다.
     - **trainer를 HyperPod로 옮길 때는 같은 GPU의 시간당 차액과 노드 복구 기능을 함께 비교합니다.**
 
@@ -37,7 +37,7 @@ GPU 사용률을 보면 샌드박스가 쉬고 있는데 청구액은 그대로�
 
 ## 비용 모델
 
-GPU가 배정된 시간과 답안을 실제로 채점한 시간은 다릅니다. 대기 중에도 노드가 켜져 있으면 비용이 발생합니다. 인스턴스 시간당 단가에 더해 유휴 노드 수와 대기 풀의 GPU 사용량을 확인하세요.
+GPU가 배정된 시간과 답안을 실제로 채점한 시간은 다릅니다. 대기 중에도 노드가 켜져 있으면 비용이 발생합니다. 인스턴스 시간당 단가에 더해 유휴 노드 수와 대기 pool의 GPU 사용량을 확인하세요.
 
 ```text
 hourly cost ≈ trainer GPU nodes
@@ -70,9 +70,11 @@ hourly cost ≈ trainer GPU nodes
 
 ## 비용을 줄이는 방법
 
-### 샌드박스 풀을 reward 구간에 맞추기
+### 샌드박스 pool을 reward 구간에 맞추기
 
-풀 크기는 reward 구간에 몰리는 요청 수에 맞추고 run 사이에는 0으로 줄이는 편이 현실적입니다. GPU 노드가 클러스터에 합류하는 데 몇 분이 걸리고 bare metal은 더 오래 걸립니다. 그래서 step마다 노드를 늘렸다 줄이기는 어렵습니다.
+<span id="샌드박스-풀을-reward-구간에-맞추기"></span>
+
+pool 크기는 reward 구간에 몰리는 요청 수에 맞추고 run 사이에는 0으로 줄이는 편이 현실적입니다. GPU 노드가 클러스터에 합류하는 데 몇 분이 걸리고 bare metal은 더 오래 걸립니다. 그래서 step마다 노드를 늘렸다 줄이기는 어렵습니다.
 
 ```text
 step_time_s(P)   ≈ t_generate + t_update + ceil(N / P) × t_eval        (seconds)
@@ -110,16 +112,16 @@ cost_per_step(P) ≈ (C_trainer + C_sandbox(P) + C_fixed) × step_time_s(P) / 36
 metal 노드는 클러스터에 합류하는 데 몇 분, kata-deploy 설치에 다시 몇 분이 걸립니다.
 
 - **비용**: 노드가 빈 채로 30분을 채우면 약 3.912 USD(10분 만에 다시 쓰면 1.304 USD)가 들고, 30분이 지난 뒤에도 노드가 종료될 때까지 요금이 이어집니다.
-- **얻는 것**: 30분 안에 풀을 다시 띄울 때(blue/green, 롤백 대기) cold start를 피할 수 있습니다.
-- **run이 끝나 풀을 다시 띄우지 않는다면**: 노드 그룹이나 `consolidateAfter`를 줄이세요.
+- **얻는 것**: 30분 안에 pool을 다시 띄울 때(blue/green, 롤백 대기) cold start를 피할 수 있습니다.
+- **run이 끝나 pool을 다시 띄우지 않는다면**: 노드 그룹이나 `consolidateAfter`를 줄이세요.
 
 `k8s/production/warm-capacity.yaml`의 placeholder는 낮은 priority의 pause pod(CPU 60, 메모리 200 GiB)로 예비 metal 노드 하나를 확보해 둡니다. 샌드박스 pod를 배치할 자리가 필요하면 placeholder가 몇 초 만에 선점되고, Karpenter가 새 예비 노드를 백그라운드에서 띄웁니다.
 
 - **placeholder가 샌드박스 pod와 다른 노드에 있으면**: 그 예비 노드 한 대분이 시간당 7.824 USD, 하루 187.776 USD 더 듭니다.
 - **샌드박스 pod와 한 노드에 함께 있을 때**: placeholder는 CPU와 메모리만 요청하므로 샌드박스 pod가 적어 자리가 남는 노드에 함께 배치될 수 있고, 그 시간에는 노드 요금을 한 번만 계산하세요.
-- **쓸 때**: 풀이 metal 노드 여러 대를 쓰거나, 노드 장애로 reward 계산이 멈추면 안 되는 run에서만 쓰세요.
+- **쓸 때**: pool이 metal 노드 여러 대를 쓰거나, 노드 장애로 reward 계산이 멈추면 안 되는 run에서만 쓰세요.
 - **그 밖에는**: `kubectl -n sandbox scale deployment/kata-metal-warm-placeholder --replicas=0`으로 꺼 두세요.
-- **Kata 풀의 blue/green 전환**: pod 4개짜리 Kata 풀 두 개(blue/green)는 metal 한 대(pod 8개의 메모리 합 208 GiB, 노드 384 GiB)에 모두 배치되므로 placeholder 없이도 전환할 수 있습니다.
+- **Kata pool의 blue/green 전환**: pod 4개짜리 Kata pool 두 개(blue/green)는 metal 한 대(pod 8개의 메모리 합 208 GiB, 노드 384 GiB)에 모두 배치되므로 placeholder 없이도 전환할 수 있습니다.
 
 ### 런타임과 GPU 선택
 
@@ -137,16 +139,16 @@ GPU당 단가만으로 고르지는 마세요. A10G와 T4는 speedup을 서로 �
 - **gVisor nvproxy**: 드라이버 ioctl을 허용 목록으로 필터링하지만, 드라이버 자체의 취약점에 대한 방어는 VM 경계보다 약합니다.
 - **Kata**: GPU를 VM에 직접 할당합니다.
 
-격리 요구 사항으로 런타임을 먼저 정하고, Kata를 쓴다면 metal 노드의 T4 8개를 모두 쓰도록 풀 크기를 맞추세요.
+격리 요구 사항으로 런타임을 먼저 정하고, Kata를 쓴다면 metal 노드의 T4 8개를 모두 쓰도록 pool 크기를 맞추세요.
 
 ### CPU 계층과 Spot
 
-- **Kata CPU 계층 (c8i)**: nested virtualization으로 `.metal` 없이 Kata를 실행합니다. 핸즈온에서는 `g4dn.metal`을 띄우기 전에 적은 비용으로 Kata를 연습하는 용도로 쓰고, Production에서는 GPU가 필요 없는 작업(정적 검사, nvcc 컴파일)을 GPU 계층보다 먼저 처리할 수 있습니다. CPU 풀(`gvisor-cpu`, `kata-*-cpu`)은 routing 표에 있고 시나리오 C의 reward 루프([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md))가 사용하지만, CPU 계층과 GPU 계층을 잇는 2단 구성은 구현하지 않았습니다.
+- **Kata CPU 계층 (c8i)**: nested virtualization으로 `.metal` 없이 Kata를 실행합니다. 핸즈온에서는 `g4dn.metal`을 띄우기 전에 적은 비용으로 Kata를 연습하는 용도로 쓰고, Production에서는 GPU가 필요 없는 작업(정적 검사, nvcc 컴파일)을 GPU 계층보다 먼저 처리할 수 있습니다. CPU pool(`gvisor-cpu`, `kata-*-cpu`)은 routing 표에 있고 시나리오 C의 reward 루프([10 c8i 단독 저비용 경로](../handson/10_cpu_only.md))가 사용하지만, CPU 계층과 GPU 계층을 잇는 2단 구성은 구현하지 않았습니다.
 - **이미 구현된 절감 방법**: `KernelRewards`의 세 reward 함수는 샌드박스 평가 결과를 공유합니다.
     - **보내지 않는 것**: 이미 캐시에 있는 completion과, 코드가 없거나 정적 정책을 위반한 completion은 샌드박스로 보내지 않습니다.
     - **한 호출 안의 동일한 completion**: 한 번만 전송됩니다.
-    - **batch 전체가 한 풀의 캐시에 있으면**: 버전 전환 뒤에도 전송이 없습니다.
-    - **결과가 여러 풀에 걸쳐 있으면**: 이번 풀로 다시 보내고, 채점 도중 풀이 또 바뀌면 세 번째 호출에 batch 전체를 담으므로 전송 건수가 잠시 늘 수 있습니다.
+    - **batch 전체가 한 pool의 캐시에 있으면**: 버전 전환 뒤에도 전송이 없습니다.
+    - **결과가 여러 pool에 걸쳐 있으면**: 이번 pool로 다시 보내고, 채점 도중 pool이 또 바뀌면 세 번째 호출에 batch 전체를 담으므로 전송 건수가 잠시 늘 수 있습니다.
 - **Spot은 CPU 계층에만**: `infra/karpenter/nodepools.yaml`에서 Spot을 허용하는 NodePool은 `sandbox-kata-cpu`뿐입니다.
     - **CPU 계층에서 중단되면**: 다른 pod로 재시도하면 됩니다.
     - **GPU 노드가 평가 도중 회수되어 연결이 끊기면**: gateway가 다른 Ready pod로 재시도하고, 끝내 처리하지 못한 요청은 `sandbox_error`가 됩니다(TRL은 제외, veRL은 format 점수만). GPU 용량을 다시 확보하는 몇 분 동안은 처리량도 줄어듭니다.
@@ -203,7 +205,7 @@ HyperPod는 EC2와 별도인 "ml.<type> for cluster usage" 한도를 씁니다. 
 - 계산 예시: 최소 경로 8시간에 `g4dn.metal` 2시간을 더하면 3.416 × 8 + 7.824 × 2 = 42.976 USD입니다(EC2만, 소요 시간은 가정).
 - 클러스터를 삭제한 뒤에도 Kata용 AMI의 EBS snapshot과 ECR 이미지는 남아 과금될 수 있습니다. `scripts/08_cleanup.sh`는 AMI 등록 해제 여부를 묻고, `--images`를 지정하면 ECR 저장소도 삭제합니다.
 
-Production veRL 예시에서 `g6e.48xlarge` trainer(30.13118 USD/시간)와 함께 gVisor 샌드박스 16개를 쓰면, 샌드박스 비용만 16.096 USD/시간으로 trainer 비용의 약 53%입니다. 8개면 8.048 USD/시간(약 27%)입니다. 비중이 작지 않으므로 풀 크기는 위의 step당 비용 기준으로 정하세요.
+Production veRL 예시에서 `g6e.48xlarge` trainer(30.13118 USD/시간)와 함께 gVisor 샌드박스 16개를 쓰면, 샌드박스 비용만 16.096 USD/시간으로 trainer 비용의 약 53%입니다. 8개면 8.048 USD/시간(약 27%)입니다. 비중이 작지 않으므로 pool 크기는 위의 step당 비용 기준으로 정하세요.
 
 ## 확인 방법
 

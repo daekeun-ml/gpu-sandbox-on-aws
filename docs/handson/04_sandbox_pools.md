@@ -1,10 +1,12 @@
-# 04 샌드박스 풀 배포와 검증
+# 04 샌드박스 pool 배포와 검증
 
-채점 풀은 같은 런타임과 버전으로 답안을 처리하는 pod 묶음입니다. [gVisor](02_gvisor.md)나 [Kata](03_kata.md)에서 실행 환경을 준비했다면, 이제 trainer가 보낸 답에 기대한 판정이 돌아오는지 확인하세요.
+<span id="04-샌드박스-풀-배포와-검증"></span>
 
-1. [인증과 라우팅 준비](#네임스페이스-정책-인증-05_setup_namespaces_authsh)에서 trainer가 호출할 풀을 정합니다. EC2 gVisor의 기본값은 `gvisor/v1`입니다.
-2. [선택한 풀 배포](#샌드박스-풀-배포-06_deploy_sandboxessh) 후 pod의 `READY` 열을 봅니다. 요청을 받을 준비가 됐다는 표시입니다.
-3. [시험 답안으로 검증](#네-가지-검증-opsverifysh)하세요. 일부러 틀린 답에 `wrong_answer`가 돌아와도 예상과 일치하면 그 항목은 `PASS`입니다. 마지막 `verified` 줄까지 나오면 이 풀을 사용할 수 있습니다.
+채점 pool은 같은 런타임과 버전으로 답안을 처리하는 pod 묶음입니다. [gVisor](02_gvisor.md)나 [Kata](03_kata.md)에서 실행 환경을 준비했다면, 이제 trainer가 보낸 답에 기대한 판정이 돌아오는지 확인하세요.
+
+1. [인증과 라우팅 준비](#네임스페이스-정책-인증-05_setup_namespaces_authsh)에서 trainer가 호출할 pool을 정합니다. EC2 gVisor의 기본값은 `gvisor/v1`입니다.
+2. [선택한 pool 배포](#샌드박스-pool-배포-06_deploy_sandboxessh) 후 pod의 `READY` 열을 봅니다. 요청을 받을 준비가 됐다는 표시입니다.
+3. [시험 답안으로 검증](#네-가지-검증-opsverifysh)하세요. 일부러 틀린 답에 `wrong_answer`가 돌아와도 예상과 일치하면 그 항목은 `PASS`입니다. 마지막 `verified` 줄까지 나오면 이 pool을 사용할 수 있습니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **Pod Security (restricted, baseline)**: 네임스페이스 단위로 pod의 보안 설정 수준을 강제하는 Kubernetes 기능과, 가장 엄격한 수준(restricted) 및 기본 수준(baseline)입니다.
@@ -20,11 +22,11 @@
     - **golden**: 기대 verdict가 미리 정해진 테스트용 제출물입니다.
 
 ??? note "실습 계정에서 확인한 범위"
-    이 페이지의 `gvisor`, `kata-qemu`, CPU 풀 배포와 풀 검증(`scripts/ops/verify.sh`)은 실습 계정에서 실행해 통과했고, 실험용 `kata-clh` GPU 풀은 VM이 시작되지 않았습니다(아래 "적용 범위와 한계"). 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다. 클러스터에서의 동작은 아래 "확인할 것"과 비교해 검증하세요.
+    이 페이지의 `gvisor`, `kata-qemu`, CPU pool 배포와 pool 검증(`scripts/ops/verify.sh`)은 실습 계정에서 실행해 통과했고, 실험용 `kata-clh` GPU pool은 VM이 시작되지 않았습니다(아래 "적용 범위와 한계"). 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다. 클러스터에서의 동작은 아래 "확인할 것"과 비교해 검증하세요.
 
 ## 네임스페이스, 정책, 인증: `05_setup_namespaces_auth.sh`
 
-시작할 풀을 고르면 스크립트가 인증 키와 라우팅을 준비합니다. CPU 전용 클러스터는 [10편의 설정](10_cpu_only.md)을 따르세요.
+시작할 pool을 고르면 스크립트가 인증 키와 라우팅을 준비합니다. CPU 전용 클러스터는 [10편의 설정](10_cpu_only.md)을 따르세요.
 
 === "gVisor"
 
@@ -38,7 +40,7 @@
     ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh
     ```
 
-- **다시 실행하면**: routing 표의 활성 풀이 `ACTIVE_RUNTIME`과 `ACTIVE_VERSION` 값(없으면 `gvisor/v1`)으로 다시 써집니다. 유지할 값을 지정해 실행하세요.
+- **다시 실행하면**: routing 표의 활성 pool이 `ACTIVE_RUNTIME`과 `ACTIVE_VERSION` 값(없으면 `gvisor/v1`)으로 다시 써집니다. 유지할 값을 지정해 실행하세요.
 - **서명 키만 갱신할 때**: `scripts/ops/sync_jwks.sh`를 쓰세요.
 - **[Production gateway](../production/03_gateway_and_pools.md)를 쓰는 클러스터에서 다시 실행하면**: `sandbox` 네임스페이스의 `allow-clients-to-sandbox-api`가 핸즈온 규칙(`rl-trainer`의 client pod만 허용)으로 돌아가 gateway가 샌드박스에 연결하지 못합니다. 그때는 gateway 매니페스트를 다시 적용하세요.
 
@@ -63,7 +65,7 @@ configmap/sandbox-routing created
 | NetworkPolicy `default-deny-all` | `k8s/base/networkpolicies.yaml` | `sandbox`의 모든 pod에 Ingress와 Egress 차단 (DNS, IMDS, 인터넷, Kubernetes API 모두) |
 | NetworkPolicy `allow-clients-to-sandbox-api` | `k8s/base/networkpolicies.yaml` | `app.kubernetes.io/name=gpu-sandbox` pod의 TCP 8000에 `rl-trainer` 네임스페이스의 `gpusandbox/client=true` pod만 허용 |
 | ConfigMap `sandbox-auth-jwks` (`sandbox`) | `scripts/ops/sync_jwks.sh` | `kubectl get --raw /openid/v1/jwks`로 받은 `jwks.json`과 `issuer` |
-| ConfigMap `sandbox-routing` (`rl-trainer`) | `k8s/base/routing.json.tpl` | 활성 (runtime, version)과 풀 주소 |
+| ConfigMap `sandbox-routing` (`rl-trainer`) | `k8s/base/routing.json.tpl` | 활성 (runtime, version)과 pool 주소 |
 
 샌드박스가 토큰을 오프라인으로 검증하므로, 호출자 ServiceAccount에도 Kubernetes API 권한이 필요 없습니다.
 
@@ -116,7 +118,7 @@ trainer는 이 ConfigMap을 디렉터리로 마운트합니다(subPath로 마운
 
 ??? note "trainer가 routing 표를 쓰는 방식"
     - 샌드박스에 채점을 보낼 때마다 routing 표의 snapshot을 만들고, 한 reward batch를 한 버전으로만 채점합니다.
-    - batch의 결과가 모두 한 풀의 캐시에 있으면 샌드박스를 부르지 않고 그 결과를 씁니다.
+    - batch의 결과가 모두 한 pool의 캐시에 있으면 샌드박스를 부르지 않고 그 결과를 씁니다.
 
 ## 샌드박스 인증 동작
 
@@ -152,7 +154,7 @@ sequenceDiagram
 - **JWKS에 키가 하나뿐이면**: 토큰의 `kid`가 맞지 않아도 그 키로 서명을 검증하므로, 실패 시 `invalid token: ...`이 나옵니다.
 - **401 응답**: `WWW-Authenticate: Bearer` 헤더가 붙습니다.
 - **`/healthz`와 `/readyz`**: kubelet probe는 토큰을 보낼 수 없으므로 인증 없이 호출할 수 있고, 대신 샌드박스 정보를 반환하지 않습니다.
-- **기본 allowlist**: `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(production gateway)입니다. 풀을 배포할 때(`06_deploy_sandboxes.sh`) `SANDBOX_ALLOWED_SUBJECTS`로 바꿀 수 있습니다.
+- **기본 allowlist**: `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(production gateway)입니다. pool을 배포할 때(`06_deploy_sandboxes.sh`) `SANDBOX_ALLOWED_SUBJECTS`로 바꿀 수 있습니다.
 
 !!! note "서명 키 교체"
     - **API server가 서명 키를 교체하면**: `scripts/ops/sync_jwks.sh`를 다시 실행하세요. production에서는 같은 작업을 CronJob(`python -m gpusandbox.tools sync-jwks`)으로 실행합니다([Production 02 보안](../production/02_security.md)).
@@ -160,9 +162,11 @@ sequenceDiagram
 
 </details>
 
-## 샌드박스 풀 배포: `06_deploy_sandboxes.sh`
+## 샌드박스 pool 배포: `06_deploy_sandboxes.sh`
 
-준비한 GPU 노드에 맞는 탭에서 풀 하나를 배포하세요. 마지막 인자 `[replicas]`를 생략하면 프로필의 기본 pod 수를 씁니다. 세 CPU 풀의 이름과 배포 순서는 [CPU 전용 실습](10_cpu_only.md)에 있습니다.
+<span id="샌드박스-풀-배포-06_deploy_sandboxessh"></span>
+
+준비한 GPU 노드에 맞는 탭에서 pool 하나를 배포하세요. 마지막 인자 `[replicas]`를 생략하면 프로필의 기본 pod 수를 씁니다. 세 CPU pool의 이름과 배포 순서는 [CPU 전용 실습](10_cpu_only.md)에 있습니다.
 
 === "gVisor"
 
@@ -183,7 +187,7 @@ pod 수를 직접 정하려면 버전 뒤에 개수를 붙이세요. 예를 들�
 1. `k8s/sandbox/profiles/<runtime>.env`와 `k8s/sandbox/versions/<version>.env`를 읽습니다.
 2. OIDC issuer와 allowlist 값을 채워 `k8s/sandbox/deployment.yaml.tpl`을 렌더링하고 적용합니다.
 3. `kubectl -n sandbox rollout status`로 최대 30분 기다립니다.
-4. 풀의 pod를 `-o wide`로 출력합니다.
+4. pool의 pod를 `-o wide`로 출력합니다.
 
 **확인할 것:** `gvisor`라면 아래와 같은 형태로 끝납니다(예시).
 
@@ -197,17 +201,17 @@ sandbox-gvisor-v1-xxxxxxxxxx-xxxxx   1/1     Running   0          3m    10.0.x.x
 
 **문제가 생기면:**
 
-- **`rollout status`가 timeout으로 끝나거나 pod가 `0/1`에 머물면**: [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
+- **`rollout status`가 timeout으로 끝나거나 pod가 `0/1`에 머물면**: [문제 해결](../reference/troubleshooting.md)의 "샌드박스 pool과 readiness" 항목을 보세요.
 - **흔한 원인**: 대부분 GPU probe 실패나 egress 자가 점검 실패(아래 "readiness에 egress 차단 확인을 포함하는 이유")입니다.
 
-### 다섯 v1 풀과 Service { #ready-pools }
+### 다섯 v1 pool과 Service { #ready-pools }
 
-`us-west-2`에서 gVisor GPU 2개, Kata QEMU GPU 4개, CPU 런타임별 1개씩 총 9개 replica가 Ready였습니다. 각 풀에는 `ClusterIP`가 `None`이고 포트가 8000인 Service가 하나씩 있습니다.
+`us-west-2`에서 gVisor GPU 2개, Kata QEMU GPU 4개, CPU 런타임별 1개씩 총 9개 replica가 Ready였습니다. 각 pool에는 `ClusterIP`가 `None`이고 포트가 8000인 Service가 하나씩 있습니다.
 
 ![다섯 v1 Deployment의 Ready replica와 해당 headless Service](../images/terminal/pools-v1-replay.png)
 
 <details class="note" markdown="1">
-<summary>풀 프로필, Service와 readiness 설정</summary>
+<summary>pool 프로필, Service와 readiness 설정</summary>
 
 ### 프로필과 버전
 
@@ -255,7 +259,7 @@ Deployment는 평가 pod를 띄우고, headless Service는 준비된 pod의 주�
 
 ```mermaid
 flowchart TD
-    A["서버 시작"] --> B["GPU probe (시작 때 한 번)<br/>새 프로세스에서 torch import,<br/>GPU 풀은 CUDA 커널 1개 실행 (120초 제한)"]
+    A["서버 시작"] --> B["GPU probe (시작 때 한 번)<br/>새 프로세스에서 torch import,<br/>GPU pool은 CUDA 커널 1개 실행 (120초 제한)"]
     A --> C["egress 자가 점검<br/>169.254.169.254:80, API server,<br/>NODE_IP:10250 (각 2초)"]
     B --> D{"GPU 통과, egress 모두 차단,<br/>draining 아님"}
     C --> D
@@ -266,7 +270,7 @@ flowchart TD
     F -->|"평가 횟수 한도 (draining)"| I["Ready로 돌아오지 않음<br/>pod 교체"]
 ```
 
-*그림 요약: pod가 GPU probe(GPU 풀은 CUDA 연산까지, CPU 풀은 CUDA 없이)를 통과하고 나가는 경로가 모두 막힌 것을 스스로 확인해야 Ready가 되고, 그때부터 trainer가 그 pod의 주소를 받습니다.*
+*그림 요약: pod가 GPU probe(GPU pool은 CUDA 연산까지, CPU pool은 CUDA 없이)를 통과하고 나가는 경로가 모두 막힌 것을 스스로 확인해야 Ready가 되고, 그때부터 trainer가 그 pod의 주소를 받습니다.*
 
 `/readyz`는 아래 네 조건을 모두 만족할 때만 200을 반환합니다.
 
@@ -307,17 +311,17 @@ pod는 아래 두 경우에 draining 상태가 됩니다. production에서는 ga
 
 ## 네 가지 검증: `ops/verify.sh`
 
-풀 배포가 끝나면 Kubernetes가 pod를 평가 요청에 사용할 수 있다고 판단한 상태입니다. `verify.sh`는 실제로 trainer 쪽에서 답안을 보내 예상한 판정이 돌아오는지 확인하고, 허용 범위 밖의 연결도 검사합니다.
+pool 배포가 끝나면 Kubernetes가 pod를 평가 요청에 사용할 수 있다고 판단한 상태입니다. `verify.sh`는 실제로 trainer 쪽에서 답안을 보내 예상한 판정이 돌아오는지 확인하고, 허용 범위 밖의 연결도 검사합니다.
 
-`06_deploy_sandboxes.sh`로 배포한 풀마다 `scripts/ops/verify.sh <runtime> [version]`(버전 기본값 `v1`)을 실행합니다.
+`06_deploy_sandboxes.sh`로 배포한 pool마다 `scripts/ops/verify.sh <runtime> [version]`(버전 기본값 `v1`)을 실행합니다.
 
 ```bash
 scripts/ops/verify.sh gvisor
 ```
 
-위 명령은 gVisor 풀을 검증합니다. Kata 풀을 배포했다면 `gvisor` 자리에 배포에 사용한 런타임 이름을 넣으세요. 마지막에 `pool sandbox-<runtime>-<version> verified`가 나오면 자동 검사를 통과한 것입니다. 커널 문자열은 아래 표의 1번을 보고 직접 비교하세요.
+위 명령은 gVisor pool을 검증합니다. Kata pool을 배포했다면 `gvisor` 자리에 배포에 사용한 런타임 이름을 넣으세요. 마지막에 `pool sandbox-<runtime>-<version> verified`가 나오면 자동 검사를 통과한 것입니다. 커널 문자열은 아래 표의 1번을 보고 직접 비교하세요.
 
-스크립트는 풀의 첫 pod를 선택해 아래 표의 검사를 차례로 실행합니다.
+스크립트는 pool의 첫 pod를 선택해 아래 표의 검사를 차례로 실행합니다.
 
 - **2번부터 4번**: 실패하면 스크립트가 멈춥니다.
 - **1번**: 두 커널 문자열을 출력만 하고 비교하지 않습니다. 두 값이 같아도 계속 진행하므로 1번은 직접 확인하세요.
@@ -326,7 +330,7 @@ scripts/ops/verify.sh gvisor
 |---|---|---|
 | 1) 커널 비교 (사람이 확인) | `kubectl exec`로 pod 안의 `uname -r`, 노드의 `kernelVersion`을 출력 | `sandbox:`와 `node:`의 값이 다르고 샌드박스 쪽이 선택한 런타임과 맞음 |
 | 2) egress 차단 | pod 안에서 IMDS `169.254.169.254:80`, Kubernetes API(`KUBERNETES_SERVICE_HOST:443`), 노드 kubelet(`NODE_IP:10250`), S3 공인 IP `:443`으로 3초 TCP 연결 | 모두 `blocked` |
-| 3) golden verdict | `rl-trainer`의 probe Job이 `python -m gpusandbox.tools probe` 실행 | 모든 endpoint가 `egress_blocked: true`이고 golden 6개(CPU 풀은 4개)가 기대 verdict와 일치 |
+| 3) golden verdict | `rl-trainer`의 probe Job이 `python -m gpusandbox.tools probe` 실행 | 모든 endpoint가 `egress_blocked: true`이고 golden 6개(CPU pool은 4개)가 기대 verdict와 일치 |
 | 4) NetworkPolicy | `default` 네임스페이스에서 임시 pod로 pod IP의 8000번 연결 | 연결 실패 |
 
 - **1번의 샌드박스 쪽 값**: gVisor는 Sentry 버전, Kata는 guest 커널입니다.
@@ -341,7 +345,7 @@ golden 제출물은 다음과 같습니다.
 - 정확성 검사 뒤에만 틀리는 벤치마크 치팅(`wrong_answer`)
 - `/etc/hostname`을 읽는 코드(`policy_violation`)
 
-**확인할 것:** `gvisor` 풀이라면 아래와 같은 형태로 끝납니다. speedup과 IP는 환경마다 다르며, 아래 값은 측정값이 아니라 출력 형태를 보여 주는 예시입니다.
+**확인할 것:** `gvisor` pool이라면 아래와 같은 형태로 끝납니다. speedup과 IP는 환경마다 다르며, 아래 값은 측정값이 아니라 출력 형태를 보여 주는 예시입니다.
 
 ```text
 [hh:mm:ss] 1) kernel inside sandbox-gvisor-v1-xxxxxxxxxx-xxxxx vs node ip-192-168-x-x.us-west-2.compute.internal
@@ -368,8 +372,8 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 ![verify.sh gvisor v1 실행 화면: 샌드박스 커널 4.19.0-gvisor와 노드 커널이 다르고, 외부 연결 네 곳이 blocked, 두 pod 모두 NVIDIA A10G와 egress blocked, 미리 준비한 코드 6개가 PASS(Triton 정답 speedup 1.76), default namespace 접속 blocked, 마지막 줄 pool sandbox-gvisor-v1 verified](../images/terminal/verify-gvisor-a.png)
 
-- 3번의 `pod` 줄은 endpoint마다 하나씩 나오며, 풀, 커널, GPU, egress 차단 여부를 보여 줍니다. 차단되지 않은 endpoint는 `EGRESS OPEN`으로 표시됩니다.
-- Kata 풀에서는 `kernel` 값이 guest 커널 버전이고, `kata-qemu`의 GPU 자리는 `Tesla T4`입니다. CPU 풀(`*-cpu`)은 GPU 자리에 `no GPU`가 나오고 Triton golden 둘을 건너뜁니다.
+- 3번의 `pod` 줄은 endpoint마다 하나씩 나오며, pool, 커널, GPU, egress 차단 여부를 보여 줍니다. 차단되지 않은 endpoint는 `EGRESS OPEN`으로 표시됩니다.
+- Kata pool에서는 `kernel` 값이 guest 커널 버전이고, `kata-qemu`의 GPU 자리는 `Tesla T4`입니다. CPU pool(`*-cpu`)은 GPU 자리에 `no GPU`가 나오고 Triton golden 둘을 건너뜁니다.
 - 스크립트 앞에 `GPUSANDBOX_LOG=json`을 붙이면(`GPUSANDBOX_LOG=json scripts/ops/verify.sh gvisor`) `pod` 줄 대신 모든 필드가 들어 있는 원래 JSON 줄(`endpoint`, `kernel_release`, `gpu`, `egress_blocked` 등)이 나옵니다. 원래 JSON은 `rl-trainer` namespace에서 실행된 `probe-...` Job의 로그에도 남습니다.
 - 차단된 연결의 예외 이름은 런타임과 경로에 따라 `TimeoutError` 대신 다른 `OSError` 계열일 수 있습니다.
 
@@ -377,22 +381,22 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 | 멈춘 메시지 | 뜻 | 볼 항목 |
 |---|---|---|
-| `a denial check failed: see docs/reference/troubleshooting.md` | 2번 검사가 실패함 | `REACHABLE`이면 "NetworkPolicy", "샌드박스 풀과 readiness". 줄이 없으면 바로 위 `kubectl exec`의 오류 |
-| `probe reported failures` | 3번의 probe Job이 실패함 | `FAIL` 줄이나 `EGRESS OPEN`이면 "샌드박스 풀과 readiness", "401, 403 응답". `did not start`는 `kubectl -n rl-trainer describe pod -l job-name=<Job 이름>` |
+| `a denial check failed: see docs/reference/troubleshooting.md` | 2번 검사가 실패함 | `REACHABLE`이면 "NetworkPolicy", "샌드박스 pool과 readiness". 줄이 없으면 바로 위 `kubectl exec`의 오류 |
+| `probe reported failures` | 3번의 probe Job이 실패함 | `FAIL` 줄이나 `EGRESS OPEN`이면 "샌드박스 pool과 readiness", "401, 403 응답". `did not start`는 `kubectl -n rl-trainer describe pod -l job-name=<Job 이름>` |
 | `NetworkPolicy did not block an outside caller` | 4번 검사가 실패함 | `REACHABLE`이면 "NetworkPolicy". 줄이 없으면 바로 위 `kubectl run`과 검사 명령의 오류(이미지 pull 등) |
-| `no pods for gpusandbox/runtime=...` | 그 풀이 배포되지 않음 | `06_deploy_sandboxes.sh`를 먼저 실행 |
+| `no pods for gpusandbox/runtime=...` | 그 pool이 배포되지 않음 | `06_deploy_sandboxes.sh`를 먼저 실행 |
 
 - **`a denial check failed`가 나왔을 때**:
-    - **2번에서 `REACHABLE` 또는 `REACHABLE (refused)`가 보이면**: 패킷이 대상까지 도달한 것입니다. "NetworkPolicy", "샌드박스 풀과 readiness" 항목을 보세요.
+    - **2번에서 `REACHABLE` 또는 `REACHABLE (refused)`가 보이면**: 패킷이 대상까지 도달한 것입니다. "NetworkPolicy", "샌드박스 pool과 readiness" 항목을 보세요.
     - **그런 줄이 없으면**: `kubectl exec`이나 검사 명령 자체가 실패한 것입니다. 바로 위 `kubectl exec`의 오류를 보세요.
 - **`probe reported failures`가 나왔을 때**: `FAIL` 줄, `EGRESS OPEN`(원래 JSON에서는 `"egress_blocked": false`), `no ready endpoints behind ...`, `job ... did not start` 경고 중 무엇이 나왔는지로 원인을 나눕니다.
-    - **`FAIL` 줄이나 `EGRESS OPEN` 중 하나라도 나오면**: "샌드박스 풀과 readiness", "401, 403 응답" 항목을 보세요.
+    - **`FAIL` 줄이나 `EGRESS OPEN` 중 하나라도 나오면**: "샌드박스 pool과 readiness", "401, 403 응답" 항목을 보세요.
     - **`did not start`이면**: `kubectl -n rl-trainer describe pod -l job-name=<Job 이름>`을 실행하세요.
 - **`NetworkPolicy did not block an outside caller`가 나왔을 때**:
     - **4번에서 `connect from default ns: REACHABLE`이 나왔으면**: 연결에 성공한 것입니다. "NetworkPolicy" 항목을 보세요.
     - **그 줄이 없으면**: 임시 pod가 시작되지 못했거나 검사 명령이 실패한 것입니다. 바로 위 `kubectl run`과 검사 명령의 오류(이미지 pull 등)를 보세요.
 
-### 두 GPU 풀의 검증 결과 { #gpu-verdicts }
+### 두 GPU pool의 검증 결과 { #gpu-verdicts }
 
 `scripts/ops/verify.sh`를 `gvisor v1`과 `kata-qemu v1`에 각각 실행했습니다. `PASS`는 제출물의 판정이 기대값과 일치했다는 뜻입니다. 오답으로 준비한 제출물은 `wrong_answer`여야 통과합니다.
 
@@ -401,9 +405,9 @@ PASS read_host_file               status=policy_violation  speedup=None
 ## 적용 범위와 한계
 
 - **로컬 테스트로 확인한 것:** 인증의 fail-closed 동작(잘못된 audience, 만료, 허용되지 않은 subject), egress 차단을 확인한 뒤에만 Ready가 되는 readiness, 두 CPU 서버를 대상으로 한 golden probe와 parity, 모든 프로필과 버전의 매니페스트 렌더링입니다.
-- **실습 계정에서 확인한 것 (시나리오 A 클러스터):** `gvisor` 풀(v1, replica 1개, `g5.xlarge`)에서 풀 검증(`scripts/ops/verify.sh`)이 통과했습니다. 노드 kubelet을 포함한 egress 대상 4개가 차단됐고, NetworkPolicy가 `default` 네임스페이스의 연결을 막았습니다.
-- **실습 계정에서 확인한 것 (Kata 클러스터):** `kata-qemu` GPU 풀(`g4dn.metal`, pod 4개, `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`)과 CPU 풀 세 개에서 풀 검증이 통과했습니다. 이미지가 캐시된 상태에서 `kata-qemu` pod 네 개가 생성부터 Ready까지 각각 30초, 30초, 31초, 36초 걸렸습니다([03](03_kata.md), [08](08_benchmark.md)).
-- **AWS에서 확인하지 않은 것:** 실험용 `kata-clh` GPU 풀입니다(VM이 시작되지 않음, [03](03_kata.md)).
+- **실습 계정에서 확인한 것 (시나리오 A 클러스터):** `gvisor` pool(v1, replica 1개, `g5.xlarge`)에서 pool 검증(`scripts/ops/verify.sh`)이 통과했습니다. 노드 kubelet을 포함한 egress 대상 4개가 차단됐고, NetworkPolicy가 `default` 네임스페이스의 연결을 막았습니다.
+- **실습 계정에서 확인한 것 (Kata 클러스터):** `kata-qemu` GPU pool(`g4dn.metal`, pod 4개, `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`)과 CPU pool 세 개에서 pool 검증이 통과했습니다. 이미지가 캐시된 상태에서 `kata-qemu` pod 네 개가 생성부터 Ready까지 각각 30초, 30초, 31초, 36초 걸렸습니다([03](03_kata.md), [08](08_benchmark.md)).
+- **AWS에서 확인하지 않은 것:** 실험용 `kata-clh` GPU pool입니다(VM이 시작되지 않음, [03](03_kata.md)).
 
 ## 소요 시간과 비용
 
@@ -415,7 +419,7 @@ PASS read_host_file               status=policy_violation  speedup=None
 
 - **`06_deploy_sandboxes.sh`가 오래 걸리는 이유**: 첫 pod는 큰 이미지를 pull하고, Kata GPU VM은 startupProbe로 최대 10분을 기다립니다.
 
-풀이 쓰는 GPU 노드는 계속 과금됩니다. 첫 줄처럼 Deployment만 0으로 줄이면 GPU는 해제되지만 노드 요금은 그대로 나갑니다. 실습을 쉬는 동안에는 나머지 두 줄로 노드 그룹도 0으로 줄이세요.
+pool이 쓰는 GPU 노드는 계속 과금됩니다. 첫 줄처럼 Deployment만 0으로 줄이면 GPU는 해제되지만 노드 요금은 그대로 나갑니다. 실습을 쉬는 동안에는 나머지 두 줄로 노드 그룹도 0으로 줄이세요.
 
 ```bash
 kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=0   # frees the GPUs, nodes still bill
@@ -434,7 +438,7 @@ Kata 노드 그룹을 0으로 줄이는 방법은 [03 Kata 샌드박스](03_kata
 
 ## 다음 단계
 
-EC2 trainer는 [05 GRPO 학습](05_grpo_training.md), HyperPod trainer는 [07 B1 학습](07_hyperpod.md)으로 이어 가세요. CPU 전용 클러스터에서는 [10편의 시뮬레이터](10_cpu_only.md)로 같은 풀에 답안을 보낼 수 있습니다.
+EC2 trainer는 [05 GRPO 학습](05_grpo_training.md), HyperPod trainer는 [07 B1 학습](07_hyperpod.md)으로 이어 가세요. CPU 전용 클러스터에서는 [10편의 시뮬레이터](10_cpu_only.md)로 같은 pool에 답안을 보낼 수 있습니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |
@@ -443,6 +447,6 @@ EC2 trainer는 [05 GRPO 학습](05_grpo_training.md), HyperPod trainer는 [07 B1
     | Kubernetes ServiceAccount token projection, issuer discovery | https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/ |
     | Kubernetes Service (headless Service) | https://kubernetes.io/docs/concepts/services-networking/service/ |
     | 샌드박스 Deployment 템플릿 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/deployment.yaml.tpl |
-    | 풀 검증 스크립트 (ops/verify.sh) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/verify.sh |
+    | pool 검증 스크립트 (ops/verify.sh) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/verify.sh |
 
     [관련 대표 자료](../reference/references.md#ref-handson-04-sandbox-pools)

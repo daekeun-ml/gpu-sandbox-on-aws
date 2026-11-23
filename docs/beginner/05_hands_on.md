@@ -35,7 +35,7 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
 - 실행 결과가 틀리면 `wrong_answer`가 나옵니다.
 - `policy_violation`은 실행 정책 검사에서 제출을 거절했다는 뜻입니다.
 
-![로컬 CPU 풀 두 개를 확인한 pytest의 완료 출력](../images/learning/local-cpu-grading.png)
+![로컬 CPU pool 두 개를 확인한 pytest의 완료 출력](../images/learning/local-cpu-grading.png)
 
 `ModuleNotFoundError`가 나오면 저장소 루트에서 `.venv`를 활성화했는지 확인하고 설치 명령을 다시 실행하세요.
 
@@ -177,7 +177,7 @@ scripts/kata/cpu_nodes.sh
 
 ### 실습 리소스 정리
 
-이 클러스터에서 [CPU 풀을 배포하고 버전을 교체하는 실습](../handson/10_cpu_only.md)으로 이어갈 수 있습니다. 여기서 끝내려면 **터널을 열어 둔 상태에서** 아래 명령을 실행합니다. 확인 메시지의 계정, 리전과 클러스터 이름을 확인하세요.
+이 클러스터에서 [CPU pool을 배포하고 버전을 교체하는 실습](../handson/10_cpu_only.md)으로 이어갈 수 있습니다. 여기서 끝내려면 **터널을 열어 둔 상태에서** 아래 명령을 실행합니다. 확인 메시지의 계정, 리전과 클러스터 이름을 확인하세요.
 
 ```bash
 scripts/08_cleanup.sh

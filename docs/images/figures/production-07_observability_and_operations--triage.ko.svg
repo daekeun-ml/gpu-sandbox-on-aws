@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="780px" height="301px" viewBox="0 0 780 301" role="img" aria-labelledby="title desc">
-  <title id="title">평가 장애의 첫 진단 경로</title><desc id="desc">trainer 로그에서 채점 상태와 지연을 확인해 인증, 풀 용량, 채점 품질 가운데 먼저 볼 곳을 고릅니다.</desc>
+  <title id="title">평가 장애의 첫 진단 경로</title><desc id="desc">trainer 로그에서 채점 상태와 지연을 확인해 인증, pool 용량, 채점 품질 가운데 먼저 볼 곳을 고릅니다.</desc>
   <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#3765a8"/></marker></defs>
   <rect width="780" height="301" rx="14" fill="#fff"/>
   <g fill="none" stroke="#3765a8" stroke-width="2">
@@ -18,7 +18,7 @@
     <g transform="translate(378 164)" fill="none" stroke="#3765a8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M7 7.5h.1M7 16.5h.1M12 7.5h5M12 16.5h5"/></g>
     <text x="390" y="210" font-size="17" font-weight="700">평가 대기 증가</text>
     <text x="390" y="234" font-size="13">pod 부족 또는 장시간 평가</text>
-    <text x="390" y="255" font-size="13">활성 풀의 Ready 수 확인</text>
+    <text x="390" y="255" font-size="13">활성 pool의 Ready 수 확인</text>
     <rect x="520" y="153" width="236" height="124" rx="11" fill="#f8fafc" stroke="#a4afbf"/>
     <g transform="translate(626 164)" fill="none" stroke="#3765a8" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20M7.5 10l1.7 1.7 3-3"/></g>
     <text x="638" y="210" font-size="17" font-weight="700">reward 급등</text>

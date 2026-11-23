@@ -27,7 +27,7 @@ T = {
         "wb.train": "학습 (EC2 GPU 노드 또는 HyperPod 노드)",
         "wb.model": "policy 모델 + vLLM", "wb.model_sub": "GRPO, on-policy",
         "wb.model_sub2": "g5.2xlarge 또는 ml.g5.2xlarge",
-        "wb.pool": "샌드박스 풀 (EC2 GPU, CPU 노드)",
+        "wb.pool": "샌드박스 pool (EC2 GPU, CPU 노드)",
         "wb.g": "gVisor + nvproxy", "wb.g_sub": "g5.xlarge (A10G)",
         "wb.q": "Kata + QEMU", "wb.q_sub": "g4dn.metal (T4)",
         "wb.c": "Kata + Cloud Hypervisor", "wb.c_sub": "CPU 계층 (c8i, nested virt)", "wb.c_sub2": "GPU는 실험적",
@@ -60,7 +60,7 @@ T = {
         "bi.words_sub2": "RuntimeClass, GRPO",
         "bi.copy": "명령만 따라 치기", "bi.copy_sub": "이유를 모른 채",
         "bi.stuck": "응용 불가", "bi.stuck_sub": "상황이 조금만 바뀌어도",
-        "bi.why": "1~4편: 그림과 예시", "bi.why_sub": "용어는 처음 나올 때", "bi.why_sub2": "한 줄로 풀이",
+        "bi.why": "1~4편: 그림과 예시", "bi.why_sub": "용어는 처음 나올 때", "bi.why_sub2": "한 줄로 pool이",
         "bi.how": "5편: 직접 해 보기", "bi.how_sub": "내 PC (무료),", "bi.how_sub2": "AWS (선택)",
         "bi.see": "채점 결과를 직접 확인",
         # docs/beginner/01_why_sandbox.md, 한 겹이 아니라 여러 겹

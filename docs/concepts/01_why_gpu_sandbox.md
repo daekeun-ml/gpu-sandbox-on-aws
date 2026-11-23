@@ -21,13 +21,13 @@ KernelBench는 PyTorch 기준 구현을 주고, 모델이 작성한 GPU 커널�
 
 **Speedup**은 기준 구현의 실행 시간을 제출 코드의 실행 시간으로 나눈 값입니다. 같은 GPU에서 기준 구현이 4 ms, 정답인 제출이 2 ms 걸렸다면 speedup은 2배입니다.
 
-![trainer의 CPU 사전 검사를 통과한 답은 GPU 풀로 보내고, CPU 전용 풀은 별도 실습에 사용합니다.](../images/figures/concepts-01_why_gpu_sandbox--two-tier.ko.svg)
+![trainer의 CPU 사전 검사를 통과한 답은 GPU pool로 보내고, CPU 전용 pool은 별도 실습에 사용합니다.](../images/figures/concepts-01_why_gpu_sandbox--two-tier.ko.svg)
 
 ## GPU를 격리할 때의 운영 조건
 
 - **장치 연결**　Firecracker v1.18.0은 물리 GPU를 VM에 직접 연결하는 GPU passthrough를 지원하지 않습니다. E2B의 샌드박스도 CPU 전용입니다. 이 저장소의 GPU 실습은 gVisor와 Kata + QEMU를 사용합니다. [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md) [E2B GPU 지원](https://docs.e2b.dev/faq/gpu-support) [격리 런타임 비교](02_isolation_runtimes.md)
-- **측정 일관성**　같은 GPU에서 다른 작업이 겹치면 같은 코드도 실행 시간이 달라져 속도 점수가 흔들릴 수 있습니다. 이 실습에서는 GPU 한 장을 pod 하나에 할당하고, pod마다 한 번에 제출 하나만 채점합니다. [샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md)
-- **동시 실행 비용**　이 구성에서 pod 10개를 동시에 띄우려면 GPU 10장이 필요합니다. 요청을 기다리는 pod도 GPU를 할당받은 상태라서 풀을 크게 유지할수록 더 많은 GPU 용량을 확보해야 합니다. [용량과 노드 관리](../production/01_capacity_and_nodes.md)
+- **측정 일관성**　같은 GPU에서 다른 작업이 겹치면 같은 코드도 실행 시간이 달라져 속도 점수가 흔들릴 수 있습니다. 이 실습에서는 GPU 한 장을 pod 하나에 할당하고, pod마다 한 번에 제출 하나만 채점합니다. [샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)
+- **동시 실행 비용**　이 구성에서 pod 10개를 동시에 띄우려면 GPU 10장이 필요합니다. 요청을 기다리는 pod도 GPU를 할당받은 상태라서 pool을 크게 유지할수록 더 많은 GPU 용량을 확보해야 합니다. [용량과 노드 관리](../production/01_capacity_and_nodes.md)
 
 ??? note "CUDA 오류와 다음 채점"
     잘못된 메모리 접근 같은 일부 CUDA 오류가 나면 같은 프로세스에서 다음에 실행하는 정상 코드도 실패할 수 있습니다. NVIDIA time-slicing으로 GPU를 공유하는 pod는 같은 GPU 메모리 용량을 나눠 쓰며, 장치 오류가 여러 pod에 영향을 줄 수 있습니다. [CUDA 오류 코드](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html) [NVIDIA GPU time-slicing](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html)
@@ -38,9 +38,9 @@ KernelBench는 PyTorch 기준 구현을 주고, 모델이 작성한 GPU 커널�
 
 ## 커널 실행 시간과 채점 시간을 구별하기
 
-GPU 풀에 `relu_bias_triton`을 보냈을 때 `ref_ms_median`은 **기준 커널 한 번**의 실행 시간을 나타냅니다. `eval_p50_s`는 **요청 하나**에 대해 샌드박스가 코드를 준비하고 정확성을 검사하고 성능을 측정해 판정을 내리기까지 걸린 시간의 중앙값입니다. 단위도 각각 밀리초와 초입니다.
+GPU pool에 `relu_bias_triton`을 보냈을 때 `ref_ms_median`은 **기준 커널 한 번**의 실행 시간을 나타냅니다. `eval_p50_s`는 **요청 하나**에 대해 샌드박스가 코드를 준비하고 정확성을 검사하고 성능을 측정해 판정을 내리기까지 걸린 시간의 중앙값입니다. 단위도 각각 밀리초와 초입니다.
 
-예를 들어 A10G 두 장을 둔 gVisor 풀에서 기준 커널은 0.5833 ms, 커널 speedup 중앙값은 1.743배였고, 요청당 채점 시간 중앙값은 9.984초였습니다. 커널이 빨라져도 코드 준비와 정확성 검사 시간은 여전히 듭니다. 모델이 낸 커널의 성능을 보려면 speedup을, 학습이 다음 배치를 얼마나 기다리는지 보려면 채점 시간과 풀 처리량을 읽으세요. [벤치마크 표와 원본 JSONL](../handson/08_benchmark.md#runtime-results)
+예를 들어 A10G 두 장을 둔 gVisor pool에서 기준 커널은 0.5833 ms, 커널 speedup 중앙값은 1.743배였고, 요청당 채점 시간 중앙값은 9.984초였습니다. 커널이 빨라져도 코드 준비와 정확성 검사 시간은 여전히 듭니다. 모델이 낸 커널의 성능을 보려면 speedup을, 학습이 다음 배치를 얼마나 기다리는지 보려면 채점 시간과 pool 처리량을 읽으세요. [벤치마크 표와 원본 JSONL](../handson/08_benchmark.md#runtime-results)
 
 <a id="더-살펴보기"></a>
 
@@ -88,7 +88,7 @@ GPU 풀에 `relu_bias_triton`을 보냈을 때 `ref_ms_median`은 **기준 커�
 
 ## 적용 범위와 한계
 
-- 그림에서 CPU 사전 검사는 trainer 안에서 실행합니다. 별도 CPU 풀은 GPU 없이 채점을 실습하는 데 사용합니다.
+- 그림에서 CPU 사전 검사는 trainer 안에서 실행합니다. 별도 CPU pool은 GPU 없이 채점을 실습하는 데 사용합니다.
 - 채점기의 방어 범위와 한계는 [Production 04 Reward 무결성](../production/04_reward_integrity.md)에서 다룹니다.
 
 ??? note "참고 자료"

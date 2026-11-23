@@ -36,9 +36,9 @@
 :   데이터 내용으로 계산한 짧은 값으로, 두 데이터의 내용이 같은지 비교하는 데 씁니다. harness는 타이밍 반복마다 후보 출력의 checksum을 레퍼런스와 비교해서, 측정 구간에서만 틀리는 출력("벤치마크 때만 틀리기")을 검출합니다. 쓰는 곳: [04 Reward 무결성](../production/04_reward_integrity.md)
 
 **Cloud Hypervisor (CLH)**
-:   Kata가 쓸 수 있는 가벼운 하이퍼바이저입니다. 이 저장소는 장치가 없는 Kata CPU 풀에 씁니다. Kata upstream은 CLH의 GPU passthrough를 지원하지 않습니다.
+:   Kata가 쓸 수 있는 가벼운 하이퍼바이저입니다. 이 저장소는 장치가 없는 Kata CPU pool에 씁니다. Kata upstream은 CLH의 GPU passthrough를 지원하지 않습니다.
 
-    - **CPU 풀을 만들 때**: 배포 스크립트에 넘기는 프로필은 `kata-clh-cpu`입니다. v1 Deployment 이름은 `sandbox-kata-clh-cpu-v1`이고, 프로필이 지정하는 RuntimeClass는 `kata-clh`입니다.
+    - **CPU pool을 만들 때**: 배포 스크립트에 넘기는 프로필은 `kata-clh-cpu`입니다. v1 Deployment 이름은 `sandbox-kata-clh-cpu-v1`이고, 프로필이 지정하는 RuntimeClass는 `kata-clh`입니다.
     - **배포 스크립트에 `kata-clh`를 줄 때**: 실험용 GPU 프로필이 선택됩니다.
 
     쓰는 곳: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
@@ -64,7 +64,7 @@
 :   노드의 장치(GPU 등)를 `nvidia.com/gpu` 같은 리소스 이름으로 kubelet에 알리는 Kubernetes 구성 요소입니다. pod가 이 리소스를 요청하면 scheduler가 장치가 남은 노드에 배치합니다. Kata passthrough용 GPU는 GPU Operator가 `nvidia.com/pgpu`로 광고합니다. 쓰는 곳: [02 gVisor GPU 샌드박스](../handson/02_gvisor.md)
 
 **Draining, recycling**
-:   draining은 샌드박스가 정해진 평가 횟수(`SANDBOX_MAX_EVALS`)를 채우거나 GPU 오류를 낸 뒤 Ready 상태에서 제외된 상태입니다. recycling은 gateway가 그 pod를 지워 Deployment가 새 pod를 만들게 하는 동작이고, Kata에서는 새 pod마다 새 VM이 만들어집니다. 쓰는 곳: [03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md)
+:   draining은 샌드박스가 정해진 평가 횟수(`SANDBOX_MAX_EVALS`)를 채우거나 GPU 오류를 낸 뒤 Ready 상태에서 제외된 상태입니다. recycling은 gateway가 그 pod를 지워 Deployment가 새 pod를 만들게 하는 동작이고, Kata에서는 새 pod마다 새 VM이 만들어집니다. 쓰는 곳: [03 Gateway와 샌드박스 pool](../production/03_gateway_and_pools.md)
 
 **Drift**
 :   Karpenter가 NodePool이나 EC2NodeClass 설정(예: AMI)과 달라진 노드를 찾아 교체하는 동작입니다. 쓰는 곳: [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
@@ -94,7 +94,7 @@
 :   GRPO에서 prompt 하나로 생성한 completion 묶음입니다(이 저장소는 8개). advantage를 group 안에서 상대적으로 계산하므로, 한 group은 하나의 샌드박스 버전으로 채점해야 합니다. 노드 그룹이나 HyperPod 인스턴스 그룹과는 다른 뜻입니다. 쓰는 곳: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
 
 **Group pin (`group_key`)**
-:   gateway가 같은 `group_key`(GRPO group 하나)의 샘플을 첫 샘플을 받을 때 정한 routing snapshot으로 계속 채점하도록 고정하는 기능입니다. 기본 TTL은 900초입니다. 고정 정보는 gateway 메모리에만 저장되므로 gateway가 재시작하면 사라집니다. 쓰는 곳: [03 Gateway와 샌드박스 풀](../production/03_gateway_and_pools.md)
+:   gateway가 같은 `group_key`(GRPO group 하나)의 샘플을 첫 샘플을 받을 때 정한 routing snapshot으로 계속 채점하도록 고정하는 기능입니다. 기본 TTL은 900초입니다. 고정 정보는 gateway 메모리에만 저장되므로 gateway가 재시작하면 사라집니다. 쓰는 곳: [03 Gateway와 샌드박스 pool](../production/03_gateway_and_pools.md)
 
 **Group-relative advantage**
 :   GRPO의 advantage 계산 방식입니다. 같은 prompt에서 나온 completion들의 reward를 group 평균과 표준편차로 정규화하므로(TRL 기본 `scale_rewards="group"`), group 안에서 다른 completion과 비교한 reward가 학습 신호가 됩니다. 그래서 한 group은 하나의 샌드박스 버전으로 채점해야 합니다. 쓰는 곳: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
@@ -114,7 +114,7 @@
 :   후보 코드를 실행하고 정답 여부와 속도를 측정해서 verdict를 내는 평가 코드입니다. 이 저장소의 harness는 신뢰하는 부모 프로세스(정책 검사, 레퍼런스, 타이밍, verdict)와 신뢰하지 않는 자식 프로세스(후보 실행)로 나뉩니다. 쓰는 곳: [04 Reward 무결성](../production/04_reward_integrity.md)
 
 **Headless Service**
-:   가상 IP 없이(`clusterIP: None`) DNS 조회에 Ready 상태인 pod의 IP 목록을 그대로 반환하는 Kubernetes Service입니다. 클라이언트나 gateway가 pod를 직접 선택해 pod마다 평가를 하나씩 보낼 수 있습니다. 쓰는 곳: [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md)
+:   가상 IP 없이(`clusterIP: None`) DNS 조회에 Ready 상태인 pod의 IP 목록을 그대로 반환하는 Kubernetes Service입니다. 클라이언트나 gateway가 pod를 직접 선택해 pod마다 평가를 하나씩 보낼 수 있습니다. 쓰는 곳: [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)
 
 **HyperPod instance group**
 :   SageMaker HyperPod 클러스터 안에서 같은 인스턴스 유형과 설정을 공유하는 노드 묶음입니다. 이 저장소의 시나리오 B는 trainer를 `ml.g5.2xlarge` 인스턴스 그룹에 두고, 그 노드를 샌드박스와 같은 EKS 클러스터에 연결합니다. 쓰는 곳: [07 HyperPod 시나리오](../handson/07_hyperpod.md)
@@ -216,7 +216,7 @@
 ## Q
 
 **QEMU**
-:   Kata가 쓰는 하이퍼바이저 가운데 하나입니다. Kata에서 NVIDIA GPU passthrough를 공식 지원하는 하이퍼바이저는 QEMU뿐이라서, 이 저장소의 Kata GPU 풀은 `kata-qemu-nvidia-gpu` RuntimeClass를 씁니다. 쓰는 곳: [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)
+:   Kata가 쓰는 하이퍼바이저 가운데 하나입니다. Kata에서 NVIDIA GPU passthrough를 공식 지원하는 하이퍼바이저는 QEMU뿐이라서, 이 저장소의 Kata GPU pool은 `kata-qemu-nvidia-gpu` RuntimeClass를 씁니다. 쓰는 곳: [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)
 
 ## R
 
@@ -230,7 +230,7 @@
 :   RL에서 현재 policy로 prompt의 completion을 생성하는 단계입니다. GRPO에서는 prompt마다 group 하나 분량을 생성합니다. Kubernetes의 Deployment rollout(`kubectl rollout`)과는 다른 뜻입니다. 쓰는 곳: [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
 
 **Routing table (`sandbox-routing`)**
-:   어느 (runtime, version) 풀이 active인지와 풀마다의 주소를 적은 `routing.json`입니다. ConfigMap `sandbox-routing`으로 배포되고, trainer와 gateway가 읽습니다. 쓰는 곳: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md)
+:   어느 (runtime, version) pool이 active인지와 pool마다의 주소를 적은 `routing.json`입니다. ConfigMap `sandbox-routing`으로 배포되고, trainer와 gateway가 읽습니다. 쓰는 곳: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md)
 
 **runc**
 :   Kubernetes의 기본 컨테이너 런타임입니다. runc로 실행한 컨테이너는 호스트 커널과 드라이버를 직접 공유합니다. 쓰는 곳: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
@@ -302,7 +302,7 @@
     - **RL 문맥(GRPO, veRL)**: rollout은 policy가 completion을 생성하는 단계입니다.
     - **배포 문맥**: rollout은 명령마다 하는 일이 다릅니다.
         - `kubectl rollout status`는 지정한 Deployment의 배포가 끝날 때까지 기다립니다.
-        - `scripts/ops/rollout.sh`는 새 버전의 풀을 별도 Deployment로 배포해 검증한 뒤 routing 표를 바꿔 트래픽을 옮깁니다.
+        - `scripts/ops/rollout.sh`는 새 버전의 pool을 별도 Deployment로 배포해 검증한 뒤 routing 표를 바꿔 트래픽을 옮깁니다.
 
 !!! question "❓ 오해: warm placeholder도 GPU를 미리 점유한다"
     - **Production의 warm placeholder**: CPU와 메모리만 요청하고 GPU는 요청하지 않습니다. 노드를 점유하기만 하고, 샌드박스 pod를 배치해야 하면 제거됩니다.

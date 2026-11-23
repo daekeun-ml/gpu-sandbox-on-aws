@@ -15,7 +15,7 @@ T = {
         "a": "에피소드 단위 샌드박스가 없으면: turn마다 다른 pod",
         "b": "시나리오 C의 Agent Sandbox: 에피소드마다 샌드박스 하나를 claim",
         "episode": "에피소드 하나",
-        "pool": "reward 풀 (Deployment): 요청마다 유휴 pod 선택",
+        "pool": "reward pool (Deployment): 요청마다 유휴 pod 선택",
         "pa": ["pod A", "요청 후 작업 디렉터리, 프로세스 정리"],
         "pb": ["pod B", "요청 후 작업 디렉터리, 프로세스 정리"],
         "t1": ["turn 1 제출"], "t2": ["turn 2 수정 제출"],

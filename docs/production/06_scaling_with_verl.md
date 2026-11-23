@@ -5,13 +5,15 @@
 
 ## 한 장의 GPU에서 여러 노드로
 
-GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 메모리와 step 시간 외에 채점 요청이 도착하는 방식도 달라집니다. worker 여러 개가 동시에 답을 보내면 같은 문제의 답들이 각기 다른 요청으로 들어오고, 샌드박스 풀의 대기도 늘어날 수 있습니다.
+GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 메모리와 step 시간 외에 채점 요청이 도착하는 방식도 달라집니다. worker 여러 개가 동시에 답을 보내면 같은 문제의 답들이 각기 다른 요청으로 들어오고, 샌드박스 pool의 대기도 늘어날 수 있습니다.
 
-![a: trainer A10G 한 장(24 GB)의 vLLM 생성, 별도 샌드박스 GPU의 reward 채점, trainer의 업데이트가 차례로 이어집니다. 샌드박스를 부를 때마다 routing snapshot 하나를 잡으므로 한 batch는 한 버전으로 채점됩니다. GPU 메모리 24 GB 가운데 7B bf16 가중치만 약 15 GB를 차지합니다. b: RayCluster verl(rl-trainer)의 GPU worker(actor, vLLM rollout, reward worker) ×N이 샘플마다 POST /v1/evaluate 요청에 group_key를 붙여 sandbox gateway로 보냅니다. gateway가 group_key마다 버전을 고정하므로, 같은 group은 같은 버전의 샌드박스 풀(runtime별, version별)에서 채점됩니다.](../images/figures/production-06_scaling_with_verl.ko.svg)
+![a: trainer A10G 한 장(24 GB)의 vLLM 생성, 별도 샌드박스 GPU의 reward 채점, trainer의 업데이트가 차례로 이어집니다. 샌드박스를 부를 때마다 routing snapshot 하나를 잡으므로 한 batch는 한 버전으로 채점됩니다. GPU 메모리 24 GB 가운데 7B bf16 가중치만 약 15 GB를 차지합니다. b: RayCluster verl(rl-trainer)의 GPU worker(actor, vLLM rollout, reward worker) ×N이 샘플마다 POST /v1/evaluate 요청에 group_key를 붙여 sandbox gateway로 보냅니다. gateway가 group_key마다 버전을 고정하므로, 같은 group은 같은 버전의 샌드박스 pool(runtime별, version별)에서 채점됩니다.](../images/figures/production-06_scaling_with_verl.ko.svg)
 
-## 같은 샌드박스 풀로 확장하기
+## 같은 샌드박스 pool로 확장하기
 
-기존 EKS 풀을 유지하고 Ray worker가 gateway를 호출하도록 연결합니다. 같은 문제의 답에는 같은 `group_key`를 붙여 버전을 고정합니다. 첫 운영 run에서는 생성 처리량과 함께 채점 대기, `sandbox_error`, 버전 일관성을 확인합니다. 중단 후 재개가 필요하면 새 pod에서도 읽을 수 있는 공유 스토리지에 checkpoint를 저장합니다.
+<span id="같은-샌드박스-풀로-확장하기"></span>
+
+기존 EKS pool을 유지하고 Ray worker가 gateway를 호출하도록 연결합니다. 같은 문제의 답에는 같은 `group_key`를 붙여 버전을 고정합니다. 첫 운영 run에서는 생성 처리량과 함께 채점 대기, `sandbox_error`, 버전 일관성을 확인합니다. 중단 후 재개가 필요하면 새 pod에서도 읽을 수 있는 공유 스토리지에 checkpoint를 저장합니다.
 
 ??? note "세부 조건과 예외"
     핸즈온은 1.5B 모델을 LoRA로 A10G 한 장(24 GB)에서 학습합니다.
@@ -20,11 +22,11 @@ GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 메모리와 ste
     - **7B 모델의 메모리**: `Qwen/Qwen2.5-Coder-7B-Instruct`는 파라미터가 약 7.6B라 bf16 가중치만 약 15 GB입니다. 생성과 학습을 한 GPU에서 실행하는 colocate 방식으로는 메모리 여유가 거의 없습니다.
     - **여러 GPU에서의 reward 호출**: 여러 GPU로 옮기면 reward 호출 방식도 달라집니다. veRL은 샘플을 하나씩 채점해서 TRL처럼 batch 전체를 한 버전으로 채점할 수 없습니다.
 
-    - **같은 EKS 클러스터에서 확장합니다.** KubeRay로 Ray를 배포하면 기존 샌드박스 풀, gateway, NetworkPolicy, 토큰 인증을 그대로 쓸 수 있습니다.
+    - **같은 EKS 클러스터에서 확장합니다.** KubeRay로 Ray를 배포하면 기존 샌드박스 pool, gateway, NetworkPolicy, 토큰 인증을 그대로 쓸 수 있습니다.
     - **샘플 단위 채점에서도 on-policy 일관성을 유지합니다.** reward 함수가 요청마다 `group_key`를 붙이면 gateway가 같은 group의 샘플을 같은 샌드박스 버전으로 보냅니다.
     - **긴 run을 중단 지점부터 재개합니다.** checkpoint를 공유 PVC에 두고 `trainer.resume_mode=auto`를 쓰면, HyperPod가 노드를 교체한 뒤 같은 `CKPT_DIR`로 job을 다시 제출할 때 마지막 checkpoint부터 이어서 학습합니다.
 
-**읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 TRL 루프와 [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)의 gateway API, group pin을 먼저 보세요.
+**읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 TRL 루프와 [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)의 gateway API, group pin을 먼저 보세요.
 
 ??? note "용어"
     - **veRL**: 여러 GPU와 노드에 걸쳐 RL post-training을 실행하는 오픈소스 프레임워크입니다. 이 페이지는 0.9.1을 기준으로 합니다.
@@ -61,7 +63,7 @@ flowchart LR
     end
     FSX[("공유 PVC /fsx<br/>데이터, checkpoint, HF 캐시")]
     GW["sandbox gateway<br/>(sandbox-gateway)"]
-    SB["샌드박스 풀<br/>runtime별, version별"]
+    SB["샌드박스 pool<br/>runtime별, version별"]
     H --- W
     W -->|"POST /v1/evaluate + group_key"| GW
     GW -->|"같은 group은 같은 버전"| SB
@@ -73,7 +75,7 @@ flowchart LR
 ## 사전 준비
 
 1. **KubeRay operator**: 최신 릴리스는 v1.7.2(API `ray.io/v1`)입니다. 아래 명령은 HyperPod 문서의 설치 절차에 차트 버전 고정만 추가했습니다.
-2. **gateway**: [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)대로 배포하고 `GATEWAY_ALLOWED_SUBJECTS`에 `system:serviceaccount:rl-trainer:grpo-trainer`를 넣습니다. gateway의 `/readyz`는 routing 표를 읽어야 성공하므로 `sandbox-gateway` 네임스페이스에도 `sandbox-routing` ConfigMap이 있어야 합니다.
+2. **gateway**: [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)대로 배포하고 `GATEWAY_ALLOWED_SUBJECTS`에 `system:serviceaccount:rl-trainer:grpo-trainer`를 넣습니다. gateway의 `/readyz`는 routing 표를 읽어야 성공하므로 `sandbox-gateway` 네임스페이스에도 `sandbox-routing` ConfigMap이 있어야 합니다.
 3. **공유 PVC**: `rl-trainer` 네임스페이스에 head와 worker가 함께 마운트할 PVC를 만듭니다(FSx for Lustre CSI driver 사용법은 EKS 문서 참고).
 4. **head를 배치할 노드**: head는 `gpusandbox/role: system` 노드에 CPU 4, 메모리 16 GiB를 요청합니다. 핸즈온 기본값 `m6i.large`로는 부족하므로 system 노드의 allocatable을 확인하세요.
 
@@ -289,8 +291,8 @@ reward 설정은 veRL 0.9.1의 `reward.*` 키를 씁니다: `reward.custom_rewar
 - **timeout**: veRL 클라이언트는 gateway 응답을 300초(`SandboxClient`의 `request_timeout_s`) 기다리고, gateway는 빈 pod를 600초(`SandboxPool`의 `acquire_timeout_s`) 기다립니다.
     - **요청 N개가 한꺼번에 들어오면**: 300초 안에 응답을 받지 못한 요청은 `sandbox_error`가 됩니다. 이때 마지막 차례의 요청은 `ceil(N / P)`번째로 평가를 마치므로, `ceil(N / P) × t_eval(p95)`에 통신 여유를 더한 값이 300초보다 작도록 `P`를 고르고, 실제 timeout 비율도 확인하세요. 예를 들어 N = 32, `t_eval` = 28초이면 `P` = 3에서는 11번째 차례가 308초에 끝나므로 `P`는 4 이상이어야 합니다.
     - **동시 요청 수**: veRL이 동시에 보내는 요청 수는 `reward.num_workers`와 릴리스의 async 처리 방식에 따라 다릅니다.
-- **상한**: NodePool `sandbox-gvisor`와 ResourceQuota가 GPU를 16개로 제한하므로, blue/green 전환에 필요한 여유까지 고려하면 기본 한도에서 풀 하나는 GPU 8개까지 쓸 수 있습니다. 더 큰 풀이 필요하면 두 한도를 함께 올리세요.
-- **GPU 종류**: speedup은 샌드박스 GPU에서 측정하므로, 커널을 최적화할 대상 GPU를 샌드박스 GPU로 고르세요. 한 풀의 pod는 모두 같은 GPU 종류로 구성하세요. GPU 종류가 섞이면 한 group의 speedup이 서로 다른 하드웨어에서 측정됩니다. `sandbox-gvisor` NodePool은 `g5.xlarge`, `g5.2xlarge`(둘 다 A10G)만 허용합니다.
+- **상한**: NodePool `sandbox-gvisor`와 ResourceQuota가 GPU를 16개로 제한하므로, blue/green 전환에 필요한 여유까지 고려하면 기본 한도에서 pool 하나는 GPU 8개까지 쓸 수 있습니다. 더 큰 pool이 필요하면 두 한도를 함께 올리세요.
+- **GPU 종류**: speedup은 샌드박스 GPU에서 측정하므로, 커널을 최적화할 대상 GPU를 샌드박스 GPU로 고르세요. 한 pool의 pod는 모두 같은 GPU 종류로 구성하세요. GPU 종류가 섞이면 한 group의 speedup이 서로 다른 하드웨어에서 측정됩니다. `sandbox-gvisor` NodePool은 `g5.xlarge`, `g5.2xlarge`(둘 다 A10G)만 허용합니다.
 
 ## 재개
 
@@ -345,8 +347,8 @@ Ray on HyperPod 문서는 port-forward 없이 인증된 브라우저 링크로 �
 - **Karpenter trainer NodePool이 만든 노드**: 빈 상태로 15분이 지나면 회수 대상이 되고(`consolidateAfter: 15m`), 요금은 노드가 실제로 종료될 때까지 붙습니다.
 - **시나리오 A의 CDK 관리형 trainer 노드 그룹**: pod를 지워도 인스턴스가 계속 실행되므로 직접 줄이세요(`aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name trainer --scaling-config minSize=0,maxSize=1,desiredSize=0`).
 - **HyperPod 인스턴스 그룹**: 인스턴스 수를 줄이거나 클러스터를 삭제할 때까지 과금됩니다(핸즈온 클러스터는 `scripts/hyperpod/delete.sh`로 삭제).
-- **구버전 샌드박스 풀**: [05 샌드박스 버전 관리](05_sandbox_updates.md)의 `--finish`로 0으로 줄입니다.
-- **학습이 끝나 활성 풀도 쓰지 않으면**: 그 풀의 replica 수도 0으로 줄이세요.
+- **구버전 샌드박스 pool**: [05 샌드박스 버전 관리](05_sandbox_updates.md)의 `--finish`로 0으로 줄입니다.
+- **학습이 끝나 활성 pool도 쓰지 않으면**: 그 pool의 replica 수도 0으로 줄이세요.
 
 관련 페이지: [05 On-policy GRPO 학습](../handson/05_grpo_training.md), [07 HyperPod 시나리오](../handson/07_hyperpod.md), [01 용량과 노드 관리](01_capacity_and_nodes.md), [02 보안](02_security.md).
 

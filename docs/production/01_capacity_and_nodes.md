@@ -7,7 +7,7 @@
 
 학습을 시작했는데 첫 reward 배치가 몇 분째 기다린다면, 샌드박스 pod가 배치되지 않는지부터 확인하세요. `g4dn.metal`은 인스턴스가 시작된 뒤에도 Kata 설치와 GPU 준비가 끝나야 평가를 받을 수 있습니다. 반대로 gVisor 노드는 생성됐는데 샌드박스가 Ready가 되지 않는다면 AMI의 드라이버와 nvproxy 조합을 먼저 봅니다.
 
-![a: metal 노드(sandbox-kata-gpu)에서는 reward batch가 도착한 뒤에 g4dn.metal 부팅, kata-deploy, vfio-pci 바인딩이 진행되어 수 분이 걸리고, batch는 그동안 대기합니다. gVisor 노드(sandbox-gvisor)에서는 al2023@latest의 AMI 자동 갱신(drift 교체)으로 nvproxy가 지원하지 않는 드라이버가 설치될 수 있습니다. 그러면 GPU 초기화가 실패해 샌드박스가 Ready가 되지 않고 풀 용량이 0이 됩니다. b: metal에서는 우선순위 -10인 warm placeholder가 선점되어 종료되고, 샌드박스 pod는 이미 실행 중인 노드에 배치됩니다. Karpenter는 새 예비 노드를 추가합니다. gVisor에서는 AMI를 al2023@v20261107로 고정하고, CI에서 nvproxy list-supported-drivers로 지원 여부를 확인해 통과할 때만 AMI와 GVISOR_RELEASE를 함께 승격합니다.](../images/figures/production-01_capacity_and_nodes.ko.svg)
+![a: metal 노드(sandbox-kata-gpu)에서는 reward batch가 도착한 뒤에 g4dn.metal 부팅, kata-deploy, vfio-pci 바인딩이 진행되어 수 분이 걸리고, batch는 그동안 대기합니다. gVisor 노드(sandbox-gvisor)에서는 al2023@latest의 AMI 자동 갱신(drift 교체)으로 nvproxy가 지원하지 않는 드라이버가 설치될 수 있습니다. 그러면 GPU 초기화가 실패해 샌드박스가 Ready가 되지 않고 pool 용량이 0이 됩니다. b: metal에서는 우선순위 -10인 warm placeholder가 선점되어 종료되고, 샌드박스 pod는 이미 실행 중인 노드에 배치됩니다. Karpenter는 새 예비 노드를 추가합니다. gVisor에서는 AMI를 al2023@v20261107로 고정하고, CI에서 nvproxy list-supported-drivers로 지원 여부를 확인해 통과할 때만 AMI와 GVISOR_RELEASE를 함께 승격합니다.](../images/figures/production-01_capacity_and_nodes.ko.svg)
 
 ## 런타임별 용량 관리
 
@@ -19,7 +19,7 @@
     - **수요가 생긴 뒤에 노드를 띄우면**: reward 배치가 그동안 대기합니다.
     - **노드를 미리 띄워 두면**: 사용하지 않는 동안에도 과금됩니다(7.824 USD/시간, us-east-1과 us-west-2 온디맨드 요금).
     - **노드 수를 수동으로 관리하면**: 노드를 종료하는 것을 잊기 쉽습니다.
-    - **AMI가 자동으로 바뀌면서 nvproxy가 인식하지 못하는(unknown) NVIDIA 드라이버가 설치되면**: gVisor GPU 샌드박스가 Ready가 되지 않아 풀 용량이 0이 됩니다.
+    - **AMI가 자동으로 바뀌면서 nvproxy가 인식하지 못하는(unknown) NVIDIA 드라이버가 설치되면**: gVisor GPU 샌드박스가 Ready가 되지 않아 pool 용량이 0이 됩니다.
     - **G and VT On-Demand quota**: 문서상 기본값이 0이라, quota를 늘리기 전에는 96 vCPU짜리 `g4dn.metal`을 한 대도 띄우지 못합니다.
 
     - **런타임마다 필요한 노드 설정이 다릅니다.** 인스턴스, taint, label, 상한, 회수 정책을 NodePool 단위로 분리하면 한 런타임의 설정이 다른 런타임에 영향을 주지 않습니다.
@@ -102,7 +102,7 @@ kubectl get ec2nodeclass,nodepool
     - **인스턴스는 g5(A10G)로 한정**: AMI는 g5에서 proprietary 커널 모듈(GSP 꺼짐)을 로드하고, 이 조합은 gVisor 문서가 아니라 이 저장소에서 검증했습니다.
     - **대안**: g6(L4, open 드라이버)도 NodePool에 넣을 수 있습니다.
     - **다른 GPU 계열을 쓰려면**: nvproxy의 드라이버 지원 여부부터 확인하세요.
-- **GPU 풀은 `WhenEmpty`를 씁니다.** 평가 중에 노드를 회수하면 진행 중인 평가를 다른 pod에서 처음부터 다시 실행해야 하고, 재시도까지 실패하면 `sandbox_error`가 됩니다. 그래서 빈 노드만 회수합니다. 노드를 다시 띄우는 비용이 작은 CPU 계층은 `WhenEmptyOrUnderutilized`와 spot을 허용합니다.
+- **GPU pool은 `WhenEmpty`를 씁니다.** 평가 중에 노드를 회수하면 진행 중인 평가를 다른 pod에서 처음부터 다시 실행해야 하고, 재시도까지 실패하면 `sandbox_error`가 됩니다. 그래서 빈 노드만 회수합니다. 노드를 다시 띄우는 비용이 작은 CPU 계층은 `WhenEmptyOrUnderutilized`와 spot을 허용합니다.
 - **metal 노드는 빈 상태로 30분이 지나야 회수 대상이 됩니다.** 비자마자 반납하면 다음 요청 때 부팅과 준비에 걸리는 수 분을 다시 기다려야 하기 때문입니다. 30분 대기 비용은 7.824 USD/시간 기준 약 3.9 USD이고, 요금은 노드가 실제로 종료될 때까지 붙습니다.
 - **`expireAfter`에 따라 노드를 주기적으로 교체합니다.** Karpenter v1.15 문서에 따르면 만료는 forceful 동작이라 `karpenter.sh/do-not-disrupt`로 만료를 막을 수 없고, drain은 PDB와 `terminationGracePeriod`를 따릅니다. 중단된 평가는 gateway가 다른 pod로 다시 보냅니다.
 
@@ -214,8 +214,8 @@ kubectl get node "${node}" -o jsonpath='{.status.allocatable.nvidia\.com/pgpu}'
 - **빈 값이나 `0`이면**: [문제 해결](../reference/troubleshooting.md)의 "Kata" 표에서 `no passthrough GPUs advertised` 행을 보세요.
 - **`8`이 나와도**: 장치가 스케줄러에 등록됐다는 뜻일 뿐이라, `vfio_iommu_type1` 모듈이 빠진 AMI에서도 `8`이 나오고 QEMU는 VM을 시작하지 못합니다.
 - **AMI를 승격하기 전**: 다음 순서로 확인하세요.
-    1. 새 AMI의 노드에 `kata-qemu-nvidia-gpu` 풀 pod를 띄워 READY `1/1`이 되는지 확인합니다.
-    2. golden 평가는 풀의 Service 주소로 가므로, 같은 풀에 기존 AMI 노드의 pod가 섞여 있으면 그 pod가 대신 답할 수 있습니다. `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu,gpusandbox/version=<version> -o wide`의 NODE 열에서 Ready pod가 모두 새 AMI 노드에 있는지 확인합니다.
+    1. 새 AMI의 노드에 `kata-qemu-nvidia-gpu` pool pod를 띄워 READY `1/1`이 되는지 확인합니다.
+    2. golden 평가는 pool의 Service 주소로 가므로, 같은 pool에 기존 AMI 노드의 pod가 섞여 있으면 그 pod가 대신 답할 수 있습니다. `kubectl -n sandbox get pods -l gpusandbox/runtime=kata-qemu,gpusandbox/version=<version> -o wide`의 NODE 열에서 Ready pod가 모두 새 AMI 노드에 있는지 확인합니다.
     3. `scripts/ops/verify.sh kata-qemu <version>`의 golden 평가까지 통과한 뒤에 AMI를 승격하세요.
 
 - **승격:** `scripts/config.env`의 `KATA_IOMMU_AMI_ID`를 바꾸고 EC2NodeClass를 다시 적용합니다. Karpenter는 선택된 AMI가 바뀌면 노드를 drift로 표시하고, disruption budget과 PDB를 지키면서 교체합니다(Karpenter v1.15 문서).
@@ -237,7 +237,7 @@ nvproxy는 드라이버 상태를 지원(supported), 미지원(unsupported, `--n
 현재 `sandbox-gvisor` EC2NodeClass는 `alias: al2023@latest`라서, 새 EKS AMI가 나오면 Karpenter가 노드를 drift로 교체합니다. nvproxy가 새 드라이버를 인식하지 못하면 다음과 같이 됩니다.
 
 - `install-gvisor.sh`가 user data 로그에 `WARNING: NVIDIA driver ... is not supported`를 남깁니다.
-- 샌드박스 pod는 GPU 초기화에 실패해 Ready가 되지 않습니다(fail closed). 이 동작은 안전하지만 풀 용량이 0이 됩니다.
+- 샌드박스 pod는 GPU 초기화에 실패해 Ready가 되지 않습니다(fail closed). 이 동작은 안전하지만 pool 용량이 0이 됩니다.
 
 Karpenter 문서도 production에서는 `latest`를 권장하지 않습니다.
 
@@ -245,7 +245,7 @@ production에서는 다음과 같이 하세요.
 
 - **alias 고정**: alias를 버전으로 고정하고(예: `alias: al2023@v20261107`, 버전 표기는 Karpenter 문서에서 재확인), AMI와 `GVISOR_RELEASE`를 같은 변경에서 함께 업그레이드하세요.
 - **바꾼 뒤 다시 검증**: 드라이버, AMI, gVisor 버전을 바꾼 뒤에는 `04_install_gpu_stack.sh`의 smoke test와 `scripts/ops/verify.sh`를 다시 실행합니다. g5의 proprietary 모듈 조합은 gVisor 문서가 아니라 이 저장소의 검증에 근거하기 때문입니다.
-- **샌드박스 풀이 노드의 GPU를 모두 쓰고 있으면**: smoke pod가 `Pending`으로 남으니, 풀의 replica를 하나 줄여 GPU를 비운 뒤 실행하세요.
+- **샌드박스 pool이 노드의 GPU를 모두 쓰고 있으면**: smoke pod가 `Pending`으로 남으니, pool의 replica를 하나 줄여 GPU를 비운 뒤 실행하세요.
 
 업그레이드 전에 CI에서 후보 gVisor 릴리스의 체크섬과 nvproxy 지원 목록을 확인할 수 있습니다. 아래는 저장소에 포함된 스크립트가 아니라, `install-gvisor.sh`와 같은 URL과 검사를 사용한 예시입니다.
 
@@ -308,7 +308,7 @@ kubectl apply -f k8s/production/warm-capacity.yaml
 
     확인할 것: `kubectl -n sandbox get deployment kata-metal-warm-placeholder`의 READY가 `0/0`입니다.
 
-- **풀 pod의 priority**: `deployment.yaml.tpl`은 `priorityClassName`을 지정하지 않으므로 풀 pod는 기본 priority 0으로 실행됩니다. 0도 -10보다 높으므로 선점은 동작합니다.
+- **pool pod의 priority**: `deployment.yaml.tpl`은 `priorityClassName`을 지정하지 않으므로 pool pod는 기본 priority 0으로 실행됩니다. 0도 -10보다 높으므로 선점은 동작합니다.
 - **`pool-hardening.yaml`의 `gpu-sandbox-pool`(100000)을 쓰려면**: 템플릿에 `priorityClassName`을 추가하세요.
 - **노드 전체를 예비 용량으로 확보하려면**: placeholder가 요청하지 않아 남는 CPU와 메모리에는 선점 없이도 샌드박스 pod가 배치될 수 있습니다. placeholder의 requests를 노드 allocatable에 가깝게 맞추세요.
 
@@ -316,10 +316,10 @@ kubectl apply -f k8s/production/warm-capacity.yaml
 
 [`pool-hardening.yaml`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/production/pool-hardening.yaml)은 자발적 중단과 리소스 사용량 급증을 제한합니다.
 
-- **PDB `gpu-sandbox-pools` (`maxUnavailable: 1`).** selector가 `app.kubernetes.io/name: gpu-sandbox` 하나라서 모든 풀(모든 runtime과 version)을 통틀어 한 번에 pod 하나만 eviction됩니다(파일 주석의 "풀마다"와 다릅니다). PDB는 NotReady pod를 이미 unavailable로 계산하므로, draining pod가 NotReady로 남아 있으면 PDB가 다른 eviction을 거부할 수 있습니다.
+- **PDB `gpu-sandbox-pools` (`maxUnavailable: 1`).** selector가 `app.kubernetes.io/name: gpu-sandbox` 하나라서 모든 pool(모든 runtime과 version)을 통틀어 한 번에 pod 하나만 eviction됩니다(파일 주석의 "pool마다"와 다릅니다). PDB는 NotReady pod를 이미 unavailable로 계산하므로, draining pod가 NotReady로 남아 있으면 PDB가 다른 eviction을 거부할 수 있습니다.
 - **PDB가 적용되지 않는 경우.** PDB는 eviction API에만 적용되므로, pod를 직접 삭제하는 gateway의 recycling은 PDB의 영향을 받지 않습니다(Kubernetes 문서: "deleting deployments or pods bypasses Pod Disruption Budgets").
 - **ResourceQuota `gpu-sandbox-quota`.** `requests.nvidia.com/gpu: 16`은 `sandbox-gvisor` 상한과 같고, `requests.nvidia.com/pgpu: 8`은 `g4dn.metal` 한 대의 T4 수입니다(metal NodePool이 허용하는 2대 중 나머지 한 대는 warm 예비용). `pods: 64`는 pod 수를 제한합니다.
-- **blue/green과의 관계.** 새 버전 풀을 기존 풀과 함께 실행하는 동안에는 두 풀의 사용량이 모두 quota에 합산됩니다. Kata 풀의 이전 버전이 pgpu를 많이 점유하고 있으면 새 버전 pod가 quota 초과로 생성되지 않습니다. 이전 풀을 먼저 줄이거나 quota를 늘리세요. ([05 샌드박스 버전 관리](05_sandbox_updates.md))
+- **blue/green과의 관계.** 새 버전 pool을 기존 pool과 함께 실행하는 동안에는 두 pool의 사용량이 모두 quota에 합산됩니다. Kata pool의 이전 버전이 pgpu를 많이 점유하고 있으면 새 버전 pod가 quota 초과로 생성되지 않습니다. 이전 pool을 먼저 줄이거나 quota를 늘리세요. ([05 샌드박스 버전 관리](05_sandbox_updates.md))
 
 ## 서비스 quota와 Capacity Reservation
 
@@ -327,7 +327,7 @@ EC2 On-Demand quota는 인스턴스 수가 아니라 vCPU 기준입니다. 아�
 
 | quota | 문서 기본값 | 관련 NodePool | NodePool 상한 기준 필요량 |
 |---|---|---|---|
-| Running On-Demand G and VT instances | 0 | `sandbox-gvisor`, `sandbox-kata-gpu`, `trainer`(g6e) | metal 2대 192 vCPU, gVisor 풀을 `g5.2xlarge`(8 vCPU)로만 채우면 128 vCPU, 여기에 trainer 사용량 추가 |
+| Running On-Demand G and VT instances | 0 | `sandbox-gvisor`, `sandbox-kata-gpu`, `trainer`(g6e) | metal 2대 192 vCPU, gVisor pool을 `g5.2xlarge`(8 vCPU)로만 채우면 128 vCPU, 여기에 trainer 사용량 추가 |
 | Running On-Demand P instances | 0 | `trainer`(`p5.48xlarge`) | p5를 쓸 때만 |
 | Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 5 | `sandbox-kata-cpu`(on-demand), system 노드, SSM 접속 인스턴스 | CPU NodePool 상한 256 vCPU에 system 노드(기본 `m6i.large` 2대)와 SSM 접속 인스턴스(`t4g.nano`) 사용량 추가 |
 | All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests | 5 | `sandbox-kata-cpu`(spot) | 최대 256 vCPU |

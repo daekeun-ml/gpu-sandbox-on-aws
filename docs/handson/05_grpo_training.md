@@ -1,10 +1,10 @@
 # 05 On-policy GRPO 학습
 
-모델이 같은 문제에 답을 여러 개 내면 GRPO는 그 답들의 점수를 비교해 모델을 업데이트합니다. [04편](04_sandbox_pools.md)에서 검증한 `gvisor/v1` 풀이 이번에는 모델이 막 작성한 코드를 채점합니다.
+모델이 같은 문제에 답을 여러 개 내면 GRPO는 그 답들의 점수를 비교해 모델을 업데이트합니다. [04편](04_sandbox_pools.md)에서 검증한 `gvisor/v1` pool이 이번에는 모델이 막 작성한 코드를 채점합니다.
 
 1. [trainer 노드와 이미지 확인](#시작-전-확인) 후 [학습 Job 하나를 제출](#실행)하세요. HyperPod로 학습하려면 [07편](07_hyperpod.md)에서 시작합니다.
-2. [로그](#로그-읽는-법)에서 `routing`은 풀 선택, `batch`는 코드 채점, `train`은 모델 업데이트를 보여 줍니다. 첫 `batch`의 판정과 다음 `train` 줄을 함께 읽으세요.
-3. 학습 중 풀을 바꿔 보려면 Job이 진행되는 동안 다른 터미널에서 [06편](06_sandbox_update.md)을 여세요. 이번에는 학습만 한다면 [완료된 Job과 채점 건수](#trainer-complete)를 확인합니다.
+2. [로그](#로그-읽는-법)에서 `routing`은 pool 선택, `batch`는 코드 채점, `train`은 모델 업데이트를 보여 줍니다. 첫 `batch`의 판정과 다음 `train` 줄을 함께 읽으세요.
+3. 학습 중 pool을 바꿔 보려면 Job이 진행되는 동안 다른 터미널에서 [06편](06_sandbox_update.md)을 여세요. 이번에는 학습만 한다면 [완료된 Job과 채점 건수](#trainer-complete)를 확인합니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **GRPO**: prompt 하나에 completion을 여러 개(group) 생성하고, group 평균보다 reward가 높은 completion이 더 자주 생성되도록 학습하는 RL 알고리즘입니다.
@@ -23,13 +23,13 @@
 
 ## 시작 전 확인
 
-- [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)에서 `scripts/ops/verify.sh gvisor`가 통과했습니다. routing table의 active 기본값은 `gvisor/v1`입니다.
+- [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에서 `scripts/ops/verify.sh gvisor`가 통과했습니다. routing table의 active 기본값은 `gvisor/v1`입니다.
 - 시나리오 A 클러스터에 `trainer` 노드 그룹(`g5.2xlarge`, A10G 1장)이 있습니다. HyperPod에서 학습하려면 [07 HyperPod 시나리오](07_hyperpod.md)를 따르세요.
 - `scripts/config.env`에 `TRAINER_IMAGE_URI`와 `SANDBOX_AUDIENCE`(기본 `gpu-sandbox`)가 있습니다. 하나라도 비면 스크립트가 멈춥니다.
 
 ## 실행
 
-첫 실행은 5스텝으로 생성·채점·업데이트를 확인할 수 있습니다. 이어서 06편의 풀 교체를 연습하려면 기본 60스텝을 선택해 교체할 시간을 확보하세요. 둘 중 하나만 실행합니다.
+첫 실행은 5스텝으로 생성·채점·업데이트를 확인할 수 있습니다. 이어서 06편의 pool 교체를 연습하려면 기본 60스텝을 선택해 교체할 시간을 확보하세요. 둘 중 하나만 실행합니다.
 
 === "첫 실행 · 5스텝"
 
@@ -37,7 +37,7 @@
     scripts/07_run_grpo.sh 5
     ```
 
-=== "풀 교체 연습 · 60스텝"
+=== "pool 교체 연습 · 60스텝"
 
     ```bash
     scripts/07_run_grpo.sh
@@ -98,7 +98,7 @@ kubectl -n rl-trainer logs -f "job/grpo-<RUN_ID>"
 
 ### 실행 중인 trainer와 첫 배치 { #trainer-running }
 
-`RUN_ID=guide-replay scripts/07_run_grpo.sh 16`을 실행했습니다. `g5.2xlarge`의 A10G 한 장에서 모델을 학습하고, 실제 생성 코드의 채점은 EC2 gVisor 풀에 보냈습니다.
+`RUN_ID=guide-replay scripts/07_run_grpo.sh 16`을 실행했습니다. `g5.2xlarge`의 A10G 한 장에서 모델을 학습하고, 실제 생성 코드의 채점은 EC2 gVisor pool에 보냈습니다.
 
 ![실행 중인 GRPO Job, 요청한 GPU와 첫 배치의 실제 판정](../images/terminal/grpo-running-replay.png)
 
@@ -110,9 +110,9 @@ Job이 `Complete`로 끝났습니다. trainer가 기록한 배치는 16개, 채�
 
 ## 로그 읽는 법
 
-`wrong_answer`가 한 번 나왔다면 채점기가 기준 답과 다른 출력을 찾아낸 것입니다. `sandbox_error`는 그 답을 채점하지 못했다는 뜻이라 이 실습의 GRPO는 해당 답을 그룹 평균에서 뺍니다. 반복되면 [풀 검증](04_sandbox_pools.md)으로 돌아가세요.
+`wrong_answer`가 한 번 나왔다면 채점기가 기준 답과 다른 출력을 찾아낸 것입니다. `sandbox_error`는 그 답을 채점하지 못했다는 뜻이라 이 실습의 GRPO는 해당 답을 그룹 평균에서 뺍니다. 반복되면 [pool 검증](04_sandbox_pools.md)으로 돌아가세요.
 
-`routing`은 사용할 풀을 읽었다는 신호입니다. 그 뒤 `reward_batch`의 판정과 optimizer step을 함께 확인하세요. 샌드박스 요청이 모두 `sandbox_error`라면 로그가 찍혀도 채점 경로를 점검해야 합니다.
+`routing`은 사용할 pool을 읽었다는 신호입니다. 그 뒤 `reward_batch`의 판정과 optimizer step을 함께 확인하세요. 샌드박스 요청이 모두 `sandbox_error`라면 로그가 찍혀도 채점 경로를 점검해야 합니다.
 
 로그에는 두 종류의 줄이 함께 출력됩니다. 첫째는 TRL이 step마다 출력하는 Python dict입니다(`loss` 키가 있어 스크립트 필터를 통과).
 
@@ -146,7 +146,7 @@ completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라
 | `reward_batch` 필드 | 의미 |
 |---|---|
 | `batch`, `global_step` | 몇 번째 reward batch인지, 채점할 때 trainer의 `global_step`(완료된 optimizer step 수) |
-| `runtime`, `version` | 이 batch를 채점한 풀(마지막 샌드박스 호출의 routing snapshot) |
+| `runtime`, `version` | 이 batch를 채점한 pool(마지막 샌드박스 호출의 routing snapshot) |
 | `served_versions` | 결과에 기록된 버전별 개수. 정상이면 key가 `version` 하나뿐입니다 |
 | `routing_revision` | routing table 내용이 바뀔 때마다 1씩 늘어납니다 |
 | `n`, `status` | 이 batch에서 샌드박스로 보낸 completion의 수와 status별 개수 |
@@ -155,7 +155,7 @@ completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라
 | `eval_p50_s`, `eval_p95_s`, `batch_wall_s` | 샌드박스 서버가 측정한 평가 시간(`duration_s`)의 p50/p95, trainer가 batch 전체를 기다린 시간 |
 
 - **`served_versions`와 direct 모드**: direct 모드에서는 응답에 버전이 없으면(통신 실패 등) 요청한 버전을 채우므로, `status`의 `sandbox_error` 수도 함께 보세요.
-- **`n`, `status`에 들어가는 것**: 코드 없음, trainer 쪽 정책 위반, 캐시 hit은 포함되지 않습니다. 다른 풀로 캐시돼 다시 채점한 completion은 포함됩니다.
+- **`n`, `status`에 들어가는 것**: 코드 없음, trainer 쪽 정책 위반, 캐시 hit은 포함되지 않습니다. 다른 pool로 캐시돼 다시 채점한 completion은 포함됩니다.
 - **`eval_p50_s`, `eval_p95_s`가 null일 때**: 측정 시간이 하나도 없으면(모두 통신 실패 등) p50과 p95가 모두 null, 하나뿐이면 p95만 null입니다.
 
 터미널 요약의 `reward_batch` 줄은 이 중 `batch`, `runtime/version`, `status`, `pass_rate`, `mean_speedup`, `batch_wall_s`만 보여 줍니다. `served_versions`에 버전이 둘 이상이면 `MIXED VERSIONS {...}`가 붙습니다. 결과의 버전이 요청한 버전(`version`)과 같은지는 원래 JSON에서 `served_versions`의 키로 확인합니다.
@@ -173,7 +173,7 @@ completion이 768 token에서 잘리면 format 점수는 잘린 위치에 따라
 | 2 | `row_softmax`, `rms_norm`, `layer_norm` |
 | 3 (기본 제외) | `matmul_bias_relu` (float16) |
 
-tasks 모듈 주석은 level 0을 작은 모델도 대부분 풀 수 있는 sanity level로 설명합니다.
+tasks 모듈 주석은 level 0을 작은 모델도 대부분 pool 수 있는 sanity level로 설명합니다.
 
 - **level 0**: 0보다 큰 reward는 level 0에서 먼저 나올 가능성이 큽니다(추론).
 - **level 2**: 정답 커널이 드물어 reward가 희소하므로 `frac_reward_zero_std`가 높을 수 있습니다.
@@ -190,7 +190,7 @@ tasks 모듈 주석은 level 0을 작은 모델도 대부분 풀 수 있는 sani
 ## 자주 막히는 지점
 
 - **pod가 `Pending`**이면 `kubectl describe pod`의 이벤트에서 GPU를 기다리는지 확인하세요. 같은 trainer 노드에 이전 Job이 남아 있으면 새 Job도 대기할 수 있습니다.
-- **`sandbox_error`가 반복**되면 먼저 `scripts/ops/verify.sh gvisor`로 풀을 확인하세요. 이 상태는 샌드박스가 채점에 실패했다는 뜻입니다. 모델이 틀린 답을 낸 경우와 로그에서 구분할 수 있습니다.
+- **`sandbox_error`가 반복**되면 먼저 `scripts/ops/verify.sh gvisor`로 pool을 확인하세요. 이 상태는 샌드박스가 채점에 실패했다는 뜻입니다. 모델이 틀린 답을 낸 경우와 로그에서 구분할 수 있습니다.
 
 OOM이나 첫 로그가 나오지 않는 경우는 [학습 문제 해결](../reference/troubleshooting.md#학습)을 참고하세요.
 
@@ -282,12 +282,12 @@ TRL은 generation batch가 `num_generations`로 나누어떨어지지 않으면 
         participant V as vLLM (colocate, 같은 A10G)
         participant T as GRPOTrainer (LoRA)
         participant R as KernelRewards
-        participant S as 샌드박스 풀 (routing의 active)
+        participant S as 샌드박스 pool (routing의 active)
         T->>V: 깨우기, 현재 가중치로 2 prompts x 8 completions 생성
         V-->>T: completion 16개
         T->>R: format, correctness, speedup reward 함수 호출
         R->>R: 코드 추출과 정책 검사 (trainer 쪽)
-        R->>S: batch 평가 (호출마다 routing snapshot, batch는 한 풀)
+        R->>S: batch 평가 (호출마다 routing snapshot, batch는 한 pool)
         S-->>R: verdict (status, speedup, sandbox_version)
         R-->>T: reward 3종 (sandbox_error면 None)
         T->>T: group 상대 advantage, LoRA 업데이트 한 번
@@ -298,9 +298,9 @@ TRL은 generation batch가 `num_generations`로 나누어떨어지지 않으면 
 
     TRL은 세 reward 함수를 따로 호출합니다. `KernelRewards`는 task, prompt, completion 텍스트의 해시를 키로 verdict를 캐시합니다.
 
-    - **같은 풀에서는**: 샌드박스 평가가 completion마다 한 번만 실행됩니다.
-    - **버전 전환 뒤 새 completion을 새 풀에서 채점할 때**: 같은 batch에 있는 이전 풀의 캐시 항목도 새 풀에서 다시 채점합니다.
-    - **batch 전체가 한 풀의 캐시에 있으면**: 샌드박스를 부르지 않고 그 풀의 결과를 씁니다.
+    - **같은 pool에서는**: 샌드박스 평가가 completion마다 한 번만 실행됩니다.
+    - **버전 전환 뒤 새 completion을 새 pool에서 채점할 때**: 같은 batch에 있는 이전 pool의 캐시 항목도 새 pool에서 다시 채점합니다.
+    - **batch 전체가 한 pool의 캐시에 있으면**: 샌드박스를 부르지 않고 그 pool의 결과를 씁니다.
 
     어느 경우든 한 batch는 한 버전으로 채점됩니다.
 
@@ -425,12 +425,12 @@ EKS control plane, NAT gateway, EBS 요금은 별도입니다. `g4dn.metal` 노�
 2. 첫 이벤트 줄이 `routing  mode direct  runtime gvisor  version v1  ...`입니다.
 3. step마다 TRL dict 줄이 나옵니다.
     - **새로 채점할 completion이 있는 step**: `batch` 줄(`reward_batch`)도 나오고, 그 줄에 `MIXED VERSIONS`가 없으며, status별 개수의 대부분이 `sandbox_error`가 아닙니다.
-    - **코드 블록이 없거나 trainer 쪽 정책 검사에서 모두 탈락하거나 모두 한 풀의 캐시에 있는 step**: `reward_batch` 없이 지나갑니다.
+    - **코드 블록이 없거나 trainer 쪽 정책 검사에서 모두 탈락하거나 모두 한 pool의 캐시에 있는 step**: `reward_batch` 없이 지나갑니다.
 4. 학습이 끝나면 `done  output /outputs/grpo/final  ...`이 나오고 Job이 Complete가 됩니다. 그 뒤에 나오는 vLLM 종료 오류(`cumem_allocator.cpp:249`)는 실습 계정의 5 step run에서도 나왔고, 그때도 Job은 Complete였습니다.
 
 | 증상 | 가능한 원인 | 확인 |
 |---|---|---|
-| `status`가 대부분 `sandbox_error` | NetworkPolicy label, token audience, 풀 Ready 상태 | `scripts/ops/verify.sh gvisor`, [문제 해결](../reference/troubleshooting.md)의 "학습"과 "401, 403 응답" 항목 |
+| `status`가 대부분 `sandbox_error` | NetworkPolicy label, token audience, pool Ready 상태 | `scripts/ops/verify.sh gvisor`, [문제 해결](../reference/troubleshooting.md)의 "학습"과 "401, 403 응답" 항목 |
 | `reward_batch` 줄이 드묾 | 대부분의 completion이 코드 블록 없음이나 trainer 쪽 정책 위반이라 샌드박스로 보낸 completion이 없음 | 원래 TRL dict의 `rewards/format_reward/mean`, `completions/clipped_ratio` |
 | CUDA OOM | 메모리 예산 초과 | 위 메모리 절의 순서대로 줄이기 |
 | pod가 Pending | trainer 노드가 없거나 GPU가 등록되지 않음 | `kubectl get nodes -L gpusandbox/role`, `scripts/04_install_gpu_stack.sh` 출력 |

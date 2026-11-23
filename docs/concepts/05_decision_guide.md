@@ -30,13 +30,13 @@ L4에서 측정하면서 샌드박스마다 별도 VM을 요구하는 경우, �
 
 ## 선택을 시험하는 작은 비교
 
-팀에서 “학습이 느리니 샌드박스 GPU부터 바꾸자”고 제안했다고 해 봅시다. 먼저 `reward_batch`의 `batch_wall_s`를 봅니다. 이는 배치가 채점 결과를 기다린 시간입니다. 다음으로 벤치마크에서 요청 한 건을 처리하는 `eval_p50_s`와 풀 전체의 `throughput_eval_per_s`를 봅니다.
+팀에서 “학습이 느리니 샌드박스 GPU부터 바꾸자”고 제안했다고 해 봅시다. 먼저 `reward_batch`의 `batch_wall_s`를 봅니다. 이는 배치가 채점 결과를 기다린 시간입니다. 다음으로 벤치마크에서 요청 한 건을 처리하는 `eval_p50_s`와 pool 전체의 `throughput_eval_per_s`를 봅니다.
 
 - GPU 한 장에서 커널이 느리다면 같은 장치, 같은 입력으로 기준 코드와 제출 코드를 비교하세요. 운영 장치가 L4라면 A10G 결과만으로 구현을 고르기 어렵습니다.
 - 여러 요청이 빈 pod를 기다린다면 동시에 채점할 자리 수를 먼저 확인하세요. pod 하나가 GPU 한 장을 쓰므로 replica를 늘리려면 여유 GPU가 필요합니다.
 - 별도 VM 경계가 필수라면 그 경계에서 목표 GPU를 쓸 수 있는지 먼저 확인하세요. 이 저장소에서 GPU를 연결해 채점한 Kata 경로는 QEMU와 T4 조합입니다.
 
-이 순서로 보면 trainer를 HyperPod에 두는 결정과 채점 풀의 크기를 정하는 결정을 나누어 시험할 수 있습니다. [다섯 풀의 요청당 시간과 처리량](../handson/08_benchmark.md#runtime-results)
+이 순서로 보면 trainer를 HyperPod에 두는 결정과 채점 pool의 크기를 정하는 결정을 나누어 시험할 수 있습니다. [다섯 pool의 요청당 시간과 처리량](../handson/08_benchmark.md#runtime-results)
 
 <a id="더-살펴보기"></a>
 
@@ -44,13 +44,13 @@ L4에서 측정하면서 샌드박스마다 별도 VM을 요구하는 경우, �
 
 | 고객 상황 | 조합 | 이유 |
 |---|---|---|
-| 사내 연구팀이 자체 모델로 L4 서빙용 Triton 커널을 학습 | `g6.xlarge`의 gVisor (이 저장소가 지원하는 대안. 기본값은 `g5.xlarge`) | 한 팀만 쓰는 풀이라 VM 경계까지는 요구하지 않고, 측정 GPU를 배포 GPU(L4)에 맞출 수 있음 |
-| 여러 고객의 학습 작업이 같은 GPU 노드를 쓰고, T4 기준 순위로 충분 | `g4dn.metal`의 Kata + QEMU, 고객별 풀 | 고객별로 풀을 나누고 요청도 그 풀로 보내야 고객 간 작업이 VM 경계로 나뉨(표 아래 목록). T4에서 측정하는 조건을 수용 |
-| 여러 고객이 공유하는 풀에서 H100 서빙용 커널을 학습 | `p5`의 gVisor + 보완 통제, 고객별 노드 분리 검토, 위험 수용 기록 | EC2에 VM 경계 + H100 조합이 없음 |
+| 사내 연구팀이 자체 모델로 L4 서빙용 Triton 커널을 학습 | `g6.xlarge`의 gVisor (이 저장소가 지원하는 대안. 기본값은 `g5.xlarge`) | 한 팀만 쓰는 pool이라 VM 경계까지는 요구하지 않고, 측정 GPU를 배포 GPU(L4)에 맞출 수 있음 |
+| 여러 고객의 학습 작업이 같은 GPU 노드를 쓰고, T4 기준 순위로 충분 | `g4dn.metal`의 Kata + QEMU, 고객별 pool | 고객별로 pool을 나누고 요청도 그 pool로 보내야 고객 간 작업이 VM 경계로 나뉨(표 아래 목록). T4에서 측정하는 조건을 수용 |
+| 여러 고객이 공유하는 pool에서 H100 서빙용 커널을 학습 | `p5`의 gVisor + 보완 통제, 고객별 노드 분리 검토, 위험 수용 기록 | EC2에 VM 경계 + H100 조합이 없음 |
 | 단위 테스트로 채점하는 code RL | `c8i`의 Kata + CLH 또는 관리형 CPU 샌드박스 | reward 계산에 GPU가 필요 없음 |
 | nvcc 컴파일 단계와 측정 단계를 나누고 싶음 | CPU 계층(`c8i`의 Kata + CLH) + GPU 계층(gVisor 또는 Kata + QEMU) | 컴파일과 정적 검사에 GPU 시간을 쓰지 않음 |
 
-- **두 번째 예시에서 고객별 풀이 필요한 이유**: Kata는 pod마다 VM을 만들지만 풀은 요청마다 빈 pod를 고르므로, 하나의 공유 풀에서는 여러 고객의 요청이 같은 VM을 차례로 씁니다.
+- **두 번째 예시에서 고객별 pool이 필요한 이유**: Kata는 pod마다 VM을 만들지만 pool은 요청마다 빈 pod를 고르므로, 하나의 공유 pool에서는 여러 고객의 요청이 같은 VM을 차례로 씁니다.
 
 두 번째와 세 번째 예시는 둘 다 멀티테넌트 상황이고 측정 GPU 요구만 다릅니다. T4에서 측정해도 되면 Kata로 VM 경계를 쓸 수 있고, H100에서 측정해야 하면 VM 경계를 쓸 수 없습니다.
 
@@ -85,7 +85,7 @@ L4에서 측정하면서 샌드박스마다 별도 VM을 요구하는 경우, �
 
 - **EKS NVIDIA AMI, NVIDIA 드라이버, gVisor 버전이 바뀌었을 때**: 먼저 노드의 `/proc/driver/nvidia/version`과 `runsc nvproxy list-supported-drivers`를 확인합니다. 이어서 다음을 확인합니다.
     - **빈 GPU가 있을 때**: `04_install_gpu_stack.sh` smoke test를 실행합니다(GPU 1개를 쓰는 pod를 따로 만듦).
-    - **배포한 풀은**: `scripts/ops/verify.sh gvisor v1`로 확인합니다.
+    - **배포한 pool은**: `scripts/ops/verify.sh gvisor v1`로 확인합니다.
 
 !!! question "❓ 오해: gVisor를 쓰면 GPU 코드도 VM만큼 격리된다"
     gVisor는 syscall을 사용자 공간 커널(Sentry)에서 처리하지만, GPU 요청은 ioctl allowlist를 거쳐 host 드라이버로 전달됩니다. gVisor 문서도 nvproxy가 "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves"이며 "no validation of things like DMA buffers"라고 설명합니다. 서로 다른 고객의 적대적 코드를 실행한다면 VM 경계(Kata + VFIO)를 먼저 검토하세요. 최신 GPU 때문에 gVisor를 쓴다면 보완 통제와 잔여 위험을 문서로 기록하세요.

@@ -23,7 +23,7 @@
     - **계층마다 다른 위험을 차단합니다.** 런타임은 커널 접근을, NetworkPolicy는 egress를, 노드 가드는 VPC CNI의 노드 IP 예외를 담당합니다. pod는 egress가 실제로 차단됐는지 확인한 뒤에만 Ready가 됩니다.
     - **pod에 없는 자격 증명은 탈취할 수 없습니다.** 샌드박스 pod에는 API token도 시크릿도 넣지 않습니다.
 
-**읽기 전에**　[02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [04 샌드박스 풀 배포와 검증](../handson/04_sandbox_pools.md)에서 풀과 토큰 배포 절차를 먼저 보세요.
+**읽기 전에**　[02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)에서 pool과 토큰 배포 절차를 먼저 보세요.
 
 ??? note "용어"
     - **runc, gVisor, Kata**: runc는 호스트 커널을 공유합니다. gVisor에서는 사용자 공간 커널(Sentry)이 system call을 먼저 받아 처리하고, Kata는 pod마다 별도의 VM(guest 커널)을 실행합니다.
@@ -122,9 +122,9 @@ sequenceDiagram
 
 production에서 샌드박스 호출자를 gateway와 검증 Job으로 줄이려면, 배포할 때 allowlist(`scripts/06_deploy_sandboxes.sh`의 기본값은 trainer, probe, gateway)를 덮어씁니다.
 
-- **세 번째 인자(replica 수)를 생략하면**: 스크립트가 프로필의 기본값(gVisor는 `GVISOR_NODES`, 기본 2)을 다시 적용하므로, 운영 중에 늘린 풀이 줄어들 수 있습니다.
+- **세 번째 인자(replica 수)를 생략하면**: 스크립트가 프로필의 기본값(gVisor는 `GVISOR_NODES`, 기본 2)을 다시 적용하므로, 운영 중에 늘린 pool이 줄어들 수 있습니다.
 
-아래 명령은 현재 replica 수를 유지한 채 allowlist에서 trainer를 제외하고 gVisor v1 풀을 다시 배포합니다.
+아래 명령은 현재 replica 수를 유지한 채 allowlist에서 trainer를 제외하고 gVisor v1 pool을 다시 배포합니다.
 
 ```bash
 replicas="$(kubectl -n sandbox get deployment sandbox-gvisor-v1 -o jsonpath='{.spec.replicas}')"
@@ -155,8 +155,8 @@ kubectl -n sandbox get pod "$pod" \
 6. **같은 노드의 다른 샌드박스와 하드웨어를 공유합니다.** Kata VM들은 같은 `g4dn.metal`의 CPU, 메모리 대역폭, PCIe를 공유하므로 타이밍 간섭과 side channel 가능성이 있습니다. 이 저장소는 이 위험을 평가하지 않았습니다.
 7. **upstream 검증 범위 밖의 조합을 씁니다.**
     - **Kata**: NVIDIA의 Kata CI는 A100과 H100을 테스트하고 T4(`g4dn.metal`)는 테스트하지 않습니다. GPU Operator의 Kata 구성은 EKS에서 Ubuntu로만 검증되었고 AL2023은 목록에 없습니다.
-    - **gVisor와 proprietary 드라이버**: gVisor 문서는 nvproxy를 NVIDIA open 드라이버 기준으로 설명하고 proprietary 드라이버는 언급하지 않습니다. gVisor 풀의 기본값인 g5(A10G)에서는 AMI가 proprietary 커널 모듈(GSP 꺼짐)을 로드하므로, 이 조합은 gVisor 문서가 아니라 이 저장소에서 검증한 것입니다.
-    - **드라이버, AMI, gVisor 버전을 바꾸면**: smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요. 샌드박스 풀이 노드의 GPU를 모두 쓰고 있으면 smoke pod가 `Pending`으로 남으니, 풀의 replica를 하나 줄여 GPU를 비운 뒤 실행합니다([02 gVisor](../handson/02_gvisor.md)).
+    - **gVisor와 proprietary 드라이버**: gVisor 문서는 nvproxy를 NVIDIA open 드라이버 기준으로 설명하고 proprietary 드라이버는 언급하지 않습니다. gVisor pool의 기본값인 g5(A10G)에서는 AMI가 proprietary 커널 모듈(GSP 꺼짐)을 로드하므로, 이 조합은 gVisor 문서가 아니라 이 저장소에서 검증한 것입니다.
+    - **드라이버, AMI, gVisor 버전을 바꾸면**: smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요. 샌드박스 pool이 노드의 GPU를 모두 쓰고 있으면 smoke pod가 `Pending`으로 남으니, pool의 replica를 하나 줄여 GPU를 비운 뒤 실행합니다([02 gVisor](../handson/02_gvisor.md)).
     - **gVisor에서 T4(g4dn)**: 드라이버 조건이 g5와 같지만 이 저장소에서 테스트하지 않았습니다.
 
 ## Production 옵션
@@ -172,7 +172,7 @@ kubectl -n sandbox get pod "$pod" \
 
 ## 확인 방법
 
-아래 명령은 gVisor v1 풀 하나에서 격리, egress 차단, golden verdict, 다른 namespace의 접속 차단을 차례로 확인합니다. 1단계는 pod와 노드의 커널 버전을 출력만 하고 비교하지 않습니다. 2단계부터는 하나라도 실패하면 그 단계에서 중단합니다.
+아래 명령은 gVisor v1 pool 하나에서 격리, egress 차단, golden verdict, 다른 namespace의 접속 차단을 차례로 확인합니다. 1단계는 pod와 노드의 커널 버전을 출력만 하고 비교하지 않습니다. 2단계부터는 하나라도 실패하면 그 단계에서 중단합니다.
 
 ```bash
 scripts/ops/verify.sh gvisor v1
@@ -206,15 +206,15 @@ PASS read_host_file               status=policy_violation  speedup=<값>
 3. probe Job의 golden 결과가 모두 `PASS`입니다.
 4. default namespace에서의 연결이 `blocked`이고, 마지막 줄이 `verified`입니다.
 
-문제가 생기면 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 표(2단계)와 "NetworkPolicy" 표(4단계)를 보세요.
+문제가 생기면 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 pool과 readiness" 표(2단계)와 "NetworkPolicy" 표(4단계)를 보세요.
 
 !!! warning "gateway-only ingress를 적용한 뒤에는"
-    production NetworkPolicy는 `rl-trainer`에서 샌드박스를 직접 호출하는 트래픽을 차단하므로, 3단계의 probe Job 요청도 차단됩니다. 검증 Job을 허용하는 별도 정책은 [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)에서 설명합니다.
+    production NetworkPolicy는 `rl-trainer`에서 샌드박스를 직접 호출하는 트래픽을 차단하므로, 3단계의 probe Job 요청도 차단됩니다. 검증 Job을 허용하는 별도 정책은 [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)에서 설명합니다.
 
 ## 적용 범위와 한계
 
 - **로컬 테스트로 확인한 것:** audience 기반 인증의 fail closed 동작(잘못된 audience, 만료, 허용 목록에 없는 subject 거부), egress 차단을 확인해야 Ready가 되는 readiness, 매니페스트 템플릿의 하드닝 값, 노드 user data(`infra/eks/userdata.py`)의 node guard 포함 여부를 확인했습니다(`pytest`, CPU, AWS 없음). CDK 스택 테스트(`cdk/tests`)는 synth한 템플릿에서 private endpoint, `0.0.0.0/0` inbound 없음, IMDSv2 필수(hop limit은 지정된 경우에만 1인지 검사), 볼륨 암호화를 확인합니다.
-- **AWS에서 실행한 것:** "확인 방법"의 `ops/verify.sh`를 실습 계정의 `gvisor` v1, `kata-qemu` v1, CPU 풀 세 개에서 실행해 통과했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 이 검증은 핸즈온 NetworkPolicy에서 실행했습니다.
+- **AWS에서 실행한 것:** "확인 방법"의 `ops/verify.sh`를 실습 계정의 `gvisor` v1, `kata-qemu` v1, CPU pool 세 개에서 실행해 통과했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). 이 검증은 핸즈온 NetworkPolicy에서 실행했습니다.
 - **AWS에서 실행하지 않은 것:** gateway-only NetworkPolicy를 적용한 production 구성과 위의 allowlist 재배포입니다. 이 구성에서 검증 Job이 접근할 수 있는지와 실제 차단 여부는 직접 실행해 확인하세요.
 - **확인하지 않은 동작:** EKS의 서명 키 회전 일정, GuardDuty Runtime Monitoring에 gVisor와 Kata 안쪽 프로세스가 보이는 방식, GPU firmware 상태가 VM 사이에 남는지 여부.
 - **대응하지 않는 위험:** gVisor의 호스트 드라이버 공유, 같은 노드의 하드웨어 공유, GPU firmware 상태 잔존 등은 위 "다루지 않는 위험"에 있습니다. 멀티 테넌트라면 "Production 옵션"의 Kata와 테넌트별 NodePool을 검토하세요.
@@ -241,4 +241,4 @@ PASS read_host_file               status=policy_violation  speedup=<값>
 
     [관련 대표 자료](../reference/references.md#ref-production-02-security)
 
-다음: [03 Gateway와 샌드박스 풀](03_gateway_and_pools.md)
+다음: [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)

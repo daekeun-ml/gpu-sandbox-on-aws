@@ -17,7 +17,7 @@ HyperPod 마법사로 만드는 관리형 B2는 [B2 전용 절차](07_hyperpod_b
     - **KMS 키 삭제 대기 기간**: KMS 키는 삭제를 요청해도 바로 삭제되지 않습니다. 지정한 기간(여기서는 7일) 동안 `Pending deletion` 상태로 남은 뒤 삭제됩니다.
     - **AMI, snapshot**: 인스턴스를 시작할 때 쓰는 디스크 이미지와, 그 이미지의 데이터를 저장한 EBS 사본입니다. AMI를 등록 해제해도 snapshot은 남을 수 있습니다.
     - **ECR 리포지토리**: 컨테이너 이미지를 저장하는 AWS 레지스트리의 저장 단위입니다.
-    - **SandboxClaim, SandboxWarmPool, SandboxTemplate**: Agent Sandbox 확장에서 샌드박스 하나를 할당받는 요청, 미리 띄워 두는 샌드박스 풀, 그 샌드박스의 pod 설정입니다.
+    - **SandboxClaim, SandboxWarmPool, SandboxTemplate**: Agent Sandbox 확장에서 샌드박스 하나를 할당받는 요청, 미리 띄워 두는 샌드박스 pool, 그 샌드박스의 pod 설정입니다.
     - **warm pool**: 요청이 오기 전에 미리 띄워 둔 샌드박스 묶음입니다. 요청이 오면 바로 할당할 수 있지만, 대기 중에도 자원(GPU 포함)을 점유합니다.
     - **NAT gateway, Elastic IP**: private subnet의 노드가 인터넷에 접속할 때 거치는 관리형 게이트웨이와, 그 게이트웨이에 연결된 고정 공인 IP입니다. 둘 다 시간 단위로 과금됩니다.
 
@@ -53,7 +53,7 @@ CDK 스택 삭제와 HyperPod 삭제 모두 소요 시간은 측정하지 않았
 정리를 시작하기 전에 다음을 준비하세요.
 
 1. `$AWS_REGION`, `$CLUSTER_NAME` 같은 변수는 먼저 `source scripts/config.env`로 불러오세요.
-2. 클러스터 안의 리소스(Agent Sandbox 객체, HyperPodPyTorchJob, 샌드박스 풀)는 kubectl로 삭제하므로, 정리가 끝날 때까지 두 번째 터미널에서 `cdk/tunnel.sh`를 실행해 두세요.
+2. 클러스터 안의 리소스(Agent Sandbox 객체, HyperPodPyTorchJob, 샌드박스 pool)는 kubectl로 삭제하므로, 정리가 끝날 때까지 두 번째 터미널에서 `cdk/tunnel.sh`를 실행해 두세요.
 3. kubectl은 현재 context의 클러스터에서 삭제합니다. 시작 전에 `kubectl config current-context`가 정리할 클러스터의 `<CLUSTER_NAME>-tunnel`인지 확인하세요.
 
 ## 0. Agent Sandbox 확장 (쓴 경우만)
@@ -77,7 +77,7 @@ kubectl -n sandbox delete sandboxclaims,sandboxwarmpools,sandboxtemplates --all
     kubectl -n sandbox get pods -l gpusandbox/managed-by=agent-sandbox
     ```
 
-- Deployment로 만든 샌드박스 풀은 2단계에서 삭제합니다.
+- Deployment로 만든 샌드박스 pool은 2단계에서 삭제합니다.
 
 확장을 설치하지 않았다면 첫 명령이 `the server doesn't have a resource type "sandboxclaims"` 같은 오류를 냅니다. 이 경우 이 단계를 건너뛰세요.
 
@@ -143,7 +143,7 @@ scripts/hyperpod/delete.sh
 
 스크립트는 다음 순서로 동작합니다.
 
-1. 현재 kubectl context로 `sandbox` namespace를 조회할 수 있으면 샌드박스 풀과 학습 Job을 먼저 삭제합니다. 그래야 노드를 종료하기 전에 GPU와 VFIO 장치가 반환됩니다.
+1. 현재 kubectl context로 `sandbox` namespace를 조회할 수 있으면 샌드박스 pool과 학습 Job을 먼저 삭제합니다. 그래야 노드를 종료하기 전에 GPU와 VFIO 장치가 반환됩니다.
 2. CDK 스택(클러스터, 노드 그룹, launch template, VPC, NAT gateway, access instance, 로그 그룹)을 삭제합니다.
 3. AMI를 삭제할지 묻습니다.
 

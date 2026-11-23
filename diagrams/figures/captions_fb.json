@@ -93,9 +93,9 @@
     "page": "docs/concepts/06_agent_sandbox.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
-    "alt_ko": "두 패널 그림입니다. a reward 풀: 에피소드 하나에서 turn 1 제출은 pod A의 GPU 1로, turn 2 수정 제출은 pod B의 GPU 2로 전송됩니다. 두 pod 모두 요청이 끝나면 그 요청의 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드마다 샌드박스를 새로 생성하는 점선 경로에서는 Kata GPU VM이 처음 Ready가 될 때까지 몇 분이 걸립니다(빨간색). b Agent Sandbox: 에피소드가 SandboxClaim을 생성하면 SandboxWarmPool이 대기 중인 Sandbox를 할당합니다. 이 풀의 Sandbox는 미리 기동되어 egress 차단을 확인한 뒤 Ready가 된 상태입니다. turn 1과 turn 2는 모두 claim한 샌드박스 하나로 전송됩니다(같은 pod와 GPU, 파일은 제출마다 삭제, 격리는 RuntimeClass gVisor 또는 Kata).",
+    "alt_ko": "두 패널 그림입니다. a reward pool: 에피소드 하나에서 turn 1 제출은 pod A의 GPU 1로, turn 2 수정 제출은 pod B의 GPU 2로 전송됩니다. 두 pod 모두 요청이 끝나면 그 요청의 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드마다 샌드박스를 새로 생성하는 점선 경로에서는 Kata GPU VM이 처음 Ready가 될 때까지 몇 분이 걸립니다(빨간색). b Agent Sandbox: 에피소드가 SandboxClaim을 생성하면 SandboxWarmPool이 대기 중인 Sandbox를 할당합니다. 이 pool의 Sandbox는 미리 기동되어 egress 차단을 확인한 뒤 Ready가 된 상태입니다. turn 1과 turn 2는 모두 claim한 샌드박스 하나로 전송됩니다(같은 pod와 GPU, 파일은 제출마다 삭제, 격리는 RuntimeClass gVisor 또는 Kata).",
     "alt_en": "Two panels. a reward pools: in one episode the turn 1 submission goes to pod A on GPU 1 and the turn 2 revised submission to pod B on GPU 2, and both clear the request's work directory and leftover processes after the request; the dashed fresh-start-per-episode path makes a Kata GPU VM take minutes to first Ready (red). b Agent Sandbox: the episode creates a SandboxClaim, the SandboxWarmPool, started ahead and Ready after the egress check, hands over a waiting Sandbox, and turn 1 and turn 2 both go to that one claimed sandbox (same pod and GPU, files removed per submission, isolation from the RuntimeClass, gVisor or Kata).",
-    "takeaway_ko": "reward 풀은 turn마다 유휴 pod를 고르므로 한 에피소드의 turn이 서로 다른 pod와 GPU에서 실행될 수 있습니다. Agent Sandbox에서는 warm pool에서 claim한 샌드박스 하나를 에피소드가 끝날 때까지 쓰므로, 에피소드마다 Kata GPU VM을 새로 시작하느라 몇 분씩 기다리지 않아도 됩니다.",
+    "takeaway_ko": "reward pool은 turn마다 유휴 pod를 고르므로 한 에피소드의 turn이 서로 다른 pod와 GPU에서 실행될 수 있습니다. Agent Sandbox에서는 warm pool에서 claim한 샌드박스 하나를 에피소드가 끝날 때까지 쓰므로, 에피소드마다 Kata GPU VM을 새로 시작하느라 몇 분씩 기다리지 않아도 됩니다.",
     "takeaway_en": "In the reward pools the turns of one episode scatter across pods and GPUs, and a fresh start per episode makes Kata GPU wait minutes, while Agent Sandbox keeps one sandbox claimed from a warm pool for the whole episode."
   }
 }

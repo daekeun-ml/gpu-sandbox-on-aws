@@ -21,14 +21,14 @@ const TEXT = {
     sourceLabel: "채점 재생에 사용한 기록",
     tourPlay: "▶  둘러보기 재생", tourFile: "영상 파일 열기 (MP4)",
     videoCaption: "영상으로 보는 코드 채점, GRPO 학습, EKS와 HyperPod 벤치마크",
-    kpiGpu: "GPU 샌드박스 풀", kpiGolden: "예상과 일치한 판정",
+    kpiGpu: "GPU 샌드박스 pool", kpiGolden: "예상과 일치한 판정",
     kpiBlocked: "차단된 연결 시도", kpiBench: "런타임 비교에서 성공한 요청 (캐시된 이미지)",
     sArch: "채점 요청이 지나가는 경로",
     sArchHint: "상자를 누르면 설명이 나옵니다. 재생 버튼을 누르면 채점 요청 하나가 어디를 거치는지 차례로 볼 수 있습니다.",
     flowPlay: "▶ 요청 흐름 보기", flowStop: "■ 멈춤", evidence: "실제 기록 보기",
     zoneTrainer: "학습 영역 (rl-trainer)", zoneSandbox: "샌드박스 영역 (기본 차단)", zoneOut: "샌드박스에서 접근 불가",
     sTry: "제출 코드별 채점 결과",
-    sTryHint: "제출 코드를 고르고 재생을 누르면 각 풀의 판정을 볼 수 있습니다. 이 기록에서 사용한 풀은 {pools}입니다.",
+    sTryHint: "제출 코드를 고르고 재생을 누르면 각 pool의 판정을 볼 수 있습니다. 이 기록에서 사용한 pool은 {pools}입니다.",
     showTask: "문제와 정답 코드 보기", candidate: "제출된 코드",
     run: "▶ 채점 재생", running: "재생 중...",
     speed: "속도", speed1: "실제 속도", speed4: "4배 빠르게", speed0: "결과만 보기",
@@ -70,21 +70,18 @@ const TEXT = {
     switchNote: "모의 실행입니다. 모델 대신 미리 준비한 코드로 채점했고 실제 학습은 하지 않았습니다. 채점과 버전 전환 방식은 실제 학습과 같습니다.",
     showRollout: "버전 전환 터미널 기록 보기",
     simSummary: "배치 {n}개가 하나도 빠지지 않고 채점됐습니다. step {s}에서 {from}에서 {to}로 바뀌었고, 채점 시간 중앙값은 바꾸기 전 {a}초, 바꾼 뒤 {b}초입니다.",
-    sBench: "런타임 벤치마크",
-    sBenchHint: "기대 결과가 정해진 코드를 반복 채점했습니다. p50과 p95는 샌드박스가 요청을 맡은 뒤 판정까지 걸린 시간입니다. 풀 처리량에는 빈 pod를 기다린 시간도 들어갑니다.",
-    b1Title: "HyperPod B1과 EKS에서 요청한 채점 결과", runtimeComparison: "배포 직후와 이미지 캐시 후 비교",
-    resultsTitle: "EKS 런타임 벤치마크 결과", resultsPool: "풀 / 노드",
-    resultsP50: "p50 (초)", resultsP95: "p95 (초)", resultsRate: "풀 처리량 (건/초)",
-    resultsNote: "풀 처리량은 Ready 상태의 pod가 합쳐서 초당 처리한 요청 수입니다. GPU 풀을 비교할 때는 GPU 종류와 pod 수도 함께 보세요.",
+    sBench: "채점 벤치마크",
+    sBenchHint: "기대 결과가 정해진 코드를 반복 채점했습니다. p50과 p95는 샌드박스가 요청을 맡은 뒤 판정까지 걸린 시간입니다. pool 처리량에는 빈 pod를 기다린 시간도 들어갑니다.",
+    runtimeComparison: "배포 직후와 이미지 캐시 후 비교",
+    resultsTitle: "구성별 채점 결과", resultsPool: "요청 노드 / 런타임",
+    resultsP50: "p50 (초)", resultsP95: "p95 (초)", resultsRate: "pool 처리량 (건/초)",
+    resultsNote: "pool 처리량은 Ready 상태의 pod가 합쳐서 초당 처리한 요청 수입니다. GPU pool을 비교할 때는 GPU 종류와 pod 수도 함께 보세요.",
     resultsGuide: "측정 조건과 실행 화면", resultsRaw: "원본 JSONL", resultsImage: "이미지",
-    resultsKpi: "벤치마크 성공 건수 →",
-    b1Setup: "EC2 {instance} {pods}대에서 gVisor v1 샌드박스를 하나씩 띄웠습니다. 사전 채점 {warmup}건 뒤에 아래 두 클라이언트가 차례로 같은 {golden} 커널을 요청했습니다.",
-    b1Note: "이 측정에서는 모델 학습을 멈추고 샌드박스 채점만 실행했습니다. 각 클라이언트의 처리량은 샌드박스 풀 전체에서 측정한 값입니다.",
-    b2Title: "HyperPod B2 채점 결과", b2System: "HyperPod CPU 워커",
-    b2Setup: "시스템과 학습 노드에서 차례로 {golden}을 {requests}건씩 보냈습니다. 같은 HyperPod {instance} {pods}대가 gVisor에서 채점을 맡았습니다.",
-    b2Guide: "B2 실행 화면과 벤치마크 조건 보기 →",
-    b1Diagram: "B1에서 요청이 지나가는 경로 보기 →", b1System: "EKS 시스템 노드", b1Trainer: "HyperPod 학습 노드",
-    b1Success: "성공 / 요청", b1PoolRate: "풀 처리량", b1Speed: "PyTorch 대비 커널 속도 (중앙값)",
+    resultsKpi: "벤치마크 성공 / 요청 →",
+    benchB2: "B2 · HyperPod에서 채점", benchB1: "B1 · EC2에서 채점", benchA: "A · EC2 런타임 비교",
+    b2System: "HyperPod CPU 워커", b1System: "EC2 시스템 노드", b1Trainer: "HyperPod 학습 노드",
+    benchRaw: "원본 기록", groupDetails: "실행 조건",
+    b1Success: "성공 / 요청", b1PoolRate: "pool 처리량", b1Speed: "PyTorch 대비 커널 속도 (중앙값)",
     mP50: "채점 시간 중앙값 (초)", mP95: "채점 시간 p95 (초)", mCold: "시작 시간 (초, pod 중앙값)",
     mTput: "pod 하나의 초당 채점 수", mSpeed: "속도 향상 중앙값 (GPU)",
     pass2: "이미지를 받아 둔 뒤 (기준)", pass1: "처음 배포했을 때",
@@ -157,20 +154,17 @@ const TEXT = {
     switchNote: "A simulation: golden submissions stood in for model outputs and no model was trained. The scoring path and the routing table are the same as in training.",
     showRollout: "Show the rollout terminal output",
     simSummary: "All {n} batches were scored. At step {s} the pool changed from {from} to {to}; the median eval p50 was {a} s before and {b} s after.",
-    sBench: "Runtime benchmarks",
+    sBench: "Grading benchmarks",
     sBenchHint: "Each run repeats a submission with a known answer. The p50 and p95 cover time from the sandbox accepting a request to returning its verdict. Pool throughput includes time spent waiting for a free pod.",
-    b1Title: "Scoring from HyperPod B1 and EKS", runtimeComparison: "First deployment and cached images",
-    resultsTitle: "EKS runtime benchmark results", resultsPool: "Pool / node",
+    runtimeComparison: "First deployment and cached images",
+    resultsTitle: "Grading results by configuration", resultsPool: "Client / runtime",
     resultsP50: "p50 (s)", resultsP95: "p95 (s)", resultsRate: "Pool throughput (eval/s)",
     resultsNote: "Pool throughput counts requests per second across all ready pods. When comparing GPU pools, check the GPU model and the number of pods.",
     resultsGuide: "Run conditions and screenshots", resultsRaw: "Raw JSONL", resultsImage: "image",
-    resultsKpi: "Successful benchmark requests →",
-    b1Setup: "Each of the {pods} EC2 {instance} nodes hosted one gVisor v1 sandbox. After {warmup} warm-up evaluations, the clients took turns submitting the same {golden} kernel.",
-    b1Note: "Training was idle during these runs. Throughput for each client covers the entire sandbox pool.",
-    b2Title: "Grading on HyperPod B2", b2System: "HyperPod CPU worker",
-    b2Setup: "The CPU and training workers each sent {requests} {golden} evaluations in turn. Both used the same {pods} HyperPod {instance} workers running gVisor.",
-    b2Guide: "See the B2 screenshots and benchmark setup →",
-    b1Diagram: "Follow a request through B1 →", b1System: "EKS system node", b1Trainer: "HyperPod trainer node",
+    resultsKpi: "Benchmark requests passed / sent →",
+    benchB2: "B2 · Grading on HyperPod", benchB1: "B1 · Grading on EC2", benchA: "A · EC2 runtimes",
+    b2System: "HyperPod CPU worker", b1System: "EC2 system node", b1Trainer: "HyperPod trainer",
+    benchRaw: "Run data", groupDetails: "Run conditions",
     b1Success: "Successful / requested", b1PoolRate: "Pool throughput", b1Speed: "Kernel speedup over PyTorch (median)",
     mP50: "eval p50 (s)", mP95: "eval p95 (s)", mCold: "cold start (s, pod median)",
     mTput: "throughput per pod (eval/s)", mSpeed: "speedup median (GPU)",
@@ -437,6 +431,10 @@ function nodeKernel(runtime) {
 }
 
 // ---------- static text and hero ----------
+function displaySource(source) {
+  return (source || "").replace(/\bus-west-2\b[, ·]*/g, "").replace(/[, ·]+$/, "").trim();
+}
+
 function renderStatic() {
   document.documentElement.lang = lang;
   for (const node of document.querySelectorAll("[data-i18n]")) node.textContent = t(node.dataset.i18n);
@@ -444,7 +442,7 @@ function renderStatic() {
     pools: recording.pools.map((p) => p.runtime).join(", "),
   });
   document.getElementById("lang").textContent = lang === "ko" ? "EN" : "KO";
-  document.getElementById("source").textContent = `${recording.source} (${recording.recorded_at})`;
+  document.getElementById("source").textContent = `${displaySource(recording.source)} (${recording.recorded_at})`;
   for (const id of ["nav-patterns", "patterns-link", "hero-patterns"]) {
     document.getElementById(id).setAttribute("href", lang === "en" ? "architecture.html?lang=en" : "architecture.html");
   }
@@ -463,6 +461,17 @@ function renderStatic() {
   }
 }
 
+function benchmarkGroups() {
+  const groups = [];
+  for (const id of ["b2", "b1"]) {
+    const bench = extras?.[id]?.bench;
+    if (bench?.rows?.length) groups.push({ id, rows: bench.rows, bench });
+  }
+  const run = extras?.runtime_run;
+  if (run?.rows?.length) groups.push({ id: "a", rows: run.rows, run });
+  return groups;
+}
+
 function renderKpis() {
   const pools = recording.pools;
   const gpuPools = pools.filter((p) => p.info?.gpu).length;
@@ -479,16 +488,16 @@ function renderKpis() {
     if (!tr.id.startsWith("verify-")) continue;
     blocked += tr.lines.filter((l) => /\bblocked\b/.test(l.text)).length;
   }
-  const run = extras?.runtime_run;
-  const rows = run?.rows?.length ? run.rows : benchRows("pass2");
+  const groups = benchmarkGroups();
+  const rows = groups.length ? groups.flatMap((group) => group.rows) : benchRows("pass2");
   const ok = rows.reduce((s, r) => s + (r.ok || 0), 0);
   const req = rows.reduce((s, r) => s + (r.requests || 0), 0);
   const tiles = gpuPools ? [[String(gpuPools), t("kpiGpu")]] : [];
   tiles.push([`${match}/${total}`, t("kpiGolden")]);
   if (blocked) tiles.push([String(blocked), t("kpiBlocked")]);
   if (req) {
-    const label = run?.rows?.length ? t("resultsKpi") : t("kpiBench");
-    tiles.push([`${ok}/${req}`, label, run?.rows?.length ? "#runtime-results" : "#runtime-bench"]);
+    const label = groups.length ? t("resultsKpi") : t("kpiBench");
+    tiles.push([`${ok}/${req}`, label, groups.length ? "#runtime-results" : "#runtime-bench"]);
   }
   document.getElementById("kpis").replaceChildren(
     ...tiles.map(([v, k, href]) => el(href ? "a" : "div", href ? { class: "kpi", href } : { class: "kpi" },
@@ -1031,7 +1040,7 @@ function renderGrpo() {
     node.hidden = !hasBatches;
   }
   if (!hasBatches) return;
-  document.getElementById("grpo-source").textContent = `${tr.source}${tr.model ? `, ${t("model")} ${tr.model}` : ""}`;
+  document.getElementById("grpo-source").textContent = `${displaySource(tr.source)}${tr.model ? `, ${t("model")} ${tr.model}` : ""}`;
   const batches = tr.batches;
   const steps = tr.steps || [];
   const W = 900, H = 300, L = 46, R = 56, T = 30, B = 40;
@@ -1160,7 +1169,7 @@ function renderSim() {
   const sw = sim.events.find((e) => e.event === "sandbox_version_switch");
   panel.hidden = !batches.length;
   if (!batches.length) return;
-  document.getElementById("sim-source").textContent = sim.source || "";
+  document.getElementById("sim-source").textContent = displaySource(sim.source);
   const W = 900, H = 220, L = 46, R = 20, T = 30, B = 34;
   const pw = W - L - R, ph = H - T - B;
   const maxY = Math.ceil(Math.max(...batches.map((b) => b.eval_p50_s)) + 1);
@@ -1210,49 +1219,40 @@ function renderSim() {
 
 // ---------- 5. benchmark ----------
 function renderRuntimeResults() {
-  const run = extras?.runtime_run;
   const panel = document.getElementById("runtime-results");
-  panel.hidden = !run?.rows?.length;
+  const groups = benchmarkGroups();
+  panel.hidden = !groups.length;
+  // Earlier cached pages placed the HyperPod results in separate articles.
+  for (const article of document.querySelectorAll("article#hyperpod-b1, article#hyperpod-b2")) article.remove();
   if (panel.hidden) return;
-  document.getElementById("results-source").textContent =
-    `${run.date} · ${run.region} · EKS ${run.eks} · ${t("resultsImage")} ${run.image}`;
-  document.getElementById("results-rows").replaceChildren(...run.rows.map((r) =>
-    el("tr", {},
-      el("th", { scope: "row" }, el("code", {}, r.runtime),
-        el("span", { class: "muted small" }, [r.instance, r.gpu].filter(Boolean).join(" · "))),
-      el("td", {}, r.ready), el("td", {}, `${r.ok}/${r.requests}`),
-      el("td", {}, fmt(r.eval_p50_s) || "—"), el("td", {}, fmt(r.eval_p95_s) || "—"),
-      el("td", {}, fmt(r.throughput_eval_per_s) || "—"))));
   const guide = "https://daekeun-ml.github.io/gpu-sandbox-on-aws/";
-  document.getElementById("results-guide").href = `${guide}${lang === "en" ? "en/" : ""}handson/08_benchmark/#runtime-results`;
-  document.getElementById("results-jsonl").href = `${guide}handson/data/${encodeURIComponent(run.jsonl)}`;
-}
-
-function renderHyperPodBench(scenario) {
-  const run = extras?.[scenario];
-  const bench = run?.bench;
-  const panel = document.getElementById(`hyperpod-${scenario}`);
-  if (!panel) return;
-  panel.hidden = !bench?.rows?.length;
-  if (panel.hidden) return;
-  document.getElementById(`${scenario}-source`).textContent = run.source;
-  document.getElementById(`${scenario}-setup`).textContent = fill(t(`${scenario}Setup`), {
-    instance: bench.sandbox_instance, pods: bench.cold_start_s.length,
-    warmup: bench.warmup_requests, golden: bench.rows[0].golden, requests: bench.rows[0].requests,
-  });
-  document.getElementById(`${scenario}-clients`).replaceChildren(...bench.rows.map((r) =>
-    el("div", { class: "card" },
-      el("h4", {}, `${t(r.client === "system" ? `${scenario}System` : "b1Trainer")} · ${r.client_instance}`),
-      row(t("b1Success"), `${r.ok} / ${r.requests}`),
-      row(t("evalTimes"), `${r.eval_p50_s} / ${r.eval_p95_s} s`),
-      row(t("b1PoolRate"), `${r.throughput_eval_per_s} eval/s`),
-      row(t("b1Speed"), `${r.speedup_median}×`))));
-  if (scenario === "b1") {
-    document.getElementById("b1-pattern").href = `architecture.html?pattern=b1${lang === "en" ? "&lang=en" : ""}`;
-  } else {
-    const guide = "https://daekeun-ml.github.io/gpu-sandbox-on-aws/";
-    document.getElementById("b2-guide").href = `${guide}${lang === "en" ? "en/" : ""}handson/08_benchmark/#hyperpod-b2`;
+  const chapter = `${guide}${lang === "en" ? "en/" : ""}handson/08_benchmark/`;
+  const table = panel.querySelector("table");
+  for (const body of [...table.tBodies]) body.remove();
+  for (const { id, rows, bench, run } of groups) {
+    const anchor = bench ? `hyperpod-${id}` : "ec2-runtimes";
+    const title = t({ b2: "benchB2", b1: "benchB1", a: "benchA" }[id]);
+    const description = bench
+      ? `${rows[0].runtime} · ${bench.sandbox_instance} · ${bench.gpu} · ${rows[0].golden}`
+      : `EKS ${run.eks} · ${t("resultsImage")} ${run.image}`;
+    const original = bench ? `hyperpod-${id}.json` : run.jsonl;
+    const body = el("tbody", { id: anchor }, el("tr", { class: "results-group" },
+      el("th", { scope: "rowgroup", colspan: "6" }, el("strong", {}, title),
+        el("span", { class: "muted small" }, description),
+        el("a", { href: `${chapter}#${id}-conditions` }, t("groupDetails")), " · ",
+        el("a", { href: `${guide}handson/data/${encodeURIComponent(original)}` }, t("benchRaw")))));
+    for (const r of rows) {
+      const name = bench ? t(r.client === "system" ? `${id}System` : "b1Trainer") : r.runtime;
+      const node = bench ? r.client_instance : [r.instance, r.gpu || "CPU"].join(" · ");
+      body.append(el("tr", {}, el("th", { scope: "row" }, name, el("span", { class: "muted small" }, node)),
+        el("td", {}, bench ? (bench.replicas ?? bench.cold_start_s.length) : r.ready),
+        el("td", {}, `${r.ok}/${r.requests}`), el("td", {}, fmt(r.eval_p50_s)),
+        el("td", {}, fmt(r.eval_p95_s)), el("td", {}, fmt(r.throughput_eval_per_s))));
+    }
+    table.append(body);
   }
+  const oldLinks = panel.querySelector(".results-links");
+  if (oldLinks) oldLinks.hidden = true;
 }
 
 const METRICS = [
@@ -1279,17 +1279,15 @@ function renderBenchTabs() {
 
 function renderBench() {
   renderRuntimeResults();
-  renderHyperPodBench("b1");
-  renderHyperPodBench("b2");
   const passes = extras?.bench?.passes || [];
   const section = document.getElementById("bench");
-  section.hidden = !passes.length && document.getElementById("hyperpod-b1").hidden && document.getElementById("runtime-results").hidden;
+  section.hidden = !passes.length && document.getElementById("runtime-results").hidden;
   document.getElementById("hero-bench").hidden = section.hidden;
   for (const node of section.querySelectorAll("#runtime-bench,#runtime-source,.bench-ctl,.bench-ctl + .panel")) {
     node.hidden = !passes.length;
   }
   if (!passes.length) return;
-  document.getElementById("runtime-source").textContent = extras.source;
+  document.getElementById("runtime-source").textContent = displaySource(extras.source);
   renderBenchTabs();
   const metric = METRICS.find((m) => m.id === ui.benchMetric);
   const rows = benchRows(ui.benchPass);
@@ -1395,7 +1393,7 @@ async function main() {
   renderAll();
   // Benchmark panels are hidden until their recording loads, after the browser's initial anchor lookup.
   if (["#bench", "#runtime-results", "#hyperpod-b1", "#hyperpod-b2", "#runtime-bench"].includes(location.hash)) {
-    document.getElementById(location.hash.slice(1)).scrollIntoView({ behavior: "instant" });
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "instant" });
   }
 }
 

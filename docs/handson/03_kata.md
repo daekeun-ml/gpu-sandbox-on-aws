@@ -3,7 +3,7 @@
 Kata는 pod마다 가상 머신(VM)을 띄웁니다. [클러스터와 이미지](01_cluster_and_images.md)가 준비됐다면 먼저 CPU에서 **pod가 어느 커널을 쓰는지** 확인하세요. GPU가 필요한 실습만 2단계로 이어집니다.
 
 1. [CPU 리허설](#1단계-nested-virtualization으로-리허설-katacpu_nodessh)에서 `scripts/kata/cpu_nodes.sh`를 실행합니다. [커널 출력](#cpu-run)에서 Kata pod 안의 게스트 커널과 마지막 줄의 EC2 호스트 커널을 비교하세요. CPU 코스는 여기까지입니다.
-2. [GPU 연결](#2단계-g4dnmetal-gpu-passthrough-katagpu_nodessh)에서는 `g4dn.metal`을 추가합니다. 노드가 GPU를 제공하는지 확인한 뒤 [QEMU 채점 풀](04_sandbox_pools.md)을 배포하세요. [게스트 안의 `Tesla T4`와 시험 답안 판정](#gpu-run)까지 확인하면 GPU 실습이 끝납니다.
+2. [GPU 연결](#2단계-g4dnmetal-gpu-passthrough-katagpu_nodessh)에서는 `g4dn.metal`을 추가합니다. 노드가 GPU를 제공하는지 확인한 뒤 [QEMU 채점 pool](04_sandbox_pools.md)을 배포하세요. [게스트 안의 `Tesla T4`와 시험 답안 판정](#gpu-run)까지 확인하면 GPU 실습이 끝납니다.
 
 ??? note "CPU 노드와 GPU 노드의 차이"
     CPU 실습은 중첩 가상화가 가능한 `c8i.2xlarge` 한 대에서 Cloud Hypervisor와 QEMU를 비교합니다. GPU 실습은 별도 `g4dn.metal`에서 QEMU VM에 T4를 한 장씩 연결합니다. metal 노드 한 대를 추가하면 시간당 7.824 USD가 더 듭니다.
@@ -24,7 +24,7 @@ Kata는 pod마다 가상 머신(VM)을 띄웁니다. [클러스터와 이미지]
     - **`overhead.podFixed`**: VM 자체가 쓰는 메모리와 CPU를 scheduler가 pod 요청에 더하도록 RuntimeClass에 지정한 값입니다.
 
 ??? note "실습 계정에서 확인한 범위"
-    이 페이지의 Kata CPU 경로(`scripts/kata/cpu_nodes.sh`, CDK 시나리오 C)와 Kata GPU 경로(IOMMU AMI 빌드, `scripts/kata/gpu_nodes.sh`, `g4dn.metal` 노드 그룹, `kata-qemu` 풀)는 실습 계정(EKS 1.36)에서 실행했습니다. 아래 smoke pod 출력과 2단계의 출력, 소요 시간은 그 실행에서 관찰한 값이고, 그 실행에서 찾은 `vfio_iommu_type1` 모듈 문제와 AMI 빌더 문제는 스크립트에서 고쳤습니다(2단계). 업스트림에서 검증된 조합은 아니며(아래 "적용 범위와 한계"), 실험용 CLH GPU는 VM이 시작되지 않았습니다(3단계). 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
+    이 페이지의 Kata CPU 경로(`scripts/kata/cpu_nodes.sh`, CDK 시나리오 C)와 Kata GPU 경로(IOMMU AMI 빌드, `scripts/kata/gpu_nodes.sh`, `g4dn.metal` 노드 그룹, `kata-qemu` pool)는 실습 계정(EKS 1.36)에서 실행했습니다. 아래 smoke pod 출력과 2단계의 출력, 소요 시간은 그 실행에서 관찰한 값이고, 그 실행에서 찾은 `vfio_iommu_type1` 모듈 문제와 AMI 빌더 문제는 스크립트에서 고쳤습니다(2단계). 업스트림에서 검증된 조합은 아니며(아래 "적용 범위와 한계"), 실험용 CLH GPU는 VM이 시작되지 않았습니다(3단계). 날짜별 실행 기록은 [검증된 사실과 출처](../reference/sources.md#aws-실행-기록)에 있습니다.
 
 <details class="note" markdown="1">
 <summary>런타임별 장치 요청과 VM 자원 비교</summary>
@@ -85,7 +85,7 @@ scripts/kata/cpu_nodes.sh    # kata-deploy, the gvisor-cpu RuntimeClass, smoke p
 | `BlockDeviceMappings` | `/dev/xvda` 100 GB gp3, 암호화 | 이미지와 VM 자산 |
 | `UserData` (MIME multipart) | NodeConfig(containerd `imports`와 gVisor `runsc` handler), `/etc/containerd/conf.d` 생성, 고정 버전 gVisor 설치(nvproxy 없음), node guard | 아래 설명 |
 | `ImageId` | 지정하지 않음 | EKS가 EKS 최적화 AMI(`AL2023_x86_64_STANDARD`)를 선택하고 자체 bootstrap user data를 병합 |
-| 노드 그룹 | desired 1, min 0, max 2, label `gpusandbox/role=sandbox-kata`와 `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | Kata 샌드박스 전용. smoke pod와 CPU 풀은 `gpusandbox/kata-gpu=false`로 이 노드를 선택함 |
+| 노드 그룹 | desired 1, min 0, max 2, label `gpusandbox/role=sandbox-kata`와 `gpusandbox/kata-gpu=false`, taint `gpusandbox/role=sandbox-kata:NoSchedule` | Kata 샌드박스 전용. smoke pod와 CPU pool은 `gpusandbox/kata-gpu=false`로 이 노드를 선택함 |
 
 - **`CpuOptions`의 코어 수와 스레드 수**: API가 다른 CPU 옵션과 함께 코어 수와 스레드 수를 요구합니다. 값은 `cdk/gpusandbox_cdk/config.py`의 표에서 읽습니다.
 - **`UserData`의 gVisor**: 같은 노드에서 세 런타임을 비교하려고 함께 설치합니다([10 c8i 단독 저비용 경로](10_cpu_only.md)).
@@ -320,7 +320,7 @@ trainer와 gVisor 노드에는 `nvidia.com/gpu.deploy.operands=false` label이 �
 
 - **예약 메모리와 pin하는 메모리**: overhead(10 GiB)가 limits에 포함되지 않는 `default_memory`(8 GiB)보다 크므로, scheduler가 예약하는 메모리가 VFIO가 실제로 pin하는 양보다 작아지지 않습니다.
 - **첫 Ready까지 걸리는 시간**: GPU VM은 부팅 전에 메모리를 모두 pin하고 guest 안에서 CUDA를 초기화하므로, 처음 Ready 상태가 될 때까지 몇 분 걸릴 수 있습니다(2026-11-18에는 이미지가 캐시된 상태에서 pod마다 30에서 36초, [08 런타임 벤치마크](08_benchmark.md)).
-- **늘린 대기 시간**: 그래서 kubelet `runtimeRequestTimeout`을 20분으로 늘렸고, 샌드박스 Deployment의 startupProbe는 최대 10분 기다립니다([04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)).
+- **늘린 대기 시간**: 그래서 kubelet `runtimeRequestTimeout`을 20분으로 늘렸고, 샌드박스 Deployment의 startupProbe는 최대 10분 기다립니다([04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)).
 
 !!! note "보안 속성"
     IOMMU가 GPU의 DMA를 해당 VM의 메모리로 제한하므로, IOMMU를 끄는 unsafe noiommu 모드는 쓰지 않습니다. vfio-pci는 장치를 해제할 때 function(또는 bus)을 reset하고, T4는 `reset_method=bus`로 보고됐습니다(제3자 보고이며 NVIDIA의 보증이 아님).
@@ -333,7 +333,7 @@ trainer와 gVisor 노드에는 `nvidia.com/gpu.deploy.operands=false` label이 �
 
 - 스크립트는 Kata GPU 노드에 `nvidia.com/pgpu`가 등록될 때까지 최대 20분(20초 간격 60회) 기다린 뒤 아래 형태로 결과를 출력합니다.
 - 2026-11-18 실행에서는 `pgpu=8`이 나왔고, GPU Operator 설치, kata-deploy upgrade, pgpu 대기까지 약 1분 걸렸습니다.
-- 같은 2026-11-18 실행에서 kata-deploy upgrade는 실행 중인 CPU 풀을 재시작하지 않았습니다.
+- 같은 2026-11-18 실행에서 kata-deploy upgrade는 실행 중인 CPU pool을 재시작하지 않았습니다.
 
 ```text
 [hh:mm:ss] waiting for the T4s to be advertised as nvidia.com/pgpu on ip-192-168-x-x.us-west-2.compute.internal
@@ -373,7 +373,7 @@ grep vfio_iommu_type1 /proc/modules    # expect one line: QEMU needs this VFIO I
 
 확인이 끝나면 debug pod를 [02 gVisor](02_gvisor.md)의 "노드에서 직접 확인하기"와 같은 방법으로 삭제하세요.
 
-실제 GPU VM은 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)에서 `scripts/06_deploy_sandboxes.sh kata-qemu`로 실행하고 풀 검증(`scripts/ops/verify.sh`)으로 확인합니다. 2026-11-18 실행에서는 `kata-qemu` pod 4개가 Ready가 되었고, `scripts/ops/verify.sh kata-qemu v1`의 결과는 다음과 같았습니다.
+실제 GPU VM은 [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에서 `scripts/06_deploy_sandboxes.sh kata-qemu`로 실행하고 pool 검증(`scripts/ops/verify.sh`)으로 확인합니다. 2026-11-18 실행에서는 `kata-qemu` pod 4개가 Ready가 되었고, `scripts/ops/verify.sh kata-qemu v1`의 결과는 다음과 같았습니다.
 
 - GPU `Tesla T4`, guest 커널 `6.18.56-nvidia-gpu`
 - egress 대상 4개 모두 차단
@@ -386,7 +386,7 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
 
 ### Kata VM 안에서 확인한 T4 { #gpu-run }
 
-같은 클러스터에 IOMMU를 켠 `g4dn.metal`을 추가했습니다. 노드가 광고한 `nvidia.com/pgpu` 개수, QEMU 풀의 Ready replica 4개, guest 안에서 PyTorch가 읽은 GPU 이름을 순서대로 확인할 수 있습니다.
+같은 클러스터에 IOMMU를 켠 `g4dn.metal`을 추가했습니다. 노드가 광고한 `nvidia.com/pgpu` 개수, QEMU pool의 Ready replica 4개, guest 안에서 PyTorch가 읽은 GPU 이름을 순서대로 확인할 수 있습니다.
 
 ![g4dn.metal의 passthrough GPU와 Kata QEMU guest의 커널 및 T4](../images/terminal/kata-gpu-replay.png)
 
@@ -404,7 +404,7 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
 - **RuntimeClass**: `kata-clh-nvidia-gpu`(overhead 10240Mi와 CPU 1, nodeSelector `nvidia.com/cc.ready.state: "false"`, label `gpusandbox/support: experimental`)를 만듭니다.
 
 !!! warning "2026-11-18 결과: VM이 시작되지 않았습니다"
-    아래 2번의 경로를 채운 values 파일로도 `kata-clh` 풀의 pod는 `create container timeout`으로 실패했습니다. CLH VM이 socket을 만들지 않았고, 로그에서 더 구체적인 원인은 찾지 못했습니다. 그래서 [08 런타임 벤치마크](08_benchmark.md)에는 "측정 안 됨"으로 기록하고 풀을 0으로 줄였습니다.
+    아래 2번의 경로를 채운 values 파일로도 `kata-clh` pool의 pod는 `create container timeout`으로 실패했습니다. CLH VM이 socket을 만들지 않았고, 로그에서 더 구체적인 원인은 찾지 못했습니다. 그래서 [08 런타임 벤치마크](08_benchmark.md)에는 "측정 안 됨"으로 기록하고 pool을 0으로 줄였습니다.
 
 1. **guest 자산 이름 확인 (다른 kata-deploy 버전일 때).** Kata GPU 노드에서 debug pod를 실행합니다.
 
@@ -443,7 +443,7 @@ GPU pod가 `ContainerCreating`에 머물면 pod 이벤트부터 보세요. `crea
     - **초기화되지 않으면**: `False`를 출력합니다.
     - **로그가 없으면**: `no logs: the VM probably never started` 경고가 나옵니다.
 
-5. **풀 배포(선택).** CUDA가 초기화되면 `scripts/06_deploy_sandboxes.sh kata-clh`로 실험 풀을 배포합니다. `kata-clh` 프로필은 `kata-qemu`와 같은 `g4dn.metal` 노드를 함께 씁니다(기본 replicas 2, `KATA_CLH_REPLICAS`).
+5. **pool 배포(선택).** CUDA가 초기화되면 `scripts/06_deploy_sandboxes.sh kata-clh`로 실험 pool을 배포합니다. `kata-clh` 프로필은 `kata-qemu`와 같은 `g4dn.metal` 노드를 함께 씁니다(기본 replicas 2, `KATA_CLH_REPLICAS`).
 
 !!! warning "다시 실행할 때 환경변수를 빠뜨리지 마세요"
     `kata/gpu_nodes.sh`를 `ENABLE_EXPERIMENTAL_CLH_GPU=1` 없이 다시 실행하면 `helm upgrade`가 기본 values 파일만으로 실행되어 실험 runtime과 `kata-clh-nvidia-gpu` RuntimeClass가 제거됩니다. `kata/cpu_nodes.sh`는 이 환경변수를 읽지 않으므로, 실험 뒤에 `kata/cpu_nodes.sh`를 다시 실행해도 실험 runtime이 제거됩니다.
@@ -506,7 +506,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 ## 다음 단계
 
-[04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)에서 Kata 풀(`kata-clh-cpu`, `kata-qemu-cpu`, `kata-qemu`)을 배포하고 검증합니다.
+[04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)에서 Kata pool(`kata-clh-cpu`, `kata-qemu-cpu`, `kata-qemu`)을 배포하고 검증합니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

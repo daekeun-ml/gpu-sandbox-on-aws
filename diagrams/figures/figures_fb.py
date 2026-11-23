@@ -156,7 +156,7 @@ T = {
         "dt.E2": ["EC2에 없는 VM 경계 + 최신 GPU 조합", "gVisor + 보완 통제로 위험을 수용하거나", "요구 사항을 다시 검토"],
         "dt.yes": "예", "dt.no": "아니오",
         # 06 pain
-        "p6.a": "reward 풀: turn마다 다른 pod와 GPU",
+        "p6.a": "reward pool: turn마다 다른 pod와 GPU",
         "p6.b": "Agent Sandbox: 에피소드 하나가 끝까지 쓰는 샌드박스 하나",
         "p6.ep": ["에피소드 하나"],
         "p6.t1": ["turn 1 제출"], "p6.t2": ["turn 2 수정 제출"],

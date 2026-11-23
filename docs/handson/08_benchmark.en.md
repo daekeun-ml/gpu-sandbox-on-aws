@@ -1,33 +1,99 @@
-# 08 Runtime benchmark
+# 08 Grading benchmarks
 
-Sending the same code repeatedly answers two questions. How long does one evaluation take, and how many evaluations can the whole pool finish per second? You can read the [EKS results](#runtime-results) and [HyperPod B1 results](#hyperpod-b1) without a cluster.
+Compare the time to grade one submission with the number of evaluations a pool completes per second. B2 and B1 changed the worker sending requests to a fixed pool. A compared five grading runtimes on EC2.
 
-To run a comparison, [check that v1 pools are ready and training has stopped](#before-you-begin), then [send 32 requests per pool](#running-it). Look for `ok 32/32` before reading p50, p95 and requests per second. Record the GPU type and pod count alongside the results.
+## Results by configuration { #runtime-results }
 
-## Scoring latency and throughput across five EKS pools { #runtime-results }
+Each of the nine runs sent 32 requests. **All 288 succeeded.** GPU pools received `relu_bias_triton` and CPU pools received `relu_bias_torch_only`.
 
-**All 160 requests succeeded**, 32 on each of five v1 pools. For example, the two-pod EC2 gVisor pool took about 10 seconds per evaluation at p50 and completed 0.198 evaluations per second across both pods.
+<div class="bench-scroll" role="region" tabindex="0" aria-labelledby="runtime-results">
+<table class="bench-results" aria-labelledby="runtime-results">
+<thead><tr><th scope="col">Client / runtime</th><th scope="col">OK/sent</th><th scope="col">p50 <small>(s)</small></th><th scope="col">p95 <small>(s)</small></th><th scope="col">Throughput <small>(eval/s)</small></th></tr></thead>
+<tbody id="hyperpod-b2">
+<tr><th scope="rowgroup" colspan="5">B2 · Grading on HyperPod<small>ml.g5.xlarge · A10G · gvisor-hyperpod · 2 Pods</small></th></tr>
+<tr><th scope="row">System worker<small>ml.m5.xlarge</small></th><td>32/32</td><td>10.448</td><td>10.572</td><td>0.189</td></tr>
+<tr><th scope="row">Training worker<small>ml.g5.2xlarge</small></th><td>32/32</td><td>10.480</td><td>10.593</td><td>0.190</td></tr>
+</tbody>
+<tbody id="hyperpod-b1">
+<tr><th scope="rowgroup" colspan="5">B1 · Grading on EC2<small>g5.xlarge · A10G · gvisor · 2 Pods</small></th></tr>
+<tr><th scope="row">System worker<small>m6i.large</small></th><td>32/32</td><td>9.918</td><td>10.034</td><td>0.199</td></tr>
+<tr><th scope="row">Training worker<small>ml.g5.2xlarge</small></th><td>32/32</td><td>9.937</td><td>10.071</td><td>0.199</td></tr>
+</tbody>
+<tbody id="ec2-runtimes">
+<tr><th scope="rowgroup" colspan="5">A · EC2 runtime comparison<small>EKS 1.36 · image a20261120b</small></th></tr>
+<tr><th scope="row">gvisor<small>g5.xlarge · A10G · 2 Pods</small></th><td>32/32</td><td>9.984</td><td>10.151</td><td>0.198</td></tr>
+<tr><th scope="row">kata-qemu<small>g4dn.metal · T4 · 4 Pods</small></th><td>32/32</td><td>10.789</td><td>11.863</td><td>0.349</td></tr>
+<tr><th scope="row">gvisor-cpu<small>c8i.2xlarge · CPU · 1 Pod</small></th><td>32/32</td><td>3.576</td><td>3.618</td><td>0.277</td></tr>
+<tr><th scope="row">kata-clh-cpu<small>c8i.2xlarge · CPU · 1 Pod</small></th><td>32/32</td><td>4.043</td><td>4.120</td><td>0.244</td></tr>
+<tr><th scope="row">kata-qemu-cpu<small>c8i.2xlarge · CPU · 1 Pod</small></th><td>32/32</td><td>3.819</td><td>3.958</td><td>0.258</td></tr>
+</tbody>
+</table>
+</div>
 
-| v1 pool | Node | Ready pods | OK / requests | Eval p50 (s) | Eval p95 (s) | Pool throughput (eval/s) |
-|---|---|---:|---:|---:|---:|---:|
-| `gvisor` | `g5.xlarge` | 2 | 32/32 | 9.984 | 10.151 | 0.198 |
-| `kata-qemu` | `g4dn.metal` | 4 | 32/32 | 10.789 | 11.863 | 0.349 |
-| `gvisor-cpu` | `c8i.2xlarge` | 1 | 32/32 | 3.576 | 3.618 | 0.277 |
-| `kata-clh-cpu` | `c8i.2xlarge` | 1 | 32/32 | 4.043 | 4.120 | 0.244 |
-| `kata-qemu-cpu` | `c8i.2xlarge` | 1 | 32/32 | 3.819 | 3.958 | 0.258 |
+**Reading the table.** The latency percentiles cover successful server-side evaluations. Throughput also includes time the client spent waiting for an available pod. For the B2 system client, p50 was 10.448 seconds and the two grading pods together completed 0.189 evaluations per second. GPU model and pod count differ across configurations.
 
-Sort the successful requests by server grading time. **p50** marks the halfway point and **p95** the point by which 95% have finished. Throughput includes the client waiting for a free pod and covers the whole pool. The GPU rows use different replica counts and different GPUs (A10G and T4).
+[Open the same table in the demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results)
 
 <details class="note" markdown="1">
-<summary>Run conditions and the GPU and CPU submissions</summary>
+<summary id="b2-conditions">B2 · HyperPod grading workers, screenshots and data</summary>
 
-After scenario A training and rollback, we ran `scripts/ops/bench.sh 32` in `us-west-2` on EKS 1.36 with image `a20261120b`. GPU pools received `relu_bias_triton` and CPU pools received `relu_bias_torch_only`. [Run metadata](data/runtime-benchmark-2026-11-22.meta.json)
+In `us-east-1` on EKS 1.36, two `ml.g5.xlarge` workers each hosted one `gvisor-hyperpod` v1 grader with an A10G. After GRPO finished, the CPU system worker and the training worker each submitted 32 `relu_bias_triton` evaluations. Each run had the pool to itself.
+
+The percentiles use the server's `duration_s` for successful evaluations. Pool throughput divides the number of successful evaluations by the elapsed client time for the whole batch. Pod creation to `Ready` took 10 seconds on the node that already held the sandbox image from the CUDA check and 110 seconds on the other node.
+
+[![Both completed jobs and their latency and throughput from the live cluster](../images/terminal/hyperpod-b2-benchmark.png)](../images/terminal/hyperpod-b2-benchmark.png)
+
+```bash
+scripts/hyperpod/bench_b2.sh 32
+```
+
+[Run record in JSON](data/hyperpod-b2.json) · [Public B2 demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b2) · [Build the B2 cluster and run GRPO](07_hyperpod_b2.md)
 
 </details>
 
-![Success counts, latency, throughput and kernel timings from the benchmark JSONL](../images/terminal/bench-results-replay.png)
+<details class="note" markdown="1">
+<summary id="b1-conditions">B1 · EC2 grading workers, screenshots and data</summary>
 
-[View the results in the demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#runtime-results) · [Download the raw benchmark JSONL](data/runtime-benchmark-2026-11-22.jsonl) · [First deployment and cached images](#results-20261118) · [HyperPod B1 results](#hyperpod-b1)
+Two EC2 `g5.xlarge` nodes each hosted one `gvisor/v1` sandbox with an A10G. On EKS 1.36, we warmed the pool with two evaluations, then sent a batch of 32 copies of `relu_bias_triton` from each client in the order shown. No training job shared the pool. Both runs used image tag `a20261120b`.
+
+The sandbox pods reached Ready in 15, 120 seconds respectively. The p50 and p95 come from successful server-side evaluations. Throughput includes the client waiting for a free pod. Each client ran once, so the difference between the rows does not isolate the effect of placement.
+
+![Completed B1 benchmark jobs, client placements and metrics](../images/terminal/hyperpod-b1-benchmark.png)
+
+[Run data (JSON)](data/hyperpod-b1.json) · [Interactive demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1)
+
+??? example "Repeat the runs on a B1 cluster"
+    Use the B1 configuration and the two ready sandbox pods from [07 HyperPod](07_hyperpod.md). The default Job used an EKS system node in this run. The final Job pins its client to the HyperPod trainer.
+
+    ```bash
+    scripts/ops/bench.sh 2
+    scripts/ops/bench.sh 32
+
+    source scripts/lib.sh
+    job="bench-b1-hyperpod-$(date +%s)"
+    client_spec=$(jq -nc --arg cluster "$HYPERPOD_CLUSTER_NAME" --arg type "$HYPERPOD_TRAINER_INSTANCE_TYPE" '
+      {spec:{template:{spec:{nodeSelector:{"sagemaker.amazonaws.com/cluster-name":$cluster,
+          "node.kubernetes.io/instance-type":$type, "sagemaker.amazonaws.com/node-health-status":"Schedulable"},
+        tolerations:[{key:"nvidia.com/gpu", operator:"Exists", effect:"NoSchedule"}]}}}}')
+    render k8s/probe/job-probe.yaml.tpl JOB_NAME="$job" \
+      TOOL_ARGS='["bench","--address","sandbox-gvisor-v1.sandbox.svc.cluster.local:8000","--requests","32","--golden","relu_bias_triton"]' \
+      | kubectl patch --local -f - --type=merge -p "$client_spec" -o yaml | kubectl create -f -
+    kubectl -n rl-trainer wait --for=condition=Complete "job/$job" --timeout=15m
+    kubectl -n rl-trainer logs "job/$job"
+    ```
+
+</details>
+
+<details class="note" markdown="1">
+<summary id="a-conditions">A · Five EC2 runtimes, screenshot and raw results</summary>
+
+Scenario A ran after training and rollback on EKS 1.36 with image `a20261120b`.
+
+![EC2 runtime results](../images/terminal/bench-results-replay.png)
+
+[Run conditions](data/runtime-benchmark-2026-11-22.meta.json) · [Raw JSONL](data/runtime-benchmark-2026-11-22.jsonl)
+
+</details>
 
 **Before you start:**
 
@@ -48,24 +114,6 @@ After scenario A training and rollback, we ran `scripts/ops/bench.sh 32` in `us-
     - **Pool claim**: taking one sandbox from a pool of sandboxes started in advance (a warm pool).
     - **JSONL**: a file format with one JSON object per line.
 
-## HyperPod B2 · Two clients, one GPU grading pool { #hyperpod-b2 }
-
-In `us-east-1` on EKS 1.36, two `ml.g5.xlarge` workers each hosted one `gvisor-hyperpod` v1 grader with an A10G. After GRPO finished, the CPU system worker and the training worker each submitted 32 `relu_bias_triton` evaluations. Each run had the pool to itself.
-
-| HyperPod client | Successful / requested | Evaluation p50 (s) | Evaluation p95 (s) | Pool throughput (eval/s) | Median kernel speedup |
-|---|---:|---:|---:|---:|---:|
-| `system` · `ml.m5.xlarge` | 32 / 32 | 10.448 | 10.572 | 0.189 | 1.727× |
-| `trainer` · `ml.g5.2xlarge` | 32 / 32 | 10.480 | 10.593 | 0.190 | 1.725× |
-
-The percentiles use the server's `duration_s` for successful evaluations. Pool throughput divides the number of successful evaluations by the elapsed client time for the whole batch. Pod creation to `Ready` took 10 seconds on the node that already held the sandbox image from the CUDA check and 110 seconds on the other node.
-
-[![Both completed jobs and their latency and throughput from the live cluster](../images/terminal/hyperpod-b2-benchmark.png)](../images/terminal/hyperpod-b2-benchmark.png)
-
-```bash
-scripts/hyperpod/bench_b2.sh 32
-```
-
-[Run record in JSON](data/hyperpod-b2.json) · [Public B2 demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b2) · [Build the B2 cluster and run GRPO](07_hyperpod_b2.md)
 
 ## Before you begin
 
@@ -240,6 +288,9 @@ With `maxSurge: 0`, pods are replaced one at a time, and in a pool with one pod 
 
 ## First deployment and cached images { #results-20261118 }
 
+<details class="note" markdown="1">
+<summary>Show cache conditions and detailed measurements</summary>
+
 The second pass on November 18, 2026 restarted the v1 pools with images cached on the nodes. The table gives the hardware and replica counts for that run.
 
 | runtime | Instance (GPU) | Ready pods | cold start (s, median over pods) | eval p50 (s) | eval p95 (s) | throughput (eval/s) | throughput per pod | median speedup | median ref_ms |
@@ -305,40 +356,8 @@ The second pass on November 18, 2026 restarted the v1 pools with images cached o
 - **Cold start of the GPU pools:** 16 s for gVisor (A10G), 30 to 36 s per pod for Kata QEMU (T4). The GPUs differ (A10G vs T4), so by the rule in "How to interpret the results" this difference is not an overhead comparison.
 - **Per-GPU values:** the median `ref_ms` was 0.58 ms on A10G and 1.15 ms on T4, and the speedup was 1.75 on A10G and 1.79 on T4.
 
-## HyperPod B1 { #hyperpod-b1 }
 
-Two EC2 `g5.xlarge` nodes each hosted one `gvisor/v1` sandbox with an A10G. In `us-west-2` on EKS 1.36, we warmed the pool with two evaluations, then sent a batch of 32 copies of `relu_bias_triton` from each client in the order shown. No training job shared the pool. Both runs used image tag `a20261120b`.
-
-| Request source | Successful | Eval p50 | Eval p95 | Pool throughput | Median kernel speedup |
-|---|---:|---:|---:|---:|---:|
-| EKS system `m6i.large` | 32/32 | 9.918 s | 10.034 s | 0.199 eval/s | 1.735× |
-| HyperPod trainer `ml.g5.2xlarge` | 32/32 | 9.937 s | 10.071 s | 0.199 eval/s | 1.738× |
-
-The sandbox pods reached Ready in 15, 120 seconds respectively. The p50 and p95 come from successful server-side evaluations. Throughput includes the client waiting for a free pod. Each client ran once, so the difference between the rows does not isolate the effect of placement.
-
-![Completed B1 benchmark jobs, client placements and metrics](../images/terminal/hyperpod-b1-benchmark.png)
-
-[Run data (JSON)](data/hyperpod-b1.json) · [Interactive demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1)
-
-??? example "Repeat the runs on a B1 cluster"
-    Use the B1 configuration and the two ready sandbox pods from [07 HyperPod](07_hyperpod.md). The default Job used an EKS system node in this run. The final Job pins its client to the HyperPod trainer.
-
-    ```bash
-    scripts/ops/bench.sh 2
-    scripts/ops/bench.sh 32
-
-    source scripts/lib.sh
-    job="bench-b1-hyperpod-$(date +%s)"
-    client_spec=$(jq -nc --arg cluster "$HYPERPOD_CLUSTER_NAME" --arg type "$HYPERPOD_TRAINER_INSTANCE_TYPE" '
-      {spec:{template:{spec:{nodeSelector:{"sagemaker.amazonaws.com/cluster-name":$cluster,
-          "node.kubernetes.io/instance-type":$type, "sagemaker.amazonaws.com/node-health-status":"Schedulable"},
-        tolerations:[{key:"nvidia.com/gpu", operator:"Exists", effect:"NoSchedule"}]}}}}')
-    render k8s/probe/job-probe.yaml.tpl JOB_NAME="$job" \
-      TOOL_ARGS='["bench","--address","sandbox-gvisor-v1.sandbox.svc.cluster.local:8000","--requests","32","--golden","relu_bias_triton"]' \
-      | kubectl patch --local -f - --type=merge -p "$client_spec" -o yaml | kubectl create -f -
-    kubectl -n rl-trainer wait --for=condition=Complete "job/$job" --timeout=15m
-    kubectl -n rl-trainer logs "job/$job"
-    ```
+</details>
 
 <details class="note" markdown="1">
 <summary>Reference numbers published for other environments</summary>

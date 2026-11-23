@@ -9,7 +9,7 @@
 | 샌드박스 요청이 어디서 처리되는지 보기 | [`server/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/server/app.py) |
 | 정확성 검사와 속도 측정 바꾸기 | [`harness/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/src/gpusandbox/harness) |
 | GRPO의 reward 계산과 로그 확인 | [`rewards.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/rewards.py), [`rl/trl/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/rl/trl) |
-| gateway가 요청을 풀에 배정하는 방식 보기 | [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py), [`client/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/src/gpusandbox/client) |
+| gateway가 요청을 pool에 배정하는 방식 보기 | [`gateway/app.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/gateway/app.py), [`client/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/src/gpusandbox/client) |
 | 런타임, 리소스, 채점 버전 바꾸기 | [`k8s/sandbox/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/k8s/sandbox) |
 | AWS 노드와 클러스터 배치 바꾸기 | [`cdk/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/cdk), [`infra/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/infra) |
 | multi-turn 에피소드 또는 데모 확인 | [`agent_sandbox.py`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/src/gpusandbox/agent_sandbox.py), [`demo/`](https://github.com/daekeun-ml/gpu-sandbox-on-aws/tree/main/demo) |
@@ -21,7 +21,7 @@
 ## 평가 요청을 따라 읽는 순서
 
 1. `rl/trl/train_grpo.py`가 답을 생성하고, `src/gpusandbox/rewards.py`가 채점 결과를 reward로 바꿉니다. 분산 학습의 진입점은 `rl/verl/`에 있습니다.
-2. `src/gpusandbox/client/`가 라우팅을 읽습니다. 운영 구성에서는 `src/gpusandbox/gateway/app.py`가 풀과 버전을 고릅니다.
+2. `src/gpusandbox/client/`가 라우팅을 읽습니다. 운영 구성에서는 `src/gpusandbox/gateway/app.py`가 pool과 버전을 고릅니다.
 3. `src/gpusandbox/server/app.py`가 평가 요청을 받고, `harness/evaluate.py`가 별도 프로세스의 `harness/runner.py`에 제출 코드를 실행시킵니다. `evaluate.py`가 기준 결과와 비교해 verdict를 반환합니다.
 
 ## 테스트 { #tests }

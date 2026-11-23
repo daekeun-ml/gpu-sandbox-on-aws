@@ -44,6 +44,6 @@ Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지
 
 ![Kata 게스트 안에서 확인한 T4와 GPU 연산 결과](../images/terminal/kata-gpu-replay.png)
 
-같은 커널을 두 풀에 보내도 처리량은 달라질 수 있습니다. EKS 실습에서 gVisor 풀은 A10G 두 장으로 초당 0.198건, Kata QEMU 풀은 T4 네 장으로 초당 0.349건을 처리했습니다. 뒤쪽 풀에는 동시에 채점할 자리가 두 배 있었습니다. **코드 자체의 속도**를 비교하려면 같은 GPU에서 기준 구현과 제출 코드를 돌려 보고, **풀 용량**을 정하려면 전체 처리량과 Ready pod 수를 함께 보세요. [측정 조건과 원본 결과](../handson/08_benchmark.md#runtime-results)
+같은 커널을 두 pool에 보내도 처리량은 달라질 수 있습니다. EKS 실습에서 gVisor pool은 A10G 두 장으로 초당 0.198건, Kata QEMU pool은 T4 네 장으로 초당 0.349건을 처리했습니다. 뒤쪽 pool에는 동시에 채점할 자리가 두 배 있었습니다. **코드 자체의 속도**를 비교하려면 같은 GPU에서 기준 구현과 제출 코드를 돌려 보고, **pool 용량**을 정하려면 전체 처리량과 Ready pod 수를 함께 보세요. [측정 조건과 원본 결과](../handson/08_benchmark.md#runtime-results)
 
 다른 GPU 작업의 예는 [GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), 노드별 GPU 연결 조건은 [격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 볼 수 있습니다. [다음 편](04_rl_and_sandbox.md)에서는 실행 결과를 학습 점수로 바꿉니다.

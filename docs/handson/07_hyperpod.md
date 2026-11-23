@@ -1,9 +1,9 @@
 # 07 HyperPod 시나리오
 
-B1에서 모델은 SageMaker HyperPod 노드에서 학습하고, 모델이 만든 코드는 EC2의 gVisor 풀에서 채점합니다. 두 작업이 다른 노드에서 이뤄지므로 **학습 노드의 이름과 채점 결과를 함께** 확인합니다.
+B1에서 모델은 SageMaker HyperPod 노드에서 학습하고, 모델이 만든 코드는 EC2의 gVisor pool에서 채점합니다. 두 작업이 다른 노드에서 이뤄지므로 **학습 노드의 이름과 채점 결과를 함께** 확인합니다.
 
 1. [리전과 쿼터](#시작-전-확인)를 확인한 뒤 [B1 단계](#b1-단계)에서 시작하세요. 이 경로는 자체 EKS 클러스터와 EC2 채점 노드를 준비합니다.
-2. HyperPod trainer가 `Schedulable`이 되고 EC2 풀이 검증되면 [한 스텝을 제출](#6-학습)하세요.
+2. HyperPod trainer가 `Schedulable`이 되고 EC2 pool이 검증되면 [한 스텝을 제출](#6-학습)하세요.
 3. [실행 화면과 로그](#확인-방법)에서 trainer pod의 노드, `reward_batch`의 판정, Job의 `Completed`를 찾으세요. 끝나면 [HyperPod를 먼저 정리](#정리)합니다.
 
 [B2 실습](07_hyperpod_b2.md)에서는 시스템 CPU, 학습 GPU, 채점 GPU를 모두 HyperPod 인스턴스 그룹에 배치합니다.
@@ -25,11 +25,11 @@ B1에서 모델은 SageMaker HyperPod 노드에서 학습하고, 모델이 만�
     - **ENI**: 인스턴스에 연결되는 가상 네트워크 인터페이스입니다. VPC CNI는 ENI의 IP 주소를 pod에 할당하므로, ENI 수에 따라 노드당 pod 수 한도가 정해집니다.
 
 !!! info "검증 상태"
-    `us-west-2`의 `ml.g5.2xlarge`에서 B1 GRPO 한 스텝을 완료했습니다. EC2의 gVisor 샌드박스 2개가 생성된 코드 12개를 채점했습니다. 아래 [실제 실행 화면](#확인-방법)에서 노드 배치와 완료 로그를 확인할 수 있습니다. [관리형 B2](07_hyperpod_b2.md)에서는 HyperPod에 있는 채점 풀을 사용합니다.
+    `us-west-2`의 `ml.g5.2xlarge`에서 B1 GRPO 한 스텝을 완료했습니다. EC2의 gVisor 샌드박스 2개가 생성된 코드 12개를 채점했습니다. 아래 [실제 실행 화면](#확인-방법)에서 노드 배치와 완료 로그를 확인할 수 있습니다. [관리형 B2](07_hyperpod_b2.md)에서는 HyperPod에 있는 채점 pool을 사용합니다.
 
 ## 구성
 
-[![시나리오 B1: trainer는 HyperPod 인스턴스 그룹에, gVisor 풀은 EC2 노드에 있는 구성](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
+[![시나리오 B1: trainer는 HyperPod 인스턴스 그룹에, gVisor pool은 EC2 노드에 있는 구성](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
 
 *그림 요약: AWS 리소스로 보면 trainer만 HyperPod 인스턴스 그룹에 있고 나머지는 시나리오 A와 같습니다.*
 
@@ -176,7 +176,7 @@ scripts/kata/cpu_nodes.sh
 scripts/kata/gpu_nodes.sh              # second run: GPU Operator, kata-deploy, pgpu check
 ```
 
-Kata CPU 풀만 쓰면 `WITH_KATA_CPU="1"`만 설정하고 클러스터 생성과 `scripts/kata/cpu_nodes.sh`를 실행하세요.
+Kata CPU pool만 쓰면 `WITH_KATA_CPU="1"`만 설정하고 클러스터 생성과 `scripts/kata/cpu_nodes.sh`를 실행하세요.
 
 **문제가 생기면:** gVisor smoke test가 실패하면 [02 gVisor GPU 샌드박스](02_gvisor.md)와 [문제 해결](../reference/troubleshooting.md)의 "gVisor" 항목을 보세요.
 
@@ -243,9 +243,11 @@ aws eks wait addon-active --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" 
 
 **문제가 생기면:** 상태가 `Failed`이거나 노드가 `Schedulable`이 되지 않으면 [문제 해결](../reference/troubleshooting.md)의 "HyperPod" 항목을 보세요.
 
-### 5. namespace와 샌드박스 풀
+### 5. namespace와 샌드박스 pool
 
-이 단계는 시나리오 A와 같습니다. 아래 명령은 namespace, 인증, NetworkPolicy, routing 표를 만들고 gVisor 샌드박스 풀을 배포합니다. 마지막 명령은 격리와 verdict를 검증합니다.
+<span id="5-namespace와-샌드박스-풀"></span>
+
+이 단계는 시나리오 A와 같습니다. 아래 명령은 namespace, 인증, NetworkPolicy, routing 표를 만들고 gVisor 샌드박스 pool을 배포합니다. 마지막 명령은 격리와 verdict를 검증합니다.
 
 ```bash
 scripts/05_setup_namespaces_auth.sh
@@ -253,11 +255,11 @@ scripts/06_deploy_sandboxes.sh gvisor
 scripts/ops/verify.sh gvisor
 ```
 
-**확인할 것:** 셋째 명령의 마지막 줄이 `pool sandbox-gvisor-v1 verified`입니다. 단계별 출력은 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)의 "확인할 것"과 같습니다.
+**확인할 것:** 셋째 명령의 마지막 줄이 `pool sandbox-gvisor-v1 verified`입니다. 단계별 출력은 [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)의 "확인할 것"과 같습니다.
 
 ![B1 클러스터에서 준비된 gVisor 샌드박스 2개와 인증된 probe가 통과한 6개 검사](../images/terminal/hyperpod-sandboxes.png)
 
-**문제가 생기면:** [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)의 "문제가 생기면" 표와 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 풀과 readiness" 항목을 보세요.
+**문제가 생기면:** [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)의 "문제가 생기면" 표와 [문제 해결](../reference/troubleshooting.md)의 "샌드박스 pool과 readiness" 항목을 보세요.
 
 ### 6. 학습
 
@@ -382,7 +384,7 @@ aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPO
 
 `$AWS_REGION`, `$CLUSTER_NAME`, `$HYPERPOD_CLUSTER_NAME`은 `source scripts/config.env`로 먼저 불러오세요. 문제가 생기면 [문제 해결](../reference/troubleshooting.md)의 "HyperPod" 항목을 보세요.
 
-별도 벤치마크에서 HyperPod 학습 노드가 고정 Triton 커널을 EC2 샌드박스 두 개에 32번 보냈습니다. 32건 모두 성공했고, 서버 채점 시간 p50은 9.937초, 풀 처리량은 초당 0.199건이었습니다. [벤치마크 결과와 실행 화면](08_benchmark.md#hyperpod-b1)
+별도 벤치마크에서 HyperPod 학습 노드가 고정 Triton 커널을 EC2 샌드박스 두 개에 32번 보냈습니다. 32건 모두 성공했고, 서버 채점 시간 p50은 9.937초, pool 처리량은 초당 0.199건이었습니다. [벤치마크 결과와 실행 화면](08_benchmark.md#hyperpod-b1)
 
 ## B2 · CPU와 GPU를 모두 HyperPod에서 운영하기 { #b2 }
 
@@ -395,7 +397,7 @@ aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPO
 
 ### 기존 B2 custom AMI 경로
 
-B2는 trainer와 GPU 샌드박스를 모두 HyperPod 인스턴스 그룹에서 실행합니다. 샌드박스용 인스턴스 그룹(`sandbox`)은 NVIDIA 드라이버를 580.178.04로 바꾸고 gVisor를 설치한 custom AMI로 부팅하고, 이 노드에서 시나리오 A와 같은 gVisor 풀(`gvisor-hyperpod`)이 실행됩니다.
+B2는 trainer와 GPU 샌드박스를 모두 HyperPod 인스턴스 그룹에서 실행합니다. 샌드박스용 인스턴스 그룹(`sandbox`)은 NVIDIA 드라이버를 580.178.04로 바꾸고 gVisor를 설치한 custom AMI로 부팅하고, 이 노드에서 시나리오 A와 같은 gVisor pool(`gvisor-hyperpod`)이 실행됩니다.
 
 ```mermaid
 flowchart LR
@@ -403,10 +405,10 @@ flowchart LR
     B --> C["custom AMI<br/>HYPERPOD_B2_AMI_ID"]
     C --> D["hyperpod/create.sh --b2<br/>sandbox 인스턴스 그룹<br/>ml.g5.xlarge x 2"]
     D --> E["on_create_sandbox.sh<br/>드라이버 확인, runsc 등록,<br/>node guard"]
-    E --> F["06_deploy_sandboxes.sh,<br/>ops/verify.sh<br/>gvisor-hyperpod 풀"]
+    E --> F["06_deploy_sandboxes.sh,<br/>ops/verify.sh<br/>gvisor-hyperpod pool"]
 ```
 
-*그림 요약: 기본 AMI에서 드라이버를 바꾸고 gVisor를 설치한 이미지로 별도 인스턴스 그룹을 만들고, 그 위에 EC2와 같은 방식의 gVisor 풀을 올립니다.*
+*그림 요약: 기본 AMI에서 드라이버를 바꾸고 gVisor를 설치한 이미지로 별도 인스턴스 그룹을 만들고, 그 위에 EC2와 같은 방식의 gVisor pool을 올립니다.*
 
 ### custom AMI가 필요한 이유
 
@@ -453,7 +455,7 @@ ACTIVE_RUNTIME=gvisor-hyperpod scripts/05_setup_namespaces_auth.sh
 **확인할 것:**
 
 - 첫 명령은 CDK `Outputs`(`EndpointPublicAccess = false`)를 출력하고 끝납니다.
-- `03_build_push_images.sh`는 끝에 `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI`, `CONTROL_IMAGE_URI`의 `export` 세 줄을 출력만 하므로, 이 세 줄을 `scripts/config.env`에 추가한 뒤 다음 명령을 실행하세요. 추가하지 않으면 5단계의 풀 배포가 `SANDBOX_IMAGE_URI` 검사에서 멈춥니다.
+- `03_build_push_images.sh`는 끝에 `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI`, `CONTROL_IMAGE_URI`의 `export` 세 줄을 출력만 하므로, 이 세 줄을 `scripts/config.env`에 추가한 뒤 다음 명령을 실행하세요. 추가하지 않으면 5단계의 pool 배포가 `SANDBOX_IMAGE_URI` 검사에서 멈춥니다.
 - 터널을 연 뒤 `kubectl get nodes`를 실행하면 `system` 노드 두 대만 나옵니다.
 - 아직 GPU 노드가 없으므로 `04_install_gpu_stack.sh`의 GPU 표가 비어 있어도 정상입니다.
 - `05_setup_namespaces_auth.sh`의 마지막 출력에는 `"active": {"runtime": "gvisor-hyperpod", "version": "v1"}`이 보입니다.
@@ -588,7 +590,9 @@ kubectl get nodes -l gpusandbox/role=sandbox-hyperpod \
   -o custom-columns='NODE:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu'
 ```
 
-### 5단계: 풀 배포, 검증, 학습
+### 5단계: pool 배포, 검증, 학습
+
+<span id="5단계-풀-배포-검증-학습"></span>
 
 여기부터는 시나리오 A와 같은 스크립트를 쓰고, 런타임 이름만 `gvisor-hyperpod`로 지정합니다.
 
@@ -600,11 +604,11 @@ scripts/hyperpod/run_grpo.sh
 
 **확인할 것:**
 
-- 풀 검증(`ops/verify.sh`)이 `pool sandbox-gvisor-hyperpod-v1 verified`로 끝납니다.
+- pool 검증(`ops/verify.sh`)이 `pool sandbox-gvisor-hyperpod-v1 verified`로 끝납니다.
 - 이 검증의 1번 검사에서 샌드박스 안의 커널 버전은 gVisor가 제공하는 값이므로 노드 커널(`6.12.111-...`)과 달라야 합니다.
 - trainer 로그의 `reward_batch` 줄에는 `"runtime": "gvisor-hyperpod"`가 나옵니다.
 
-학습 중 버전을 교체하려면 `scripts/ops/rollout.sh gvisor-hyperpod v1 v2`를 실행합니다. 풀의 replica 기본값은 1이며 `GVISOR_HYPERPOD_REPLICAS`로 바꿀 수 있습니다.
+학습 중 버전을 교체하려면 `scripts/ops/rollout.sh gvisor-hyperpod v1 v2`를 실행합니다. pool의 replica 기본값은 1이며 `GVISOR_HYPERPOD_REPLICAS`로 바꿀 수 있습니다.
 
 **문제가 생기면:**
 

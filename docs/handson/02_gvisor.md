@@ -2,7 +2,7 @@
 
 [01편](01_cluster_and_images.md)에서 노드가 `Ready`였다면 이번에는 **pod 안에서 GPU 계산이 되는지** 확인합니다. A와 B1의 gVisor 노드와 `SANDBOX_IMAGE_URI`를 사용합니다. 터널은 열어 두고 작업 터미널에서 [GPU 설치 스크립트](#gpu-스택과-gvisor-설치-04_install_gpu_stacksh)를 실행하세요.
 
-[시험용 pod의 출력](#runtimeclass와-smoke-pod)에서 `Starting gVisor...`와 `cuda ok: NVIDIA A10G 2048.0`을 차례로 찾으세요. 첫 줄은 어떤 런타임이 코드를 실행했는지, 마지막 줄은 GPU에서 계산한 합이 기대값 2048과 맞는지 보여 줍니다. 둘을 확인했으면 [채점 풀 배포](04_sandbox_pools.md)로 넘어가세요.
+[시험용 pod의 출력](#runtimeclass와-smoke-pod)에서 `Starting gVisor...`와 `cuda ok: NVIDIA A10G 2048.0`을 차례로 찾으세요. 첫 줄은 어떤 런타임이 코드를 실행했는지, 마지막 줄은 GPU에서 계산한 합이 기대값 2048과 맞는지 보여 줍니다. 둘을 확인했으면 [채점 pool 배포](04_sandbox_pools.md)로 넘어가세요.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **gVisor Sentry**: 컨테이너의 syscall을 host 커널 대신 처리하는, 사용자 공간에서 실행되는 커널입니다.
@@ -232,7 +232,7 @@ gVisor 문서는 nvproxy를 NVIDIA open 드라이버 기준으로 설명하고, 
 
 이 조합은 이 저장소가 실습 계정에서 검증한 것이므로, 인스턴스 타입, 드라이버, AMI, gVisor 버전을 바꾼 뒤에는 `04_install_gpu_stack.sh`의 smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요.
 
-기본 풀(`sandbox-gvisor-v1`, replica 2)이 두 노드의 GPU를 모두 쓰고 있으면 smoke pod가 GPU를 받을 수 없습니다. 이때 스크립트는 smoke pod를 띄우기 전에 `every GPU on the sandbox-gvisor nodes is in use`로 멈추고 풀을 줄이는 명령을 안내합니다.
+기본 pool(`sandbox-gvisor-v1`, replica 2)이 두 노드의 GPU를 모두 쓰고 있으면 smoke pod가 GPU를 받을 수 없습니다. 이때 스크립트는 smoke pod를 띄우기 전에 `every GPU on the sandbox-gvisor nodes is in use`로 멈추고 pool을 줄이는 명령을 안내합니다.
 
 1. `kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=1`로 GPU 하나를 비운 뒤 다시 실행하세요.
 2. `cuda ok:`를 확인하면 `scripts/06_deploy_sandboxes.sh gvisor v1`로 replica를 2로 되돌리고 `verify.sh`를 실행합니다.
@@ -262,7 +262,7 @@ gVisor 문서에 따르면 nvproxy에 ioctl 허용 목록이 있어도 NVIDIA �
 
 ## 적용 범위와 한계
 
-- AWS에서는 `g5`(A10G, gVisor 문서가 다루지 않는 proprietary GSP off 모듈)만 실행했습니다. smoke test, `ops/verify.sh`, 5 step 학습은 `g5.xlarge` 샌드박스로, 다른 클러스터의 벤치마크(`ops/bench.sh`, [08](08_benchmark.md))는 `g5.2xlarge`의 gVisor 풀로 했습니다. `g6`와 T4는 gVisor로 실행하지 않았습니다.
+- AWS에서는 `g5`(A10G, gVisor 문서가 다루지 않는 proprietary GSP off 모듈)만 실행했습니다. smoke test, `ops/verify.sh`, 5 step 학습은 `g5.xlarge` 샌드박스로, 다른 클러스터의 벤치마크(`ops/bench.sh`, [08](08_benchmark.md))는 `g5.2xlarge`의 gVisor pool로 했습니다. `g6`와 T4는 gVisor로 실행하지 않았습니다.
 - 커널 문자열과 dmesg 줄은 gVisor 릴리스에 따라 바뀔 수 있습니다. 특정 값과 일치하는지보다 노드 커널과 다른지, dmesg 첫 줄이 `Starting gVisor...`인지를 확인하세요.
 
 ## 소요 시간과 비용
@@ -289,7 +289,7 @@ aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_
 
 ## 다음 단계
 
-Kata까지 비교하려면 [03 Kata 샌드박스 (CLH, QEMU)](03_kata.md)로, gVisor만 쓰는 최소 경로라면 [04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)으로 갑니다.
+Kata까지 비교하려면 [03 Kata 샌드박스 (CLH, QEMU)](03_kata.md)로, gVisor만 쓰는 최소 경로라면 [04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)으로 갑니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

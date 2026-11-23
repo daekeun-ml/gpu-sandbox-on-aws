@@ -8,7 +8,7 @@
 | AWS 리전, 클러스터 이름, 이미지 URI, 모델 | [`scripts/config.env`](#1-scriptsconfigenv) |
 | RuntimeClass, GPU 종류, pod의 CPU와 메모리 | [런타임 프로필](#8-런타임-profile-k8ssandboxprofiles) |
 | 정확성 검사 횟수, 측정 옵션 | [버전 파일](#9-버전-파일-k8ssandboxversions) |
-| trainer가 평가를 보낼 풀 | [라우팅 설정](#10-routingjson) |
+| trainer가 평가를 보낼 pool | [라우팅 설정](#10-routingjson) |
 
 수정한 값이 적용되지 않으면 [값이 전달되는 경로](#값이-전달되는-경로)에서 설정 파일과 실행 중인 프로세스 사이를 확인하세요.
 
@@ -56,7 +56,7 @@ flowchart LR
 | `SYSTEM_INSTANCE_TYPE` | `m6i.large` | system 노드 그룹(2대) | `cdk/` |
 | `TRAINER_INSTANCE_TYPE` | `g5.2xlarge` | 시나리오 A trainer 노드(A10G 24 GB 1개, 8 vCPU, 32 GiB). `g6.2xlarge`(L4)도 지정할 수 있음 | `cdk/`, `01_check_prereqs.sh` |
 | `GVISOR_INSTANCE_TYPE` | `g5.xlarge` | gVisor 노드. 노드당 A10G 1개, 샌드박스 pod 1개. `g6.xlarge`(L4)도 지정할 수 있음([04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)) | `cdk/`, `01_check_prereqs.sh` |
-| `GVISOR_NODES` | `2` | gVisor 노드 수. gVisor 풀 replica의 기본값이기도 함 | `cdk/`, `profiles/gvisor.env` |
+| `GVISOR_NODES` | `2` | gVisor 노드 수. gVisor pool replica의 기본값이기도 함 | `cdk/`, `profiles/gvisor.env` |
 | `KATA_CPU_INSTANCE_TYPE` | `c8i.2xlarge` | Kata CPU 노드(nested virtualization, GPU 없음) | `01_check_prereqs.sh`, `cdk/` |
 | `KATA_GPU_INSTANCE_TYPE` | `g4dn.metal` | Kata GPU 노드(T4 8개) | `01_check_prereqs.sh`, `cdk/`, `kata/gpu_nodes.sh` |
 | `GVISOR_RELEASE` | `20261109.0` | 설치할 gVisor 릴리스 | `install-gvisor.sh`(`infra/eks/userdata.py`가 노드 user data에 넣음), `hyperpod/check_gvisor.sh` |
@@ -106,12 +106,12 @@ flowchart LR
 | `ENABLE_EXPERIMENTAL_CLH_GPU` | `0` | `1`이면 실험용 `kata-clh-nvidia-gpu` RuntimeClass 추가 | `kata/gpu_nodes.sh` |
 | `ACTIVE_RUNTIME`, `ACTIVE_VERSION` | `gvisor`, `v1` | 처음 만드는 routing 표의 active 값 | `05_setup_namespaces_auth.sh` |
 | `SANDBOX_ALLOWED_SUBJECTS` | `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe`, `system:serviceaccount:sandbox-gateway:gateway`(쉼표로 연결) | 샌드박스 API를 호출할 수 있는 ServiceAccount | `06_deploy_sandboxes.sh`, `extensions/agent_sandbox.sh pool` |
-| `KATA_QEMU_REPLICAS`, `KATA_CLH_REPLICAS`, `KATA_CPU_REPLICAS` | `4`, `2`, `2` | 풀 replica 기본값. `06_deploy_sandboxes.sh`의 세 번째 인자가 있으면 그 값이 우선 | `profiles/*.env` |
+| `KATA_QEMU_REPLICAS`, `KATA_CLH_REPLICAS`, `KATA_CPU_REPLICAS` | `4`, `2`, `2` | pool replica 기본값. `06_deploy_sandboxes.sh`의 세 번째 인자가 있으면 그 값이 우선 | `profiles/*.env` |
 | `RUN_ID` | 현재 시각(`%Y%m%d-%H%M%S`) | Job 이름 `grpo-<RUN_ID>` | `07_run_grpo.sh`, `hyperpod/run_grpo.sh` |
 | `MODEL_ID` | `Qwen/Qwen2.5-Coder-1.5B-Instruct` | 학습할 모델 | `07_run_grpo.sh`, `hyperpod/run_grpo.sh` |
 
 - **`SANDBOX_ALLOWED_SUBJECTS`**: `extensions/agent_sandbox.sh pool`은 기본값이 다릅니다(`grpo-trainer`, `sandbox-probe`, `sandbox-episode`).
-- **`KATA_CPU_REPLICAS`**: 시나리오 C 실습에서는 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가합니다(c8i 한 대에 풀 4개).
+- **`KATA_CPU_REPLICAS`**: 시나리오 C 실습에서는 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가합니다(c8i 한 대에 pool 4개).
 
 스크립트가 직접 계산하는 값도 있습니다. 이 값들은 config.env에 넣을 필요가 없습니다.
 
@@ -128,7 +128,7 @@ flowchart LR
     | `RAY_ADDRESS` (`http://127.0.0.1:8265`), `MODEL_PATH` (`Qwen/Qwen2.5-Coder-7B-Instruct`), `DATA_DIR` (`/fsx/verl/data/kernels`), `CKPT_DIR` (`/fsx/verl/ckpts/kernels-grpo`), `NNODES` (`1`), `GPUS_PER_NODE` (`8`), `TRAIN_BATCH_SIZE` (`64`), `N_RESP_PER_PROMPT` (`8`), `TOTAL_STEPS` (`200`) | `rl/verl/run_grpo_kernels.sh` | veRL job 제출 값(괄호 안은 기본값) |
     | `HYPERPOD_CONTAINERD_CONFIG` (실행 중인 containerd의 `--config`, 없으면 `/etc/containerd/config.toml`) | `infra/hyperpod/lifecycle/on_create_sandbox.sh` | B2 sandbox 노드의 containerd 설정 파일. lifecycle 스크립트는 환경 변수를 받지 않으므로, 값을 바꾸려면 업로드 전에 스크립트를 고칩니다 |
     | `HYPERPOD_BASE_AMI_ID` (비우면 EC2 `describe-images`로 소유자 `amazon`, 이름 `HyperPod EKS <K8S_VERSION> x86_64 AMI Amazon Linux 2023 *`인 사용 가능한 AMI 중 가장 최근 것을 고름) | `infra/hyperpod/ami/build-b2-ami.sh` | B2 builder의 base AMI. 검색되지 않을 때 직접 지정 |
-    | `GVISOR_HYPERPOD_REPLICAS` (`1`) | `k8s/sandbox/profiles/gvisor-hyperpod.env` | B2 풀의 버전당 replica |
+    | `GVISOR_HYPERPOD_REPLICAS` (`1`) | `k8s/sandbox/profiles/gvisor-hyperpod.env` | B2 pool의 버전당 replica |
 
 ## 2. 샌드박스 서버
 
@@ -167,8 +167,8 @@ flowchart LR
 
 GPU probe는 새 프로세스에서 실행하며 120초 안에 끝나야 합니다.
 
-- **CUDA 풀(`SANDBOX_DEVICE=cuda`)**: GPU에서 `torch.ones(1, device='cuda').add_(1)`과 `torch.cuda.synchronize()`가 성공해야 통과합니다.
-- **CPU 풀**: GPU가 없어도 통과합니다.
+- **CUDA pool(`SANDBOX_DEVICE=cuda`)**: GPU에서 `torch.ones(1, device='cuda').add_(1)`과 `torch.cuda.synchronize()`가 성공해야 통과합니다.
+- **CPU pool**: GPU가 없어도 통과합니다.
 
 egress 점검은 다음과 같이 동작합니다.
 
@@ -326,7 +326,7 @@ python -m json.tool /tmp/gs-eval/result.json
 |---|---|---|
 | `SANDBOX_GATEWAY` | 없음 | 있으면 gateway 모드. `host:port`(예: `gateway.sandbox-gateway.svc.cluster.local:8080`) |
 | `SANDBOX_ROUTING_FILE` | 없음 | direct 모드의 routing.json 경로(Job 템플릿: `/etc/gpusandbox/routing/routing.json`) |
-| `SANDBOX_ADDRESS` | 없음 | routing 파일 없이 풀 하나를 직접 지정 |
+| `SANDBOX_ADDRESS` | 없음 | routing 파일 없이 pool 하나를 직접 지정 |
 | `SANDBOX_RUNTIME` | `gvisor` | `SANDBOX_ADDRESS`와 함께만 쓰이는 runtime 이름 |
 | `SANDBOX_VERSION` | `v1` | `SANDBOX_ADDRESS`와 함께만 쓰이는 버전 이름 |
 | `SANDBOX_TOKEN_FILE` | 없음 | projected 토큰 파일. 요청마다 다시 읽고, 파일이 없으면 토큰 없이 보냄 |
@@ -339,7 +339,7 @@ python -m json.tool /tmp/gs-eval/result.json
 - **쉼표로 구분한 목록**: 그대로 씁니다(로컬 테스트용).
 - **`static:` 접두사가 붙은 값**: 그대로 씁니다(로컬 테스트용).
 
-아래 표는 샌드박스 pod를 부르는 풀 클라이언트의 동작이며, direct 모드의 trainer와 gateway가 이 클라이언트를 씁니다.
+아래 표는 샌드박스 pod를 부르는 pool 클라이언트의 동작이며, direct 모드의 trainer와 gateway가 이 클라이언트를 씁니다.
 
 | 동작 | 코드 값 |
 |---|---|
@@ -382,7 +382,7 @@ gateway는 audience나 허용 목록이 비어 있으면 보호된 경로를 모
 | `GET /healthz` | 없음 | 200 |
 | `GET /readyz` | 없음 | 쓸 수 있는 routing 표가 없으면 503, 있으면 200 |
 
-- **gateway `/readyz`가 503인 경우**: 첫 읽기부터 실패했거나 활성 런타임과 버전의 풀 주소가 없을 때입니다. 다시 읽기에 실패해도 마지막 정상 표가 있으면 200입니다.
+- **gateway `/readyz`가 503인 경우**: 첫 읽기부터 실패했거나 활성 런타임과 버전의 pool 주소가 없을 때입니다. 다시 읽기에 실패해도 마지막 정상 표가 있으면 200입니다.
 
 고정 정보(pin)는 gateway 프로세스 메모리에만 저장되고, 10만 개를 넘으면 만료된 항목을 지웁니다. 그래서 매니페스트는 replica를 1로 둡니다.
 
@@ -438,7 +438,7 @@ Job 템플릿(`k8s/trainer/job-grpo.yaml.tpl`, `hyperpod-job-grpo.yaml.tpl`)은 
 
 모든 profile에서 requests와 limits는 같습니다(Guaranteed QoS). Kata GPU VM은 Go shim 기준으로 `default_memory` 8 GiB에 limits를 더한 크기로 생성되고, RuntimeClass overhead로 pod 요청에 10 GiB와 CPU 1이 추가됩니다. 그래서 `g4dn.metal` 한 대에 8개를 배치하면 8 x (16 + 10) = 208 GiB로 384 GiB 안에 들어갑니다. VFIO는 게스트 메모리 전체를 고정하므로 overcommit 할 수 없습니다.
 
-Deployment 템플릿이 모든 풀에 넣는 고정 값도 있습니다.
+Deployment 템플릿이 모든 pool에 넣는 고정 값도 있습니다.
 
 | 항목 | 값 |
 |---|---|
@@ -461,7 +461,7 @@ Deployment 템플릿이 모든 풀에 넣는 고정 값도 있습니다.
     v2 pod는 200번 평가한 뒤 draining 상태가 되어 NotReady로 남습니다.
 
     - **Production gateway를 쓸 때**: 이런 pod를 자동으로 지워 Deployment가 새 pod를 만들게 하는 기능은 Production gateway의 재활용 기능(`GATEWAY_RECYCLE_PODS=1`)뿐입니다.
-    - **direct 모드일 때**(핸즈온처럼 trainer가 풀을 직접 호출): pod를 직접 지우거나, 핸즈온용 버전 파일에서 이 값을 `0`으로 두세요.
+    - **direct 모드일 때**(핸즈온처럼 trainer가 pool을 직접 호출): pod를 직접 지우거나, 핸즈온용 버전 파일에서 이 값을 `0`으로 두세요.
 
     자세한 증상은 [문제 해결](troubleshooting.md)에 있습니다.
 
@@ -489,14 +489,14 @@ Deployment 템플릿이 모든 풀에 넣는 고정 값도 있습니다.
 |---|---|
 | `active.runtime` | 기본 runtime. trainer의 `--runtime`이나 gateway 요청의 `runtime`이 있으면 그 값을 씀 |
 | `active.version` | 버전. runtime을 바꿔도 버전은 이 값을 씀 |
-| `pools.<runtime>.<version>` | 그 풀의 주소(`host:port`, headless Service DNS). 로컬에서는 쉼표 목록이나 `static:` 값도 가능 |
+| `pools.<runtime>.<version>` | 그 pool의 주소(`host:port`, headless Service DNS). 로컬에서는 쉼표 목록이나 `static:` 값도 가능 |
 
 `k8s/base/routing.json.tpl`이 원본이고, ConfigMap `sandbox-routing`(키 `routing.json`)으로 배포됩니다.
 
 - **`05_setup_namespaces_auth.sh`**: `rl-trainer`에 배포합니다.
 - **버전 교체 스크립트(`ops/rollout.sh`)**: `rl-trainer`와(있으면) `sandbox-gateway`에 배포합니다.
 
-템플릿에는 GPU 런타임 4개(`gvisor`, `kata-qemu`, `kata-clh`, `gvisor-hyperpod`)와 CPU 런타임 3개(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)의 `v1`, `v2` 주소가 모두 들어 있습니다. 주소가 표에 있어도 그 버전의 풀을 배포해야 요청을 받습니다.
+템플릿에는 GPU 런타임 4개(`gvisor`, `kata-qemu`, `kata-clh`, `gvisor-hyperpod`)와 CPU 런타임 3개(`gvisor-cpu`, `kata-clh-cpu`, `kata-qemu-cpu`)의 `v1`, `v2` 주소가 모두 들어 있습니다. 주소가 표에 있어도 그 버전의 pool을 배포해야 요청을 받습니다.
 
 읽는 쪽은 다음과 같이 동작합니다.
 
@@ -516,7 +516,7 @@ Deployment 템플릿이 모든 풀에 넣는 고정 값도 있습니다.
 ```
 
 > ❓ **오해: `SANDBOX_RUNTIME`은 서버와 trainer에서 같은 값으로 맞춰야 한다.**
-> 이름만 같고 쓰임이 다릅니다. 서버에서는 그 pod가 응답에 넣는 자기 런타임 이름이고(기본 `unknown`), 클라이언트에서는 `SANDBOX_ADDRESS`로 풀 하나를 지정할 때만 쓰는 이름입니다(기본 `gvisor`). routing 파일을 쓰는 trainer는 이 값을 읽지 않습니다. 실제로 어느 pod가 응답했는지는 verdict의 `runtime`, `sandbox_version`, `pod` 필드로 확인하세요.
+> 이름만 같고 쓰임이 다릅니다. 서버에서는 그 pod가 응답에 넣는 자기 런타임 이름이고(기본 `unknown`), 클라이언트에서는 `SANDBOX_ADDRESS`로 pool 하나를 지정할 때만 쓰는 이름입니다(기본 `gvisor`). routing 파일을 쓰는 trainer는 이 값을 읽지 않습니다. 실제로 어느 pod가 응답했는지는 verdict의 `runtime`, `sandbox_version`, `pod` 필드로 확인하세요.
 
 > ❓ **오해: `HARNESS_MAX_SPEEDUP=0`이면 speedup 상한이 0이 된다.**
 > `0`은 상한을 끈다는 뜻입니다. v2처럼 `10`을 넣으면 10배를 넘는 speedup에 `implausible_speedup` 플래그를 달고 speedup을 1.0으로 기록합니다. verdict 자체는 `ok`로 남아서 correctness reward는 그대로 받습니다.

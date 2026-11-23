@@ -65,7 +65,7 @@ T = {
         "p01.ready": "이미 실행 중인 노드에 배치", "p01.ready_sub": "Karpenter가 추가하는 예비 노드",
         "p01.auto": "AMI 자동 갱신", "p01.auto_sub": "al2023@latest, drift 교체",
         "p01.unknown": "nvproxy가 지원하지 않는 드라이버", "p01.unknown_sub": "GPU 초기화 실패",
-        "p01.zero": "샌드박스 Ready 불가", "p01.zero_sub": "풀 용량 0",
+        "p01.zero": "샌드박스 Ready 불가", "p01.zero_sub": "pool 용량 0",
         "p01.pin": "AMI 버전 고정", "p01.pin_sub": "al2023@v20261107",
         "p01.ci": "CI에서 지원 확인", "p01.ci_sub": "nvproxy list-supported-drivers",
         "p01.raise": "통과할 때만 함께 승격", "p01.raise_sub": "AMI와 GVISOR_RELEASE",

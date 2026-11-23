@@ -12,7 +12,7 @@
 
 -   **AWS에서 무엇을 실행할까요?**
 
-    - [3 · GPU 없이 채점 풀 교체하기](#course-3)
+    - [3 · GPU 없이 채점 pool 교체하기](#course-3)
     - [4 · EC2 GPU에서 모델 학습하기](#course-4)
     - [5 · HyperPod에서 모델 학습하기](#course-5)
     - [6 · 기존 클러스터에 Kata GPU 추가하기](#course-6)
@@ -49,7 +49,7 @@
 
 ??? note "설계할 항목별로 읽기"
     - **누가 무엇을 실행할 수 있나?** [보안](production/02_security.md) · [Reward 무결성](production/04_reward_integrity.md)
-    - **채점 요청을 어디로 보내고, 언제 새 버전으로 넘기나?** [게이트웨이와 채점 풀](production/03_gateway_and_pools.md) · [샌드박스 버전 관리](production/05_sandbox_updates.md)
+    - **채점 요청을 어디로 보내고, 언제 새 버전으로 넘기나?** [게이트웨이와 채점 pool](production/03_gateway_and_pools.md) · [샌드박스 버전 관리](production/05_sandbox_updates.md)
     - **노드는 몇 대가 필요하고 비용은 얼마나 들까?** [용량과 노드 관리](production/01_capacity_and_nodes.md) · [비용](production/08_cost.md) · [CDK 스택 구성](production/09_cdk.md)
     - **여러 학습 노드의 지연과 오류를 어떻게 추적하나?** [veRL로 확장](production/06_scaling_with_verl.md) · [모니터링과 운영](production/07_observability_and_operations.md)
 
@@ -71,11 +71,11 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
     - **HyperPod**　B1은 Standard 6과 G/VT 8 vCPU에 더해 SageMaker의 `ml.g5.2xlarge for cluster usage` 한 대분이 필요합니다. B2는 HyperPod `ml.m5.xlarge` 한 대, `ml.g5.2xlarge` 한 대, `ml.g5.xlarge` 두 대분이 필요합니다.
     - **Kata GPU**　metal 노드에 G/VT 96 vCPU가 더 필요합니다. C에 추가하면 시간당 약 8.39 USD, A에 CPU 리허설 노드와 metal 노드를 함께 추가하면 약 11.61 USD입니다. CPU 리허설 노드와 임시 AMI 빌더가 함께 떠 있으면 Standard 16 vCPU가 필요합니다. [구성별 쿼터와 비용](concepts/04_platforms_and_instances.md)
 
-### 3. CPU에서 채점 풀 교체하기 · 시나리오 C { #course-3 }
+### 3. CPU에서 채점 pool 교체하기 · 시나리오 C { #course-3 }
 
-[CPU 전용 실습](handson/10_cpu_only.md)에서 `c8i.2xlarge` 한 대에 gVisor와 Kata를 띄웁니다. GPU나 모델 학습 없이, 준비된 답안을 계속 보내면서 채점 서버 묶음(풀)을 v1에서 v2로 바꿉니다.
+[CPU 전용 실습](handson/10_cpu_only.md)에서 `c8i.2xlarge` 한 대에 gVisor와 Kata를 띄웁니다. GPU나 모델 학습 없이, 준비된 답안을 계속 보내면서 채점 서버 묶음(pool)을 v1에서 v2로 바꿉니다.
 
-`SWITCH` 다음 `batch` 줄을 보세요. `kata-clh-cpu/v2`에서 `ok`와 `wrong_answer`가 나오면 새 풀이 실제로 답을 채점한 것입니다.
+`SWITCH` 다음 `batch` 줄을 보세요. `kata-clh-cpu/v2`에서 `ok`와 `wrong_answer`가 나오면 새 pool이 실제로 답을 채점한 것입니다.
 
 ??? example "교체 전후 두 배치의 결과 비교하기"
     배치 6은 v1, 배치 7은 v2를 사용했고 둘 다 정답 1건과 오답 2건을 돌려줬습니다.
@@ -84,13 +84,13 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
 
 ### 4. EC2 GPU에서 GRPO 학습하기 · 시나리오 A { #course-4 }
 
-[클러스터와 이미지 준비](handson/01_cluster_and_images.md)에서 시작해 [gVisor의 GPU 연결](handson/02_gvisor.md)과 [채점 풀](handson/04_sandbox_pools.md)을 확인하세요. [GRPO 학습](handson/05_grpo_training.md)에서는 모델이 여러 답을 만들고 샌드박스가 매긴 점수로 모델을 업데이트합니다.
+[클러스터와 이미지 준비](handson/01_cluster_and_images.md)에서 시작해 [gVisor의 GPU 연결](handson/02_gvisor.md)과 [채점 pool](handson/04_sandbox_pools.md)을 확인하세요. [GRPO 학습](handson/05_grpo_training.md)에서는 모델이 여러 답을 만들고 샌드박스가 매긴 점수로 모델을 업데이트합니다.
 
-[학습 중 풀 교체](handson/06_sandbox_update.md)까지 따라가면 한 배치 안의 답은 같은 버전에서 채점되고 다음 배치부터 v2를 쓰는 모습을 볼 수 있습니다. [교체 전후의 배치 로그](handson/06_sandbox_update.md#switch-batches)
+[학습 중 pool 교체](handson/06_sandbox_update.md)까지 따라가면 한 배치 안의 답은 같은 버전에서 채점되고 다음 배치부터 v2를 쓰는 모습을 볼 수 있습니다. [교체 전후의 배치 로그](handson/06_sandbox_update.md#switch-batches)
 
 ### 5. HyperPod에서 GRPO 학습하기 · 시나리오 B1 { #course-5 }
 
-[HyperPod 실습](handson/07_hyperpod.md)에서 B1을 고르세요. 모델은 SageMaker HyperPod에서 학습하고 코드는 EC2의 gVisor 풀에서 채점합니다. trainer가 HyperPod 노드에 배치됐는지, `reward_batch`에 채점 결과가 남았는지, 학습 Job이 `Completed`로 끝났는지 차례로 확인하세요.
+[HyperPod 실습](handson/07_hyperpod.md)에서 B1을 고르세요. 모델은 SageMaker HyperPod에서 학습하고 코드는 EC2의 gVisor pool에서 채점합니다. trainer가 HyperPod 노드에 배치됐는지, `reward_batch`에 채점 결과가 남았는지, 학습 Job이 `Completed`로 끝났는지 차례로 확인하세요.
 
 가이드에는 한 스텝에서 보낸 코드 12개의 판정과, 학습을 마친 뒤 고정 커널을 32번 보내 얻은 벤치마크가 있습니다. [B1 실행 화면과 학습 로그](handson/07_hyperpod.md#확인-방법) · [B1 벤치마크 결과](handson/08_benchmark.md#hyperpod-b1)
 
@@ -99,10 +99,10 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
 
 ### 6. Kata VM에서 GPU 사용하기 · 코스 3 또는 4에서 추가 { #course-6 }
 
-코스 3이나 4의 클러스터를 정리하기 전에 [Kata 실습](handson/03_kata.md)의 CPU 리허설과 GPU 연결 단계를 진행하세요. [채점 풀 배포](handson/04_sandbox_pools.md) 후 `scripts/ops/verify.sh kata-qemu v1` 출력에 `Tesla T4`가 보이고 시험용 답안 여섯 개가 모두 `PASS`면 VM 안에서 GPU 채점까지 확인한 것입니다. [Kata VM의 GPU 확인 화면](handson/03_kata.md#gpu-run)
+코스 3이나 4의 클러스터를 정리하기 전에 [Kata 실습](handson/03_kata.md)의 CPU 리허설과 GPU 연결 단계를 진행하세요. [채점 pool 배포](handson/04_sandbox_pools.md) 후 `scripts/ops/verify.sh kata-qemu v1` 출력에 `Tesla T4`가 보이고 시험용 답안 여섯 개가 모두 `PASS`면 VM 안에서 GPU 채점까지 확인한 것입니다. [Kata VM의 GPU 확인 화면](handson/03_kata.md#gpu-run)
 
 ??? note "gVisor와 Kata의 GPU 성능도 비교하려면"
-    코스 4에서 학습이 멈추고 `gvisor v1`과 `kata-qemu v1` 풀이 모두 Ready일 때 실행하세요. 06편에서 이미 `--finish`로 gVisor v1을 줄였다면 먼저 v1을 복구하세요. [런타임 벤치마크 절차와 결과](handson/08_benchmark.md#runtime-results)
+    코스 4에서 학습이 멈추고 `gvisor v1`과 `kata-qemu v1` pool이 모두 Ready일 때 실행하세요. 06편에서 이미 `--finish`로 gVisor v1을 줄였다면 먼저 v1을 복구하세요. [런타임 벤치마크 절차와 결과](handson/08_benchmark.md#runtime-results)
 
 ### 실습을 마치거나 쉬어 갈 때 { #비용-사고를-막는-세-가지-습관 }
 

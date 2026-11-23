@@ -393,7 +393,7 @@ iptables -w -C INPUT -i eni+ -j GPUSANDBOX-GUARD 2>/dev/null \
   || iptables -w -I INPUT 1 -i eni+ -j GPUSANDBOX-GUARD
 ```
 
-이 규칙은 pod veth 인터페이스(VPC CNI의 접두사 `eni`)에서 노드로 들어오는 새 연결을 차단(DROP)하고, 노드가 먼저 연 연결의 응답(kubelet probe)은 허용합니다. 규칙은 systemd unit `gpusandbox-node-guard.service`(oneshot, `Before=kubelet.service`)로 등록돼 부팅할 때마다 적용됩니다. pod에서 노드로 가는 새 연결이 실제로 차단되는지는 샌드박스 pod의 readiness 자가 점검과 풀 검증(`scripts/ops/verify.sh`)이 확인합니다([04 샌드박스 풀 배포와 검증](04_sandbox_pools.md)).
+이 규칙은 pod veth 인터페이스(VPC CNI의 접두사 `eni`)에서 노드로 들어오는 새 연결을 차단(DROP)하고, 노드가 먼저 연 연결의 응답(kubelet probe)은 허용합니다. 규칙은 systemd unit `gpusandbox-node-guard.service`(oneshot, `Before=kubelet.service`)로 등록돼 부팅할 때마다 적용됩니다. pod에서 노드로 가는 새 연결이 실제로 차단되는지는 샌드박스 pod의 readiness 자가 점검과 pool 검증(`scripts/ops/verify.sh`)이 확인합니다([04 샌드박스 pool 배포와 검증](04_sandbox_pools.md)).
 
 ### 매니페스트 렌더링 (render.py)
 

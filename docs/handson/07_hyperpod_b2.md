@@ -108,7 +108,9 @@ kubectl apply -f k8s/runtimes/runtimeclass-gvisor-hyperpod.yaml
 
 HyperPod가 채점 노드를 교체하면 새 워커가 등록된 뒤 `reboot_sandboxes.sh`를 다시 실행하세요. 실행 중인 드라이버와 디스크의 드라이버를 비교해 이미 목표 버전을 쓰는 워커는 건너뜁니다. 이번 실습에서 확인한 복구 작업은 두 워커의 관리형 재부팅입니다.
 
-## 두 노드에 채점 풀 배포하기
+## 두 노드에 채점 pool 배포하기
+
+<span id="두-노드에-채점-풀-배포하기"></span>
 
 ```bash
 scripts/06_deploy_sandboxes.sh gvisor-hyperpod v1 2
@@ -132,7 +134,7 @@ scripts/hyperpod/run_grpo.sh 1
 kubectl -n rl-trainer wait --for=condition=Completed "hyperpodpytorchjob/grpo-${RUN_ID}" --timeout=30m
 ```
 
-학습 Pod는 `ml.g5.2xlarge`에서 실행됐습니다. `reward_batch`에 기록된 런타임은 `gvisor-hyperpod`이고 코드 12개가 모두 v1 풀에 도착했습니다. 결과는 정답 1개, 오답 2개, 실행 오류 8개, 컴파일 오류 1개였습니다. `Completed=True`는 이 판정들을 보상으로 받아 학습 한 스텝을 마쳤다는 뜻입니다. TRL이 기록한 학습 시간은 51.07초였습니다.
+학습 Pod는 `ml.g5.2xlarge`에서 실행됐습니다. `reward_batch`에 기록된 런타임은 `gvisor-hyperpod`이고 코드 12개가 모두 v1 pool에 도착했습니다. 결과는 정답 1개, 오답 2개, 실행 오류 8개, 컴파일 오류 1개였습니다. `Completed=True`는 이 판정들을 보상으로 받아 학습 한 스텝을 마쳤다는 뜻입니다. TRL이 기록한 학습 시간은 51.07초였습니다.
 
 [![HyperPod Job의 완료 상태와 코드 12개의 채점 결과가 함께 보이는 화면](../images/terminal/hyperpod-b2-training.png)](../images/terminal/hyperpod-b2-training.png)
 
@@ -141,7 +143,9 @@ kubectl -n rl-trainer wait --for=condition=Completed "hyperpodpytorchjob/grpo-${
 
     [![학습 Pod가 배치된 HyperPod 노드의 타입과 상태, GPU와 드라이버](../images/terminal/hyperpod-b2-trainer.png)](../images/terminal/hyperpod-b2-trainer.png)
 
-## 같은 채점 풀로 벤치마크하기
+## 같은 채점 pool로 벤치마크하기
+
+<span id="같은-채점-풀로-벤치마크하기"></span>
 
 ```bash
 scripts/hyperpod/bench_b2.sh 32
@@ -149,7 +153,7 @@ scripts/hyperpod/bench_b2.sh 32
 
 학습이 끝난 뒤 CPU 시스템 노드가 먼저 32건, 학습 노드가 이어서 32건을 보냅니다. 두 Job은 같은 `relu_bias_triton` 커널을 사용하고, 같은 채점 Pod 두 개가 A10G 한 장씩을 맡습니다. [벤치마크 결과](08_benchmark.md#hyperpod-b2)
 
-CPU 워커와 학습 워커 모두 32건 중 32건에 성공했습니다. 풀 처리량은 각각 초당 0.189건과 0.190건이었습니다.
+CPU 워커와 학습 워커 모두 32건 중 32건에 성공했습니다. pool 처리량은 각각 초당 0.189건과 0.190건이었습니다.
 
 ## 정리 { #cleanup }
 

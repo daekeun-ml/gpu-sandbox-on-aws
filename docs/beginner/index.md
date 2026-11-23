@@ -28,5 +28,5 @@ GPU를 띄우기 전에 채점 결과를 보고 싶다면 공개 데모에서 **
 | 같은 계산인데 GPU가 바뀌면 속도 순위도 바뀔까? | [GPU 작업과 채점 기준](../concepts/01_why_gpu_sandbox.md) |
 | pod 두 개가 같은 커널을 쓰는지 어떻게 알 수 있을까? | [격리 경계와 런타임 비교](../concepts/02_isolation_runtimes.md) |
 | 샌드박스 한 곳이 응답하지 않으면 모델은 그 답을 오답으로 배울까? | [GRPO와 인프라 오류](../concepts/03_onpolicy_rl_with_sandboxes.md) |
-| 학습 노드는 HyperPod에, 채점 풀은 EC2에 두면 요청은 어디로 갈까? | [플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md) |
+| 학습 노드는 HyperPod에, 채점 pool은 EC2에 두면 요청은 어디로 갈까? | [플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md) |
 | 에피소드가 끝난 뒤 어떤 자원이 계속 남을까? | [Agent Sandbox의 할당과 반납](../concepts/06_agent_sandbox.md) |

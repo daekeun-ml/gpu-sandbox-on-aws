@@ -9,11 +9,11 @@
 | `set ... in scripts/config.env`, `missing tool` | [설정과 스크립트](#설정과-스크립트) |
 | `kubectl` 연결 실패, 노드가 나타나지 않음 | [CDK, 터널, 클러스터](#cdk-터널-클러스터) |
 | GPU smoke test 실패 | [gVisor](#gvisor), [Kata](#kata) |
-| `Pending`, `ContainerCreating`, `Running`인데 `0/1` | [샌드박스 풀](#샌드박스-풀) |
+| `Pending`, `ContainerCreating`, `Running`인데 `0/1` | [샌드박스 pool](#샌드박스-pool) |
 | 인증 요청이 `401` 또는 `403`으로 실패 | [인증 오류별 진단](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답) |
 | `CUDA out of memory`, `sandbox_error` 반복 | [학습](#학습) |
 | `hyperpodrun` 누락, HyperPod 생성 실패 | [HyperPod](#hyperpod) |
-| 새 풀로 전환했는데 이전 버전으로 채점됨 | [버전 전환](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing) |
+| 새 pool로 전환했는데 이전 버전으로 채점됨 | [버전 전환](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing) |
 | 정리 후에도 리소스나 요금이 남음 | [정리와 비용](#정리와-비용) |
 
 ## 먼저 확인할 것
@@ -72,7 +72,7 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
     1. 노드의 `nvidia.com/gpu` 수와 NVIDIA device plugin pod 상태를 확인하세요.
     2. GPU 수가 보이면 device plugin 설정이 `deviceListStrategy: cdi-cri`인지와 PyTorch 오류 문구를 함께 확인하세요.
 - **GPU pod가 `StartError`로 끝나고 이벤트에 `reading mounts file:`**: NVIDIA toolkit의 CDI hook 하나가 gVisor와 맞지 않아 생기는 문제입니다. `04_install_gpu_stack.sh`가 이 hook을 끕니다. device plugin DaemonSet의 `CDI_DISABLE_HOOKS` 값이 `disable-device-node-modification`인지 확인하세요.
-- **`04_install_gpu_stack.sh`가 `every GPU on the sandbox-gvisor nodes is in use`로 멈춤**: 이미 배포한 샌드박스 풀이 gVisor 노드의 GPU를 모두 쓰고 있어서 smoke pod가 GPU를 받을 수 없습니다. 출력된 명령으로 풀을 0으로 줄이고 다시 실행한 뒤, `scripts/06_deploy_sandboxes.sh gvisor v1`로 풀을 되돌리세요.
+- **`04_install_gpu_stack.sh`가 `every GPU on the sandbox-gvisor nodes is in use`로 멈춤**: 이미 배포한 샌드박스 pool이 gVisor 노드의 GPU를 모두 쓰고 있어서 smoke pod가 GPU를 받을 수 없습니다. 출력된 명령으로 pool을 0으로 줄이고 다시 실행한 뒤, `scripts/06_deploy_sandboxes.sh gvisor v1`로 pool을 되돌리세요.
 - **노드 로그에 `NVIDIA driver ... is not supported by gVisor`**: 노드의 드라이버 버전이 고정한 gVisor 버전의 지원 목록에 없습니다. 지원 드라이버가 들어 있는 AMI를 쓰거나, 그 드라이버를 지원하는 버전으로 `GVISOR_RELEASE`를 바꾸세요.
     - **CDK로 만든 EC2 노드 그룹**: 새 노드가 처음 부팅할 때 gVisor를 설치합니다. 이 노드 그룹에서 `GVISOR_RELEASE`를 바꿨다면 같은 시나리오로 `scripts/02_create_cluster.sh`를 다시 실행하세요.
 
@@ -89,22 +89,24 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 자세히: [Kata](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#kata)
 
-## 샌드박스 풀
+## 샌드박스 pool
+
+<span id="샌드박스-풀"></span>
 
 - **`06_deploy_sandboxes.sh`가 `exceeded its progress deadline`으로 실패**: pod의 STATUS부터 보세요.
     - **`Pending`이나 `ContainerCreating`이면**: `kubectl -n sandbox describe pod <pod>`의 Events를 확인하세요.
     - **`Running`인데 `0/1`이면**: `kubectl -n sandbox logs <pod>`를 보세요. `device probe ok=False` 줄이 있으면 같은 줄의 `info`에서 장치 확인 실패 사유를 보고, `egress is open, refusing work:` 줄이 있으면 외부 연결 차단 설정을 확인하세요.
 - **로그에 `egress is open, refusing work: 169.254.169.254:80 (connected)`**: pod에서 EC2 인스턴스 메타데이터 서비스(IMDS) 주소로 연결이 열렸습니다. NetworkPolicy가 적용되지 않은 것입니다. `kubectl -n sandbox get networkpolicy`로 정책 목록을 보고, VPC CNI 애드온의 `enableNetworkPolicy`가 켜져 있는지 확인하세요.
 - **`sandbox_error`와 `no free sandbox in sandbox-<runtime>-<version>...`**: 600초 동안 평가를 맡길 pod를 찾지 못했습니다. 먼저 Ready인 pod가 있는지 확인하세요.
-    - **모든 pod가 계속 평가 중이라면**: replica 수를 늘리세요. GPU 풀은 pod 하나가 GPU 하나를 쓰므로, 남는 GPU가 없으면 노드 수도 함께 늘려야 합니다.
+    - **모든 pod가 계속 평가 중이라면**: replica 수를 늘리세요. GPU pool은 pod 하나가 GPU 하나를 쓰므로, 남는 GPU가 없으면 노드 수도 함께 늘려야 합니다.
 - **401, 403 응답**: 토큰, JWKS, 허용 목록 설정 문제입니다. 오류 문구별 해결 방법은 [401, 403 응답](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답)에 있습니다.
 
-자세히: [샌드박스 풀과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-풀과-readiness)
+자세히: [샌드박스 pool과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-pool과-readiness)
 
 ## 학습
 
 - **TRL trainer 로그에 `CUDA out of memory`**: vLLM과 학습이 GPU 하나를 나눠 씁니다. Job 템플릿의 `args`에 `--per-device-batch=2`와 `--grad-accum=8`을 넣으세요(곱 16은 그대로입니다). 그래도 부족하면 `--max-completion-length=512`, `--vllm-gpu-memory-utilization=0.3`을 차례로 넣어 보세요.
-- **`reward_batch`에 `sandbox_error`가 많음**: `scripts/ops/verify.sh <runtime> <version>`으로 같은 풀을 점검하세요. 실패한 단계와 오류 문구를 보면 인증, 네트워크, pod 부족, 평가 시간 초과 중 어디부터 볼지 알 수 있습니다.
+- **`reward_batch`에 `sandbox_error`가 많음**: `scripts/ops/verify.sh <runtime> <version>`으로 같은 pool을 점검하세요. 실패한 단계와 오류 문구를 보면 인증, 네트워크, pod 부족, 평가 시간 초과 중 어디부터 볼지 알 수 있습니다.
 
 자세히: [학습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#학습)
 

@@ -82,7 +82,7 @@ plugins:
             01 클러스터와 이미지: 01 Cluster and images
             02 gVisor GPU 샌드박스: 02 gVisor GPU sandboxes
             03 Kata 샌드박스 (CLH, QEMU): 03 Kata sandboxes (CLH, QEMU)
-            04 샌드박스 풀 배포와 검증: 04 Deploy and verify sandbox pools
+            04 샌드박스 pool 배포와 검증: 04 Deploy and verify sandbox pools
             05 On-policy GRPO 학습: 05 On-policy GRPO training
             06 학습 중 샌드박스 업데이트: 06 Updating the sandbox during training
             07 HyperPod 시나리오: 07 HyperPod scenario
@@ -96,7 +96,7 @@ plugins:
             00 아키텍처: 00 Architecture
             01 용량과 노드 관리: 01 Capacity and nodes
             02 보안: 02 Security
-            03 Gateway와 샌드박스 풀: 03 Gateway and pools
+            03 Gateway와 샌드박스 pool: 03 Gateway and pools
             04 Reward 무결성: 04 Reward integrity
             05 샌드박스 버전 관리: 05 Sandbox versioning
             06 veRL로 확장: 06 Scaling with veRL
@@ -166,7 +166,7 @@ nav:
       - 01 클러스터와 이미지: handson/01_cluster_and_images.md
       - 02 gVisor GPU 샌드박스: handson/02_gvisor.md
       - 03 Kata 샌드박스 (CLH, QEMU): handson/03_kata.md
-      - 04 샌드박스 풀 배포와 검증: handson/04_sandbox_pools.md
+      - 04 샌드박스 pool 배포와 검증: handson/04_sandbox_pools.md
       - 05 On-policy GRPO 학습: handson/05_grpo_training.md
       - 06 학습 중 샌드박스 업데이트: handson/06_sandbox_update.md
       - 07 HyperPod 시나리오: handson/07_hyperpod.md
@@ -180,7 +180,7 @@ nav:
       - 00 아키텍처: production/00_architecture.md
       - 01 용량과 노드 관리: production/01_capacity_and_nodes.md
       - 02 보안: production/02_security.md
-      - 03 Gateway와 샌드박스 풀: production/03_gateway_and_pools.md
+      - 03 Gateway와 샌드박스 pool: production/03_gateway_and_pools.md
       - 04 Reward 무결성: production/04_reward_integrity.md
       - 05 샌드박스 버전 관리: production/05_sandbox_updates.md
       - 06 veRL로 확장: production/06_scaling_with_verl.md
