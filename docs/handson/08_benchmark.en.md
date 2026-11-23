@@ -48,6 +48,25 @@ After scenario A training and rollback, we ran `scripts/ops/bench.sh 32` in `us-
     - **Pool claim**: taking one sandbox from a pool of sandboxes started in advance (a warm pool).
     - **JSONL**: a file format with one JSON object per line.
 
+## HyperPod B2 · Two clients, one GPU grading pool { #hyperpod-b2 }
+
+In `us-east-1` on EKS 1.36, two `ml.g5.xlarge` workers each hosted one `gvisor-hyperpod` v1 grader with an A10G. After GRPO finished, the CPU system worker and the training worker each submitted 32 `relu_bias_triton` evaluations. Each run had the pool to itself.
+
+| HyperPod client | Successful / requested | Evaluation p50 (s) | Evaluation p95 (s) | Pool throughput (eval/s) | Median kernel speedup |
+|---|---:|---:|---:|---:|---:|
+| `system` · `ml.m5.xlarge` | 32 / 32 | 10.448 | 10.572 | 0.189 | 1.727× |
+| `trainer` · `ml.g5.2xlarge` | 32 / 32 | 10.480 | 10.593 | 0.190 | 1.725× |
+
+The percentiles use the server's `duration_s` for successful evaluations. Pool throughput divides the number of successful evaluations by the elapsed client time for the whole batch. Pod creation to `Ready` took 10 seconds on the node that already held the sandbox image from the CUDA check and 110 seconds on the other node.
+
+[![Both completed jobs and their latency and throughput from the live cluster](../images/terminal/hyperpod-b2-benchmark.png)](../images/terminal/hyperpod-b2-benchmark.png)
+
+```bash
+scripts/hyperpod/bench_b2.sh 32
+```
+
+[Run record in JSON](data/hyperpod-b2.json) · [Public B2 demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b2) · [Build the B2 cluster and run GRPO](07_hyperpod_b2.md)
+
 ## Before you begin
 
 List the pods in the `sandbox` namespace with their runtime and version labels.

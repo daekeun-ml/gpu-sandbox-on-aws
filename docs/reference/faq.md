@@ -65,10 +65,10 @@
 ## 플랫폼과 관리형 서비스
 
 ??? question "HyperPod 기본 AMI 노드에 이 샌드박스를 바로 올릴 수 있다"
-    **실제:** 기본 AMI(Kubernetes 1.36)로는 HyperPod 노드에 gVisor GPU 샌드박스도, Kata GPU 샌드박스도 올릴 수 없습니다. 기본 시나리오 B1은 학습만 HyperPod에서 하고 샌드박스는 같은 EKS 클러스터의 EC2 노드에 둡니다. B2는 지원 목록에 있는 드라이버를 넣은 custom AMI로 HyperPod 노드에서 gVisor 샌드박스를 실행하도록 구성했지만, AWS에서는 아직 실행하지 않았습니다.
+    **실습 결과**. HyperPod EKS 1.36 기본 이미지의 NVIDIA 드라이버는 `595.112.07`이었습니다. B1은 EC2에서 채점했습니다. 관리형 B2에서는 HyperPod 채점 노드 두 대에 `580.178.04`를 설치하고 재부팅한 뒤 A10G에서 gVisor를 실행했습니다. [B2 실습](../handson/07_hyperpod_b2.md)
 
     - **기본 AMI의 gVisor GPU 샌드박스**: HyperPod EKS AMI(1.34~1.36)의 NVIDIA 드라이버 595.91.07이 gVisor release-20261109.0의 nvproxy 지원 목록에 없어서 쓸 수 없습니다(목록에 없는 unknown 버전은 플래그와 관계없이 실패).
-    - **B2가 이 조건을 맞추는 방법**: HyperPod 공개 base AMI의 드라이버를 580.178.04로 바꾸고 고정한 gVisor를 설치한 custom AMI를 빌드합니다. 노드가 시작할 때 lifecycle 스크립트가 `runsc`를 containerd에 등록합니다([07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)).
+    - **기존 custom AMI 방식**. CDK 경로는 별도 AMI에 드라이버를 넣습니다. 관리형 실습은 등록된 채점 노드에 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다.
     - **Kata GPU 샌드박스**: Kubernetes 버전이나 AMI와 관계없이 HyperPod 노드에서 실행할 수 없습니다. `ml.*.metal`이 없고, CreateCluster에 nested virtualization CPU 옵션이 없으며, G와 P 계열은 nested virtualization을 지원하지 않기 때문입니다.
     - **GPU 없는 Kata**: 같은 `/dev/kvm` 조건 때문에 어렵다고 보지만 검증하지 않았고(추론), 이 저장소에는 HyperPod용 Kata 구성이 없습니다.
 

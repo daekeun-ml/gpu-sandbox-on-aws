@@ -1,5 +1,7 @@
 # 99 Cleanup
 
+For the HyperPod-managed B2 cluster, follow the [dedicated B2 workflow](07_hyperpod_b2.md#cleanup). The CDK commands on this page apply to A, B1, C and the earlier custom AMI option.
+
 Check the AWS account, `AWS_REGION`, `CLUSTER_NAME` and your current `kubectl` context against the lab cluster you intend to remove. Leave the tunnel open. Follow the steps for the resources you created.
 
 1. **If you ran episodes**, clean up remaining [claims and warm pools](#0-agent-sandbox-extension-only-if-you-used-it). **If you used HyperPod**, [delete its cluster](#1-hyperpod-first-scenario-b) while EKS is still available.

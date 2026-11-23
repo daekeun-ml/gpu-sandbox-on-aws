@@ -12,10 +12,13 @@ source "$(dirname "$0")/lib.sh"
 require_tools aws helm kubectl python3
 require_vars AWS_REGION CLUSTER_NAME NVIDIA_DEVICE_PLUGIN_VERSION
 
-# The scenario the stack was deployed with (the output cdk/deploy.sh checks too). Empty without
-# the CDK stack, and then both parts run.
+# The CDK stack records its scenario. A cluster created through the HyperPod wizard
+# has no CDK stack, so use the scenario selected in config.env.
 deployed="$(aws cloudformation describe-stacks --region "${AWS_REGION}" --stack-name "${CLUSTER_NAME}-cdk" \
   --query "Stacks[0].Outputs[?OutputKey=='Scenario'].OutputValue" --output text 2>/dev/null || true)"
+case "${deployed}" in
+  ""|None) deployed="${SCENARIO:-A}" ;;
+esac
 with_gvisor=1
 if [[ "${deployed}" == "B2" || "${deployed}" == "C" ]]; then
   with_gvisor=0

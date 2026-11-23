@@ -74,10 +74,7 @@ Creating the cluster starts charges for resources including nodes and the NAT ga
 
         [![A HyperPod training node using an EC2 grading pool in the same EKS cluster](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
 
-    ??? note "B2 experiment · Run the sandboxes on HyperPod too"
-        B2 still needs a live AWS test. Start EKS with system nodes only using `scripts/02_create_cluster.sh --hyperpod-b2`. Build the sandbox AMI with `scripts/hyperpod/build_b2_ami.sh` before attaching the instance groups with `scripts/hyperpod/create.sh --b2`. The grading pool is `gvisor-hyperpod`. Allow two `ml.g5.xlarge for cluster usage` instances in addition to the trainer quota. [B2 setup and verification](07_hyperpod.md#b2)
-
-        [![Separate trainer and sandbox instance groups in the experimental B2 setup](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+    **[B2 · Run all workers on HyperPod](07_hyperpod_b2.md)** uses the EKS creation workflow in HyperPod. `system` hosts the CPU pods, `trainer` trains the model and `sandbox` runs two GPU graders. Check the three instance groups before running the same GRPO exercise.
 
 === "C · CPU"
 

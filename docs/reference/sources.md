@@ -17,7 +17,7 @@
 | 블로그의 측정값 | 다른 사람이 다른 환경에서 측정한 값 | AWS 기술 블로그 2부의 warm pool claim 약 55 ms, AWS China 블로그의 cold start 약 3 s |
 | 추론 | 근거에서 이끌어 낸 판단, 미검증 | NodeConfig `imports`가 kata-deploy drop-in을 유지하는 효과 |
 | AWS에서 저자가 실행 | 실습 계정에서 실제로 실행하고 출력을 확인 | 시나리오 A의 gVisor 경로, Kata GPU(`g4dn.metal`), 시나리오 C의 CPU 런타임 세 개, 런타임 벤치마크, 데모 사이트. 날짜별 기록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
-| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | `ml.g5`의 HyperPod B2. 전체 목록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
+| AWS에서 저자가 실행하지 않음 | 설계하고 템플릿까지 만들었지만 실행하지 않음 | EC2에서 custom AMI를 빌드하는 기존 B2 CDK 경로. 전체 목록은 [AWS 실행 기록](#aws-실행-기록)에 있습니다 |
 
 ## 이 저장소에서 확인한 것
 
@@ -78,12 +78,13 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 | 2026-11-22 | us-west-2 | HyperPod B1, EKS 1.36 | `ml.g5.2xlarge` trainer, EC2 `g5.xlarge` 샌드박스 2대, training operator `v1.3.0-eksbuild.1`, `hyperpod/run_grpo.sh 1` | `Completed=True`. probe 검사 6/6 통과, 제출 코드 12개 채점, 정답 1개. HyperPod·EKS 클러스터, 테스트 GPU 노드, lifecycle 버킷, 테스트용 trainer 저장소를 삭제했습니다. EKS용 KMS 키는 7일 후 삭제 예약 상태를 확인했습니다. [콘솔과 trainer 실행 화면](../handson/07_hyperpod.md#확인-방법) |
 | 2026-11-22 | us-west-2 | HyperPod B1 벤치마크 | `relu_bias_triton`, gVisor v1, EC2 `g5.xlarge` 샌드박스 2대 | EKS 시스템 노드와 HyperPod 학습 노드에서 각각 32/32 성공. HyperPod에서 요청했을 때 풀 처리량은 0.199 eval/s. [측정값과 실행 화면](../handson/08_benchmark.md#hyperpod-b1) |
 | 2026-11-22 | us-west-2 | 시나리오 A, Kata CPU/GPU, EKS 1.36 | `g5.2xlarge`에서 GRPO 16스텝, v1→v2 전환 및 롤백, 5개 v1 풀에서 `ops/bench.sh 32` | 학습 중 5번째 배치부터 v2로 전환, 207개 제출물, 버전이 섞인 배치 0개. 벤치마크 160/160 성공. [학습 로그](../handson/06_sandbox_update.md#switch-batches) · [측정 표와 원본 JSONL](../handson/08_benchmark.md#runtime-results) |
+| 2026-11-23 | us-east-1 | 관리형 HyperPod B2, EKS 1.36 | `system` `ml.m5.xlarge` 1대, `trainer` `ml.g5.2xlarge` 1대, gVisor `ml.g5.xlarge` 2대. 네 워커 모두 HyperPod 소속 | GRPO `Completed=True`, 코드 12개 채점. 기준 사례 6개 통과. CPU·학습 노드 벤치마크 각 32/32 성공. [실행 화면](../handson/07_hyperpod_b2.md) · [결과 표](../handson/08_benchmark.md#hyperpod-b2) |
 
 2026-11-14에는 ap-south-1 콘솔에서 Service Quotas 화면과 EC2 AMI Catalog의 HyperPod AMI 검색 결과도 캡처했습니다. 조회만 했고 스크립트는 실행하지 않았습니다.
 
 **AWS에서 실행하지 않은 것:**
 
-- Sandbox용 custom AMI를 쓰는 HyperPod B2, 자동 노드 교체와 체크포인트 복구.
+- 기존 B2 CDK 경로의 샌드박스용 custom AMI, 자동 노드 교체와 체크포인트 복구.
 - `demo/teardown.sh`(shellcheck만 통과)
 - [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)의 `gvisor-cpu` warm pool과 GPU 절(`kata-clh-cpu` warm pool로는 실행함)
 - 운영 가이드가 핸즈온에 더하는 구성: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity

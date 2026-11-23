@@ -67,6 +67,8 @@ Create it only when it does not exist, with `test -f scripts/config.env || cp sc
 | `HYPERPOD_CLUSTER_NAME` | `gpu-sandbox-hp` | HyperPod cluster name. Also used for the execution role name `<name>-execution` | `hyperpod/*` |
 | `HYPERPOD_TRAINER_INSTANCE_TYPE` | `ml.g5.2xlarge` | HyperPod trainer instance group. You can set `ml.g6.2xlarge` instead | `cluster.json.tpl`, `hyperpod-job-grpo.yaml.tpl` |
 | `HYPERPOD_LCS_BUCKET` | `sagemaker-gpu-sandbox-lcs-__SET_ME__` | Lifecycle script bucket. Keep the `sagemaker-` prefix, which the HyperPod managed policy expects | `hyperpod/create.sh`, `hyperpod/delete.sh` |
+| `HYPERPOD_SYSTEM_INSTANCE_TYPE` | `ml.m5.xlarge` | HyperPod CPU system worker for managed B2 | `hyperpod/create_managed.sh` |
+| `HYPERPOD_AZ_IDS` | e.g. `use1-az1,use1-az2` | Availability zone IDs in the target region | `hyperpod/create_managed.sh` |
 | `B2_NVIDIA_DRIVER_VERSION` | `580.178.04` | Driver baked into the B2 custom AMI. Must be on the pinned gVisor's nvproxy supported list | `hyperpod/build_b2_ami.sh` |
 | `B2_NVIDIA_RUNFILE_SHA256` | `5975a86e...` (64 chars) | sha256 of that driver's `.run` installer | `hyperpod/build_b2_ami.sh` |
 | `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | The B2 `sandbox` instance group. You can set `ml.g6.xlarge` instead | `instance-group-sandbox.json.tpl` |

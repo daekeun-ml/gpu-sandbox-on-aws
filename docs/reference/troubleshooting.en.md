@@ -21,7 +21,7 @@ If the symptom is unclear, start with the events from `kubectl describe pod`.
     - **Ran in a practice account**: scenario C, scenario A (`g5`), Kata GPU (`g4dn.metal`), HyperPod B1 training and scoring, the runtime benchmark and the demo site.
     - **November 18 scenario A cluster**: created without GPU node groups, which were added with updates (see "When there is no GPU capacity" below).
     - **Rows from the Kata GPU run**: the Kata GPU `vfio_iommu_type1` row and the AMI builder row below.
-    - **Not run**. HyperPod B2.
+    - **Not run**. The earlier CDK B2 custom AMI path.
     - **Experimental CLH GPU**: the pool was deployed, but the VM did not start.
     - **Dated run record**: in [Verified facts and sources](sources.md#aws-run-record).
     - **Where symptoms and causes come from**: the scripts' error messages, the code's behavior and official documentation. The wording can differ by tool version.
@@ -608,6 +608,16 @@ Before it submits the Job, the multi-turn episode run (`scripts/extensions/agent
     4. Delete only waiting Sandboxes with `kubectl -n sandbox delete sandboxes.agents.x-k8s.io <name>`. The pool starts replacements with the new env.
 
 ## HyperPod
+
+### Managed B2 in Northern Virginia
+
+| Symptom observed during the lab | What resolved it |
+|---|---|
+| The group shows `InService`, but `CurrentCount` is below `TargetCount` | Inspect `list-cluster-nodes --include-node-logical-ids`. The original GPU requests reported `INSUFFICIENT_CAPACITY_ERROR`. HyperPod retried in `Continuous` mode and allocated all three GPUs. |
+| The wizard stack is `CREATE_COMPLETE`, but the training add-on reports `K8sResourceNotFound` for cert-manager | Run `scripts/hyperpod/prepare_managed.sh` after the workers are ready. It waits for the certificate webhook and recreates the failed add-on at the same version. |
+| The grading nodes report driver `595.112.07` or `nvidia_uvm` is in use | Once both grading workers are `Ready`, `scripts/hyperpod/reboot_sandboxes.sh` stages `580.178.04` on disk, reboots the workers through HyperPod and verifies the running module. |
+
+[Commands, screenshots and cleanup](../handson/07_hyperpod_b2.md)
 
 | Symptom | Cause | Fix |
 |---|---|---|

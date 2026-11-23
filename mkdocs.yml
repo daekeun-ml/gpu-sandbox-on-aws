@@ -86,6 +86,7 @@ plugins:
             05 On-policy GRPO 학습: 05 On-policy GRPO training
             06 학습 중 샌드박스 업데이트: 06 Updating the sandbox during training
             07 HyperPod 시나리오: 07 HyperPod scenario
+            07B HyperPod에서 전체 실습: 07B All workers on HyperPod
             08 런타임 벤치마크: 08 Runtime benchmark
             09 데모 사이트 (CloudFront): 09 Demo site (CloudFront)
             10 c8i 단독 저비용 경로: 10 CPU-only path on c8i
@@ -169,6 +170,7 @@ nav:
       - 05 On-policy GRPO 학습: handson/05_grpo_training.md
       - 06 학습 중 샌드박스 업데이트: handson/06_sandbox_update.md
       - 07 HyperPod 시나리오: handson/07_hyperpod.md
+      - 07B HyperPod에서 전체 실습: handson/07_hyperpod_b2.md
       - 08 런타임 벤치마크: handson/08_benchmark.md
       - 09 데모 사이트 (CloudFront): handson/09_demo_site.md
       - 10 c8i 단독 저비용 경로: handson/10_cpu_only.md

@@ -1,5 +1,7 @@
 # 시작하기
 
+CPU와 GPU 워커를 전부 HyperPod에 두는 B2를 실습하려면 [리전별 쿼터와 생성 절차](handson/07_hyperpod_b2.md)를 보세요.
+
 !!! info "TL;DR"
     AWS 없이 로컬 CPU에서 파이프라인을 먼저 확인한 다음, `scripts/config.env`를 채우고 시나리오를 고릅니다.
 
@@ -61,6 +63,7 @@
 | Running On-Demand G and VT instances | 시나리오 A 16, B1 8, B2와 C는 0 | 새 계정은 기본값이 0일 수 있음 |
 | Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 6 (system `m6i.large` 2 x 2 + SSM 접속 인스턴스 `t4g.nano` 2) | 문서상 기본값 5 |
 | `ml.g5.2xlarge for cluster usage` (SageMaker) | 1 (Scenario B) | HyperPod 전용 quota |
+| `ml.m5.xlarge for cluster usage` (SageMaker) | 1 (관리형 B2) | CPU `system` 그룹 |
 | `ml.g5.xlarge for cluster usage` (SageMaker) | 2 (Scenario B2) | B2의 `sandbox` 인스턴스 그룹(`HYPERPOD_SANDBOX_COUNT`) |
 
 - **G and VT, 시나리오 A**: 16은 trainer `g5.2xlarge` 8 + gVisor `g5.xlarge` 4 x 2입니다.
@@ -68,7 +71,7 @@
 - **G and VT, B2와 C**: EC2 GPU 노드가 없어서 G and VT 쿼터 없이 시작할 수 있습니다.
 - **Kata GPU까지 하면**: G and VT에 `g4dn.metal` 96을 더합니다.
 - **Standard, 시나리오 C이거나 Kata CPU까지 하면**: `c8i.2xlarge` 8을 더해 14입니다.
-- **Standard, B2와 Kata GPU**: custom AMI를 빌드하는 동안 빌더 `m6i.large` 2가 더 필요해 8(c8i와 함께 쓰면 16)입니다.
+- **Standard, 기존 CDK B2와 Kata GPU**: custom AMI를 빌드하는 동안 빌더 `m6i.large` 2가 더 필요해 8(c8i와 함께 쓰면 16)입니다.
 - **B1과 B2**: 위의 SageMaker 쿼터를 따로 확인하세요.
 
 quota 증가는 처리에 시간이 걸릴 수 있으니 클러스터를 만들기 전에 신청하세요.
@@ -344,7 +347,7 @@ scripts/01_check_prereqs.sh
 **확인할 것:** AWS identity 표, 도구 버전, G and VT quota, `c8i.2xlarge`의 nested virtualization 지원 여부, GPU 인스턴스 타입의 AZ별 제공 여부가 차례로 출력됩니다. 스크립트는 후보 인스턴스 타입을 모두 조회하므로, 고른 시나리오에서 만들 노드만 확인하세요.
 
 - **G and VT quota**: quota 표의 `Running On-Demand G and VT instances` 값이 시나리오 A는 16, B1은 8 이상인지 (B2와 C는 0). Kata GPU를 추가하면 어느 시나리오든 96을 더하고, gVisor 풀을 v1에서 v2로 교체하는 동안에는 `g5.xlarge` 두 대분 8이 더 필요합니다
-- **Standard quota**: 값이 6 이상인지 (시나리오 C이거나 Kata CPU까지 하면 14 이상. custom AMI를 빌드하는 B2와 Kata GPU는 2를 더해 8, c8i와 함께 쓰면 16 이상)
+- **Standard quota**: 값이 6 이상인지 (시나리오 C이거나 Kata CPU까지 하면 14 이상. 기존 CDK 경로에서 custom AMI를 빌드하는 B2와 Kata GPU는 2를 더해 8, c8i와 함께 쓰면 16 이상)
 - **c8i를 쓴다면(시나리오 C, Kata CPU)**: nested virtualization 줄에 `nested-virtualization`이 들어 있는지
 - **GPU 노드의 AZ**: 만들 GPU 노드의 인스턴스 타입(A는 `g5.2xlarge`와 `g5.xlarge`, B1은 `g5.xlarge`, Kata GPU는 `g4dn.metal`) 옆의 AZ 목록에, CDK 스택이 쓰는 두 AZ(CDK가 조회한 리전 AZ 목록의 앞 두 곳) 중 한 곳 이상이 있는지. 스크립트는 리전 전체를 조회하므로 다른 AZ 이름만 나와도 노드를 만들 수 없습니다
 
@@ -359,7 +362,7 @@ scripts/01_check_prereqs.sh
 |---|---|---|---|
 | Scenario A (EC2 자체 운영) | 모든 구성 요소를 직접 제어하고 싶을 때 | `scripts/02_create_cluster.sh` | [핸즈온 00 전체 흐름](handson/00_overview.md) |
 | Scenario B1 (HyperPod, 기본) | 장시간 학습에 HyperPod의 노드 자동 교체와 job 재시작이 필요할 때 | `scripts/02_create_cluster.sh --hyperpod` 다음 `scripts/hyperpod/create.sh` | [07 HyperPod 시나리오](handson/07_hyperpod.md) |
-| Scenario B2 (HyperPod, 실험) | 샌드박스 노드까지 HyperPod 인스턴스 그룹에 두고 싶을 때 | `scripts/02_create_cluster.sh --hyperpod-b2` 다음 `scripts/hyperpod/build_b2_ami.sh` | [07 HyperPod 시나리오의 B2](handson/07_hyperpod.md#b2). custom AMI를 직접 관리 |
+| Scenario B2 (관리형 HyperPod) | 시스템 CPU와 학습·채점 GPU를 모두 HyperPod에서 운영할 때 | `scripts/hyperpod/create_managed.sh` | [관리형 B2 실습](handson/07_hyperpod_b2.md) |
 | Scenario C (c8i 단독, GPU 없음) | GPU 쿼터가 없거나, 시간당 약 0.57 USD로 런타임 비교와 버전 교체를 먼저 익히고 싶을 때 | `scripts/02_create_cluster.sh --cpu-only` | [핸즈온 10 c8i 단독 저비용 경로](handson/10_cpu_only.md) |
 | Production | Karpenter NodePool, sandbox gateway, veRL로 확장할 때 | 핸즈온을 마친 뒤 | [Production 00 아키텍처](production/00_architecture.md) |
 
@@ -372,7 +375,7 @@ scripts/01_check_prereqs.sh
 - 1~4장의 로컬 단계는 테스트가 94개였을 때 macOS(CPU 전용)에서 확인했습니다. 2026-11-22에는 Linux에서 로컬 테스트 110개와 CDK 테스트 19개가 통과했습니다.
 - 5장의 `scripts/01_check_prereqs.sh`는 저자가 실행하지 않았습니다.
 - 그 뒤 단계 가운데 시나리오 A의 gVisor 경로(`02`부터 `08`까지), 시나리오 C, Kata GPU(`g4dn.metal`), 런타임 벤치마크는 실습 계정에서 실행했습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다.
-- 시나리오 A의 [학습 중 gVisor 버전 전환](handson/06_sandbox_update.md#switch-batches)을 실행했습니다. HyperPod B2는 실험 경로입니다.
+- 시나리오 A의 [학습 중 gVisor 버전 전환](handson/06_sandbox_update.md#switch-batches)을 실행했습니다. 관리형 B2는 버지니아 북부에서 학습과 벤치마크 64건을 완료했습니다.
 - dry run은 학습 효과를 보여 주지 않으며, 실제 학습은 [05 On-policy GRPO 학습](handson/05_grpo_training.md)에서 GPU로 실행합니다.
 
 ## 소요 시간과 비용

@@ -62,13 +62,13 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
     |---|---|---:|
     | 3 · CPU 전용 (C) | 반나절 | 약 0.57 |
     | 4 · EC2 GPU (A) | 하루 | 약 3.42 |
-    | 5 · HyperPod (B1 / B2) | 하루 이상 | 약 3.72 / 4.52 |
+    | 5 · HyperPod (B1 / B2) | 하루 이상 | 약 3.72 / 4.56 |
     | 6 · Kata GPU 추가 | 코스 3 또는 4에서 반나절 추가 | metal 노드 7.824 추가 |
 
     <span id="적용-범위와-한계"></span>노드 비용은 `us-west-2`와 `us-east-1` 온디맨드 요금 기준 추정치입니다. EKS 컨트롤 플레인(표준 지원 0.10 USD/시간), 접속 인스턴스, NAT gateway, 스토리지와 전송 등에 따로 요금이 붙습니다.
 
     - **CPU와 EC2 GPU**　C에는 Standard 14 vCPU, A에는 Standard 6과 G/VT 16 vCPU가 필요합니다. A에서 gVisor v1과 v2를 함께 띄우는 동안 G/VT는 24 vCPU, 노드 비용은 시간당 약 2.01 USD 더 듭니다.
-    - **HyperPod**　B1은 Standard 6과 G/VT 8 vCPU에 더해 SageMaker의 `ml.g5.2xlarge for cluster usage` 한 대분이 필요합니다. B2는 EC2 GPU 없이 HyperPod의 `ml.g5.2xlarge` 한 대와 `ml.g5.xlarge` 두 대를 씁니다.
+    - **HyperPod**　B1은 Standard 6과 G/VT 8 vCPU에 더해 SageMaker의 `ml.g5.2xlarge for cluster usage` 한 대분이 필요합니다. B2는 HyperPod `ml.m5.xlarge` 한 대, `ml.g5.2xlarge` 한 대, `ml.g5.xlarge` 두 대분이 필요합니다.
     - **Kata GPU**　metal 노드에 G/VT 96 vCPU가 더 필요합니다. C에 추가하면 시간당 약 8.39 USD, A에 CPU 리허설 노드와 metal 노드를 함께 추가하면 약 11.61 USD입니다. CPU 리허설 노드와 임시 AMI 빌더가 함께 떠 있으면 Standard 16 vCPU가 필요합니다. [구성별 쿼터와 비용](concepts/04_platforms_and_instances.md)
 
 ### 3. CPU에서 채점 풀 교체하기 · 시나리오 C { #course-3 }
@@ -95,7 +95,7 @@ AWS 실습이 처음이라면 [핸즈온 배포 전 확인](handson/00_overview.
 가이드에는 한 스텝에서 보낸 코드 12개의 판정과, 학습을 마친 뒤 고정 커널을 32번 보내 얻은 벤치마크가 있습니다. [B1 실행 화면과 학습 로그](handson/07_hyperpod.md#확인-방법) · [B1 벤치마크 결과](handson/08_benchmark.md#hyperpod-b1)
 
 ??? note "채점 노드도 HyperPod에 두고 싶다면"
-    [B2 실험 구성](handson/07_hyperpod.md#b2)은 샌드박스용 AMI를 직접 만들고 별도 인스턴스 그룹에 배포합니다. B1과 B2를 모두 해 보려면 첫 번째 구성을 정리한 뒤 두 번째를 시작하세요.
+    [관리형 B2](handson/07_hyperpod_b2.md)는 시스템 CPU 한 대, 학습 GPU 한 대, 채점 GPU 두 대를 HyperPod EKS에서 함께 구성합니다. B1과 B2는 서로 다른 클러스터를 사용합니다.
 
 ### 6. Kata VM에서 GPU 사용하기 · 코스 3 또는 4에서 추가 { #course-6 }
 

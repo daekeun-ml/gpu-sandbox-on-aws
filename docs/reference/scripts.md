@@ -208,6 +208,17 @@ EKS 실습에서 다섯 풀에 32건씩 보내 160건 모두 성공했습니다.
 
 ## HyperPod
 
+### 관리형 B2 · CPU와 GPU 워커를 모두 HyperPod에서 운영
+
+| 명령 | 하는 일 |
+|---|---|
+| `scripts/hyperpod/create_managed.sh` | HyperPod EKS 생성 마법사의 AWS 템플릿으로 제어 영역과 `system`, `trainer`, `sandbox` HyperPod 그룹을 만듭니다. |
+| `scripts/hyperpod/reboot_sandboxes.sh` | 채점 노드에 지원 드라이버를 설치하고, 전환이 필요한 노드만 HyperPod API로 재부팅해 실행 버전을 확인합니다. |
+| `scripts/hyperpod/prepare_managed.sh` | VPC CNI NetworkPolicy를 켜고 CoreDNS를 `system`에 배치합니다. 학습 오퍼레이터와 인증서 웹훅도 확인합니다. |
+| `scripts/hyperpod/bench_b2.sh 32` | `system`과 `trainer`에서 같은 Triton 평가를 차례로 실행하고 요청 위치별로 JSONL 파일을 남깁니다. |
+
+리전 설정, 실행 화면과 정리 순서는 [B2 실습](../handson/07_hyperpod_b2.md)을 보세요. 아래 `create.sh`와 AMI 빌드 명령은 기존 CDK 경로에서 사용합니다.
+
 ### `scripts/hyperpod/create.sh`
 
 - **하는 일**: HyperPod dependency Helm chart, lifecycle script 버킷(Block Public Access), execution role을 준비하고 `create-cluster`로 HyperPod 클러스터를 EKS에 연결한 뒤 training operator add-on을 설치합니다. `--b2`는 custom AMI로 부팅하는 `sandbox` 인스턴스 그룹과 `gvisor-hyperpod` RuntimeClass를 더합니다.
@@ -230,12 +241,11 @@ EKS 실습에서 다섯 풀에 32건씩 보내 160건 모두 성공했습니다.
 
 ### `scripts/hyperpod/check_gvisor.sh`
 
-- **하는 일**: HyperPod 노드마다 debug pod를 만들어 NVIDIA 드라이버 버전이 고정된 gVisor release의 nvproxy 지원 목록에 있는지 출력합니다. 끝에 `default`에서 이름이 `node-debugger-`로 시작하는 pod를 모두 지웁니다.
+- **하는 일**. CPU 시스템 그룹을 제외한 HyperPod 워커에서 NVIDIA 드라이버의 gVisor 지원 여부를 확인합니다. 검사할 때마다 임시 네임스페이스를 만들고 검사가 끝나면 지웁니다.
 - **사용법**: `scripts/hyperpod/check_gvisor.sh` (인자 없음)
 - **언제**: B2에서 `hyperpod/create.sh --b2` 다음, 풀 배포 전에 실행합니다.
 - **시간과 과금**: 문서에 기록 없음(노드마다 gVisor를 내려받음). 과금되는 리소스는 없습니다.
-- **다시 실행할 때**: 노드를 바꾸지 않으므로 안전합니다. 다만 실행할 때마다 `default`의 `node-debugger-*` pod를 모두 지우므로, 직접 만든 `kubectl debug node` pod도 함께 지워집니다.
-- **성공 신호**: sandbox 노드 두 대에서 `driver 580.178.04: SUPPORTED by gVisor ...: mode B2 is possible`이 나옵니다. trainer 노드의 `driver 595.91.07: NOT supported ...`는 정상입니다.
+- **성공 신호**: sandbox 노드 두 대에서 `driver 580.178.04: SUPPORTED by gVisor ...`이 나옵니다. trainer 노드의 `driver 595.91.07: NOT supported ...`는 정상입니다.
 - **막히면**: [문제 해결: HyperPod](troubleshooting.md#hyperpod), [07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)
 
 ### `scripts/hyperpod/run_grpo.sh` { #scriptshyperpodrun_grposh }

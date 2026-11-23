@@ -74,10 +74,7 @@ scripts/01_check_prereqs.sh
 
         [![HyperPod 학습 노드에서 같은 EKS 클러스터의 EC2 채점 풀을 호출하는 구성](../images/architecture/scenario-b1.drawio.png)](../images/architecture/scenario-b1.drawio.png)
 
-    ??? note "B2 실험 경로 · 샌드박스도 HyperPod에 둘 때"
-        B2는 AWS에서의 동작을 추가로 확인해야 하는 구성입니다. `scripts/02_create_cluster.sh --hyperpod-b2`로 시스템 노드만 있는 EKS 클러스터를 만듭니다. `scripts/hyperpod/build_b2_ami.sh`로 샌드박스용 AMI를 준비한 뒤 `scripts/hyperpod/create.sh --b2`로 인스턴스 그룹을 연결합니다. 채점 풀 이름은 `gvisor-hyperpod`입니다. `ml.g5.xlarge for cluster usage` 쿼터도 두 대분 필요합니다. [B2 설정과 확인 순서](07_hyperpod.md#b2)
-
-        [![HyperPod의 trainer 그룹과 별도 샌드박스 그룹을 사용하는 B2 실험 구성](../images/architecture/scenario-b2.drawio.png)](../images/architecture/scenario-b2.drawio.png)
+    **[B2 · CPU와 GPU를 모두 HyperPod에 두기](07_hyperpod_b2.md)**　HyperPod에서 EKS를 함께 구성합니다. `system`이 CPU Pod를, `trainer`가 모델 학습을, `sandbox` 두 대가 GPU 채점을 맡습니다. 세 그룹의 배치를 확인한 뒤 같은 GRPO 실습을 진행하세요.
 
 === "C · CPU"
 

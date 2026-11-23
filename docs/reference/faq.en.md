@@ -65,10 +65,10 @@
 ## Platforms and managed services
 
 ??? question "these sandboxes can run on default-AMI HyperPod nodes today"
-    **Actually:** with the default AMI (Kubernetes 1.36), neither gVisor GPU sandboxes nor Kata GPU sandboxes can run on HyperPod nodes. The default scenario B1 runs only the training on HyperPod and keeps the sandboxes on EC2 nodes in the same EKS cluster. B2 is configured to run gVisor sandboxes on HyperPod nodes with a custom AMI that carries a supported driver, but it has not been run on AWS yet.
+    **In the lab** the unmodified EKS 1.36 HyperPod image used NVIDIA `595.112.07`. B1 kept the graders on EC2. In managed B2 the two HyperPod grading workers rebooted into driver `580.178.04`, and both ran gVisor on A10G. [B2 walkthrough](../handson/07_hyperpod_b2.md)
 
     - **gVisor GPU sandboxes on the default AMI**: blocked, because the nvproxy of gVisor release-20261109.0 does not know the NVIDIA driver 595.91.07 in the HyperPod EKS AMIs (1.34 to 1.36) (unknown versions, which are not on the list, fail regardless of flags).
-    - **How B2 meets the condition**: it bakes a custom AMI from the HyperPod public base AMI with the driver replaced by 580.178.04 and the pinned gVisor installed. When a node starts, the lifecycle script registers `runsc` with containerd ([B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)).
+    - **Earlier custom AMI option**. The CDK route bakes the driver into a separate AMI. The managed lab stages it on the registered sandbox workers and reboots them through HyperPod.
     - **Kata GPU sandboxes**: not possible regardless of the Kubernetes version or the AMI. There are no `ml.*.metal` types, CreateCluster has no nested virtualization CPU option, and the G and P families do not support nested virtualization.
     - **Kata without a GPU**: probably blocked by the same `/dev/kvm` requirement, but this is untested (inference), and the repository has no Kata setup for HyperPod.
 

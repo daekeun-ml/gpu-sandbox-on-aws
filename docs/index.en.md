@@ -61,12 +61,12 @@ For RL that scores code by running it (RLVR), a CPU sandbox is usually enough, b
 |---|---|---|---|
 | A. Self-managed EC2 (default) | EC2 GPU node in EKS (`g5.2xlarge`) | EC2 nodes in the same cluster | When you want to control every component yourself |
 | B1. HyperPod (HyperPod default) | HyperPod instance group (`ml.g5.2xlarge`) | EC2 nodes in the same EKS cluster that HyperPod is attached to | When long training runs need HyperPod's automatic node replacement and job restart |
-| B2. HyperPod (experimental) | HyperPod instance group | gVisor on a HyperPod instance group built from a custom AMI with a replaced driver | When the sandbox nodes also need HyperPod's node recovery (you maintain the custom AMI; not run on AWS) |
+| B2. HyperPod | HyperPod `trainer` | Two `ml.g5.xlarge` in the HyperPod `sandbox` group | Run CPU and GPU workloads on HyperPod. [B2 lab](handson/07_hyperpod_b2.md) |
 | C. c8i only (no GPU) | none (a reward loop without a model) | CPU sandboxes on one `c8i.2xlarge` (gVisor, Kata + CLH, Kata + QEMU) | When you want to learn the runtime comparison and the version swap first, without GPU quota, for about 0.57 USD of compute per hour ([Hands-on 10](handson/10_cpu_only.md)) |
 
 ### Scenarios on AWS
 
-All four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key, logs). A, B1 and B2 differ in where the trainer and the sandboxes run; C has no trainer or model and practices scoring and version swaps on CPU sandboxes.
+A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the control plane and workers from the SageMaker HyperPod EKS wizard. C runs scoring and version changes on CPU sandboxes.
 
 === "A: EC2 GPU"
 
@@ -80,11 +80,11 @@ All four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key,
 
     *Takeaway: Only the trainer moves to a HyperPod instance group (ml.g5.2xlarge), booted with lifecycle scripts from S3; the sandboxes stay on the same EC2 gVisor nodes as in A.*
 
-=== "B2: training and sandboxes on HyperPod"
+=== "B2 · All workers on HyperPod"
 
-    [![Scenario B2: the trainer and the gVisor pools both on HyperPod instance groups, the sandbox nodes booting from a custom AMI](images/architecture/scenario-b2.drawio.png)](images/architecture/scenario-b2.drawio.png)
+    [![System, trainer and sandbox instance types in the HyperPod console](images/console/hyperpod-b2-instance-groups.png)](images/console/hyperpod-b2-instance-groups.png)
 
-    *Takeaway: The sandboxes also move to a HyperPod instance group (ml.g5.xlarge x2), whose nodes boot from a custom AMI baked once (driver 580.178.04). This experimental path has not been run on AWS.*
+    One CPU worker runs cluster services, one GPU worker trains the model and two GPU workers grade code. [Run B2](handson/07_hyperpod_b2.md)
 
 === "C: CPU only"
 
@@ -124,7 +124,7 @@ Node groups, namespaces and a step-by-step reading of each arrow are in [Hands-o
 
 !!! warning "What you need to check yourself"
     - **What ran**: scenario A (gVisor GPU on `g5`), scenario C (three CPU runtimes) with a version switch, Kata GPU (`g4dn.metal`), the runtime benchmark on five pools ([08 Runtime benchmark](handson/08_benchmark.md)) and the public demo site ran in a practice account. The experimental Kata CLH GPU did not start its VM. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record).
-    - **Verification scope**. Scenario A completed a [switch during training and rollback](handson/06_sandbox_update.md#switch-batches) and `--finish`. HyperPod B2 remains experimental.
+    - **Verification scope**. Scenario A completed a [switch during training and rollback](handson/06_sandbox_update.md#switch-batches) and `--finish`. Managed B2 completed one GRPO step with all workers on HyperPod.
     - **Where the numbers come from**: numbers such as prices and versions come from official documentation and public material, not measurements.
     - **Local tests**: what they cover is in [Getting started](getting_started.md).
 

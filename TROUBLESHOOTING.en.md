@@ -110,6 +110,16 @@ More: [Training](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/tr
 
 ## HyperPod
 
+### Managed B2 in Northern Virginia
+
+| Symptom observed during the lab | What resolved it |
+|---|---|
+| The group shows `InService`, but `CurrentCount` is below `TargetCount` | Inspect `list-cluster-nodes --include-node-logical-ids`. The original GPU requests reported `INSUFFICIENT_CAPACITY_ERROR`. HyperPod retried in `Continuous` mode and allocated all three GPUs. |
+| The wizard stack is `CREATE_COMPLETE`, but the training add-on reports `K8sResourceNotFound` for cert-manager | Run `scripts/hyperpod/prepare_managed.sh` after the workers are ready. It waits for the certificate webhook and recreates the failed add-on at the same version. |
+| The grading nodes report driver `595.112.07` or `nvidia_uvm` is in use | Once both grading workers are `Ready`, `scripts/hyperpod/reboot_sandboxes.sh` stages `580.178.04` on disk, reboots the workers through HyperPod and verifies the running module. |
+
+[Commands, screenshots and cleanup](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
+
 - **Cluster `InService`, trainer instance `Pending`.** During the B1 run, the cluster reached `InService` before the trainer joined EKS. Run `source scripts/config.env`, check the trainer with `aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME"`, then use `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status` to look for `Ready` and `Schedulable`. [B1 run and screenshots](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod/#how-to-verify)
 - **Worker `Pending` with `Insufficient cpu` or `Insufficient memory`.** Check allocated resources with `kubectl describe node <trainer-node>`. On the `ml.g5.2xlarge` used for B1, the worker shared the node with the operator and system pods. The template requests 5 vCPUs and 24 GiB for the worker.
 

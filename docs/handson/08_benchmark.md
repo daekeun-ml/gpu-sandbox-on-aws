@@ -48,6 +48,25 @@
     - **pool claim**: 미리 띄워 둔 샌드박스 풀(warm pool)에서 샌드박스 하나를 할당받는 작업입니다.
     - **JSONL**: 한 줄에 JSON 객체 하나씩 기록하는 파일 형식입니다.
 
+## HyperPod B2 · 같은 GPU 채점 풀에 두 클라이언트로 요청하기 { #hyperpod-b2 }
+
+`us-east-1`의 EKS 1.36에서 `ml.g5.xlarge` 두 대에 `gvisor-hyperpod` v1 Pod를 하나씩 띄웠습니다. 각 Pod에는 A10G 한 장이 있습니다. GRPO 학습이 끝난 뒤 CPU 시스템 노드와 학습 노드가 차례로 `relu_bias_triton`을 32번씩 제출했습니다. 두 Job의 실행 시간은 겹치지 않습니다.
+
+| 요청을 보낸 HyperPod 그룹 | 성공 / 요청 | 채점 p50(초) | 채점 p95(초) | 풀 처리량(건/초) | 커널 속도 향상 중앙값 |
+|---|---:|---:|---:|---:|---:|
+| `system` · `ml.m5.xlarge` | 32 / 32 | 10.448 | 10.572 | 0.189 | 1.727× |
+| `trainer` · `ml.g5.2xlarge` | 32 / 32 | 10.480 | 10.593 | 0.190 | 1.725× |
+
+p50과 p95는 성공한 요청의 서버 채점 시간(`duration_s`)입니다. 풀 처리량은 성공 건수를 클라이언트가 한 배치를 마칠 때까지 걸린 시간으로 나눈 값입니다. Pod 생성부터 `Ready`까지는 앞선 CUDA 검사로 이미지가 캐시된 노드에서 10초, 다른 노드에서 110초가 걸렸습니다.
+
+[![두 벤치마크 Job의 완료 상태와 클라이언트별 성공 건수, 채점 시간, 처리량](../images/terminal/hyperpod-b2-benchmark.png)](../images/terminal/hyperpod-b2-benchmark.png)
+
+```bash
+scripts/hyperpod/bench_b2.sh 32
+```
+
+[실행 기록 JSON](data/hyperpod-b2.json) · [공개 데모의 B2 결과](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b2) · [B2 구성과 GRPO 실습](07_hyperpod_b2.md)
+
 ## 시작 전 확인
 
 `sandbox` namespace의 pod를 런타임과 버전 label과 함께 확인합니다.

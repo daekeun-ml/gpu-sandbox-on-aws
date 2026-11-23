@@ -6,7 +6,7 @@ B1에서 모델은 SageMaker HyperPod 노드에서 학습하고, 모델이 만�
 2. HyperPod trainer가 `Schedulable`이 되고 EC2 풀이 검증되면 [한 스텝을 제출](#6-학습)하세요.
 3. [실행 화면과 로그](#확인-방법)에서 trainer pod의 노드, `reward_batch`의 판정, Job의 `Completed`를 찾으세요. 끝나면 [HyperPod를 먼저 정리](#정리)합니다.
 
-채점 노드도 HyperPod에 두는 [B2](#b2)는 별도의 실험 구성입니다.
+[B2 실습](07_hyperpod_b2.md)에서는 시스템 CPU, 학습 GPU, 채점 GPU를 모두 HyperPod 인스턴스 그룹에 배치합니다.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **SageMaker HyperPod**: 장시간 실행되는 학습을 위한 AWS의 관리형 클러스터입니다. EKS를 orchestrator로 쓰면 기존 EKS 클러스터에 HyperPod 노드 묶음을 연결합니다.
@@ -25,7 +25,7 @@ B1에서 모델은 SageMaker HyperPod 노드에서 학습하고, 모델이 만�
     - **ENI**: 인스턴스에 연결되는 가상 네트워크 인터페이스입니다. VPC CNI는 ENI의 IP 주소를 pod에 할당하므로, ENI 수에 따라 노드당 pod 수 한도가 정해집니다.
 
 !!! info "검증 상태"
-    `us-west-2`의 `ml.g5.2xlarge`에서 B1 GRPO 한 스텝을 완료했습니다. EC2의 gVisor 샌드박스 2개가 생성된 코드 12개를 채점했습니다. 아래 [실제 실행 화면](#확인-방법)에서 노드 배치와 완료 로그를 확인할 수 있습니다. B2는 실험 경로입니다.
+    `us-west-2`의 `ml.g5.2xlarge`에서 B1 GRPO 한 스텝을 완료했습니다. EC2의 gVisor 샌드박스 2개가 생성된 코드 12개를 채점했습니다. 아래 [실제 실행 화면](#확인-방법)에서 노드 배치와 완료 로그를 확인할 수 있습니다. [관리형 B2](07_hyperpod_b2.md)에서는 HyperPod에 있는 채점 풀을 사용합니다.
 
 ## 구성
 
@@ -59,7 +59,7 @@ flowchart LR
 | 구성 | 학습 위치 | 샌드박스 위치 | 상태 |
 |---|---|---|---|
 | B1 (기본) | HyperPod 인스턴스 그룹 | 같은 EKS 클러스터의 EC2 노드 그룹 (gVisor `g5.xlarge`, 선택으로 Kata) | 이 페이지의 기본 경로 |
-| B2 (실험) | HyperPod 인스턴스 그룹 `trainer` | HyperPod 인스턴스 그룹 `sandbox`의 gVisor (custom AMI) | [아래 B2 절차](#b2). AWS에서 실행하지 않음 |
+| B2 | HyperPod `trainer` | HyperPod `sandbox`의 gVisor | `system` CPU도 HyperPod에 배치. [B2 실습과 실행 화면](07_hyperpod_b2.md) |
 
 ## 시작 전 확인
 
@@ -219,7 +219,7 @@ NAME              STATUS   ROLES    AGE   VERSION   NODE-HEALTH-STATUS   INSTANC
 `cluster.json.tpl`은 deep health check(`OnStartDeepHealthChecks`: `InstanceStress`, `InstanceConnectivity` 등)를 설정하지 않으니, 필요하면 인스턴스 그룹에 직접 추가하세요.
 
 ??? note "Training operator 권한"
-    B1과 B2 CDK 스택은 `cert-manager`와 `eks-pod-identity-agent`를 설치하고 `aws-hyperpod/hp-training-operator-controller-manager` 서비스 계정에 IAM 역할을 연결합니다. `create.sh`는 HyperPod 클러스터에 `SageMaker=true` 태그를 붙입니다. 역할의 `AmazonSageMakerHyperPodTrainingOperatorAccess` 정책은 이 태그가 있어야 `DescribeClusterNode`를 허용합니다.
+    B1과 기존 B2 CDK 스택은 `cert-manager`와 `eks-pod-identity-agent`를 설치하고 `aws-hyperpod/hp-training-operator-controller-manager` 서비스 계정에 IAM 역할을 연결합니다. `create.sh`는 HyperPod 클러스터에 `SageMaker=true` 태그를 붙입니다. 역할의 `AmazonSageMakerHyperPodTrainingOperatorAccess` 정책은 이 태그가 있어야 `DescribeClusterNode`를 허용합니다.
 
 스크립트를 다시 실행하면 단계마다 다르게 동작합니다.
 
@@ -384,10 +384,14 @@ aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPO
 
 별도 벤치마크에서 HyperPod 학습 노드가 고정 Triton 커널을 EC2 샌드박스 두 개에 32번 보냈습니다. 32건 모두 성공했고, 서버 채점 시간 p50은 9.937초, 풀 처리량은 초당 0.199건이었습니다. [벤치마크 결과와 실행 화면](08_benchmark.md#hyperpod-b1)
 
-<details class="note" markdown="1">
-<summary>B2 실험 절차 · 채점 노드도 HyperPod에 둘 때</summary>
+## B2 · CPU와 GPU를 모두 HyperPod에서 운영하기 { #b2 }
 
-## B2 (실험): HyperPod 인스턴스 그룹에서 실행하는 gVisor { #b2 }
+미국 동부(버지니아 북부)에서 HyperPod의 EKS 생성 흐름으로 `system` 1대, `trainer` 1대, `sandbox` 2대를 구성했습니다. 일반 EC2 노드 그룹 수가 0인 클러스터에서 네 워커의 배치를 확인할 수 있습니다. [B2 실습과 실행 화면](07_hyperpod_b2.md)
+
+<details class="note" markdown="1">
+<summary>기존 CDK 구성 · EC2 시스템 노드와 샌드박스용 custom AMI</summary>
+
+### 기존 B2 custom AMI 경로
 
 B2는 trainer와 GPU 샌드박스를 모두 HyperPod 인스턴스 그룹에서 실행합니다. 샌드박스용 인스턴스 그룹(`sandbox`)은 NVIDIA 드라이버를 580.178.04로 바꾸고 gVisor를 설치한 custom AMI로 부팅하고, 이 노드에서 시나리오 A와 같은 gVisor 풀(`gvisor-hyperpod`)이 실행됩니다.
 
@@ -567,7 +571,7 @@ sandbox 그룹의 AMI ID와, 그 AMI의 드라이버와 gVisor 버전(`aws ec2 d
 
 ### 4단계: 노드 확인 (`hyperpod/check_gvisor.sh`)
 
-이 스크립트는 HyperPod 노드마다 드라이버 버전을 읽고, 고정한 gVisor 버전이 그 드라이버를 지원하는지 출력합니다. 노드마다 debug pod를 잠시 실행하고, 끝나면 `default` namespace에서 이름이 `node-debugger-`로 시작하는 pod를 모두 삭제합니다. 다른 운영자가 `kubectl debug node/...`로 연 세션이 있는지 먼저 확인하세요.
+CPU 시스템 그룹을 제외한 HyperPod 워커의 드라이버 버전을 gVisor 지원 목록과 대조합니다. 검사용 Pod는 임시 네임스페이스에 생성하고 검사가 끝나면 함께 지웁니다.
 
 ```bash
 scripts/hyperpod/check_gvisor.sh
@@ -576,7 +580,7 @@ scripts/hyperpod/check_gvisor.sh
 **확인할 것:** sandbox 노드 두 대에서 아래 줄이 나와야 합니다. trainer 노드는 기본 AMI를 쓰므로 `595.91.07: NOT supported`가 나옵니다. trainer 노드에서는 샌드박스를 실행하지 않으므로 이 결과는 정상입니다.
 
 ```text
-  driver 580.178.04: SUPPORTED by gVisor 20261109.0: mode B2 is possible
+  driver 580.178.04: SUPPORTED by gVisor 20261109.0
 ```
 
 Kubernetes가 GPU를 인식하는지도 확인합니다. 두 노드 모두 `1`이면 정상입니다.
@@ -651,7 +655,7 @@ custom AMI를 써도 이 조건은 달라지지 않습니다. AMI로는 소프�
 Kata 샌드박스가 필요하면 B1처럼 같은 클러스터의 EC2 노드 그룹(`g4dn.metal`, `c8i`)에서 실행하세요.
 
 !!! question "❓ 오해: HyperPod를 쓰면 GPU 샌드박스도 HyperPod 노드에 둬야 한다"
-    HyperPod EKS는 기존 EKS 클러스터에 인스턴스 그룹을 연결하는 구조입니다. 그래서 샌드박스를 같은 클러스터의 EC2 노드 그룹에서 실행하면서 NetworkPolicy와 토큰 인증을 그대로 쓸 수 있습니다. 이 구성에서 HyperPod가 맡는 일은 장시간 실행되는 trainer의 노드 복구와 job 재시작입니다. B2는 custom AMI를 직접 관리해야 하므로, 샌드박스 노드에도 HyperPod의 노드 복구가 필요할 때 선택하세요.
+    HyperPod EKS는 기존 EKS 클러스터에 인스턴스 그룹을 연결하는 구조입니다. 그래서 샌드박스를 같은 클러스터의 EC2 노드 그룹에서 실행하면서 NetworkPolicy와 토큰 인증을 그대로 쓸 수 있습니다. 이 구성에서 HyperPod가 맡는 일은 장시간 실행되는 trainer의 노드 복구와 job 재시작입니다. [관리형 B2](07_hyperpod_b2.md)에서는 시스템 Pod와 GPU 채점까지 HyperPod 워커가 맡습니다.
 
 </details>
 
@@ -663,7 +667,7 @@ Kata 샌드박스가 필요하면 B1처럼 같은 클러스터의 EC2 노드 그
 - **deep health check:** `cluster.json.tpl`에 설정하지 않았습니다.
 - **GPU 없는 Kata:** GPU를 쓰지 않는 Kata도 같은 `/dev/kvm` 조건 때문에 HyperPod 노드에서는 실행하기 어려울 것으로 봅니다(추론, 미검증).
 - **B1 검증 범위**. GRPO 한 스텝을 실행하고 HyperPod 학습 노드에서 고정 커널 채점 벤치마크도 완료했습니다. 노드 교체와 체크포인트 복구는 별도 검증이 필요합니다.
-- **B2 (실험):** `ml.g5`로도 AWS에서 실행하지 않았습니다. 확인하지 못한 항목은 다섯 가지입니다.
+- **기존 B2 custom AMI 경로:** EC2 빌더로 만든 AMI를 HyperPod에 지정하는 방법은 AWS에서 실행하지 않았습니다. 확인하지 못한 항목은 다섯 가지입니다.
     - HyperPod base AMI가 드라이버를 dnf와 `.run` 중 어느 방식으로 설치했는지(builder는 두 방식을 모두 처리)
     - 드라이버를 바꾼 이미지가 HyperPod의 이미지 검증을 통과하는지
     - HyperPod health monitoring agent가 580 드라이버와 custom taint가 붙은 노드에서 정상 동작하는지
@@ -672,6 +676,8 @@ Kata 샌드박스가 필요하면 B1처럼 같은 클러스터의 EC2 노드 그
   첫 sandbox 노드가 만들어지면 4단계 확인(`runsc nvproxy list-supported-drivers`에 드라이버가 있는지)과 5단계의 `scripts/ops/verify.sh`를 꼭 실행하세요. 580.178.04는 `ml.g7` 계열을 지원하지 않습니다(EKS 문서에 따르면 g7에는 595 이상이 필요).
 
 ## 정리
+
+이 절차는 B1과 기존 CDK 경로에 적용됩니다. HyperPod 마법사로 만든 B2는 [B2 스택 정리](07_hyperpod_b2.md#cleanup)를 따르세요.
 
 HyperPod 리소스를 먼저 삭제한 뒤 EKS 클러스터를 삭제합니다. 두 스크립트 모두 단계마다 확인 단어를 입력받습니다.
 

@@ -15,12 +15,12 @@
 |---|---|---|---|
 | A | EC2 GPU trainer | EC2 GPU | EKS에서 학습과 GPU 채점 연결 |
 | B1 | HyperPod trainer | EC2 GPU | trainer 노드 복구와 Job 재시작 |
-| B2 | HyperPod trainer | 별도 HyperPod GPU 그룹 | custom AMI를 사용하는 gVisor 배치 실험 |
+| B2 | HyperPod `trainer` | HyperPod `sandbox` | 시스템 Pod, 학습, 채점을 각각의 HyperPod 그룹에 배치 |
 | C | 모델 없이 시뮬레이터 실행 | EC2 `c8i.2xlarge`의 CPU 풀 | GPU 없이 런타임 비교, 채점, 버전 교체 |
 
-A, B1, C를 실습 계정에서 실행했습니다. B2는 실험 경로입니다.
+A, B1, C는 `us-west-2`에서, [관리형 B2](../handson/07_hyperpod_b2.md)는 `us-east-1`에서 실행했습니다.
 
-B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타임 조건을 따로 맞추기 위해서입니다. HyperPod trainer가 Job 재시작 기능을 쓰는 동안, EC2 샌드박스는 gVisor가 지원하는 드라이버나 Kata에 필요한 가상화 환경을 그대로 사용할 수 있습니다. B2에서는 gVisor의 드라이버 조건을 맞추기 위해 노드 시작에 쓰는 이미지인 **AMI**를 별도로 준비합니다.
+B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타임 조건을 따로 맞추기 위해서입니다. HyperPod trainer가 Job 재시작 기능을 쓰는 동안, EC2 샌드박스는 gVisor가 지원하는 드라이버나 Kata에 필요한 가상화 환경을 그대로 사용할 수 있습니다. 관리형 B2는 등록된 채점 노드에 gVisor가 지원하는 드라이버를 설치하고 HyperPod API로 재부팅합니다.
 
 ## 시나리오별 아키텍처
 
@@ -42,13 +42,11 @@ B1이 학습과 채점의 노드를 나누는 이유는 복구 기능과 런타�
 
     **차이점**　A에서 trainer만 HyperPod로 옮겨 노드 복구와 Job 재시작 기능을 사용합니다. [시나리오 B1 실습](../handson/07_hyperpod.md)
 
-=== "B2: HyperPod 학습과 샌드박스"
+=== "B2 · CPU와 GPU 모두 HyperPod"
 
-    ![trainer와 gVisor 샌드박스가 별도의 HyperPod 인스턴스 그룹에 배치됩니다.](../images/architecture/scenario-b2.drawio.png)
+    [![CPU, 학습, 채점 인스턴스 그룹을 보여주는 HyperPod 콘솔](../images/console/hyperpod-b2-instance-groups.png)](../images/console/hyperpod-b2-instance-groups.png)
 
-    **그림 설명**　그림의 `AMI builder`에서 만든 custom AMI로 sandbox 인스턴스 그룹을 시작합니다. 샌드박스 노드는 부팅 중 드라이버를 확인하고 gVisor를 등록합니다. 학습이 시작되면 HyperPod trainer가 `gvisor-hyperpod pool v1`에 코드를 보내고 평가 결과를 받습니다.
-
-    **차이점**　B1과 달리 샌드박스도 HyperPod에서 실행합니다. 지원 드라이버가 포함된 custom AMI가 필요한 실험 구성입니다. [시나리오 B2 실습](../handson/07_hyperpod.md#b2)
+    `system`은 CoreDNS를, `trainer`는 GRPO Job을, `sandbox`는 gVisor 채점을 맡습니다. Kubernetes API는 EKS에서 제공합니다. [B2 배포 실습](../handson/07_hyperpod_b2.md)
 
 === "C: CPU 전용"
 
@@ -117,7 +115,7 @@ B1 실습에서 `ml.g5.2xlarge`의 A10G 한 장은 모델의 답을 생성하고
 
 HyperPod 노드에서는 기본적으로 hostNetwork pod만 IMDS에 접근할 수 있습니다. 샌드박스 격리에는 유리한 기본값이지만, 위 표의 제약을 해결하지는 않습니다.
 
-## B1의 EC2 샌드박스와 B2의 custom AMI
+## B1의 EC2 샌드박스와 기존 B2 custom AMI
 
 gVisor는 드라이버 버전이 지원 목록과 정확히 일치해야 하고, unknown 버전은 우회 플래그를 써도 동작하지 않습니다. 그래서 B2는 드라이버를 580.178.04로 바꾼 custom AMI를 직접 빌드합니다([07 HyperPod 시나리오의 B2](../handson/07_hyperpod.md#b2)).
 
@@ -132,7 +130,7 @@ scripts/hyperpod/check_gvisor.sh
 - **기본 AMI를 쓰는 trainer 노드**: 아래 줄이 출력됩니다.
 
     ```text
-      driver 595.91.07: NOT supported by gVisor 20261109.0: keep sandboxes on EC2 (mode B1)
+      driver 595.91.07: NOT supported by gVisor 20261109.0
     ```
 
 - **B2 custom AMI를 쓰는 sandbox 노드**: `driver 580.178.04: SUPPORTED ...`가 출력됩니다.
@@ -249,7 +247,7 @@ Standard quota가 더 필요한 경우는 다음과 같습니다.
 
 - 시나리오 A의 `g5` 구성은 실습 계정에서 실행했습니다([실행 기록](../reference/sources.md#aws-실행-기록)). gVisor 샌드박스(1 replica)와 `scripts/ops/verify.sh gvisor v1`이 통과했고, trainer 설정(1.5B + LoRA + vLLM colocate on A10G 하나)으로 GRPO 5 step을 마쳤습니다.
 - 다른 클러스터 구성에서는 `g4dn.metal`의 Kata + QEMU(`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`)를 실행했고, `scripts/ops/bench.sh 32`로 GPU 풀 2개와 CPU 풀 3개를 측정했습니다.
-- 시나리오 A에서 학습 중 gVisor 버전을 전환했습니다. HyperPod B2(`ml.g5`)는 실험 경로입니다. [전환 기록](../handson/06_sandbox_update.md#switch-batches)
+- 시나리오 A에서 학습 중 gVisor 버전을 전환했습니다. 관리형 B2에서는 HyperPod에서 한 스텝 학습을 완료했습니다. [전환 기록](../handson/06_sandbox_update.md#switch-batches)
 - `c8i.2xlarge`는 us-east-1과 us-west-2에서 시간당 0.37484 USD, 서울 리전에서 0.42336 USD입니다. GPU 없이 이 노드만 쓰는 시나리오 C는 [10 c8i 단독 저비용 경로](../handson/10_cpu_only.md)에 있습니다.
 
 ??? note "참고 자료"

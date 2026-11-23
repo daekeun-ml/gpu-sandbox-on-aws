@@ -13,12 +13,12 @@ The trainer generates answers and updates the model. The sandbox executes submis
 |---|---|---|---|
 | A | EC2 | EC2 | Connect training and scoring in EKS |
 | B1 | HyperPod | EC2 | Add node recovery and job restart for training |
-| B2 | HyperPod | Separate HyperPod group | Try gVisor on a custom AMI with a supported driver |
+| B2 | HyperPod `trainer` | HyperPod `sandbox` | Run system pods, training and grading on three dedicated HyperPod groups |
 | C | Simulator without a model | CPU pools on EC2 `c8i.2xlarge` | Compare runtimes, score submissions, and switch versions without GPUs |
 
-A, B1 and C ran in the AWS exercise account. B2 is experimental.
+A, B1 and C ran in `us-west-2`. The [managed B2 walkthrough](../handson/07_hyperpod_b2.md) ran in `us-east-1`.
 
-B1 keeps the runtime requirements independent from trainer recovery. Its EC2 sandbox nodes can use a driver supported by gVisor or the virtualization setup required by Kata. B2 needs a custom **AMI**, the image from which its sandbox instances boot, to match the gVisor driver requirement.
+B1 keeps the runtime requirements independent from trainer recovery. Its EC2 sandbox nodes can use a driver supported by gVisor or the virtualization setup required by Kata. Managed B2 installs a compatible NVIDIA driver on the two registered grading workers and activates it with a HyperPod reboot.
 
 ## Architecture by scenario
 
@@ -40,13 +40,11 @@ Select a tab to view the scenario.
 
     **Difference** The trainer moves from EC2 to HyperPod for node recovery and Job restart. The scoring pool stays on EC2. [Scenario B1 exercise](../handson/07_hyperpod.md)
 
-=== "B2: HyperPod training and sandboxes"
+=== "B2 · All workers on HyperPod"
 
-    ![The trainer and gVisor sandboxes run in separate HyperPod instance groups.](../images/architecture/scenario-b2.drawio.png)
+    [![The three HyperPod instance groups](../images/console/hyperpod-b2-instance-groups.png)](../images/console/hyperpod-b2-instance-groups.png)
 
-    **Diagram** The `AMI builder` prepares the custom image for the sandbox instance group. At boot, each sandbox node checks its driver and registers gVisor. The trainer then sends code to `gvisor-hyperpod pool v1` and receives the evaluation result.
-
-    **Difference** B2 also moves the sandboxes to HyperPod. This experimental setup requires a custom AMI with a supported driver. [Scenario B2 exercise](../handson/07_hyperpod.md#b2)
+    `system` runs CoreDNS, `trainer` runs the GRPO job and `sandbox` grades the code with gVisor. The Kubernetes API is provided by EKS. [B2 deployment](../handson/07_hyperpod_b2.md)
 
 === "C: CPU only"
 
@@ -113,7 +111,7 @@ What can you learn by changing only the client? With training stopped, an EKS sy
 
 On HyperPod nodes, by default only hostNetwork pods can reach IMDS. That default favors sandboxes, but it does not lift the constraints above.
 
-## EC2 sandboxes in B1 and the custom AMI in B2
+## EC2 sandboxes in B1 and the earlier B2 custom AMI
 
 gVisor needs an exact driver version match, and an unknown version does not work even with the override flag, so B2 bakes its own custom AMI with the driver replaced by 580.178.04 ([B2 in 07 HyperPod scenario](../handson/07_hyperpod.md#b2)).
 
@@ -128,7 +126,7 @@ scripts/hyperpod/check_gvisor.sh
 - **A default-AMI node (the trainer)**: it prints the line below.
 
     ```text
-      driver 595.91.07: NOT supported by gVisor 20261109.0: keep sandboxes on EC2 (mode B1)
+      driver 595.91.07: NOT supported by gVisor 20261109.0
     ```
 
 - **A B2 custom-AMI node (sandbox)**: it prints `driver 580.178.04: SUPPORTED ...`.
@@ -245,7 +243,7 @@ The table is an estimate from list prices and leaves out the EKS control plane, 
 
 - Scenario A's `g5` setup ran in the practice account ([run record](../reference/sources.md#aws-run-record)). The gVisor sandbox (1 replica) and `scripts/ops/verify.sh gvisor v1` passed, and a 5-step GRPO run finished with the trainer configuration (1.5B + LoRA + vLLM colocate on one A10G).
 - On a different cluster setup, Kata + QEMU ran on `g4dn.metal` (`kata-qemu` replica 4, `scripts/ops/verify.sh kata-qemu v1`), and `scripts/ops/bench.sh 32` measured two GPU pools and three CPU pools.
-- Scenario A switched gVisor versions during training. HyperPod B2 (`ml.g5`) remains experimental. [Switch record](../handson/06_sandbox_update.md#switch-batches)
+- Scenario A switched gVisor versions during training. Managed B2 completed one GRPO step on HyperPod. [Switch record](../handson/06_sandbox_update.md#switch-batches)
 - `c8i.2xlarge` is 0.37484 USD per hour in us-east-1 and us-west-2 and 0.42336 USD in the Seoul Region. Scenario C, which uses only this node and no GPU, is in [10 CPU-only path on c8i](../handson/10_cpu_only.md).
 
 ??? note "References"

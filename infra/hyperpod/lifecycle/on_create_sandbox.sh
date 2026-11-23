@@ -16,7 +16,7 @@ echo "[gpu-sandbox] on_create_sandbox start: $(date -Is)"
 
 command -v runsc >/dev/null || { echo "[gpu-sandbox] runsc missing: is this the B2 custom AMI?" >&2; exit 1; }
 driver="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)"
-if ! runsc nvproxy list-supported-drivers | grep -qwF "${driver}"; then
+if ! runsc nvproxy list-supported-drivers | grep -wF -- "${driver}" >/dev/null; then
   echo "[gpu-sandbox] NVIDIA driver ${driver} is not supported by $(runsc --version | head -1)" >&2
   exit 1
 fi
@@ -35,7 +35,7 @@ cat > /etc/containerd/runsc.toml <<'TOML'
   # compute,utility is the default. Do not add profiling, rdma or graphics for reward sandboxes.
   nvproxy-allowed-driver-capabilities = "compute,utility"
 TOML
-"${here}/register_runsc.sh" "${config}"
+bash "${here}/register_runsc.sh" "${config}"
 bash "${here}/node-guard.sh"
 systemctl restart containerd
 

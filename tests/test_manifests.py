@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -280,6 +281,23 @@ def test_hyperpod_trainer_leaves_room_for_the_operator_and_pod_manager():
     (job,) = _render("k8s/trainer/hyperpod-job-grpo.yaml.tpl", env)
     (container,) = job["spec"]["replicaSpecs"][0]["template"]["spec"]["containers"]
     assert container["resources"]["requests"] == {"nvidia.com/gpu": "1", "cpu": "5", "memory": "24Gi"}
+
+
+def test_managed_b2_provisions_cpu_and_gpu_workers_as_hyperpod_instance_groups():
+    env = {**HYPERPOD_ENV, "CLUSTER_NAME": "gpu-sandbox-b2-eks", "K8S_VERSION": "1.36",
+           "HYPERPOD_AZ_IDS": "use1-az1,use1-az2"}
+    result = subprocess.check_output([sys.executable, str(ROOT / "infra/hyperpod/managed-parameters.py")], env=env)
+    params = {v["ParameterKey"]: v["ParameterValue"] for v in json.loads(result)}
+    assert f'{params["ResourceNamePrefix"]}-{params["EKSClusterName"]}' == env["CLUSTER_NAME"]
+    assert params["CreateEKSClusterStack"] == params["CreateHyperPodClusterStack"] == "true"
+    groups = {g["InstanceGroupName"]: g for g in json.loads(params["InstanceGroupSettings1"])}
+    assert {name: (g["InstanceType"], g["InstanceCount"]) for name, g in groups.items()} == {
+        "system": ("ml.m5.xlarge", 1), "trainer": ("ml.g5.2xlarge", 1), "sandbox": ("ml.g5.xlarge", 2),
+    }
+    runtime = yaml.safe_load((ROOT / "k8s/runtimes/runtimeclass-gvisor-hyperpod.yaml").read_text())
+    assert runtime["scheduling"]["nodeSelector"].items() <= groups["sandbox"]["KubernetesConfig"]["Labels"].items()
+    for group in groups.values():
+        assert (ROOT / "infra/hyperpod/lifecycle" / group["LifeCycleConfig"]["OnCreate"]).is_file()
 
 
 def test_hyperpod_b2_sandbox_group_matches_runtimeclass_and_device_plugin():

@@ -21,7 +21,7 @@
     - **실습 계정에서 실행한 것**: 시나리오 C, 시나리오 A(`g5`), Kata GPU(`g4dn.metal`), HyperPod B1 학습과 채점, 런타임 벤치마크, 데모 사이트.
     - **2026-11-18 시나리오 A 클러스터**: GPU 노드 그룹 없이 만든 뒤 update로 추가했습니다(아래 "GPU 용량이 없을 때").
     - **Kata GPU 실행에서 나온 행**: 아래 Kata GPU의 `vfio_iommu_type1` 행과 AMI 빌더 행.
-    - **실행하지 않은 것**. HyperPod B2.
+    - **실행하지 않은 것**. 기존 B2 CDK 경로의 custom AMI.
     - **실험용 CLH GPU**: 풀을 배포했지만 VM이 시작되지 않았습니다.
     - **날짜별 실행 기록**: [검증된 사실과 출처](sources.md#aws-실행-기록)에 있습니다.
     - **증상과 원인의 출처**: 스크립트 오류 메시지, 코드 동작, 공식 문서입니다. 에러 문구는 도구 버전마다 다를 수 있습니다.
@@ -608,6 +608,16 @@ multi-turn 에피소드 실행(`scripts/extensions/agent_sandbox.sh episodes <ru
     4. 대기 중인 Sandbox만 `kubectl -n sandbox delete sandboxes.agents.x-k8s.io <name>`으로 삭제합니다. pool이 새 env로 대체 샌드박스를 시작합니다.
 
 ## HyperPod
+
+### 관리형 B2에서 확인한 문제
+
+| 실습에서 본 증상 | 해결 방법 |
+|---|---|
+| 그룹은 `InService`인데 `CurrentCount`가 `TargetCount`보다 작음 | `list-cluster-nodes --include-node-logical-ids`로 각 요청을 확인합니다. 이번에는 `INSUFFICIENT_CAPACITY_ERROR`가 발생했고 HyperPod가 `Continuous` 모드에서 다시 요청해 GPU 세 대를 확보했습니다. |
+| 마법사 스택은 `CREATE_COMPLETE`인데 학습 애드온이 cert-manager 관련 `K8sResourceNotFound`를 반환 | 워커가 준비된 뒤 `scripts/hyperpod/prepare_managed.sh`를 실행합니다. 인증서 웹훅이 준비될 때까지 기다린 뒤 실패한 애드온을 같은 버전으로 다시 설치합니다. |
+| 채점 노드에 `595.112.07`이 표시되거나 `nvidia_uvm` 모듈이 사용 중 | 두 채점 워커가 `Ready`가 되면 `scripts/hyperpod/reboot_sandboxes.sh`로 `580.178.04`를 디스크에 설치하고 HyperPod API로 재부팅합니다. 마지막에 실행 중인 커널 모듈의 버전을 확인합니다. |
+
+[재현 명령과 실행 화면, 정리 절차](../handson/07_hyperpod_b2.md)
 
 | 증상 | 원인 | 해결 |
 |---|---|---|

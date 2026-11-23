@@ -1,5 +1,7 @@
 # 01 클러스터와 이미지
 
+HyperPod 마법사로 만드는 관리형 B2는 [B2 전용 절차](07_hyperpod_b2.md)를 따르세요. 이 페이지의 CDK 명령은 A, B1, C와 기존 custom AMI 경로에 적용됩니다.
+
 이 장을 마치면 내 PC에서 EKS 노드를 조회할 수 있고, 샌드박스가 실행할 이미지가 ECR에 올라갑니다. 처음 배포한다면 [로컬 Python 환경](../getting_started.md)과 [경로별 쿼터](00_overview.md#사전-준비)를 먼저 확인하세요.
 
 1. [계정과 리전 설정](#준비-1-scriptsconfigenv)부터 [배포 전 점검](#사전-확인-01_check_prereqssh)까지 진행합니다. 이때 선택한 시나리오가 만들 노드를 결정합니다.

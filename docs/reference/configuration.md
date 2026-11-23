@@ -67,6 +67,8 @@ flowchart LR
 | `HYPERPOD_CLUSTER_NAME` | `gpu-sandbox-hp` | HyperPod 클러스터 이름. 실행 역할 이름 `<이름>-execution`에도 쓰임 | `hyperpod/*` |
 | `HYPERPOD_TRAINER_INSTANCE_TYPE` | `ml.g5.2xlarge` | HyperPod trainer instance group. `ml.g6.2xlarge`도 지정할 수 있음 | `cluster.json.tpl`, `hyperpod-job-grpo.yaml.tpl` |
 | `HYPERPOD_LCS_BUCKET` | `sagemaker-gpu-sandbox-lcs-__SET_ME__` | lifecycle 스크립트 버킷. HyperPod 관리형 정책이 `sagemaker-` 접두사를 전제로 하므로 유지 | `hyperpod/create.sh`, `hyperpod/delete.sh` |
+| `HYPERPOD_SYSTEM_INSTANCE_TYPE` | `ml.m5.xlarge` | 관리형 B2의 HyperPod CPU 시스템 워커 | `hyperpod/create_managed.sh` |
+| `HYPERPOD_AZ_IDS` | 예: `use1-az1,use1-az2` | 대상 리전에서 사용할 가용 영역 ID | `hyperpod/create_managed.sh` |
 | `B2_NVIDIA_DRIVER_VERSION` | `580.178.04` | B2 custom AMI에 넣을 드라이버. 고정한 gVisor의 nvproxy 지원 목록에 있어야 함 | `hyperpod/build_b2_ami.sh` |
 | `B2_NVIDIA_RUNFILE_SHA256` | `5975a86e...` (64자) | 위 드라이버의 `.run` 설치 파일 sha256 | `hyperpod/build_b2_ami.sh` |
 | `HYPERPOD_SANDBOX_INSTANCE_TYPE`, `HYPERPOD_SANDBOX_COUNT` | `ml.g5.xlarge`, `2` | B2 `sandbox` 인스턴스 그룹. `ml.g6.xlarge`도 지정할 수 있음 | `instance-group-sandbox.json.tpl` |

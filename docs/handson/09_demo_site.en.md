@@ -69,7 +69,7 @@ The published data and recordings are these.
 
 ![Five EKS pools with their node types, successful requests, p50, p95 and throughput](../images/demo/runtime-results-en.png)
 
-[Open the public B1 benchmark](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1)
+[Open the public B1 benchmark](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1) · [Open the B2 results](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b2)
 
 ![CloudFront demo with EKS and HyperPod clients scoring the same kernel](../images/demo/hyperpod-b1-benchmark-en.png)
 
@@ -328,6 +328,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 | Image-cache comparison | Save the output of `scripts/ops/bench.sh 32` to `bench.log` with `tee` | `--bench-log pass1=bench.log --bench-pass pass2`, node details with `--node` (see the example) |
 | GRPO training | `kubectl -n rl-trainer logs job/<job> > grpo.log`. It reads the reward function's `reward_batch` JSON lines and the trainer's metric lines (`{'loss': ...}`) | `--training-log grpo.log --model <model-id>` |
 | HyperPod B1 | The published B1 training log summary and fixed-kernel benchmark | `--b1-record docs/handson/data/hyperpod-b1.json` |
+| HyperPod B2 | GRPO and both 32-request benchmarks on the all-HyperPod cluster | `--b2-record docs/handson/data/hyperpod-b2.json` |
 | Version switch | Save the output of `scripts/ops/simulate.sh 30 20` to `simulate.log`, and switch the version with `rollout.sh` from [06](06_sandbox_update.md) meanwhile | `--simulation-log simulate.log` |
 | Terminal output | Save the output of commands such as `scripts/ops/verify.sh gvisor v1` to a file | `--transcript verify-gvisor=verify-gvisor.txt` (repeatable) |
 
@@ -340,6 +341,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 python3 demo/build_extras.py --out demo/site/data/extras.json \
   --source "Amazon EKS 1.36, us-west-2, 2026-11-18" \
   --b1-record docs/handson/data/hyperpod-b1.json \
+  --b2-record docs/handson/data/hyperpod-b2.json \
   --runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json \
   --bench-log pass1=bench.log --bench-pass pass2 \
   --node 'gvisor=g5.2xlarge|NVIDIA A10G' --node 'kata-qemu=g4dn.metal|Tesla T4' \

@@ -1639,5 +1639,125 @@
     "ready": 1
    }
   ]
+ },
+ "b2": {
+  "source": "Amazon EKS 1.36 · SageMaker HyperPod · us-east-1",
+  "region": "us-east-1",
+  "eks": "1.36",
+  "groups": {
+   "sandbox": {
+    "instance_type": "ml.g5.xlarge",
+    "count": 2
+   },
+   "system": {
+    "instance_type": "ml.m5.xlarge",
+    "count": 1
+   },
+   "trainer": {
+    "instance_type": "ml.g5.2xlarge",
+    "count": 1
+   }
+  },
+  "eks_managed_node_groups": 0,
+  "training_operator": "v1.3.0-eksbuild.1",
+  "gvisor": "20261109.0",
+  "sandbox_driver": "580.178.04",
+  "image_digests": {
+   "trainer": "sha256:6fd263f18f1e3a4502ab39856757218244cbfc90168a063d23fe39f7c1c482ea",
+   "sandbox": "sha256:92083cede0d745ab7494001c4253a61150571d54cb499041de023f0aff45610b",
+   "control": "sha256:bdcf68d2d17440d8581de483b217de722dc4a53af92e3b934bd9f170ae788518"
+  },
+  "verification": {
+   "golden_cases_passed": 6,
+   "blocked_egress_targets": 4,
+   "default_namespace_blocked": true
+  },
+  "training": {
+   "source": "HyperPod ml.g5.2xlarge · gVisor on HyperPod ml.g5.xlarge",
+   "model": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+   "completed": true,
+   "batches": [
+    {
+     "event": "reward_batch",
+     "batch": 1,
+     "global_step": 0,
+     "runtime": "gvisor-hyperpod",
+     "version": "v1",
+     "served_versions": {
+      "v1": 12
+     },
+     "routing_revision": 1,
+     "n": 12,
+     "status": {
+      "wrong_answer": 2,
+      "runtime_error": 8,
+      "ok": 1,
+      "compile_error": 1
+     },
+     "pass_rate": 0.0833,
+     "custom_kernel_rate": 0.0833,
+     "mean_speedup": 1.5698,
+     "eval_p50_s": 3.43,
+     "eval_p95_s": 9.085,
+     "batch_wall_s": 30.607,
+     "ts": 1795441277.567
+    }
+   ],
+   "switches": [],
+   "steps": [
+    {
+     "loss": 0.1143,
+     "completions/mean_length": 380.1,
+     "rewards/format_reward/mean": 0.75,
+     "rewards/correctness_reward/mean": 0.1125,
+     "rewards/speedup_reward/mean": 0.05158,
+     "reward": 0.2133,
+     "reward_std": 0.3587,
+     "step_time": 49.56,
+     "step": 1
+    }
+   ],
+   "train_runtime_s": 51.07
+  },
+  "bench": {
+   "sandbox_instance": "ml.g5.xlarge",
+   "gpu": "NVIDIA A10G",
+   "version": "v1",
+   "image_tag": "v1",
+   "replicas": 2,
+   "cold_start_s": [
+    10,
+    110
+   ],
+   "conditions": "One node had already pulled the sandbox image for a CUDA check. The pool was verified and completed one GRPO step before the sequential client runs.",
+   "rows": [
+    {
+     "client": "system",
+     "client_instance": "ml.m5.xlarge",
+     "golden": "relu_bias_triton",
+     "runtime": "gvisor-hyperpod",
+     "requests": 32,
+     "ok": 32,
+     "throughput_eval_per_s": 0.189,
+     "eval_p50_s": 10.448,
+     "eval_p95_s": 10.572,
+     "speedup_median": 1.727,
+     "ref_ms_median": 0.5849
+    },
+    {
+     "client": "trainer",
+     "client_instance": "ml.g5.2xlarge",
+     "golden": "relu_bias_triton",
+     "runtime": "gvisor-hyperpod",
+     "requests": 32,
+     "ok": 32,
+     "throughput_eval_per_s": 0.19,
+     "eval_p50_s": 10.48,
+     "eval_p95_s": 10.593,
+     "speedup_median": 1.725,
+     "ref_ms_median": 0.5845
+    }
+   ]
+  }
  }
 }

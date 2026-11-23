@@ -61,12 +61,12 @@ Amazon EKS 클러스터에서 학습과 코드 채점을 별도 GPU 노드에 �
 |---|---|---|---|
 | A. EC2 자체 운영 (기본) | EKS의 EC2 GPU 노드 (`g5.2xlarge`) | 같은 클러스터의 EC2 노드 | 모든 구성 요소를 직접 제어하고 싶을 때 |
 | B1. HyperPod (HyperPod 기본) | HyperPod 인스턴스 그룹 (`ml.g5.2xlarge`) | HyperPod를 연결한 같은 EKS 클러스터의 EC2 노드 | 장시간 학습에 HyperPod의 노드 자동 교체와 job 재시작이 필요할 때 |
-| B2. HyperPod (실험) | HyperPod 인스턴스 그룹 | 드라이버를 바꾼 custom AMI로 만든 HyperPod 인스턴스 그룹에서 실행하는 gVisor | 샌드박스 노드에도 HyperPod 노드 복구가 필요할 때 (custom AMI를 직접 관리, AWS에서 미실행) |
+| B2. HyperPod | HyperPod `trainer` | HyperPod `sandbox` 그룹의 `ml.g5.xlarge` 2대에서 gVisor 실행 | CPU 워커도 HyperPod에서 운영할 때. [B2 실습](handson/07_hyperpod_b2.md) |
 | C. c8i 단독 (GPU 없음) | 없음 (모델 없는 reward 루프) | `c8i.2xlarge` 한 대의 CPU 샌드박스 (gVisor, Kata + CLH, Kata + QEMU) | GPU 쿼터 없이, 컴퓨트 시간당 약 0.57 USD로 런타임 비교와 버전 교체를 먼저 익히고 싶을 때 ([핸즈온 10](handson/10_cpu_only.md)) |
 
 ### 시나리오별 구성
 
-네 시나리오는 같은 CDK 스택(private EKS API, SSM 터널, KMS 키, 로그)을 씁니다. A, B1, B2는 trainer와 샌드박스가 배치되는 위치가 다르고, C는 trainer와 모델 없이 CPU 샌드박스에서 채점과 버전 교체를 실습합니다.
+A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 관리형 B2는 HyperPod EKS 생성 마법사에서 제어 영역과 워커를 함께 구성합니다. C는 CPU 샌드박스에서 채점과 버전 교체를 실습합니다.
 
 === "A: EC2 GPU"
 
@@ -80,11 +80,11 @@ Amazon EKS 클러스터에서 학습과 코드 채점을 별도 GPU 노드에 �
 
     *그림 요약: trainer만 HyperPod 인스턴스 그룹(ml.g5.2xlarge)으로 옮겨 S3의 lifecycle 스크립트로 부팅하고, 샌드박스는 A와 같은 EC2 gVisor 노드에 남습니다.*
 
-=== "B2: HyperPod 학습과 샌드박스"
+=== "B2 · CPU와 GPU 모두 HyperPod"
 
-    [![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](images/architecture/scenario-b2.drawio.png)](images/architecture/scenario-b2.drawio.png)
+    [![HyperPod 콘솔에서 확인한 system, trainer, sandbox 인스턴스 그룹](images/console/hyperpod-b2-instance-groups.png)](images/console/hyperpod-b2-instance-groups.png)
 
-    *그림 요약: 샌드박스도 HyperPod 인스턴스 그룹(ml.g5.xlarge x2)에 올라가고, 이 노드는 한 번 빌드하는 custom AMI(드라이버 580.178.04)로 부팅합니다. AWS에서 실행해 보지 않은 실험 경로입니다.*
+    CPU 한 대가 공용 Pod를 맡고, GPU 한 대가 모델을 학습합니다. 나머지 GPU 두 대에서는 모델이 만든 코드를 채점합니다. [B2 따라 하기](handson/07_hyperpod_b2.md)
 
 === "C: CPU 전용"
 
@@ -124,7 +124,7 @@ Amazon EKS 클러스터에서 학습과 코드 채점을 별도 GPU 노드에 �
 
 !!! warning "직접 확인해야 하는 범위"
     - **실행한 것**: 실습 계정에서 시나리오 A(gVisor GPU, `g5`), 시나리오 C(CPU 런타임 세 개)와 버전 교체, Kata GPU(`g4dn.metal`), 다섯 개 풀의 런타임 벤치마크([08 런타임 벤치마크](handson/08_benchmark.md)), 공개 데모 사이트를 실행했습니다. 실험용 Kata CLH GPU는 VM이 시작되지 않았습니다. 날짜별 실행 기록은 [검증된 사실과 출처](reference/sources.md#aws-실행-기록)에 있습니다.
-    - **검증 범위**. 시나리오 A의 [학습 중 전환·롤백](handson/06_sandbox_update.md#switch-batches)과 `--finish`까지 실행했습니다. HyperPod B2는 실험 경로입니다.
+    - **검증 범위**. 시나리오 A의 [학습 중 전환·롤백](handson/06_sandbox_update.md#switch-batches)과 `--finish`까지 실행했습니다. 관리형 B2에서도 HyperPod 워커로 GRPO 한 스텝을 완료했습니다.
     - **수치의 출처**: 가격과 버전 같은 수치는 직접 측정한 값이 아니라 공식 문서와 공개 자료에서 가져온 값입니다.
     - **로컬 테스트**: 확인 범위는 [시작하기](getting_started.md)에 있습니다.
 

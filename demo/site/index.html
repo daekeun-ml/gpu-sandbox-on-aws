@@ -136,7 +136,7 @@
           <span id="grpo-source" class="muted small"></span>
         </div>
         <label id="grpo-runs" hidden><span data-i18n="runRecord"></span>
-          <select id="grpo-run"><option value="training">EC2</option><option value="b1">HyperPod B1</option></select>
+          <select id="grpo-run"><option value="training">EC2</option><option value="b1">HyperPod B1</option><option value="b2">HyperPod B2</option></select>
         </label>
         <p id="grpo-empty" class="muted" hidden data-i18n="noData"></p>
         <div class="chart-wrap"><svg id="grpo-chart" viewBox="0 0 900 300" role="img" aria-label="GRPO reward batches"></svg></div>
@@ -196,6 +196,15 @@
         <div id="b1-clients" class="cards"></div>
         <p class="muted small" data-i18n="b1Note"></p>
         <a id="b1-pattern" href="architecture.html?pattern=b1" data-i18n="b1Diagram"></a>
+      </article>
+      <article id="hyperpod-b2" class="panel" hidden>
+        <div class="panel-head">
+          <h3 data-i18n="b2Title"></h3>
+          <span id="b2-source" class="muted small"></span>
+        </div>
+        <p id="b2-setup"></p>
+        <div id="b2-clients" class="cards"></div>
+        <a id="b2-guide" data-i18n="b2Guide"></a>
       </article>
       <h3 id="runtime-bench" data-i18n="runtimeComparison"></h3>
       <p id="runtime-source" class="muted small"></p>

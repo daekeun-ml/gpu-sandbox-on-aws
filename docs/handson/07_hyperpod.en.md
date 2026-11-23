@@ -6,7 +6,7 @@ In B1 the model trains on a SageMaker HyperPod node and its generated code is gr
 2. Once the HyperPod trainer is `Schedulable` and the EC2 pool passes verification, [submit one step](#6-training).
 3. In the [run and its logs](#how-to-verify), find the trainer pod's node, the verdicts in `reward_batch`, and the job's `Completed` status. [Delete HyperPod first](#cleanup) during cleanup.
 
-[B2](#b2) is a separate experimental deployment for putting grading nodes on HyperPod as well.
+The [B2 lab](07_hyperpod_b2.md) puts the CPU system worker, GPU trainer and GPU graders in HyperPod instance groups.
 
 ??? note "Terms (expand if a word is new to you)"
     - **SageMaker HyperPod**: an AWS managed cluster for long-running training. With EKS as the orchestrator, it attaches groups of nodes to an existing EKS cluster.
@@ -25,7 +25,7 @@ In B1 the model trains on a SageMaker HyperPod node and its generated code is gr
     - **ENI**: a virtual network interface attached to an instance. The VPC CNI hands out the ENI's IP addresses to pods, so the number of ENIs sets the per-node pod limit.
 
 !!! warning "Validation status"
-    B1 completed one GRPO step on an `ml.g5.2xlarge` in `us-west-2`. Two EC2 gVisor sandboxes evaluated 12 generated submissions. The [run record and screenshots](#how-to-verify) show node placement and the completed job. B2 is experimental.
+    B1 completed one GRPO step on an `ml.g5.2xlarge` in `us-west-2`. Two EC2 gVisor sandboxes evaluated 12 generated submissions. The [run record and screenshots](#how-to-verify) show node placement and the completed job. [Managed B2](07_hyperpod_b2.md) uses graders on HyperPod.
 
 ## Layout
 
@@ -59,7 +59,7 @@ flowchart LR
 | Configuration | Training | Sandboxes | Status |
 |---|---|---|---|
 | B1 (default) | HyperPod instance group | EC2 node groups in the same EKS cluster (gVisor `g5.xlarge`, optionally Kata) | The default path of this page |
-| B2 (experimental) | HyperPod instance group `trainer` | gVisor on the HyperPod instance group `sandbox` (custom AMI) | [B2 procedure below](#b2). Not run on AWS |
+| B2 | HyperPod `trainer` | gVisor on the HyperPod `sandbox` group | A HyperPod `system` group runs the CPU pods. [B2 lab and screenshots](07_hyperpod_b2.md) |
 
 ## Before you begin
 
@@ -219,7 +219,7 @@ NAME              STATUS   ROLES    AGE   VERSION   NODE-HEALTH-STATUS   INSTANC
 `cluster.json.tpl` does not configure deep health checks (`OnStartDeepHealthChecks`: `InstanceStress`, `InstanceConnectivity` and others); add them to the instance group yourself if you need them.
 
 ??? note "Training operator permissions"
-    The B1 and B2 CDK stacks install the `cert-manager` and `eks-pod-identity-agent` add-ons and associate the `aws-hyperpod/hp-training-operator-controller-manager` service account with an IAM role. `create.sh` tags the HyperPod cluster `SageMaker=true`, which the role’s `AmazonSageMakerHyperPodTrainingOperatorAccess` policy requires for `DescribeClusterNode`.
+    The B1 and earlier B2 CDK stacks install the `cert-manager` and `eks-pod-identity-agent` add-ons and associate the `aws-hyperpod/hp-training-operator-controller-manager` service account with an IAM role. `create.sh` tags the HyperPod cluster `SageMaker=true`, which the role’s `AmazonSageMakerHyperPodTrainingOperatorAccess` policy requires for `DescribeClusterNode`.
 
 On a rerun, the script behaves differently per step.
 
@@ -384,10 +384,14 @@ Load `$AWS_REGION`, `$CLUSTER_NAME` and `$HYPERPOD_CLUSTER_NAME` with `source sc
 
 A separate fixed-kernel benchmark sent 32 requests from the HyperPod trainer node to the two EC2 sandboxes. All 32 passed. Server-side p50 was 9.937 s and pool throughput was 0.199 eval/s. [Benchmark, screenshot and run data](08_benchmark.md#hyperpod-b1)
 
-<details class="note" markdown="1">
-<summary>B2 experiment · host the grading pool on HyperPod</summary>
+## B2 · Run all CPU and GPU workers on HyperPod { #b2 }
 
-## B2 (experimental): gVisor on a HyperPod instance group { #b2 }
+In Northern Virginia the HyperPod EKS creation workflow provisioned one `system` worker, one `trainer` and two `sandbox` workers. Kubernetes reported all four workers on a cluster with zero EKS managed node groups. [B2 lab and screenshots](07_hyperpod_b2.md)
+
+<details class="note" markdown="1">
+<summary>Earlier CDK option with EC2 system nodes and a custom sandbox AMI</summary>
+
+### Earlier B2 custom AMI path
 
 B2 puts both the trainer and the GPU sandboxes on HyperPod instance groups. The sandbox instance group (`sandbox`) boots from a custom AMI that swaps the NVIDIA driver to 580.178.04 and installs gVisor, and runs the same kind of gVisor pool as scenario A (`gvisor-hyperpod`).
 
@@ -567,7 +571,7 @@ Check the sandbox group's AMI ID and that AMI's driver and gVisor versions (the 
 
 ### Step 4: Check the nodes (`hyperpod/check_gvisor.sh`)
 
-Read the driver version on each HyperPod node and report whether the pinned gVisor supports it. The script runs a short-lived debug pod per node and, at the end, deletes every pod in the `default` namespace whose name starts with `node-debugger-`. Check first whether another operator has a `kubectl debug node/...` session open.
+The script checks HyperPod workers outside the CPU system group against the driver list for the pinned gVisor release. It removes its temporary namespace and debug pods when it finishes.
 
 ```bash
 scripts/hyperpod/check_gvisor.sh
@@ -576,7 +580,7 @@ scripts/hyperpod/check_gvisor.sh
 **What to look for:** this line on both sandbox nodes. The trainer node uses the default AMI and prints `595.91.07: NOT supported`, which is expected because no sandbox runs there.
 
 ```text
-  driver 580.178.04: SUPPORTED by gVisor 20261109.0: mode B2 is possible
+  driver 580.178.04: SUPPORTED by gVisor 20261109.0
 ```
 
 Also check that Kubernetes sees the GPUs. Both nodes should show `1`.
@@ -649,7 +653,7 @@ A custom AMI does not change this: an AMI only changes software, while `/dev/kvm
 If you need Kata sandboxes, keep them on EC2 node groups in the same cluster (`g4dn.metal`, `c8i`), as in B1.
 
 !!! question "❓ Misconception: with HyperPod, the GPU sandboxes have to run on HyperPod nodes too"
-    HyperPod on EKS attaches instance groups to an existing EKS cluster, so the sandboxes can stay on EC2 node groups in the same cluster with the same NetworkPolicy and token authentication. Here HyperPod handles node recovery and job restarts for the long-running trainer. B2 means maintaining a custom AMI yourself, so choose it when the sandbox nodes also need HyperPod's node recovery.
+    HyperPod on EKS attaches instance groups to an existing EKS cluster, so the sandboxes can stay on EC2 node groups in the same cluster with the same NetworkPolicy and token authentication. Here HyperPod handles node recovery and job restarts for the long-running trainer. In [managed B2](07_hyperpod_b2.md), the system pods and the GPU grading pool also run on HyperPod workers.
 
 </details>
 
@@ -661,7 +665,7 @@ If you need Kata sandboxes, keep them on EC2 node groups in the same cluster (`g
 - **Deep health checks:** not configured in `cluster.json.tpl`.
 - **Kata without a GPU:** likely blocked on HyperPod nodes by the same `/dev/kvm` condition (inference, unverified).
 - **B1 scope**. We completed one GRPO step and ran the fixed-kernel scoring benchmark from the HyperPod trainer node. Node replacement and checkpoint recovery require separate tests.
-- **B2 (experimental):** not run on AWS with `ml.g5` either. Five things are unconfirmed.
+- **Earlier CDK B2 option:** the EC2-built custom AMI has not been run on HyperPod. Five things are unconfirmed.
     - Whether the HyperPod base AMI installed the driver with dnf or with the `.run` installer (the builder handles both)
     - Whether HyperPod's image validation accepts an image with a replaced driver
     - Whether the HyperPod health monitoring agent works with the 580 driver and on nodes with a custom taint
@@ -670,6 +674,8 @@ If you need Kata sandboxes, keep them on EC2 node groups in the same cluster (`g
   Do run the step 4 checks (the driver is in `runsc nvproxy list-supported-drivers`) and `scripts/ops/verify.sh` from step 5 on the first sandbox node. 580.178.04 does not support the `ml.g7` family (per the EKS documentation g7 needs 595 or later).
 
 ## Cleanup
+
+These commands apply to B1 and the earlier CDK deployment. For the managed workflow, follow [B2 stack cleanup](07_hyperpod_b2.md#cleanup).
 
 Delete HyperPod first, then the EKS cluster. Both scripts ask you to type a confirmation word at each step.
 

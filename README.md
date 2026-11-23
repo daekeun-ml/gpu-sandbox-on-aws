@@ -23,7 +23,7 @@ GRPO 실습에서는 모델이 작성한 코드를 GPU 샌드박스에서 채점
 
 *그림 요약: policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 선택한 런타임의 샌드박스 풀에 전달되고, 풀이 측정한 정확성과 speedup이 reward로 쓰입니다. GPU 채점은 gVisor와 Kata + QEMU 풀이 맡고, Kata + Cloud Hypervisor는 기본적으로 CPU에서 실행합니다.*
 
-네 시나리오는 같은 CDK 스택(private EKS API, SSM 터널, KMS 키, 로그)을 씁니다. A, B1, B2는 trainer와 샌드박스가 배치되는 위치가 다르고, C는 trainer와 모델 없이 CPU 샌드박스에서 채점과 버전 교체를 실습합니다.
+A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 관리형 B2는 HyperPod EKS 생성 마법사에서 제어 영역과 워커를 함께 구성합니다. C는 CPU 샌드박스에서 채점과 버전 교체를 실습합니다.
 
 ### 시나리오 A: EC2 GPU (기본)
 
@@ -43,9 +43,9 @@ GRPO 실습에서는 모델이 작성한 코드를 GPU 샌드박스에서 채점
 <details>
 <summary><b>시나리오 B2: HyperPod 학습과 샌드박스</b></summary>
 
-![시나리오 B2: trainer와 gVisor 풀이 모두 HyperPod 인스턴스 그룹에 있고, 샌드박스 노드는 custom AMI로 부팅하는 구성](docs/images/architecture/scenario-b2.drawio.png)
+![HyperPod에서 실행한 시스템, 학습, 채점 인스턴스 그룹](docs/images/console/hyperpod-b2-instance-groups.png)
 
-*그림 요약: 샌드박스도 HyperPod 인스턴스 그룹(ml.g5.xlarge x2)에 올라가고, 이 노드는 한 번 빌드하는 custom AMI(드라이버 580.178.04)로 부팅합니다. AWS에서 실행해 보지 않은 실험 경로입니다.*
+시스템용 CPU 워커와 학습·채점용 GPU 워커를 모두 HyperPod에 배치합니다. [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
 
 </details>
 
@@ -77,7 +77,7 @@ AWS에서는 목적에 맞춰 경로를 고를 수 있습니다.
 
 - **C (CPU 전용)**　모델 없이 채점 흐름을 실행해 보고 gVisor와 Kata를 비교합니다. [CPU 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/10_cpu_only/)
 - **A (EC2 GPU)**　GPU에서 커널을 채점하고 그 결과로 GRPO 학습을 실행합니다. [클러스터 준비](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/01_cluster_and_images/)
-- **B1과 B2 (HyperPod)**　B1은 trainer를 HyperPod에 둡니다. B2는 샌드박스도 HyperPod에 배치하는 실험 경로입니다. [HyperPod 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/)
+- **HyperPod B1과 B2**. B1은 HyperPod에서 학습하고 EC2에서 채점합니다. B2는 CPU 워커와 GPU 워커 세 대를 모두 HyperPod에 배치합니다. [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
 
 AWS 리소스는 사용하지 않는 동안에도 과금될 수 있습니다. 배포 전에 [비용 추정](https://daekeun-ml.github.io/gpu-sandbox-on-aws/concepts/04_platforms_and_instances/)을 확인하고, 실습이 끝나면 [정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/99_cleanup/)를 따르세요.
 
@@ -89,7 +89,7 @@ AWS 리소스는 사용하지 않는 동안에도 과금될 수 있습니다. �
 
 ## 검증 상태
 
-AWS 실습 계정에서 EC2 GPU 학습(A), CPU 채점과 버전 전환(C), Kata + QEMU의 GPU passthrough를 확인했습니다. Kata + Cloud Hypervisor는 C의 CPU 풀에서 검증했고, 별도 GPU 실험에서는 VM 부팅이 타임아웃으로 끝났습니다. HyperPod B1에서는 GRPO 한 스텝을 실행해 EC2 gVisor 샌드박스 2개로 제출 코드 12개를 채점했습니다. HyperPod B2와 GPU 학습 중 풀 전환은 AWS에서 확인하지 않았습니다. [실행 기록과 측정 범위](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/sources/#aws-실행-기록)
+AWS 실습 계정에서 EC2 GPU 학습(A), CPU 채점과 버전 전환(C), Kata + QEMU의 GPU passthrough를 확인했습니다. Kata + Cloud Hypervisor는 C의 CPU 풀에서 검증했고, 별도 GPU 실험에서는 VM 부팅이 타임아웃으로 끝났습니다. HyperPod B1에서는 GRPO 한 스텝을 실행해 EC2 gVisor 샌드박스 2개로 제출 코드 12개를 채점했습니다. 관리형 B2는 CPU와 GPU 워커를 모두 HyperPod에 두고 GRPO 한 스텝과 벤치마크 64건을 완료했습니다. [실행 기록과 측정 범위](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/sources/#aws-실행-기록)
 
 ## License
 

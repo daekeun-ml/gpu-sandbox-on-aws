@@ -1,5 +1,7 @@
 # 99 정리
 
+HyperPod 마법사로 만드는 관리형 B2는 [B2 전용 절차](07_hyperpod_b2.md#cleanup)를 따르세요. 이 페이지의 CDK 명령은 A, B1, C와 기존 custom AMI 경로에 적용됩니다.
+
 먼저 `aws sts get-caller-identity`의 계정과 `scripts/config.env`의 `AWS_REGION`, `CLUSTER_NAME`을 확인하세요. 현재 `kubectl` context도 지울 실습 클러스터와 일치해야 합니다. 터널은 열어 둡니다. 사용한 리소스에 맞는 순서로 진행하세요.
 
 1. **에피소드를 실행했다면** 남은 [claim과 warm pool](#0-agent-sandbox-확장-쓴-경우만)을 먼저 정리하세요. **HyperPod를 썼다면** EKS가 있는 동안 [HyperPod 클러스터](#1-hyperpod-먼저-시나리오-b)를 삭제합니다.

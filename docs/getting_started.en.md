@@ -1,5 +1,7 @@
 # Getting started
 
+For B2 on HyperPod-managed CPU and GPU workers, use the [regional quotas and provisioning steps](handson/07_hyperpod_b2.md).
+
 !!! info "TL;DR"
     Check the plumbing on a local CPU machine without AWS first, then fill in `scripts/config.env` and pick a scenario.
 
@@ -61,6 +63,7 @@ Use the local CPU test to check installation and scoring first. Then choose an A
 | Running On-Demand G and VT instances | scenario A 16, B1 8, B2 and C 0 | the default can be 0 for new accounts |
 | Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances | 6 (system `m6i.large` 2 x 2 + the SSM access instance `t4g.nano` 2) | documented default is 5 |
 | `ml.g5.2xlarge for cluster usage` (SageMaker) | 1 (Scenario B) | HyperPod-specific quota |
+| `ml.m5.xlarge for cluster usage` (SageMaker) | 1 (managed B2) | CPU `system` group |
 | `ml.g5.xlarge for cluster usage` (SageMaker) | 2 (Scenario B2) | the B2 `sandbox` instance group (`HYPERPOD_SANDBOX_COUNT`) |
 
 - **G and VT, scenario A**: the 16 is trainer `g5.2xlarge` 8 + gVisor `g5.xlarge` 4 x 2.
@@ -68,7 +71,7 @@ Use the local CPU test to check installation and scoring first. Then choose an A
 - **G and VT, B2 and C**: they have no EC2 GPU nodes and need no G and VT quota.
 - **With Kata GPU**: add `g4dn.metal` 96 to G and VT.
 - **Standard, scenario C or with Kata CPU**: add `c8i.2xlarge` 8, for 14.
-- **Standard, B2 and Kata GPU**: they need 2 more for the `m6i.large` builder while the custom AMI builds: 8, or 16 together with c8i.
+- **Standard, CDK B2 and Kata GPU**: they need 2 more for the `m6i.large` builder while the custom AMI builds: 8, or 16 together with c8i.
 - **B1 and B2**: check the SageMaker quotas above separately.
 
 Quota increases can take time, so request them before creating the cluster.
@@ -359,7 +362,7 @@ scripts/01_check_prereqs.sh
 |---|---|---|---|
 | Scenario A (EC2 self-managed) | you want to control every component | `scripts/02_create_cluster.sh` | [Hands-on 00 Overview](handson/00_overview.md) |
 | Scenario B1 (HyperPod, default) | a long run needs HyperPod's automatic node replacement and job restarts | `scripts/02_create_cluster.sh --hyperpod`, then `scripts/hyperpod/create.sh` | [07 HyperPod scenario](handson/07_hyperpod.md) |
-| Scenario B2 (HyperPod, experimental) | you want the sandbox nodes on a HyperPod instance group too | `scripts/02_create_cluster.sh --hyperpod-b2`, then `scripts/hyperpod/build_b2_ami.sh` | [B2 in 07 HyperPod scenario](handson/07_hyperpod.md#b2). You maintain a custom AMI |
+| Scenario B2 (managed HyperPod) | Put the CPU worker, training worker and graders on HyperPod | `scripts/hyperpod/create_managed.sh` | [Managed B2 lab](handson/07_hyperpod_b2.md) |
 | Scenario C (c8i only, no GPU) | you have no GPU quota yet, or want to learn the runtime comparison and the version swap first for about 0.57 USD per hour | `scripts/02_create_cluster.sh --cpu-only` | [Hands-on 10 CPU-only path on c8i](handson/10_cpu_only.md) |
 | Production | you scale out with Karpenter NodePools, the sandbox gateway and veRL | after the hands-on | [Production 00 Architecture](production/00_architecture.md) |
 
@@ -372,7 +375,7 @@ If you have not chosen a runtime and instance types yet, read [05 Decision guide
 - The author checked the local steps (sections 1 to 4) on macOS (CPU only) when the suite had 94 tests (it now has 110). On November 22, 2026, the full pytest suite and the CDK tests passed on Linux.
 - The author did not run `scripts/01_check_prereqs.sh` in section 5.
 - Of the later steps, the gVisor path of scenario A (`02` to `08`), scenario C, Kata GPU (`g4dn.metal`) and the runtime benchmark ran in a practice account. The dated run record is in [Verified facts and sources](reference/sources.md#aws-run-record).
-- Scenario A completed a [gVisor version switch during training](handson/06_sandbox_update.md#switch-batches). HyperPod B2 remains experimental.
+- Scenario A completed a [gVisor version switch during training](handson/06_sandbox_update.md#switch-batches). Managed B2 completed training and 64 benchmark requests in Northern Virginia.
 - The dry run shows no training effect; real training runs on a GPU in [05 On-policy GRPO training](handson/05_grpo_training.md).
 
 ## Time and cost

@@ -199,7 +199,7 @@ The minimal path is what `scripts/02_create_cluster.sh` creates (scenario A, gVi
 | EKS control plane, NAT gateway, EBS gp3, SSM access instance (`t4g.nano`), KMS key | | See each pricing page | Extra |
 
 - Scenario B1 uses `ml.g5.2xlarge` instead of `g5.2xlarge`, so the minimal path is 3.719 and the full path 11.91784 USD per hour.
-- Scenario B2 runs the sandboxes on 2x HyperPod `ml.g5.xlarge` (1.408) instead of EC2 gVisor nodes, so the minimal path is 0.192 + 1.515 + 2.816 = 4.523, and the full path with the Kata nodes 12.72184 USD per hour.
+- [Managed B2](../handson/07_hyperpod_b2.md) uses an `ml.m5.xlarge` CPU worker (0.230), an `ml.g5.2xlarge` trainer (1.515) and two `ml.g5.xlarge` graders (2 × 1.408). The four HyperPod workers total **4.561 USD/hour** at `us-east-1` on-demand rates. EKS, storage and networking are billed separately.
 - Worked example: 8 hours of the minimal path plus 2 hours of `g4dn.metal` is 3.416 × 8 + 7.824 × 2 = 42.976 USD (EC2 only; the durations are assumptions).
 - After the cluster is deleted, the EBS snapshot of the Kata AMI and the ECR images can remain and keep billing. `scripts/08_cleanup.sh` asks before deregistering the AMI, and `--images` deletes the ECR repositories as well.
 

@@ -252,6 +252,8 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source": args.source,
     }
+    if args.b2_record:
+        document["b2"] = json.loads(Path(args.b2_record).read_text())
     if args.b1_record:
         document["b1"] = json.loads(Path(args.b1_record).read_text())
     if args.runtime_record:
@@ -304,6 +306,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--check", nargs="+", metavar="FILE", help="only scan these JSON files")
     p.add_argument("--out")
     p.add_argument("--source", default="cluster run")
+    p.add_argument("--b2-record", help="Managed B2 training and benchmark record, e.g. docs/handson/data/hyperpod-b2.json")
     p.add_argument("--b1-record", help="B1 training and benchmark record, e.g. docs/handson/data/hyperpod-b1.json")
     p.add_argument("--runtime-record", help="runtime benchmark metadata with the JSONL filename and pool configuration")
     p.add_argument("--bench-log", help="LABEL=path to the stdout of scripts/ops/bench.sh")
@@ -342,7 +345,7 @@ def main(argv: list[str] | None = None) -> int:
     counts = {k: len(v) if isinstance(v, list) else 1 for k, v in document.items() if k in ("transcripts",)}
     print(json.dumps({"event": "extras", "out": args.out, **counts,
                       "bench": "bench" in document, "runtime_run": "runtime_run" in document, "training": "training" in document,
-                      "simulation": "simulation" in document, "b1": "b1" in document}))
+                      "simulation": "simulation" in document, "b1": "b1" in document, "b2": "b2" in document}))
     return 0
 
 

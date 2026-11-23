@@ -110,6 +110,16 @@ CHANGE_SCENARIO=1 scripts/02_create_cluster.sh              # adds the trainer (
 
 ## HyperPod
 
+### 관리형 B2에서 확인한 문제
+
+| 실습에서 본 증상 | 해결 방법 |
+|---|---|
+| 그룹은 `InService`인데 `CurrentCount`가 `TargetCount`보다 작음 | `list-cluster-nodes --include-node-logical-ids`로 각 요청을 확인합니다. 이번에는 `INSUFFICIENT_CAPACITY_ERROR`가 발생했고 HyperPod가 `Continuous` 모드에서 다시 요청해 GPU 세 대를 확보했습니다. |
+| 마법사 스택은 `CREATE_COMPLETE`인데 학습 애드온이 cert-manager 관련 `K8sResourceNotFound`를 반환 | 워커가 준비된 뒤 `scripts/hyperpod/prepare_managed.sh`를 실행합니다. 인증서 웹훅이 준비될 때까지 기다린 뒤 실패한 애드온을 같은 버전으로 다시 설치합니다. |
+| 채점 노드에 `595.112.07`이 표시되거나 `nvidia_uvm` 모듈이 사용 중 | 두 채점 워커가 `Ready`가 되면 `scripts/hyperpod/reboot_sandboxes.sh`로 `580.178.04`를 디스크에 설치하고 HyperPod API로 재부팅합니다. 마지막에 실행 중인 커널 모듈의 버전을 확인합니다. |
+
+[재현 명령과 실행 화면, 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
+
 - **클러스터는 `InService`인데 trainer 인스턴스가 `Pending`입니다.** B1 실습에서는 클러스터가 먼저 준비됐습니다. `source scripts/config.env`를 실행하고 `aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME"`로 인스턴스 상태를 보세요. 이어서 `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status`에서 `Ready`와 `Schedulable`을 확인하세요. [B1 실행 화면](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod/#확인-방법)
 - **Worker가 `Pending`이고 이벤트에 `Insufficient cpu` 또는 `Insufficient memory`가 나옵니다.** `kubectl describe node <trainer-node>`에서 이미 할당된 자원을 확인하세요. B1의 `ml.g5.2xlarge`에서는 operator와 시스템 pod도 같은 노드를 사용했습니다. 템플릿이 worker에 요청하는 자원은 CPU 5개와 메모리 24 GiB입니다.
 

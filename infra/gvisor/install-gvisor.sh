@@ -46,9 +46,9 @@ fi
 
 # nvproxy only accepts driver versions it knows. Warn early if the loaded driver is not one of
 # them; the sandbox pod's GPU probe will fail closed in that case.
-if [[ -r /proc/driver/nvidia/version ]]; then
-  driver="$(sed -n 's/.*Kernel Module[^0-9]*\([0-9.]*\).*/\1/p' /proc/driver/nvidia/version | head -1)"
-  if ! /usr/local/bin/runsc nvproxy list-supported-drivers 2>/dev/null | grep -qwF "${driver}"; then
+if [[ -r /sys/module/nvidia/version ]]; then
+  driver="$(< /sys/module/nvidia/version)"
+  if ! /usr/local/bin/runsc nvproxy list-supported-drivers 2>/dev/null | grep -wF -- "${driver}" >/dev/null; then
     echo "WARNING: NVIDIA driver ${driver} is not supported by gVisor ${GVISOR_RELEASE} nvproxy" >&2
   fi
 fi

@@ -23,7 +23,7 @@ The GRPO exercise grades model-generated code in GPU sandboxes and uses correctn
 
 *Takeaway: Kernel code from the policy model goes to the sandbox pool of the selected runtime with its version pinned per group, and correctness and speedup come back as the reward. GPU scoring runs on the gVisor and Kata + QEMU pools; Kata + Cloud Hypervisor runs on CPU by default.*
 
-All four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key, logs). A, B1 and B2 differ in where the trainer and the sandboxes run; C has no trainer or model and practices scoring and version swaps on CPU sandboxes.
+A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the control plane and workers from the SageMaker HyperPod EKS wizard. C runs scoring and version changes on CPU sandboxes.
 
 ### Scenario A: EC2 GPU (default)
 
@@ -43,9 +43,9 @@ All four scenarios use the same CDK stack (private EKS API, SSM tunnel, KMS key,
 <details>
 <summary><b>Scenario B2: training and sandboxes on HyperPod</b></summary>
 
-![Scenario B2: the trainer and the gVisor pools both on HyperPod instance groups, the sandbox nodes booting from a custom AMI](docs/images/architecture/scenario-b2.drawio.png)
+![The three managed HyperPod instance groups](docs/images/console/hyperpod-b2-instance-groups.png)
 
-*Takeaway: The sandboxes also move to a HyperPod instance group (ml.g5.xlarge x2), whose nodes boot from a custom AMI baked once (driver 580.178.04). This experimental path has not been run on AWS.*
+The CPU system worker, the GPU trainer and both GPU graders run on HyperPod. [B2 hands-on](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
 
 </details>
 
@@ -77,7 +77,7 @@ Choose an AWS path that matches your goal.
 
 - **C (CPU only)** Run scoring without a model and compare gVisor and Kata. [CPU exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/10_cpu_only/)
 - **A (EC2 GPU)** Score GPU kernels and use the results for GRPO training. [Cluster setup](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/01_cluster_and_images/)
-- **B1 and B2 (HyperPod)** B1 places the trainer on HyperPod. B2 also places sandboxes there as an experimental path. [HyperPod exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod/)
+- **HyperPod B1 and B2**. B1 puts the trainer on HyperPod and uses EC2 graders. B2 puts the CPU worker and all three GPU workers on HyperPod. [B2 lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
 
 AWS resources can incur charges while idle. Check the [cost estimates](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/concepts/04_platforms_and_instances/) before deployment and follow the [cleanup steps](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/99_cleanup/) at the end.
 
@@ -89,7 +89,7 @@ AWS resources can incur charges while idle. Check the [cost estimates](https://d
 
 ## Validation status
 
-The AWS exercises verified EC2 GPU training (A), CPU grading and version switching (C), and GPU passthrough with Kata + QEMU. The Kata + Cloud Hypervisor CPU pool passed in scenario C. Its GPU experiment timed out while starting the VM. A one-step HyperPod B1 job scored 12 submissions on two EC2 gVisor sandboxes. HyperPod B2 and switching pools during GPU training were not verified on AWS. [Run records and measurement scope](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/sources/#aws-run-record)
+The AWS exercises verified EC2 GPU training (A), CPU grading and version switching (C), and GPU passthrough with Kata + QEMU. The Kata + Cloud Hypervisor CPU pool passed in scenario C. Its GPU experiment timed out while starting the VM. A one-step HyperPod B1 job scored 12 submissions on two EC2 gVisor sandboxes. Managed B2 completed one GRPO step and 64 benchmark evaluations with all workers on HyperPod. [Run records and measurement scope](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/sources/#aws-run-record)
 
 ## License
 

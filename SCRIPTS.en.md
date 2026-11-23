@@ -212,6 +212,17 @@ All five EKS pools completed 32 requests each (160/160). [Results and run condit
 
 ## HyperPod
 
+### Managed B2 with CPU and GPU workers on HyperPod
+
+| Command | What it does |
+|---|---|
+| `scripts/hyperpod/create_managed.sh` | Submits the same AWS template as the HyperPod EKS wizard. Creates the control plane and the `system`, `trainer` and `sandbox` HyperPod groups. |
+| `scripts/hyperpod/reboot_sandboxes.sh` | Stages the supported driver on the two grading workers, reboots workers that need it through HyperPod and verifies the running module. |
+| `scripts/hyperpod/prepare_managed.sh` | Enables VPC CNI NetworkPolicy, places CoreDNS on `system` and checks the training operator and its certificate webhook. |
+| `scripts/hyperpod/bench_b2.sh 32` | Runs the same Triton evaluation from the `system` and `trainer` groups in sequence. Writes one JSONL file per client. |
+
+See the [B2 lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/) for regional settings, screenshots and cleanup. The `create.sh` and AMI build commands below belong to the separate CDK deployment.
+
 ### `scripts/hyperpod/create.sh`
 
 - **What it does**: Prepares the HyperPod dependency Helm chart, the lifecycle script bucket (Block Public Access) and the execution role, attaches a HyperPod cluster to EKS with `create-cluster`, and installs the training operator add-on. `--b2` adds a `sandbox` instance group that boots from the custom AMI, and the `gvisor-hyperpod` RuntimeClass.
@@ -234,12 +245,11 @@ All five EKS pools completed 32 requests each (160/160). [Results and run condit
 
 ### `scripts/hyperpod/check_gvisor.sh`
 
-- **What it does**: Creates a debug pod on every HyperPod node and prints whether its NVIDIA driver version is on the nvproxy support list of the pinned gVisor release. At the end it deletes every pod in `default` whose name starts with `node-debugger-`.
+- **What it does**. Checks the NVIDIA driver of each HyperPod worker outside the CPU system group against the pinned gVisor release. It creates a temporary namespace for its debug pods and removes that namespace after the checks.
 - **Usage**: `scripts/hyperpod/check_gvisor.sh` (no arguments)
 - **When**: In B2 after `hyperpod/create.sh --b2`, before deploying the pool.
 - **Time and cost**: Not recorded in the docs (each node downloads gVisor). Nothing is billed.
-- **Running it again**: It does not change the nodes, so it is safe. But every run deletes all `node-debugger-*` pods in `default`, including `kubectl debug node` pods you created yourself.
-- **Success signal**: `driver 580.178.04: SUPPORTED by gVisor ...: mode B2 is possible` on the two sandbox nodes. `driver 595.91.07: NOT supported ...` on the trainer node is expected.
+- **Success signal**: `driver 580.178.04: SUPPORTED by gVisor ...` on the two sandbox nodes. `driver 595.91.07: NOT supported ...` on the trainer node is expected.
 - **If it fails**: [Troubleshooting: HyperPod](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/troubleshooting/#hyperpod), [B2 in 07 HyperPod scenario](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod/#b2)
 
 <a name="scriptshyperpodrun_grposh"></a>

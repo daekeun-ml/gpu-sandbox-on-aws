@@ -159,7 +159,7 @@ veRL sends each sample with a `group_key` to `POST /v1/evaluate`, and the gatewa
 ## Scenario B: training on HyperPod
 
 - **B1**: moves only the trainer to a HyperPod instance group and keeps the sandbox pools on EC2 NodePools in the same EKS cluster. The veRL RayCluster template selects HyperPod nodes through `VERL_NODE_SELECTOR`.
-- **B2**: puts the sandboxes on HyperPod nodes too, and is experimental. The nvproxy in gVisor release-20261109.0 does not know NVIDIA driver 595.91.07 in the HyperPod EKS AMI, so B2 needs a custom AMI with the driver swapped to 580.178.04 (steps in [07 HyperPod scenario](../handson/07_hyperpod.md#b2)).
+- **B2** runs system pods, the trainer and both gVisor graders on HyperPod. The two grading workers activate a supported NVIDIA driver with a managed reboot. [Managed B2 deployment](../handson/07_hyperpod_b2.md)
 
 ## Order of operations
 

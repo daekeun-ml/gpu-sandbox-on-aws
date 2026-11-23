@@ -1,5 +1,7 @@
 # 01 Cluster and images
 
+For the HyperPod-managed B2 cluster, follow the [dedicated B2 workflow](07_hyperpod_b2.md). The CDK commands on this page apply to A, B1, C and the earlier custom AMI option.
+
 By the end of this chapter you can list EKS nodes from your workstation, and the sandbox image is in ECR. For a first deployment, prepare the [local Python environment](../getting_started.md) and [check quotas for your scenario](00_overview.md#prerequisites).
 
 1. [Set the account and Region](#preparation-1-scriptsconfigenv), then [run the preflight checks](#preflight-01_check_prereqssh). The scenario determines which nodes the stack creates.

@@ -80,6 +80,9 @@ const TEXT = {
     resultsKpi: "벤치마크 성공 건수 →",
     b1Setup: "EC2 {instance} {pods}대에서 gVisor v1 샌드박스를 하나씩 띄웠습니다. 사전 채점 {warmup}건 뒤에 아래 두 클라이언트가 차례로 같은 {golden} 커널을 요청했습니다.",
     b1Note: "이 측정에서는 모델 학습을 멈추고 샌드박스 채점만 실행했습니다. 각 클라이언트의 처리량은 샌드박스 풀 전체에서 측정한 값입니다.",
+    b2Title: "HyperPod B2 채점 결과", b2System: "HyperPod CPU 워커",
+    b2Setup: "시스템과 학습 노드에서 차례로 {golden}을 {requests}건씩 보냈습니다. 같은 HyperPod {instance} {pods}대가 gVisor에서 채점을 맡았습니다.",
+    b2Guide: "B2 실행 화면과 벤치마크 조건 보기 →",
     b1Diagram: "B1에서 요청이 지나가는 경로 보기 →", b1System: "EKS 시스템 노드", b1Trainer: "HyperPod 학습 노드",
     b1Success: "성공 / 요청", b1PoolRate: "풀 처리량", b1Speed: "PyTorch 대비 커널 속도 (중앙값)",
     mP50: "채점 시간 중앙값 (초)", mP95: "채점 시간 p95 (초)", mCold: "시작 시간 (초, pod 중앙값)",
@@ -164,6 +167,9 @@ const TEXT = {
     resultsKpi: "Successful benchmark requests →",
     b1Setup: "Each of the {pods} EC2 {instance} nodes hosted one gVisor v1 sandbox. After {warmup} warm-up evaluations, the clients took turns submitting the same {golden} kernel.",
     b1Note: "Training was idle during these runs. Throughput for each client covers the entire sandbox pool.",
+    b2Title: "Grading on HyperPod B2", b2System: "HyperPod CPU worker",
+    b2Setup: "The CPU and training workers each sent {requests} {golden} evaluations in turn. Both used the same {pods} HyperPod {instance} workers running gVisor.",
+    b2Guide: "See the B2 screenshots and benchmark setup →",
     b1Diagram: "Follow a request through B1 →", b1System: "EKS system node", b1Trainer: "HyperPod trainer node",
     b1Success: "Successful / requested", b1PoolRate: "Pool throughput", b1Speed: "Kernel speedup over PyTorch (median)",
     mP50: "eval p50 (s)", mP95: "eval p95 (s)", mCold: "cold start (s, pod median)",
@@ -1002,16 +1008,24 @@ function seekTerm(id, pattern) {
 
 // ---------- 4. training ----------
 function selectedTraining() {
-  return document.getElementById("grpo-run").value === "b1" ? extras?.b1?.training : extras?.training;
+  const run = document.getElementById("grpo-run").value;
+  return run === "training" ? extras?.training : extras?.[run]?.training;
 }
 
 function renderGrpo() {
+  const select = document.getElementById("grpo-run");
+  for (const option of select.options) {
+    const data = option.value === "training" ? extras?.training : extras?.[option.value]?.training;
+    option.hidden = option.disabled = !data?.batches?.length;
+  }
+  const available = [...select.options].filter((option) => !option.disabled);
+  if (select.selectedOptions[0]?.disabled && available.length) select.value = available[0].value;
   const tr = selectedTraining();
   const svgEl = document.getElementById("grpo-chart");
   const panel = svgEl.closest(".panel");
   const hasBatches = Boolean(tr?.batches?.length);
   const picker = document.getElementById("grpo-runs");
-  picker.hidden = !(extras?.training?.batches?.length && extras?.b1?.training?.batches?.length);
+  picker.hidden = available.length < 2;
   document.getElementById("grpo-empty").hidden = hasBatches;
   for (const node of panel.querySelectorAll(".chart-wrap,.legend,.step-ctl,.cards,[data-i18n='grpoNote']")) {
     node.hidden = !hasBatches;
@@ -1214,25 +1228,30 @@ function renderRuntimeResults() {
   document.getElementById("results-jsonl").href = `${guide}handson/data/${encodeURIComponent(run.jsonl)}`;
 }
 
-function renderB1Bench() {
-  const run = extras?.b1;
+function renderHyperPodBench(scenario) {
+  const run = extras?.[scenario];
   const bench = run?.bench;
-  const panel = document.getElementById("hyperpod-b1");
+  const panel = document.getElementById(`hyperpod-${scenario}`);
   panel.hidden = !bench?.rows?.length;
   if (panel.hidden) return;
-  document.getElementById("b1-source").textContent = run.source;
-  document.getElementById("b1-setup").textContent = fill(t("b1Setup"), {
+  document.getElementById(`${scenario}-source`).textContent = run.source;
+  document.getElementById(`${scenario}-setup`).textContent = fill(t(`${scenario}Setup`), {
     instance: bench.sandbox_instance, pods: bench.cold_start_s.length,
-    warmup: bench.warmup_requests, golden: bench.rows[0].golden,
+    warmup: bench.warmup_requests, golden: bench.rows[0].golden, requests: bench.rows[0].requests,
   });
-  document.getElementById("b1-clients").replaceChildren(...bench.rows.map((r) =>
+  document.getElementById(`${scenario}-clients`).replaceChildren(...bench.rows.map((r) =>
     el("div", { class: "card" },
-      el("h4", {}, `${t(r.client === "hyperpod" ? "b1Trainer" : "b1System")} · ${r.client_instance}`),
+      el("h4", {}, `${t(r.client === "system" ? `${scenario}System` : "b1Trainer")} · ${r.client_instance}`),
       row(t("b1Success"), `${r.ok} / ${r.requests}`),
       row(t("evalTimes"), `${r.eval_p50_s} / ${r.eval_p95_s} s`),
       row(t("b1PoolRate"), `${r.throughput_eval_per_s} eval/s`),
       row(t("b1Speed"), `${r.speedup_median}×`))));
-  document.getElementById("b1-pattern").href = `architecture.html?pattern=b1${lang === "en" ? "&lang=en" : ""}`;
+  if (scenario === "b1") {
+    document.getElementById("b1-pattern").href = `architecture.html?pattern=b1${lang === "en" ? "&lang=en" : ""}`;
+  } else {
+    const guide = "https://daekeun-ml.github.io/gpu-sandbox-on-aws/";
+    document.getElementById("b2-guide").href = `${guide}${lang === "en" ? "en/" : ""}handson/08_benchmark/#hyperpod-b2`;
+  }
 }
 
 const METRICS = [
@@ -1259,7 +1278,8 @@ function renderBenchTabs() {
 
 function renderBench() {
   renderRuntimeResults();
-  renderB1Bench();
+  renderHyperPodBench("b1");
+  renderHyperPodBench("b2");
   const passes = extras?.bench?.passes || [];
   const section = document.getElementById("bench");
   section.hidden = !passes.length && document.getElementById("hyperpod-b1").hidden && document.getElementById("runtime-results").hidden;
@@ -1373,7 +1393,7 @@ async function main() {
   document.getElementById("grpo-step").addEventListener("input", (e) => setGrpoStep(Number(e.target.value)));
   renderAll();
   // Benchmark panels are hidden until their recording loads, after the browser's initial anchor lookup.
-  if (["#bench", "#runtime-results", "#hyperpod-b1", "#runtime-bench"].includes(location.hash)) {
+  if (["#bench", "#runtime-results", "#hyperpod-b1", "#hyperpod-b2", "#runtime-bench"].includes(location.hash)) {
     document.getElementById(location.hash.slice(1)).scrollIntoView({ behavior: "instant" });
   }
 }

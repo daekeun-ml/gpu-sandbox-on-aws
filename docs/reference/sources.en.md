@@ -17,7 +17,7 @@
 | Blog measurement | A value someone else measured in a different environment | About 55 ms for a warm pool claim in part 2 of the AWS Korea tech blog series, about 3 s cold start in the AWS China blog |
 | Inference | A judgment derived from the evidence, unverified | The effect of NodeConfig `imports` on keeping kata-deploy drop-ins |
 | Executed on AWS by the author | Actually run in a practice account, with the output checked | The gVisor path of scenario A, Kata GPU (`g4dn.metal`), the three CPU runtimes of scenario C, the runtime benchmark, the demo site. The dated record is in [AWS run record](#aws-run-record) |
-| Not executed on AWS by the author | Designed, with templates written, but not run | HyperPod B2 on `ml.g5`. The full list is in [AWS run record](#aws-run-record) |
+| Not executed on AWS by the author | Designed, with templates written, but not run | The earlier CDK B2 route using an EC2-built custom AMI. The full list is in [AWS run record](#aws-run-record) |
 
 ## What this repository verified
 
@@ -78,12 +78,13 @@ All of these ran in the author's practice account.
 | 2026-11-22 | us-west-2 | HyperPod B1 on EKS 1.36 | `ml.g5.2xlarge` trainer, two EC2 `g5.xlarge` sandboxes, training operator `v1.3.0-eksbuild.1`, `hyperpod/run_grpo.sh 1` | `Completed=True`, 6/6 probe checks passed, 12 submissions evaluated, 1 correct. The HyperPod and EKS clusters, test GPU nodes, lifecycle bucket and test trainer repository were deleted. The EKS KMS key entered its seven-day deletion window. [Console and trainer screenshots](../handson/07_hyperpod.md#how-to-verify) |
 | 2026-11-22 | us-west-2 | HyperPod B1 benchmark | `relu_bias_triton`, gVisor v1, two EC2 `g5.xlarge` sandbox nodes | EKS system and HyperPod trainer clients each passed 32/32. The HyperPod run reached 0.199 eval/s. [Measurements and screenshot](../handson/08_benchmark.md#hyperpod-b1) |
 | 2026-11-22 | us-west-2 | Scenario A, Kata CPU/GPU, EKS 1.36 | 16 GRPO steps on `g5.2xlarge`, v1→v2 switch and rollback, `ops/bench.sh 32` on five v1 pools | Training switched at batch 5, with 207 submissions and zero mixed-version batches. All 160 benchmark evaluations passed. [Training log](../handson/06_sandbox_update.md#switch-batches) · [Measurements and raw JSONL](../handson/08_benchmark.md#runtime-results) |
+| 2026-11-23 | us-east-1 | Managed HyperPod B2, EKS 1.36 | One `ml.m5.xlarge` for system pods, one `ml.g5.2xlarge` for training, two `ml.g5.xlarge` gVisor workers. All four belonged to HyperPod. | GRPO `Completed=True`, 12 submissions graded. Six golden cases passed. Both benchmark clients completed 32/32. [Hands-on screenshots](../handson/07_hyperpod_b2.md) · [Results](../handson/08_benchmark.md#hyperpod-b2) |
 
 On 2026-11-14 the author also captured the Service Quotas screens and the HyperPod AMI search in the EC2 AMI Catalog from the ap-south-1 console. These were read-only views, and no script ran there.
 
 **Not executed on AWS:**
 
-- HyperPod B2 with its custom sandbox AMI, automatic node replacement and checkpoint recovery.
+- The earlier CDK B2 custom AMI path, automatic node replacement and checkpoint recovery.
 - `demo/teardown.sh` (shellcheck only)
 - The `gvisor-cpu` warm pool and the GPU section of [11 Multi-turn episodes](../handson/11_multi_turn.md) (it ran with the `kata-clh-cpu` warm pool)
 - What the production guide adds to the hands-on: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity

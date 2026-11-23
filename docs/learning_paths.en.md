@@ -62,13 +62,13 @@ For your first AWS lab, [check your tools and regional quotas](handson/00_overvi
     |---|---|---:|
     | 3 · CPU only (C) | Half a day | About 0.57 |
     | 4 · EC2 GPU (A) | One day | About 3.42 |
-    | 5 · HyperPod (B1 / B2) | A day or more | About 3.72 / 4.52 |
+    | 5 · HyperPod (B1 / B2) | A day or more | About 3.72 / 4.56 |
     | 6 · Add a Kata GPU | Half a day after path 3 or 4 | Add 7.824 for the metal node |
 
     <span id="scope-and-limits"></span>Node estimates use On-Demand rates in `us-west-2` and `us-east-1`. The EKS control plane (0.10 USD/hour under standard support), access instance, NAT gateway, storage and data transfer incur separate charges.
 
     - **CPU and EC2 GPU.** C needs 14 Standard vCPUs. A needs 6 Standard and 16 G/VT vCPUs. While gVisor v1 and v2 both run in A, allow 24 G/VT vCPUs and about 2.01 USD/hour in additional node costs.
-    - **HyperPod.** B1 needs 6 Standard and 8 G/VT vCPUs, plus one SageMaker `ml.g5.2xlarge for cluster usage` instance. B2 uses one HyperPod `ml.g5.2xlarge` and two `ml.g5.xlarge` instances, with no EC2 GPU nodes.
+    - **HyperPod.** B1 needs 6 Standard and 8 G/VT vCPUs, plus one SageMaker `ml.g5.2xlarge for cluster usage` instance. B2 needs quota for one HyperPod `ml.m5.xlarge`, one `ml.g5.2xlarge` and two `ml.g5.xlarge` instances.
     - **Kata GPU.** The metal node uses another 96 G/VT vCPUs. Adding it to C brings node costs to about 8.39 USD/hour. Adding both the CPU rehearsal node and the metal node to A brings the total to about 11.61 USD/hour. Allow 16 Standard vCPUs when the CPU rehearsal node and temporary AMI builder run together. [Instance quotas and costs](concepts/04_platforms_and_instances.md)
 
 ### 3. Switch grading pools on CPU · scenario C { #course-3 }
@@ -95,7 +95,7 @@ Start with B1 in the [HyperPod lab](handson/07_hyperpod.md). SageMaker HyperPod 
 The guide includes the verdicts for 12 submissions from one training step and a separate benchmark that sent a fixed kernel 32 times after training. [B1 run and training logs](handson/07_hyperpod.md#how-to-verify) · [B1 benchmark results](handson/08_benchmark.md#hyperpod-b1)
 
 ??? note "Run the grading nodes on HyperPod too"
-    The [experimental B2 setup](handson/07_hyperpod.md#b2) uses a custom sandbox AMI that you build and deploy to a separate instance group. To try both B1 and B2, clean up the first deployment before starting the second.
+    [Managed B2](handson/07_hyperpod_b2.md) puts the CPU worker, the GPU trainer and both GPU graders in the HyperPod EKS workflow. B1 and B2 use separate clusters.
 
 ### 6. Use a GPU inside a Kata VM · add to path 3 or 4 { #course-6 }
 

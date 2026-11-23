@@ -69,7 +69,7 @@
 
 ![다섯 EKS 풀의 노드 구성, 성공 건수, 채점 p50·p95와 처리량을 보여 주는 데모 화면](../images/demo/runtime-results-ko.png)
 
-[공개 데모에서 B1 벤치마크 열기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1)
+[공개 데모에서 B1 벤치마크 열기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1) · [B2 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b2)
 
 ![EKS와 HyperPod에서 같은 커널의 채점을 요청했을 때 걸린 시간과 풀 처리량을 보여 주는 데모 화면](../images/demo/hyperpod-b1-benchmark-ko.png)
 
@@ -328,6 +328,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 | 이미지 캐시 전후 비교 | `scripts/ops/bench.sh 32`의 출력을 `tee`로 `bench.log`에 저장 | `--bench-log pass1=bench.log --bench-pass pass2`, 노드 정보는 `--node` (아래 예시) |
 | GRPO 학습 | `kubectl -n rl-trainer logs job/<job> > grpo.log`. reward 함수의 `reward_batch` JSON 줄과 trainer의 metric 줄(`{'loss': ...}`)을 읽습니다 | `--training-log grpo.log --model <model-id>` |
 | HyperPod B1 | 공개용 B1 학습 로그 요약과 고정 커널 벤치마크 결과 | `--b1-record docs/handson/data/hyperpod-b1.json` |
+| HyperPod B2 | CPU와 GPU가 모두 HyperPod에 있는 클러스터의 GRPO 한 스텝과 32건씩의 두 벤치마크 | `--b2-record docs/handson/data/hyperpod-b2.json` |
 | 버전 전환 | `scripts/ops/simulate.sh 30 20`의 출력을 `simulate.log`에 저장하고, 그동안 [06](06_sandbox_update.md)의 `rollout.sh`로 버전을 바꿉니다 | `--simulation-log simulate.log` |
 | 터미널 출력 | `scripts/ops/verify.sh gvisor v1` 같은 명령의 출력을 파일로 저장 | `--transcript verify-gvisor=verify-gvisor.txt` (반복 가능) |
 
@@ -340,6 +341,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 python3 demo/build_extras.py --out demo/site/data/extras.json \
   --source "Amazon EKS 1.36, us-west-2, 2026-11-18" \
   --b1-record docs/handson/data/hyperpod-b1.json \
+  --b2-record docs/handson/data/hyperpod-b2.json \
   --runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json \
   --bench-log pass1=bench.log --bench-pass pass2 \
   --node 'gvisor=g5.2xlarge|NVIDIA A10G' --node 'kata-qemu=g4dn.metal|Tesla T4' \

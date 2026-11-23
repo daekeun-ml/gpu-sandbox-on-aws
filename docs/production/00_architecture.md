@@ -159,7 +159,7 @@ veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니�
 ## 시나리오 B: HyperPod에서 학습할 때
 
 - **B1**: trainer만 HyperPod 인스턴스 그룹으로 옮기고, 샌드박스 풀은 같은 EKS 클러스터의 EC2 NodePool에 둡니다. veRL RayCluster 템플릿은 `VERL_NODE_SELECTOR`로 HyperPod 노드를 지정합니다.
-- **B2**: 샌드박스까지 HyperPod 노드에 배치하는 실험 단계의 구성입니다. gVisor release-20261109.0의 nvproxy는 HyperPod EKS AMI의 NVIDIA 드라이버 595.91.07을 지원하지 않으므로, 드라이버를 580.178.04로 바꾼 custom AMI가 필요합니다(절차는 [07 HyperPod 시나리오](../handson/07_hyperpod.md#b2)).
+- **B2**는 시스템 Pod, 학습, gVisor 채점을 모두 HyperPod 워커에서 실행합니다. 두 채점 노드는 지원 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다. [관리형 B2 배포](../handson/07_hyperpod_b2.md)
 
 ## 적용 순서
 

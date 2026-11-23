@@ -199,7 +199,7 @@ HyperPod는 EC2와 별도인 "ml.<type> for cluster usage" 한도를 씁니다. 
 | EKS control plane, NAT gateway, EBS gp3, SSM access instance(`t4g.nano`), KMS 키 | | 각 요금 페이지 | 별도 |
 
 - 시나리오 B1은 `g5.2xlarge` 대신 `ml.g5.2xlarge`를 쓰므로 최소 경로 3.719, 전체 경로 11.91784 USD/시간입니다.
-- 시나리오 B2는 EC2 gVisor 노드 대신 HyperPod `ml.g5.xlarge`(1.408) 2대에서 샌드박스를 실행합니다. 최소 경로는 0.192 + 1.515 + 2.816 = 4.523, Kata 노드를 더한 전체 경로는 12.72184 USD/시간입니다.
+- [관리형 B2](../handson/07_hyperpod_b2.md)는 `ml.m5.xlarge` CPU 한 대(0.230), `ml.g5.2xlarge` 학습 노드 한 대(1.515), `ml.g5.xlarge` 채점 노드 두 대(2 × 1.408)를 사용합니다. `us-east-1` 온디맨드 단가를 합하면 HyperPod 워커 네 대가 **시간당 4.561 USD**입니다. EKS, 스토리지와 네트워크 비용은 별도입니다.
 - 계산 예시: 최소 경로 8시간에 `g4dn.metal` 2시간을 더하면 3.416 × 8 + 7.824 × 2 = 42.976 USD입니다(EC2만, 소요 시간은 가정).
 - 클러스터를 삭제한 뒤에도 Kata용 AMI의 EBS snapshot과 ECR 이미지는 남아 과금될 수 있습니다. `scripts/08_cleanup.sh`는 AMI 등록 해제 여부를 묻고, `--images`를 지정하면 ECR 저장소도 삭제합니다.
 
