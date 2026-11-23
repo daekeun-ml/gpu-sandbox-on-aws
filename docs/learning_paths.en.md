@@ -1,170 +1,114 @@
 # Choose a learning path
 
-!!! info "TL;DR"
-    Answer at most four questions to get one of paths 1 to 5. To add Kata GPU, go to path 6; to read only the operations design, go to path 7. If you are new, start with the free path 1 (reading) and path 2 (local run).
+New to sandboxes? Follow one answer from code to score in the [beginner guide](beginner/index.md), or grade it yourself in path 2.
 
-## Choosing a starting point
+<div id="choosing-a-starting-point" class="grid cards" markdown>
 
-Start with reading or the local exercise to learn the workflow. To deploy on AWS, choose the CPU, EC2 GPU, or HyperPod path that matches your goal.
+-   **<span id="pick-a-path-with-a-few-questions">Working without AWS?</span>**
 
-![a: a new reader facing 46 pages and scenarios A, B1, B2, C starts a GPU path without needing it, and pays a few dollars per hour while it runs. b: the free path 1 (reading) and path 2 (local run) come first, and the AWS paths 3 to 6 come after them, with quota and cost shown up front](images/figures/learning_paths.en.svg)
+    - [1 · See how grading works](#course-1)
+    - [2 · Grade answers locally](#course-2)
+    - [7 · Design a production service](#course-7)
 
-*Takeaway: Picking a GPU path without knowing where to start adds cost for every hour the nodes stay up. Do the free paths 1 and 2 first, and choose a paid path after checking its quota and hourly cost.*
+-   **Running a lab on AWS?**
 
+    - [3 · Switch grading pools on CPU](#course-3)
+    - [4 · Train a model on EC2 GPUs](#course-4)
+    - [5 · Train a model on HyperPod](#course-5)
+    - [6 · Add a Kata GPU](#course-6)
 
-## What each path requires
+</div>
 
-- **Each path needs a different account, quota and hourly cost.** Check them in the table below before you start.
-- **Three paths cost nothing.** Reading and a local run (paths 1 and 2) already show the core (isolation, scoring, version swaps), and path 7 (Production design) is also a free reading path.
-- **Each path has a point where you can stop.** For example, path 2 is done when all four golden probe items show `PASS`.
+## In a browser or on your computer { #steps-per-path }
 
-## Pick a path with a few questions
+### 1. Follow a submission through grading { #course-1 }
 
-```mermaid
-flowchart TD
-    Q1{"Will you run it yourself?"} -->|"No, just understand it"| C1["Path 1: Reading<br/>free"]
-    Q1 -->|Yes| Q2{"Can you spend on AWS?"}
-    Q2 -->|No| C2["Path 2: Local run<br/>free"]
-    Q2 -->|Yes| Q3{"Do you have GPU quota?"}
-    Q3 -->|"No, or not sure"| C3["Path 3: c8i low cost (C)<br/>about 0.57 USD/hour"]
-    Q3 -->|Yes| Q4{"Where does training run?"}
-    Q4 -->|EC2| C4["Path 4: GPU basics (A)<br/>about 3.42 USD/hour"]
-    Q4 -->|HyperPod| C5["Path 5: HyperPod (B1, B2)<br/>from about 3.72 USD/hour"]
-```
+Read chapters 1–4 of the [beginner guide](beginner/index.md). In the [public demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#try), select **Missing ReLU** and replay the grading run. You'll see what happened when gVisor and Kata each ran the same code in isolation. Allow 1–2 hours for the reading and demo.
 
-*Takeaway: pick a paid path after the free ones; without GPU quota, path 3 is the cheapest way on AWS.*
+Why did both return `wrong_answer`? The code adds two numbers but leaves negative sums unchanged. The task requires replacing those with zero. The sandbox runs the code, the grader compares its output with the expected answer, and the trainer uses the result to update the model.
 
-If you design for production, read [Path 7: Production design](#course-7) in addition to the paths above.
+??? note "Read more about isolation and training"
+    - Which tasks need grading on a GPU? [When the sandbox needs a GPU](concepts/01_why_gpu_sandbox.md)
+    - Which kernel handles a submission's requests under gVisor and Kata? [Isolation runtimes](concepts/02_isolation_runtimes.md)
+    - What has to stay consistent when the grader changes during training? [On-policy RL with sandboxes](concepts/03_onpolicy_rl_with_sandboxes.md) · [Decision guide](concepts/05_decision_guide.md)
 
-## Prerequisites and cost per path
+### 2. Grade correct and incorrect answers locally { #course-2 }
 
-Costs are estimates that add up On-Demand compute list prices (us-east-1 and us-west-2). Times are rough estimates the author did not measure.
+Follow sections 1–2 of the [first grading exercise](beginner/05_hands_on.md). Use Git and `uv` to prepare a Python 3.14 environment, then run the test that sends the same submissions to two local CPU servers. Allow 30–60 minutes including installation.
 
-| Path | For | You need | Time (estimate) | Cost |
-|---|---|---|---|---|
-| 1. Reading | You want to know what a GPU sandbox is and why it is needed | a browser | 1 to 2 hours | free |
-| 2. Local run | You want to see the code actually run | Python 3.14, git | 30 minutes to 1 hour | free |
-| 3. c8i low cost (scenario C) | You want to try the three runtimes and a version swap cheaply on AWS | an AWS account, Standard vCPU quota 14, the AWS CDK CLI and the Session Manager plugin | half a day | compute about 0.57 USD/hour + EKS 0.10 + NAT |
-| 4. GPU basics (scenario A) | You want to run real GRPO training and GPU sandboxes | G and VT vCPU quota 16 (24 during the version swap in 06, which adds two gVisor nodes) | a day | compute about 3.42 USD/hour (about 2.01 more during the version swap) |
-| 5. HyperPod (scenarios B1, B2) | You plan to train on SageMaker HyperPod | B1: G and VT vCPU quota 8 and one HyperPod `ml.g5.2xlarge`. B2: one HyperPod `ml.g5.2xlarge` and two `ml.g5.xlarge` (no EC2 GPU quota) | a day or more | B1 about 3.72, B2 about 4.52 USD/hour |
-| 6. Add Kata GPU | You want to compare VM-boundary isolation and GPU passthrough | G and VT vCPU quota: 96 on top of path 3, 112 on top of path 4 | path 3 or 4 + half a day | on top of path 3, about 8.39 USD/hour in total (7.824 added) |
-| 7. Production design | You are designing a structure for a real service | a browser | 2 to 3 hours | free |
+Look for **`1 passed`**. Both servers identified correct answers, wrong answers and policy violations as expected. This exercise runs without an AWS account or GPU.
 
-- **Standard vCPU quota for path 6**: while the IOMMU AMI builds, it needs 2 more (16 together with the c8i rehearsal).
-- **Cost of path 6 on top of path 4**: with the c8i rehearsal, about 11.61 USD/hour in total.
+??? example "Test output and an optional macOS exercise"
+    ![Terminal showing 1 passed after checking submissions on two local CPU servers](images/learning/local-cpu-grading.png)
 
-## Steps per path
+    On Linux, use the pytest exercise above. On macOS you can also launch both servers to inspect individual verdicts, or run two GRPO training steps with a small model. [Local run instructions](getting_started.md#4-loopback-smoke-run-macos)
 
-=== "1. Reading"
+### 7. Design a production service { #course-7 }
 
-    1. [Home](index.md): the path where the trainer sends kernel code and the sandbox returns the scoring result.
-    2. [01 When the sandbox needs a GPU](concepts/01_why_gpu_sandbox.md): why GPU code written by a model is scored in isolation.
-    3. [02 Isolation runtimes](concepts/02_isolation_runtimes.md): the difference between gVisor and Kata (a buildings and houses analogy).
-    4. [03 On-policy RL with sandboxes](concepts/03_onpolicy_rl_with_sandboxes.md): when it is safe to change the sandbox during training.
-    5. [09 Demo site](handson/09_demo_site.md): a demo that replays the recording shipped in the repository (screenshot below).
-    6. [05 Decision guide](concepts/05_decision_guide.md): the runtime and instance for your situation.
+Follow a request from a training node in the [production architecture diagram](production/00_architecture.md). Mark where the gateway checks the caller and where to pin the grader version so every answer in a batch uses the same one. Allow 2–3 hours for a design review. All you need is a browser.
 
-    ![Replay demo: two isolation runtime cards and the verdict of a submission](images/learning/demo-replay.png)
+??? note "Reading for each design decision"
+    - **Who can submit code, and what can it do?** [Security](production/02_security.md) · [Reward integrity](production/04_reward_integrity.md)
+    - **Where does a request go, and when can it switch to a new version?** [Gateway and pools](production/03_gateway_and_pools.md) · [Sandbox versioning](production/05_sandbox_updates.md)
+    - **How many nodes will the service need, and what will they cost?** [Capacity and nodes](production/01_capacity_and_nodes.md) · [Cost](production/08_cost.md) · [CDK stacks](production/09_cdk.md)
+    - **How will operators track latency and errors across training nodes?** [Scaling with veRL](production/06_scaling_with_verl.md) · [Observability and operations](production/07_observability_and_operations.md)
 
-    *The recording shipped in the repository (a CPU run on a laptop), opened locally; these are not GPU or cluster results.*
+## On AWS { #what-each-path-requires }
 
-    **You can stop here:** items 2 to 4 let you explain the problem this asset solves and the shape of the solution.
+For your first AWS lab, [check your tools and regional quotas](handson/00_overview.md#prerequisites) before deploying. Charges begin when you create the cluster.
 
-=== "2. Local run"
+??? note "<span id='prerequisites-and-cost-per-path'>Time, node costs and quotas for paths 3–6</span>"
+    | Path | Time to allow | Node cost (USD/hour) |
+    |---|---|---:|
+    | 3 · CPU only (C) | Half a day | About 0.57 |
+    | 4 · EC2 GPU (A) | One day | About 3.42 |
+    | 5 · HyperPod (B1 / B2) | A day or more | About 3.72 / 4.52 |
+    | 6 · Add a Kata GPU | Half a day after path 3 or 4 | Add 7.824 for the metal node |
 
-    1. [Getting started](getting_started.md) sections 1 to 3: get the repository, build the Python environment and run the tests (a successful run below).
-    2. [Getting started](getting_started.md) section 4 (macOS): start two sandbox servers on your machine to score a correct answer, a wrong answer and a cheat. On a Linux host, a server started directly can kill other processes of the same user, so run each server in its own container.
-    3. (Optional) [Getting started](getting_started.md) 4.3: run a 2-step GRPO dry run with a small model to see the trainer and the scoring functions connected.
+    <span id="scope-and-limits"></span>Node estimates use On-Demand rates in `us-west-2` and `us-east-1`. The EKS control plane (0.10 USD/hour under standard support), access instance, NAT gateway, storage and data transfer incur separate charges.
 
-    ![Local terminal: python -m pytest -q, 74 passed (taken when the suite had 74 tests)](images/learning/local-pytest.png)
+    - **CPU and EC2 GPU.** C needs 14 Standard vCPUs. A needs 6 Standard and 16 G/VT vCPUs. While gVisor v1 and v2 both run in A, allow 24 G/VT vCPUs and about 2.01 USD/hour in additional node costs.
+    - **HyperPod.** B1 needs 6 Standard and 8 G/VT vCPUs, plus one SageMaker `ml.g5.2xlarge for cluster usage` instance. B2 uses one HyperPod `ml.g5.2xlarge` and two `ml.g5.xlarge` instances, with no EC2 GPU nodes.
+    - **Kata GPU.** The metal node uses another 96 G/VT vCPUs. Adding it to C brings node costs to about 8.39 USD/hour. Adding both the CPU rehearsal node and the metal node to A brings the total to about 11.61 USD/hour. Allow 16 Standard vCPUs when the CPU rehearsal node and temporary AMI builder run together. [Instance quotas and costs](concepts/04_platforms_and_instances.md)
 
-    *Taken when the suite had 74 tests. It now has 110, and run times differ by machine.*
+### 3. Switch grading pools on CPU · scenario C { #course-3 }
 
-    **You can stop here:** when item 2 shows `PASS` everywhere, you have seen the scoring flow of a local server. gVisor and Kata isolation is checked in the AWS paths.
+In the [CPU-only lab](handson/10_cpu_only.md), run gVisor and Kata on one `c8i.2xlarge`. A simulator keeps sending prepared submissions as you switch the pool of grading servers from v1 to v2. This path runs without a GPU or a training job.
 
-    **If it fails:** see the "If it fails" notes in [Getting started](getting_started.md) and the "Config and scripts" section of [Troubleshooting](reference/troubleshooting.md).
+Read the `batch` line after `SWITCH`. When `kata-clh-cpu/v2` returns `ok` and `wrong_answer`, the new pool has graded the submissions.
 
-=== "3. c8i low cost"
+??? example "Compare the batches on each side of the switch"
+    Batch 6 used v1 and batch 7 used v2. Both returned one correct answer and two wrong answers.
 
-    1. Finish path 2 first.
-    2. Follow [10 CPU-only path on c8i](handson/10_cpu_only.md) to the end. The cluster, the three runtimes, the model-free reward loop and the version swap are on one page.
-    3. When you are done, delete everything with the "Cleanup" step on the same page.
+    ![Simulator log switching to v2 between batches 6 and 7 while grading the same submissions](images/terminal/simulate-switch.png)
 
-    ![Reward loop output: v1 up to batch 2, v2 from batch 3](images/learning/local-reward-loop.png)
+### 4. Train with GRPO on EC2 GPUs · scenario A { #course-4 }
 
-    *The same reward loop reproduced locally with two servers. On a cluster, the model-free reward loop (`scripts/ops/simulate.sh`) prints the same shape, with one `sandbox_version_switch` between batches.*
+Start with [cluster and image setup](handson/01_cluster_and_images.md), then check [GPU access in gVisor](handson/02_gvisor.md) and [deploy the grading pool](handson/04_sandbox_pools.md). In the [GRPO lab](handson/05_grpo_training.md), the model generates several answers and uses their scores to update its weights.
 
-    **You can stop here:** if the `reward_batch` after `sandbox_version_switch` shows `version` `v2` and `status` with `ok` and `wrong_answer`, the new pool has scored the golden submissions. The switch event alone is not enough: it also appears when every v2 request ends in `sandbox_error`.
+[Switch pools during training](handson/06_sandbox_update.md) to see one batch finish on a single grader version and the next start on v2. [Batch logs before and after the switch](handson/06_sandbox_update.md#switch-batches)
 
-=== "4. GPU basics"
+### 5. Train with GRPO on HyperPod · scenario B1 { #course-5 }
 
-    1. Finish path 2 first, then read the steps and costs in [00 Overview](handson/00_overview.md).
-    2. [01 Cluster and images](handson/01_cluster_and_images.md) → [02 gVisor GPU sandboxes](handson/02_gvisor.md) → [04 Deploy and verify sandbox pools](handson/04_sandbox_pools.md)
-    3. [05 On-policy GRPO training](handson/05_grpo_training.md) → [06 Updating the sandbox during training](handson/06_sandbox_update.md)
-    4. (Optional) [08 Runtime benchmark](handson/08_benchmark.md): it measures only deployed v1 pools, so run it before the last step of 06 (`--finish`).
-    5. [99 Cleanup](handson/99_cleanup.md)
+Start with B1 in the [HyperPod lab](handson/07_hyperpod.md). SageMaker HyperPod runs the trainer, and a gVisor pool on EC2 grades the code. Check that the trainer ran on a HyperPod node, that `reward_batch` recorded grading outcomes, and that the training job reached `Completed`.
 
-    **You can stop here:** when page 06 shows training moving to v2 without stopping, you have reached the goal.
+The guide includes the verdicts for 12 submissions from one training step and a separate benchmark that sent a fixed kernel 32 times after training. [B1 run and training logs](handson/07_hyperpod.md#how-to-verify) · [B1 benchmark results](handson/08_benchmark.md#hyperpod-b1)
 
-=== "5. HyperPod"
+??? note "Run the grading nodes on HyperPod too"
+    The [experimental B2 setup](handson/07_hyperpod.md#b2) uses a custom sandbox AMI that you build and deploy to a separate instance group. To try both B1 and B2, clean up the first deployment before starting the second.
 
-    1. Start after you understand items 1 and 2 of path 4 (same cluster layout).
-    2. Follow B1 in [07 HyperPod scenario](handson/07_hyperpod.md). Only the training runs on HyperPod.
-    3. (Experimental) Instead of B1, [B2](handson/07_hyperpod.md#b2) on the same page: put the sandboxes on HyperPod too, with a custom AMI whose driver is replaced. You cannot start B2 while B1 is up, so to try both, clean up the first scenario before starting the second.
-    4. Delete HyperPod first, then run [99 Cleanup](handson/99_cleanup.md).
+### 6. Use a GPU inside a Kata VM · add to path 3 or 4 { #course-6 }
 
-    **You can stop here:** in B1, a `reward_batch` log line of the HyperPodPyTorchJob with `runtime` `gvisor` and at least one scored result other than `sandbox_error` in `status` (`ok`, `wrong_answer` and so on) is enough. Do B2 only if you plan to maintain a custom AMI.
+Before cleaning up path 3 or 4, follow the CPU rehearsal and GPU passthrough stages of the [Kata lab](handson/03_kata.md). [Deploy the pool](handson/04_sandbox_pools.md) and run `scripts/ops/verify.sh kata-qemu v1`. Look for `Tesla T4` and `PASS` on all six test submissions to confirm GPU grading inside the VM. [GPU verification from the Kata guest](handson/03_kata.md#gpu-run)
 
-=== "6. Kata GPU"
+??? note "Compare gVisor and Kata GPU performance"
+    On path 4, wait for training to stop, then run the benchmark while both `gvisor v1` and `kata-qemu v1` are Ready. If you already scaled gVisor v1 down with `--finish` in chapter 06, bring it back first. [Runtime benchmark steps and results](handson/08_benchmark.md#runtime-results)
 
-    1. Continue from path 3 or 4.
-        - **Continuing from path 3**: follow it up to, but not including, its cleanup step.
-        - **Continuing from path 4 to compare the two GPU pools**: come here before the version swap of 06. The last step of 06 (`--finish`) scales `gvisor v1` to zero.
-        - **Once the cluster is deleted**: you cannot continue.
-    2. Stage 1 (c8i rehearsal) → stage 2 (`g4dn.metal`) of [03 Kata sandboxes](handson/03_kata.md)
-    3. Deploy the `kata-qemu v1` pool as in [04 Sandbox pools](handson/04_sandbox_pools.md) and verify it with `scripts/ops/verify.sh kata-qemu v1`.
-    4. (Optional) Compare with gVisor in [08 Runtime benchmark](handson/08_benchmark.md). For a GPU-to-GPU comparison, run it while both the `gvisor v1` (path 4) and `kata-qemu v1` pools are Ready.
-    5. When you are done, scale the `g4dn.metal` node group to zero right away or run [99 Cleanup](handson/99_cleanup.md).
+### When you pause or finish { #three-habits-that-prevent-cost-accidents }
 
-    **You can stop here:** when `scripts/ops/verify.sh kata-qemu v1` in step 3 shows the GPU as `Tesla T4` and every golden verdict passes, GPU passthrough is confirmed.
+After paths 3–6, follow [99 Cleanup](handson/99_cleanup.md) and check the last table for remaining lab instances. **For HyperPod, run `scripts/hyperpod/delete.sh` before deleting EKS.**
 
-=== "7. Production design"
+??? note "Costs while keeping a cluster between sessions"
+    Scale unused EC2 practice node groups to zero. Scaling pods down still leaves their nodes running. The two system nodes, EKS and the NAT gateway also continue to incur charges while the cluster exists. [Resource cleanup](handson/99_cleanup.md)
 
-    1. [00 Architecture](production/00_architecture.md): how it differs from the hands-on.
-    2. [02 Security](production/02_security.md), [04 Reward integrity](production/04_reward_integrity.md): the threats to block and reward hacking.
-    3. [03 Gateway and pools](production/03_gateway_and_pools.md), [05 Sandbox versioning](production/05_sandbox_updates.md)
-    4. [01 Capacity and nodes](production/01_capacity_and_nodes.md), [08 Cost](production/08_cost.md)
-    5. [09 Provisioning with CDK](production/09_cdk.md): the private-by-default infrastructure code that the hands-on uses too (stack layout, security defaults, tunnel)
-    6. (When scaling up) [06 Scaling with veRL](production/06_scaling_with_verl.md), [07 Observability and operations](production/07_observability_and_operations.md)
-
-    **You can stop here:** items 1 and 2 are enough to draft the questions for a design review.
-
-## Path 7: Production design { #course-7 }
-
-It is for reading, not running, and its order is in the tab above. It is easier after one hands-on path (3 to 6), because the components are familiar by then.
-
-## Three habits that prevent cost accidents
-
-!!! warning "Before starting an AWS path (3 to 6)"
-    1. **Clean up as soon as you finish.** The last step of each path (`scripts/08_cleanup.sh`) asks you to type a confirmation word, so nothing is deleted by accident.
-    2. **Scale the EC2 practice node groups you are not using to zero while you take a break.** How to scale nodes is under "Time and cost" in [00 Overview](handson/00_overview.md).
-        - **Scaling only a Deployment down**: it does not stop node charges.
-        - **The two system nodes**: they stay because their minimum is 2.
-        - **HyperPod instances**: they keep billing when you scale EKS node groups, so after path 5 delete them with `scripts/hyperpod/delete.sh`.
-    3. **Check what is left after cleanup.** The last table of `08_cleanup.sh` (tagged instances) must be empty, and resources that can stay behind and the commands to check them are in [99 Cleanup](handson/99_cleanup.md).
-
-## If you get stuck
-
-- A word you do not know: [Glossary](reference/glossary.md)
-- An error message: [Troubleshooting](reference/troubleshooting.md)
-- Behavior you did not expect: [Misconceptions](reference/faq.md)
-- What a setting means: [Configuration](reference/configuration.md)
-
-## Scope and limits
-
-- The screenshots on this page are local runs on the author's laptop; console screenshots of a scenario C deployment in a practice account are in [09 Provisioning with CDK](production/09_cdk.md).
-- The real bill is higher than the costs above (sums of On-Demand list prices) because of the NAT gateway, EBS, data transfer and so on.
-
-## Next steps
-
-If you are still unsure, [Getting started](getting_started.md) in path 2 is the easiest place to begin.
+<span id="next-steps"></span><span id="if-you-get-stuck"></span>Look up unfamiliar terms in the [glossary](reference/glossary.md) and error messages in [troubleshooting](reference/troubleshooting.md). [Frequently asked questions](reference/faq.md) · [Configuration](reference/configuration.md)
