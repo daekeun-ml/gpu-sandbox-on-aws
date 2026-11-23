@@ -167,3 +167,5 @@ for image in sandbox trainer control; do
   aws ecr delete-repository --repository-name "${ECR_REPO_PREFIX}/${image}" --force --region "$AWS_REGION"
 done
 ```
+
+In this run the stack reached `DELETE_COMPLETE`. We confirmed that the HyperPod cluster, EKS cluster, lab VPC, lifecycle bucket and all three ECR repositories were gone. After saving the logs we removed seven CloudWatch log groups belonging to this deployment. For your run, match the HyperPod cluster ID, EKS cluster name and stack Lambda names before removing retained logs.

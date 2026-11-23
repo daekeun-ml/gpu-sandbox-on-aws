@@ -167,3 +167,5 @@ for image in sandbox trainer control; do
   aws ecr delete-repository --repository-name "${ECR_REPO_PREFIX}/${image}" --force --region "$AWS_REGION"
 done
 ```
+
+이번 실행에서는 스택이 `DELETE_COMPLETE`로 끝난 뒤 HyperPod 클러스터, EKS 클러스터, 실습 VPC, lifecycle 버킷, ECR 저장소 3개의 삭제를 확인했습니다. 로그를 보관한 뒤 CloudWatch에 남은 이 배포의 로그 그룹 7개도 삭제했습니다. 직접 정리할 때는 HyperPod 클러스터 ID, EKS 이름과 스택의 Lambda 함수 이름을 대조해 해당 실습의 로그 그룹을 찾으세요.
