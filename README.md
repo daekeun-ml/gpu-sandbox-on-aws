@@ -2,13 +2,27 @@
 
 # GPU Sandbox on AWS
 
-GPU Sandbox on AWS는 AI가 만든 코드를 GPU에서 실행해야 하는 팀을 위한 예제 코드와 실습 가이드입니다. 학습 서버와 분리된 실행 환경을 AWS에 직접 구축할 수 있도록 만들었습니다.
+모델이 작성한 GPU 커널을 학습 노드와 분리된 샌드박스에서 실행하는 AWS 실습입니다. GRPO 학습에서는 커널이 정답을 냈는지, 기준 구현보다 얼마나 빨랐는지를 보상에 반영합니다.
 
-Amazon EKS의 EC2 노드에서 학습과 샌드박스를 함께 운영하는 구성부터 SageMaker HyperPod에서 학습을 실행하는 구성까지 다룹니다. 샌드박스는 gVisor와 Kata의 격리 방식, 지원 GPU, 필요한 노드를 비교해 고를 수 있습니다.
+[가이드북](https://daekeun-ml.github.io/gpu-sandbox-on-aws/) | [리플레이 데모](https://dohbsn4kn34ya.cloudfront.net/) | [스크립트](SCRIPTS.md) | [문제 해결](TROUBLESHOOTING.md)
 
-GRPO 실습에서는 모델이 작성한 코드를 GPU 샌드박스에서 채점하고, 정확도와 실행 속도를 reward로 써서 모델을 업데이트합니다. GPU 없이 채점 흐름부터 확인할 수 있는 CPU 실습도 있습니다.
+<a href="docs/images/figures/index--aws-architecture.ko.svg">
+  <picture>
+    <source media="(max-width: 544px)" srcset="docs/images/figures/index--aws-architecture-compact.ko.svg">
+    <img src="docs/images/figures/index--aws-architecture.ko.svg" alt="A의 EC2 학습 노드 또는 B1의 HyperPod 학습 노드가 같은 EKS 클러스터의 EC2 샌드박스에 코드를 보내고 판정과 실행 시간을 받는 AWS 구성">
+  </picture>
+</a>
 
-[가이드북](https://daekeun-ml.github.io/gpu-sandbox-on-aws/) | [리플레이 데모](https://dohbsn4kn34ya.cloudfront.net/) | [이론 슬라이드 (PPTX)](slides/gpu-sandbox-theory.pptx) | [스크립트](SCRIPTS.md) | [문제 해결](TROUBLESHOOTING.md)
+그림에서 **A**는 EC2에서, **B1**은 SageMaker HyperPod에서 모델을 학습합니다. 두 구성 모두 EC2의 샌드박스가 코드를 채점합니다. **B2**에서는 시스템 CPU와 학습·채점 GPU를 모두 HyperPod에 둡니다. [B2 구성도와 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)
+
+<details>
+<summary><b>채점 요청 한 건 따라가기</b></summary>
+
+학습 노드는 모델이 생성한 커널 코드를 선택한 샌드박스 pool로 보냅니다. 같은 프롬프트에서 나온 답안 묶음은 같은 버전의 pool에서 채점합니다. 샌드박스가 정확도와 속도 향상 값을 돌려주면 트레이너가 그 값으로 학습 보상을 계산합니다.
+
+![학습 노드가 샌드박스 pool에 커널 코드를 보내고 정확도와 속도 향상 값을 받는 흐름. 그림의 gVisor와 Kata + QEMU는 GPU에서, Kata + Cloud Hypervisor는 CPU에서 채점합니다.](docs/images/figures/index--what-we-build.ko.svg)
+
+</details>
 
 | 하고 싶은 일 | 어디서 시작할까요? |
 |---|---|
@@ -18,10 +32,6 @@ GRPO 실습에서는 모델이 작성한 코드를 GPU 샌드박스에서 채점
 | GPU 채점과 모델 학습 연결하기 | [핸즈온 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/) (시나리오 A부터) |
 
 ## 아키텍처
-
-![만드는 것: 학습 노드의 policy 모델과 vLLM이 버전을 고정한 채 gVisor, Kata + QEMU, Kata + Cloud Hypervisor(CPU 계층) 중 선택한 샌드박스 pool에 커널 코드를 보내고, 정확성과 speedup을 reward로 받는 구성](docs/images/figures/index--what-we-build.ko.svg)
-
-*그림 요약: policy 모델이 쓴 커널 코드는 group 단위로 버전을 고정한 상태로 선택한 런타임의 샌드박스 pool에 전달되고, pool이 측정한 정확성과 speedup이 reward로 쓰입니다. GPU 채점은 gVisor와 Kata + QEMU pool이 맡고, Kata + Cloud Hypervisor는 기본적으로 CPU에서 실행합니다.*
 
 A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 관리형 B2는 HyperPod EKS 생성 마법사에서 제어 영역과 워커를 함께 구성합니다. C는 CPU 샌드박스에서 채점과 버전 교체를 실습합니다.
 

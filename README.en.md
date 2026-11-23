@@ -2,13 +2,27 @@
 
 # GPU Sandbox on AWS
 
-GPU Sandbox on AWS provides example code and hands-on guides for teams that need to run AI-generated code on a GPU. Deploy an execution environment on AWS that is separate from the training server.
+This AWS lab runs model-generated GPU kernels in sandboxes separate from the training node. During GRPO training, the reward reflects whether a kernel produces the correct output and how fast it runs compared with the reference implementation.
 
-The guide covers running the trainer and sandboxes on EC2 nodes in Amazon EKS, as well as training on SageMaker HyperPod. Compare gVisor and Kata by isolation boundary, supported GPUs, and node requirements.
+[Guidebook](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/) | [Replay demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en) | [Scripts](SCRIPTS.en.md) | [Troubleshooting](TROUBLESHOOTING.en.md)
 
-The GRPO exercise grades model-generated code in GPU sandboxes and uses correctness and execution speed as rewards for model updates. A CPU exercise covers the scoring flow without GPUs.
+<a href="docs/images/figures/index--aws-architecture.en.svg">
+  <picture>
+    <source media="(max-width: 544px)" srcset="docs/images/figures/index--aws-architecture-compact.en.svg">
+    <img src="docs/images/figures/index--aws-architecture.en.svg" alt="An EC2 trainer in A or a HyperPod trainer in B1 sends code to EC2 sandboxes in the same EKS cluster and receives a verdict and timing.">
+  </picture>
+</a>
 
-[Guidebook](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/) | [Replay demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en) | [Korean slide deck (PPTX)](slides/gpu-sandbox-theory.pptx) | [Scripts](SCRIPTS.en.md) | [Troubleshooting](TROUBLESHOOTING.en.md)
+The diagram shows **A** training on EC2 and **B1** training on SageMaker HyperPod. Both send code to sandboxes on EC2 for grading. In **B2**, HyperPod runs the system, training and grading workers. [B2 architecture and hands-on guide](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
+
+<details>
+<summary><b>Follow one grading request</b></summary>
+
+The training node sends a generated kernel to the selected sandbox pool. The trainer keeps the pool version fixed while grading the answers generated for one prompt. The sandbox returns correctness and speedup, which the trainer uses to calculate the reward.
+
+![Kernel code flows from the trainer to a sandbox pool, and correctness and speedup flow back. GPU grading uses gVisor or Kata with QEMU. The CPU exercise can use Kata with Cloud Hypervisor.](docs/images/figures/index--what-we-build.en.svg)
+
+</details>
 
 | Goal | Start here |
 |---|---|
@@ -18,10 +32,6 @@ The GRPO exercise grades model-generated code in GPU sandboxes and uses correctn
 | Connect GPU grading to training | [Hands-on overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/00_overview/), starting with A |
 
 ## Architecture
-
-![What you build: the policy model and vLLM on the training node send kernel code, with the version pinned, to the selected sandbox pool (gVisor, Kata + QEMU, or Kata + Cloud Hypervisor as the CPU tier) and get correctness and speedup back as the reward](docs/images/figures/index--what-we-build.en.svg)
-
-*Takeaway: Kernel code from the policy model goes to the sandbox pool of the selected runtime with its version pinned per group, and correctness and speedup come back as the reward. GPU scoring runs on the gVisor and Kata + QEMU pools; Kata + Cloud Hypervisor runs on CPU by default.*
 
 A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the control plane and workers from the SageMaker HyperPod EKS wizard. C runs scoring and version changes on CPU sandboxes.
 
