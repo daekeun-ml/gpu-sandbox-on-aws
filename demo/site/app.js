@@ -1232,6 +1232,7 @@ function renderHyperPodBench(scenario) {
   const run = extras?.[scenario];
   const bench = run?.bench;
   const panel = document.getElementById(`hyperpod-${scenario}`);
+  if (!panel) return;
   panel.hidden = !bench?.rows?.length;
   if (panel.hidden) return;
   document.getElementById(`${scenario}-source`).textContent = run.source;
