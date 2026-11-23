@@ -1,7 +1,13 @@
 # GPU Sandbox on AWS
 
-!!! info "TL;DR"
-    AWS에서 GPU 샌드박스를 구축하는 가이드입니다. EKS의 EC2 노드에서 직접 운영하는 구성과 HyperPod를 쓰는 구성을 살펴보고, gVisor와 Kata의 실행 조건을 비교합니다. GRPO 실습에서는 모델이 쓴 코드의 채점 결과를 reward로 연결합니다.
+Amazon EKS 클러스터에서 학습과 코드 채점을 별도 GPU 노드에 배치합니다. A는 EC2에서, B1은 SageMaker HyperPod에서 모델을 학습합니다. 두 구성 모두 같은 클러스터의 EC2 샌드박스 풀로 코드를 보냅니다.
+
+<a href="images/figures/index--aws-architecture.svg">
+<picture>
+  <source media="(max-width: 34em)" srcset="images/figures/index--aws-architecture-compact.svg" width="360" height="613">
+  <img class="off-glb" src="images/figures/index--aws-architecture.svg" width="824" height="464" alt="운영자 PC는 Systems Manager 세션과 접속용 EC2를 거쳐 프라이빗 EKS API에 연결합니다. VPC의 프라이빗 서브넷에서 EC2 또는 HyperPod 학습 노드가 별도 EC2 채점 풀에 코드를 보내고 판정과 속도를 받습니다. 워커 노드는 ECR에서 컨테이너 이미지를 가져옵니다.">
+</picture>
+</a>
 
 <div class="grid cards" markdown>
 

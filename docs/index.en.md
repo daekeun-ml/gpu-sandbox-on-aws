@@ -1,7 +1,13 @@
 # GPU Sandbox on AWS
 
-!!! info "TL;DR"
-    Build a GPU sandbox on AWS. Compare running EC2 nodes in EKS with training on HyperPod, and check the requirements for gVisor and Kata. The GRPO exercise turns evaluation results into rewards.
+Training and code grading run on separate GPU nodes in one Amazon EKS cluster. Scenario A runs the trainer on EC2. B1 runs it on SageMaker HyperPod. Both send generated code to an EC2 sandbox pool in the same cluster.
+
+<a href="images/figures/index--aws-architecture.svg">
+<picture>
+  <source media="(max-width: 34em)" srcset="images/figures/index--aws-architecture-compact.svg" width="360" height="613">
+  <img class="off-glb" src="images/figures/index--aws-architecture.svg" width="824" height="464" alt="The operator reaches the private EKS API through a Systems Manager session and an EC2 access instance. In private VPC subnets, an EC2 or HyperPod training node sends code to a separate EC2 grading pool and receives a verdict and speedup. Worker nodes pull container images from ECR.">
+</picture>
+</a>
 
 <div class="grid cards" markdown>
 
