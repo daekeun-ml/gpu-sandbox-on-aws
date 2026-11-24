@@ -124,7 +124,7 @@ A, B1, C는 [시작하기](start.md)에서 환경을 준비한 뒤 `scripts/01_c
 
 ## 실습 리소스 정리 { #다음-단계 }
 
-A, B1, C는 [정리](cleanup.md), 관리형 B2는 [HyperPod 마법사 스택 정리](scenarios/b/b2.md#cleanup)를 따르세요. pod를 0개로 줄여도 노드 요금은 계속 발생합니다. 잠시 쉬었다 이어갈 때는 [EC2 노드 그룹 일시 정지](cleanup.md#일시-정지-노드-그룹을-0으로-줄이기)를 참고하세요.
+A, B1, C는 [정리](cleanup.md), 관리형 B2는 [B2 CloudFormation 스택 정리](scenarios/b/b2.md#cleanup)를 따르세요. pod를 0개로 줄여도 노드 요금은 계속 발생합니다. 잠시 쉬었다 이어갈 때는 [EC2 노드 그룹 일시 정지](cleanup.md#일시-정지-노드-그룹을-0으로-줄이기)를 참고하세요.
 
 ## 구성과 로그 찾아보기 { #아키텍처 }
 

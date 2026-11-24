@@ -16,7 +16,7 @@ scripts/04_install_gpu_stack.sh
 kubectl apply -f k8s/runtimes/runtimeclass-gvisor-hyperpod.yaml
 ```
 
-`prepare_managed.sh` assigns CoreDNS to `system` and enables VPC CNI NetworkPolicy enforcement. In this run the wizard stack completed while the training operator was `CREATE_FAILED`. Installing `cert-manager`, waiting for its webhook and recreating the same operator version brought the add-on to `ACTIVE`.
+`prepare_managed.sh` assigns CoreDNS to `system` and enables VPC CNI NetworkPolicy enforcement. In this run CloudFormation finished creating the stack while the training operator was `CREATE_FAILED`. Installing `cert-manager`, waiting for its webhook and recreating the same operator version brought the add-on to `ACTIVE`.
 
 [![A gVisor pod identifies the A10G with PyTorch and returns 32 from a CUDA tensor sum](../../../images/terminal/hyperpod-b2-cuda.png)](../../../images/terminal/hyperpod-b2-cuda.png)
 

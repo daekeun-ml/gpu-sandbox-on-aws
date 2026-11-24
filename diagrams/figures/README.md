@@ -1,9 +1,9 @@
 # Schematic figures
 
-Source of the figures under `docs/images/figures/`: the Pain point figures and the main concept figures.
-Each figure is drawn once in a `figures_*.py` module and
-written in Korean (`<name>.ko.svg`) and English (`<name>.en.svg`); the i18n plugin serves the matching
-file at `images/figures/<name>.svg` for each language, so both pages reference the same path.
+The `figures_*.py` modules generate the diagrams used in the guide and the GitHub README.
+Each module renders Korean (`<name>.ko.svg`) and English (`<name>.en.svg`) versions under
+`docs/images/figures/`. That directory also contains diagrams maintained directly as SVGs.
+MkDocs serves the matching file at `images/figures/<name>.svg` for each language.
 
 ```bash
 # from the repository root, in the repository venv (Pillow, mkdocs-material)

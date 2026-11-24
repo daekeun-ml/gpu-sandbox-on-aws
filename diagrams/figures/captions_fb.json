@@ -1,13 +1,4 @@
 {
-  "concepts-01_why_gpu_sandbox": {
-    "page": "docs/concepts/01_why_gpu_sandbox.md",
-    "section": "기존 Pain Point",
-    "replaces": "pain",
-    "alt_ko": "두 패널 그림입니다. a: 후보 커널 코드를 CPU 전용 샌드박스로 보내면 GPU에서 측정하는 과제를 채점할 수 없습니다. GPU 샌드박스로 보내면 네 가지 위험이 생깁니다. 신뢰할 수 없는 코드가 GPU 드라이버에 접근하고, 이전 평가의 상태가 다음 평가에 남고, 샌드박스마다 GPU 1개가 필요해 비용이 늘고, 측정을 속여 reward를 얻을 수 있습니다. b: 이 에셋은 CPU에서 형식과 AST 정책을 먼저 검사해, 위반은 GPU 실행 전에 판정합니다. GPU 샌드박스 pod는 pod당 GPU 1개와 평가 1개를 쓰고, gVisor 또는 Kata가 노드를 보호합니다. 실행마다 새 프로세스 트리와 캐시를 쓰고, GPU로는 정확성과 timing만 측정하며, host clock timing과 출력 checksum 비교로 측정 조작을 막습니다.",
-    "alt_en": "Two panels. a: candidate kernel code sent to a CPU-only sandbox cannot be scored on tasks measured on a GPU; sent to a GPU sandbox it brings four risks: untrusted code reaches the GPU driver, state leaks into the next evaluation, one GPU per sandbox raises cost, and the policy fools the measurement for reward. b: this asset checks format and the AST policy on CPU first so violations get a verdict before the GPU, and in a GPU sandbox pod with one GPU and one evaluation, gVisor or Kata protects the node, each run gets a new process tree and caches, the GPU measures only correctness and timing, and host clock timing with output checksums counters measurement cheating.",
-    "takeaway_ko": "CPU 샌드박스로는 GPU 과제를 채점할 수 없고, GPU를 연결하면 드라이버 노출, 상태 오염, 비용 증가, 측정 조작의 위험이 생깁니다. 이 에셋은 CPU에서 먼저 검사하고, 네 가지 위험마다 대응 방법을 둡니다.",
-    "takeaway_en": "A CPU sandbox cannot score the task and attaching a GPU brings driver exposure, state contamination, cost and measurement cheating, so this asset filters on CPU first and pairs each risk with a countermeasure."
-  },
   "concepts-01_why_gpu_sandbox--two-tier": {
     "page": "docs/concepts/01_why_gpu_sandbox.md",
     "section": "두 계층 패턴: CPU에서 거르고 GPU에서 측정합니다",
@@ -26,32 +17,30 @@
     "takeaway_ko": "샌드박스는 생성 단계와 업데이트 단계 사이에 있습니다. 그래서 채점이 느리면 학습 전체가 느려지고, 채점이 틀리면 학습이 잘못된 방향으로 진행됩니다.",
     "takeaway_en": "The sandbox sits between generation and update, so slow or wrong scoring slows down or skews the whole training run."
   },
-  "concepts-02_isolation_runtimes": {
-    "page": "docs/concepts/02_isolation_runtimes.md",
-    "section": "기존 Pain Point",
-    "replaces": "pain",
-    "alt_ko": "세 열을 비교한 그림입니다. gVisor + GPU는 허용된 ioctl만 host 드라이버로 전달하고 /dev/kvm이 필요 없어서, g5.xlarge 같은 일반 GPU VM에서 동작합니다. Kata + GPU는 GPU를 VM에 직접 할당(VFIO)해 guest 드라이버를 쓰고, /dev/kvm, IOMMU, GPU를 소유한 host가 필요해 g4dn.metal에서만 동작합니다. 이 조합에서 upstream이 지원하는 hypervisor는 QEMU뿐이고 Cloud Hypervisor는 지원하지 않습니다(두 칸은 빨간색). Kata CPU 전용은 GPU를 쓰지 않고, nested virtualization이 /dev/kvm을 제공하므로 2026-02부터 c8i.2xlarge 같은 VM에서 Cloud Hypervisor와 QEMU 모두로 동작합니다.",
-    "alt_en": "Three columns. gVisor + GPU forwards only allowed ioctls to the host driver and needs no /dev/kvm, so it runs on regular GPU VMs such as g5.xlarge. Kata + GPU passes the whole GPU into the VM (VFIO) and uses the guest driver; it needs /dev/kvm, an IOMMU and a host that owns the GPU, so it runs only on g4dn.metal, and upstream supports only QEMU there, not Cloud Hypervisor (both cells in red). Kata CPU only has no GPU; nested virtualization provides /dev/kvm, so since 2026-02 it runs on VMs such as c8i.2xlarge with both Cloud Hypervisor and QEMU.",
-    "takeaway_ko": "gVisor와 Kata는 GPU를 연결하는 방식이 다릅니다. `.metal` 인스턴스가 필요한 조합은 Kata + GPU뿐이고, 이 조합에서 upstream이 지원하는 hypervisor는 QEMU입니다.",
-    "takeaway_en": "gVisor and Kata take different GPU paths, only Kata + GPU needs `.metal`, and there the hypervisor upstream supports is QEMU."
-  },
   "concepts-02_isolation_runtimes--gpu-paths": {
     "page": "docs/concepts/02_isolation_runtimes.md",
-    "section": "GPU 경로 두 가지",
+    "section": "GPU 요청은 어느 드라이버로 갈까요?",
     "replaces": "subgraph G[\"gVisor + nvproxy (g6.xlarge, 일반 VM)\"]",
-    "alt_ko": "같은 다섯 줄 구조로 그린 두 패널입니다. a gVisor + nvproxy(g5.xlarge): pod(gVisor) 경계 안에 후보 코드(CUDA 사용자 공간 라이브러리), Sentry(사용자 공간 커널, systrap 플랫폼), nvproxy(드라이버 버전별 ioctl allowlist)가 있습니다. 그 아래 host에는 host NVIDIA 드라이버 580.178.04(proprietary, GSP off)와 A10G가 있습니다. b Kata + QEMU(g4dn.metal): guest VM 경계 안에 후보 코드와 guest kernel + guest NVIDIA 드라이버(kata-deploy 제공, open 615.71.09)가 있습니다. host 쪽에서는 VFIO passthrough(IOMMU가 DMA를 VM 안으로 제한)를 거쳐 T4에 바로 연결되고(host는 vfio-pci만 bind), host에는 NVIDIA 드라이버가 없습니다.",
-    "alt_en": "Two panels with the same five rows. a gVisor + nvproxy (g5.xlarge): inside the pod (gVisor) boundary are the candidate code (CUDA user-space libraries), the Sentry (user-space kernel, systrap platform) and nvproxy (ioctl allowlist per driver version); below, on the host, are the host NVIDIA driver 580.178.04 (proprietary, GSP off) and the A10G. b Kata + QEMU (g4dn.metal): inside the guest VM boundary are the candidate code and the guest kernel + guest NVIDIA driver (shipped by kata-deploy, open 615.71.09); on the host, VFIO passthrough (IOMMU confines DMA to the VM) leads straight to the T4 (the host binds only vfio-pci), with no NVIDIA driver on the host.",
-    "takeaway_ko": "gVisor에서는 후보 코드의 GPU 명령이 허용 목록을 거쳐 host 드라이버로 전달되므로 host 드라이버를 공유합니다. Kata에서는 GPU가 VM에 직접 할당되어 VM 안의 guest 드라이버만 사용합니다.",
-    "takeaway_en": "With gVisor the candidate shares the host driver through an allowlist; with Kata the GPU moves into the VM and only the guest driver touches it."
+    "alt_ko": "왼쪽은 gVisor의 nvproxy가 노드의 NVIDIA 드라이버로 요청을 전달하는 경로입니다. 오른쪽은 Kata VM 안의 NVIDIA 드라이버가 전용 T4를 제어하는 경로입니다.",
+    "alt_en": "On the left, gVisor’s nvproxy forwards requests to the node’s NVIDIA driver. On the right, the NVIDIA driver inside the Kata VM controls its dedicated T4.",
+    "takeaway_ko": "gVisor에서는 노드의 드라이버가 A10G를 제어합니다. Kata에서는 VM 안의 드라이버가 VFIO로 할당된 T4를 제어합니다.",
+    "takeaway_en": "With gVisor the node’s driver controls the A10G. With Kata the VM’s driver controls the T4 assigned through VFIO."
   },
-  "concepts-03_onpolicy_rl_with_sandboxes": {
-    "page": "docs/concepts/03_onpolicy_rl_with_sandboxes.md",
-    "section": "기존 Pain Point",
-    "replaces": "pain",
-    "alt_ko": "두 패널 그림입니다. a: prompt 하나에서 나온 group에서 completion A는 v1이 채점해 1.85점, A와 같은 코드인 completion B는 v2가 채점해 1.35점을 받고, 정답인 completion C는 pod 장애로 0점을 받습니다. group 평균과 비교하는 advantage에 버전 차이와 인프라 잡음이 섞입니다(빨간색). b(TRL): A와 B를 모두 v1이 채점해 둘 다 1.85점이고, C는 sandbox_error로 None이 되어 점선으로 표시됩니다. advantage에는 policy 차이만 반영되고, C는 baseline에서 제외됩니다.",
-    "alt_en": "Two panels. a: in the group of one prompt, completion A scored by v1 gets 1.85, completion B with the same code scored by v2 gets 1.35, and the correct completion C gets zero from a pod failure, so the advantage against the group mean mixes in version gaps and infrastructure noise (red). b (TRL): A and B are both scored by v1 at 1.85, C becomes None from sandbox_error (dashed), and the advantage reflects only policy differences with C left out of the baseline.",
-    "takeaway_ko": "같은 코드가 채점 버전에 따라 다른 점수를 받고 인프라 장애가 0점으로 기록되면, advantage에 policy 차이가 아니라 버전 차이와 인프라 장애가 반영됩니다. 그래서 한 group은 한 버전으로 채점하고, 인프라 오류는 None으로 처리해 제외합니다(TRL).",
-    "takeaway_en": "When the same code scores differently by version and infrastructure failures enter as zeros, the advantage reflects versions and infrastructure, so one group is scored by one version and infrastructure errors are left out as None (TRL)."
+  "concepts-02_isolation_runtimes--gpu-passthrough": {
+    "page": "docs/concepts/02_isolation_runtimes.md",
+    "section": "Kata의 GPU 패스스루는 어떻게 동작하나요?",
+    "alt_ko": "서버의 GPU 한 장을 QEMU가 VFIO로 Kata VM에 할당합니다. VM 안의 드라이버가 GPU에 연산 명령을 보내고, IOMMU는 GPU가 시스템 RAM에 접근할 때 이 VM에 매핑된 영역만 허용합니다.",
+    "alt_en": "QEMU assigns one physical GPU to the Kata VM through VFIO. The guest driver sends work to the GPU. When the GPU accesses system RAM, the IOMMU permits access only to memory mapped for the VM’s device.",
+    "takeaway_ko": "물리 GPU는 서버 슬롯에 그대로 있고 VM의 드라이버가 그 GPU를 제어합니다. GPU가 접근할 수 있는 시스템 RAM의 범위는 IOMMU가 제한합니다.",
+    "takeaway_en": "The GPU stays in the server’s PCIe slot and the guest driver controls it. The IOMMU restricts which system RAM the GPU can access."
+  },
+  "concepts-02_isolation_runtimes--kata-hypervisors": {
+    "page": "docs/concepts/02_isolation_runtimes.md",
+    "section": "QEMU와 Cloud Hypervisor의 설계 차이",
+    "alt_ko": "QEMU는 게스트 명령을 하드웨어 가상화 또는 소프트웨어 번역으로 실행하고, Cloud Hypervisor는 하드웨어 가상화를 이용합니다. 같은 디스크 이미지를 QEMU는 IDE 또는 virtio-blk로, Cloud Hypervisor는 virtio-blk로 제공합니다.",
+    "alt_en": "QEMU can run guest instructions with hardware virtualization or software translation. Cloud Hypervisor uses hardware virtualization. QEMU can present the same disk image through IDE or virtio-blk, and Cloud Hypervisor offers virtio-blk.",
+    "takeaway_ko": "QEMU는 기존 하드웨어와 가상 머신용 장치를 모두 지원합니다. Cloud Hypervisor는 virtio를 사용하는 최신 게스트에 집중합니다.",
+    "takeaway_en": "QEMU supports both legacy hardware models and paravirtualized devices. Cloud Hypervisor focuses on modern guests that use virtio."
   },
   "concepts-03_onpolicy_rl_with_sandboxes--version-swap": {
     "page": "docs/concepts/03_onpolicy_rl_with_sandboxes.md",
@@ -64,30 +53,19 @@
   },
   "concepts-04_platforms_and_instances": {
     "page": "docs/concepts/04_platforms_and_instances.md",
-    "section": "기존 Pain Point",
-    "replaces": "pain",
-    "alt_ko": "두 패널 그림입니다. a: EKS 클러스터의 기본 AMI HyperPod 인스턴스 그룹에 trainer(ml.g5.2xlarge)와 샌드박스를 함께 둡니다. gVisor 샌드박스는 드라이버 595.91.07을 nvproxy가 지원하지 않아(unknown) 실행되지 않고, Kata 샌드박스는 ml.*.metal과 nested virtualization이 없어 실행되지 않습니다(빨간색). b B1: 같은 EKS 클러스터에서 trainer만 HyperPod 인스턴스 그룹에 두고, gVisor 샌드박스(g5.xlarge)와 Kata 샌드박스(GPU는 g4dn.metal, CPU는 c8i.2xlarge)는 EC2 노드 그룹에 둡니다.",
-    "alt_en": "Two panels. a: putting the trainer (ml.g5.2xlarge) and the sandboxes together in a default-AMI HyperPod instance group of an EKS cluster fails: the gVisor sandbox because driver 595.91.07 is unknown, the Kata sandbox because there is no ml.*.metal and no nested virtualization (red). b B1: in the same EKS cluster only the trainer sits in the HyperPod instance group, and the gVisor sandbox (g5.xlarge) and the Kata sandbox (g4dn.metal for GPU, c8i.2xlarge for CPU) sit in EC2 node groups.",
-    "takeaway_ko": "기본 HyperPod AMI의 노드에서는 gVisor 샌드박스와 Kata 샌드박스를 모두 실행할 수 없습니다. 그래서 B1은 trainer만 HyperPod에 두고, 샌드박스는 같은 클러스터의 EC2 노드에 둡니다. 드라이버를 바꾼 custom AMI의 HyperPod 그룹에 gVisor 샌드박스를 두는 B2는 실험 구성입니다.",
-    "takeaway_en": "gVisor and Kata are both blocked on HyperPod nodes, so B1 puts only the trainer on HyperPod and keeps the sandboxes on EC2 nodes in the same cluster."
+    "section": "B1과 B2에서 달라지는 것",
+    "alt_ko": "B1은 HyperPod가 학습 워커만 관리하고 EC2가 시스템과 채점을 맡습니다. B2는 세 역할 모두 HyperPod 인스턴스 그룹에 배치합니다.",
+    "alt_en": "In B1, HyperPod manages the training worker and EC2 provides the system and grading workers. In B2, all three roles run in HyperPod instance groups.",
+    "takeaway_ko": "두 구성 모두 HyperPod에서 학습합니다. B1에서는 EC2에서, B2에서는 HyperPod에서 채점합니다.",
+    "takeaway_en": "Both scenarios train on HyperPod. B1 grades on EC2 and B2 grades on HyperPod."
   },
-  "concepts-05_decision_guide": {
+  "concepts-05_decision_guide--exercise-path": {
     "page": "docs/concepts/05_decision_guide.md",
-    "section": "기존 Pain Point",
-    "replaces": "pain",
-    "alt_ko": "격리 경계와 측정 GPU를 두 축으로 한 표입니다. VM 경계와 T4 조합은 g4dn.metal의 Kata + QEMU(VFIO)로 가능합니다. VM 경계와 최신 GPU(L4, L40S, H100) 조합은 EC2에 없습니다(빨간색). 사용자 공간 커널 경계와 T4 조합은 g4dn의 gVisor이며, 이 에셋에서는 검증하지 않았습니다. 사용자 공간 커널 경계와 최신 GPU 조합은 G/P 계열 VM(g5, g6, g6e, p5)의 gVisor + nvproxy로 가능합니다. AWS 관리형 격리인 Nitro Sandboxes와 EKS isolated pods는 출시 시점에 CPU 전용이라 두 GPU 열 모두에서 쓸 수 없습니다(GPU passthrough 미지원, 빨간색).",
-    "alt_en": "A grid of isolation boundary against measurement GPU. VM boundary with T4 works as Kata + QEMU on g4dn.metal (VFIO); VM boundary with a current GPU (L4, L40S, H100) is not on EC2 (red). User-space kernel boundary with T4 is gVisor on g4dn, unverified in this asset; with a current GPU it is gVisor + nvproxy on G/P family VMs (g5, g6, g6e, p5). AWS managed isolation, Nitro Sandboxes and EKS isolated pods, spans both GPU columns as CPU only at launch with no GPU passthrough (red).",
-    "takeaway_ko": "GPU 샌드박스로 바로 쓸 수 있는 조합은 `g4dn.metal`의 Kata + QEMU와 G/P 계열 VM의 gVisor + nvproxy 두 가지입니다. VM 경계와 최신 GPU 조합은 EC2에 없고, Nitro Sandboxes와 EKS isolated pods는 출시 시점에 GPU를 지원하지 않습니다.",
-    "takeaway_en": "Two combinations are ready to use as GPU sandboxes; a VM boundary with a current GPU does not exist on EC2, and Nitro Sandboxes do not support GPUs at launch."
-  },
-  "concepts-05_decision_guide--decision-tree": {
-    "page": "docs/concepts/05_decision_guide.md",
-    "section": "결정 트리",
-    "replaces": "A{\"샌드박스 안에서 GPU 필요\"} -->|아니오| B{\"관리형 서비스 선호\"}",
-    "alt_ko": "왼쪽에 위에서 아래로 이어지는 결정 단계가 있고, 오른쪽에 결과 여섯 개가 있습니다. 샌드박스 안에서 GPU가 필요 없을 때 관리형 서비스를 선호하면 AgentCore Code Interpreter 또는 Nitro Sandboxes, EKS isolated pods(CPU 전용)를 쓰고, 선호하지 않으면 c8i의 Kata + CLH(nested virtualization)를 씁니다. GPU가 필요하고 관리형 GPU 샌드박스를 선호하면 서드파티 서비스(예: Modal, gVisor 기반, 이 에셋 범위 밖)를 씁니다. 관리형을 선호하지 않고 VM 경계(서로 다른 고객의 적대적 코드)가 필요 없으면 G/P 계열 VM의 gVisor + nvproxy(g5 A10G, g6 L4, g6e L40S, p5 H100)를 씁니다. VM 경계가 필요하고 T4에서 측정한 timing으로 충분하면 g4dn.metal의 Kata + QEMU(VM 경계 + VFIO)를 씁니다. 충분하지 않으면 EC2에 VM 경계와 최신 GPU 조합이 없으므로, gVisor와 보완 통제로 위험을 수용하거나 요구 사항을 다시 검토합니다(빨간색). 이 에셋이 구성하는 세 조합은 파란색입니다.",
-    "alt_en": "A decision ladder running down the left with six outcomes on the right. If no GPU is needed inside the sandbox and you prefer a managed service: AgentCore Code Interpreter or Nitro Sandboxes, EKS isolated pods (CPU only); otherwise Kata + CLH on c8i (nested virtualization). If a GPU is needed and you prefer a managed GPU sandbox: a third-party service (for example Modal, gVisor-based, out of scope). Otherwise, without a VM boundary requirement: gVisor + nvproxy on G/P family VMs (g5 A10G, g6 L4, g6e L40S, p5 H100). With a VM boundary and T4 acceptable for measurement: Kata + QEMU on g4dn.metal (VM boundary + VFIO); if T4 is not acceptable, EC2 has no VM boundary + current GPU combination, so accept the risk with gVisor + compensating controls or revisit the requirements (red). The three combinations this asset builds are blue.",
-    "takeaway_ko": "GPU와 VM 경계가 모두 필요할 때 EC2에서 Kata로 쓸 수 있는 GPU는 `g4dn.metal`의 T4뿐입니다. reward에 쓰는 timing을 T4에서 측정해도 되면 Kata를 쓰고, 배포할 GPU(L4, H100 등)에서 측정해야 하면 EC2에는 맞는 조합이 없으므로, gVisor와 보완 통제로 위험을 수용하거나 요구 사항을 다시 검토합니다.",
-    "takeaway_en": "When you need both a GPU and a VM boundary, the only GPU Kata can use on EC2 is the T4 in `g4dn.metal`. If measuring reward timing on a T4 is acceptable, choose Kata; if you must measure on the GPU you deploy to (L4, H100 and so on), choose gVisor and apply compensating controls."
+    "section": "GPU 실습의 플랫폼과 채점 런타임",
+    "alt_ko": "EC2 자체 운영(A)과 혼합형(B1)은 EC2에서 gVisor 또는 Kata + QEMU로 채점합니다. HyperPod 관리형(B2)은 HyperPod에서 gVisor로 채점합니다.",
+    "alt_en": "Self-managed EC2 (A) and the hybrid setup (B1) grade on EC2 with gVisor or Kata + QEMU. Managed HyperPod (B2) grades on HyperPod with gVisor.",
+    "takeaway_ko": "먼저 클러스터와 워커를 운영할 플랫폼을 고른 뒤 채점 런타임을 선택합니다.",
+    "takeaway_en": "Choose a platform for the cluster and workers, then choose the grading runtime."
   },
   "concepts-06_agent_sandbox": {
     "page": "docs/concepts/06_agent_sandbox.md",

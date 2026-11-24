@@ -30,7 +30,7 @@
     ./scripts/quickstart.sh B2 cleanup
     ```
 
-    HyperPod 마법사가 만든 스택의 이름을 입력하면 EKS 클러스터와 HyperPod 워커가 함께 삭제됩니다. [S3 버킷과 로그까지 정리하려면](scenarios/b/b2.md#retained-resources) 스택 삭제가 끝날 때까지 기다리세요.
+    B2 배포에 사용한 CloudFormation 스택 이름을 입력하면 EKS 클러스터와 HyperPod 워커가 함께 삭제됩니다. [S3 버킷과 로그까지 정리하려면](scenarios/b/b2.md#retained-resources) 스택 삭제가 끝날 때까지 기다리세요.
 
 === "C (CPU)"
 
@@ -44,7 +44,7 @@
 
 ## 개별 스크립트로 정리하기 { #manual-cleanup }
 
-HyperPod 마법사로 관리형 B2를 만들었다면 [B2 전용 절차](scenarios/b/b2.md#cleanup)에 따라 정리하세요. 이 페이지의 CDK 명령은 시나리오 A, B1, C 또는 기존 custom AMI로 만든 환경에서 실행합니다.
+`scripts/hyperpod/create_managed.sh`로 B2를 배포했다면 [B2 전용 절차](scenarios/b/b2.md#cleanup)에 따라 정리하세요. 이 페이지의 CDK 명령은 시나리오 A, B1, C 또는 기존 custom AMI로 만든 환경에서 실행합니다.
 
 먼저 `aws sts get-caller-identity`의 계정과 `scripts/config.env`의 `AWS_REGION`, `CLUSTER_NAME`을 확인하세요. 현재 `kubectl` context도 지울 실습 클러스터와 일치해야 합니다. 터널은 열어 둡니다. 사용한 리소스에 맞는 순서로 진행하세요.
 

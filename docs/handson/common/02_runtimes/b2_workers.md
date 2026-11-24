@@ -16,7 +16,7 @@ scripts/04_install_gpu_stack.sh
 kubectl apply -f k8s/runtimes/runtimeclass-gvisor-hyperpod.yaml
 ```
 
-`prepare_managed.sh`는 CoreDNS를 `system` 그룹에 배치하고 VPC CNI의 NetworkPolicy를 켭니다. 이번 실습에서는 마법사 스택이 완료된 뒤에도 학습 오퍼레이터가 `CREATE_FAILED`였습니다. `cert-manager`를 설치하고 웹훅이 준비된 뒤 같은 버전의 오퍼레이터를 다시 설치해 `ACTIVE`를 확인했습니다.
+`prepare_managed.sh`는 CoreDNS를 `system` 그룹에 배치하고 VPC CNI의 NetworkPolicy를 켭니다. 이번 실습에서는 CloudFormation 스택 생성이 끝난 뒤에도 학습 오퍼레이터가 `CREATE_FAILED`였습니다. `cert-manager`를 설치하고 웹훅이 준비된 뒤 같은 버전의 오퍼레이터를 다시 설치해 `ACTIVE`를 확인했습니다.
 
 [![gVisor Pod에서 PyTorch가 A10G를 인식하고 GPU 텐서의 합으로 32를 반환한 화면](../../../images/terminal/hyperpod-b2-cuda.png)](../../../images/terminal/hyperpod-b2-cuda.png)
 

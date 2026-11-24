@@ -9,7 +9,7 @@
 <a href="docs/images/figures/index--aws-architecture.ko.svg">
   <picture>
     <source media="(max-width: 544px)" srcset="docs/images/figures/index--aws-architecture-compact.ko.svg">
-    <img src="docs/images/figures/index--aws-architecture.ko.svg" alt="A의 EC2 학습 노드 또는 B1의 HyperPod 학습 노드가 같은 EKS 클러스터의 EC2 샌드박스에 코드를 보내고 판정과 실행 시간을 받는 AWS 구성">
+    <img src="docs/images/figures/index--aws-architecture.ko.svg" alt="A는 EC2에서 학습과 채점을 하고, B1은 HyperPod에서 학습하고 EC2에서 채점합니다. B2는 시스템 CPU와 학습용 및 채점용 GPU를 모두 HyperPod에 배치합니다.">
   </picture>
 </a>
 
@@ -33,7 +33,7 @@
 
 ## 아키텍처
 
-A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 관리형 B2는 HyperPod EKS 생성 마법사에서 제어 영역과 워커를 함께 구성합니다. C는 CPU 샌드박스에서 채점과 버전 교체를 실습합니다.
+A, B1, C는 프라이빗 EKS API를 제공하는 CDK 스택을 사용합니다. 관리형 B2에서는 CloudFormation 스택 하나로 EKS 클러스터와 HyperPod 워커를 함께 만듭니다. C는 CPU 샌드박스에서 채점과 버전 교체를 실습합니다.
 
 ### 시나리오 A: EC2 GPU (기본)
 

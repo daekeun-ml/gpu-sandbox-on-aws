@@ -8,7 +8,7 @@ Amazon EKS supplies the Kubernetes API and scheduler. All four workers registere
 
 ## Read the diagram
 
-1. **Workstation and EKS.** The workstation submits the HyperPod EKS wizard stack to CloudFormation. The stack provisions the VPC, EKS control plane and HyperPod cluster together. The operator then connects `kubectl` directly to the EKS API.
+1. **Workstation and EKS.** The operator runs the B2 deployment script from the workstation to create a CloudFormation stack. The stack provisions the VPC, EKS control plane and HyperPod cluster together. The operator then connects `kubectl` directly to the EKS API.
 2. **Three HyperPod instance groups.** The inner dashed boxes mark the instance groups. One CPU worker in `system` runs CoreDNS and the benchmark client. `trainer` runs GRPO on one `ml.g5.2xlarge`. Each of the two `ml.g5.xlarge` workers in `sandbox` runs one v1 grading pod with its own A10G.
 3. **Grading requests and responses.** Across the center, the trainer sends generated code and receives a verdict and execution time. The upper solid line shows the CPU benchmark client sending requests to the same grading pool after training.
 4. **Shared services and model download.** The bottom row shows S3 for lifecycle scripts, ECR for container images and CloudWatch Logs for EKS control plane logs. The trainer downloads the model from Hugging Face Hub through the NAT gateway.

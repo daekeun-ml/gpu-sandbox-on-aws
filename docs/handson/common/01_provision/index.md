@@ -153,7 +153,7 @@ aws sts get-caller-identity
 
     2. **EKS와 HyperPod 워커 생성**
 
-        마법사 스택 하나로 EKS 제어 영역과 세 인스턴스 그룹을 만듭니다. 스크립트가 스택 이름을 출력하면 생성이 진행되는 동안 이미지를 빌드하세요.
+        이 스크립트는 CloudFormation 스택 하나로 EKS 클러스터와 HyperPod 인스턴스 그룹 세 개를 만듭니다. 스크립트가 스택 이름을 출력하면 생성이 진행되는 동안 이미지를 빌드하세요.
 
         ```bash
         scripts/hyperpod/create_managed.sh

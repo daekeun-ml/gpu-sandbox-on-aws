@@ -30,7 +30,7 @@ If you deployed with `scripts/config.env`, follow [cleanup with individual scrip
     ./scripts/quickstart.sh B2 cleanup
     ```
 
-    Enter the stack name when prompted. Deleting the HyperPod wizard stack removes the EKS cluster and the HyperPod workers together. Wait for it to finish before [cleaning up the S3 bucket and logs](scenarios/b/b2.md#retained-resources).
+    Enter the stack name when prompted. Deleting the B2 CloudFormation stack removes the EKS cluster and the HyperPod workers together. Wait for it to finish before [cleaning up the S3 bucket and logs](scenarios/b/b2.md#retained-resources).
 
 === "C (CPU)"
 

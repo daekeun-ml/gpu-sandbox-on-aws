@@ -47,7 +47,7 @@
     },
     {
       "id": "stack",
-      "label": "CloudFormation HyperPod EKS wizard",
+      "label": "CloudFormation HyperPod EKS stack",
       "icon": "cloudformation",
       "group": "provision"
     },

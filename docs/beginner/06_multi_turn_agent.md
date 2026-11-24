@@ -8,7 +8,7 @@
 
 **Agent Sandbox**는 Kubernetes에서 에피소드마다 전용 샌드박스를 배정하고 회수하는 도구입니다. 여러 에이전트가 동시에 일해도 각자 처음 배정받은 주소로 다음 요청을 보내면 자기 작업을 이어갑니다. 에피소드가 끝나면 샌드박스를 반납합니다. 그 안에서 코드를 격리해 실행하는 일은 gVisor나 Kata가 맡습니다. [Agent Sandbox 공식 문서](https://agent-sandbox.sigs.k8s.io/docs/)
 
-![독립된 답은 빈 샌드박스에 보내고 한 문제를 여러 번 시도할 때는 같은 샌드박스로 고친 답을 보냅니다.](../images/figures/beginner-06_multi_turn_agent.ko.svg?v=2)
+![독립된 답은 빈 샌드박스에 보내고 한 문제를 여러 번 시도할 때는 같은 샌드박스로 고친 답을 보냅니다.](../images/figures/beginner-06_multi_turn_agent.ko.svg?v=3)
 
 <span id="이전-턴에서-무엇을-이어받나요"></span>
 

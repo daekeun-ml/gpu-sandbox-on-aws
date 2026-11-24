@@ -614,7 +614,7 @@ Before it submits the Job, the multi-turn episode run (`scripts/extensions/agent
 | Symptom observed during the lab | What resolved it |
 |---|---|
 | The group shows `InService`, but `CurrentCount` is below `TargetCount` | Inspect `list-cluster-nodes --include-node-logical-ids`. The original GPU requests reported `INSUFFICIENT_CAPACITY_ERROR`. HyperPod retried in `Continuous` mode and allocated all three GPUs. |
-| The wizard stack is `CREATE_COMPLETE`, but the training add-on reports `K8sResourceNotFound` for cert-manager | Run `scripts/hyperpod/prepare_managed.sh` after the workers are ready. It waits for the certificate webhook and recreates the failed add-on at the same version. |
+| The B2 CloudFormation stack is `CREATE_COMPLETE`, but the training add-on reports `K8sResourceNotFound` for cert-manager | Run `scripts/hyperpod/prepare_managed.sh` after the workers are ready. It waits for the certificate webhook and recreates the failed add-on at the same version. |
 | The grading nodes report driver `595.112.07` or `nvidia_uvm` is in use | Once both grading workers are `Ready`, `scripts/hyperpod/reboot_sandboxes.sh` stages `580.178.04` on disk, reboots the workers through HyperPod and verifies the running module. |
 
 [Commands, screenshots and cleanup](../handson/scenarios/b/b2.md)

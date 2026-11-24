@@ -153,7 +153,7 @@ Choose one tab and **save its settings in the file** before running the commands
 
     2. **Create EKS and the HyperPod workers**
 
-        One wizard stack provisions the EKS control plane and all three worker groups. When the script prints the stack name, start building the images while provisioning continues.
+        The script provisions the EKS cluster and all three HyperPod instance groups in one CloudFormation stack. When the script prints the stack name, start building the images while provisioning continues.
 
         ```bash
         scripts/hyperpod/create_managed.sh

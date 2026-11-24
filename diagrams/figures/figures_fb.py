@@ -5,6 +5,8 @@ Every box and edge comes from the page named in each docstring. Shared geometry 
 
 from __future__ import annotations
 
+from xml.sax.saxutils import escape
+
 from figlib import (ACCENT, ACCENT_FILL, GREY_FILL, INK, MUTED_STROKE, RED, RED_FILL, SIZE, SMALL, Figure,
                     text_width)
 
@@ -32,10 +34,6 @@ def mbox(fig: Figure, x, y, w, h, lines, *, icon=None, fill=GREY_FILL, stroke=MU
     assert need_h <= h, f"box {gid or lines[0]!r} too short: {need_h} > {h}"
 
 
-def dot(fig: Figure, x, y, color=INK):
-    fig.parts.append(f'<circle cx="{x}" cy="{y}" r="3" fill="{color}"/>')
-
-
 def side_label(fig: Figure, x, y, s, color=INK):
     """Edge label to the right of a vertical connector."""
     fig.text(x + 6, y, s, size=SMALL, color=color, anchor="start")
@@ -43,18 +41,6 @@ def side_label(fig: Figure, x, y, s, color=INK):
 
 T = {
     "ko": {
-        # 01 pain
-        "p1.a": "CPU 샌드박스로는 채점 불가, GPU를 연결하면 생기는 위험",
-        "p1.b": "이 에셋: CPU에서 먼저 하는 검사와 위험별 대응",
-        "p1.code": "후보 커널 코드", "p1.code_sub": "모델이 쓴 Triton 커널",
-        "p1.cpu_a": "CPU 전용 샌드박스", "p1.cpu_a_sub": "GPU 없음",
-        "p1.gpu_a": "GPU 샌드박스", "p1.gpu_a_sub": "GPU 연결",
-        "p1.cpu_b": "CPU에서 먼저 검사", "p1.cpu_b_sub": "형식, AST 정책",
-        "p1.gpu_b": "GPU 샌드박스 pod", "p1.gpu_b_sub": "pod당 GPU 1개, 평가 1개",
-        "p1.oa": ["GPU에서 측정하는 과제는 채점 불가", "GPU 드라이버에 접근하는 신뢰할 수 없는 코드", "다음 평가에 남는 이전 상태",
-                  "샌드박스마다 GPU 1개, 비용 증가", "측정을 속여 reward 획득"],
-        "p1.ob": ["위반은 GPU 실행 전에 판정", "노드를 보호하는 gVisor 또는 Kata", "실행마다 새 프로세스 트리와 캐시",
-                  "GPU로는 정확성과 timing만 측정", "host clock timing, 출력 checksum 비교"],
         # 01 two-tier
         "tt.trainer": "trainer 프로세스 (CPU)",
         "tt.comp": "completion",
@@ -76,43 +62,32 @@ T = {
         "rl.grpo": ["GRPO", "group 기준 advantage"],
         "rl.lora": ["LoRA 업데이트", "optimizer step 1회"],
         "rl.sync": "가중치 동기화",
-        # 02 pain
-        "p2.cols": [
-            ("gVisor + GPU", [["host 드라이버", "허용된 ioctl만 전달"], ["/dev/kvm 불필요", "systrap 플랫폼"],
-                              ["일반 GPU VM", "g5.xlarge 등"], ["해당 없음", "경계는 사용자 공간 커널"]]),
-            ("Kata + GPU", [["guest 드라이버", "GPU를 VM에 직접 할당 (VFIO)"], ["/dev/kvm, IOMMU", "GPU를 소유한 host"],
-                            ["g4dn.metal만", "x86 NVIDIA GPU의 유일한 .metal"],
-                            ["upstream 지원은 QEMU만", "Cloud Hypervisor는 미지원"]]),
-            ("Kata CPU 전용", [["GPU 없음", "CPU 샌드박스"], ["/dev/kvm", "nested virtualization으로 제공"],
-                               ["nested virtualization VM", "c8i.2xlarge 등, 2026-02부터"],
-                               ["Cloud Hypervisor, QEMU", "둘 다 지원"]]),
-        ],
-        "p2.rows": ["GPU 경로", "필요한 것", "인스턴스", "hypervisor"],
         # 02 gpu-paths
-        "gp.a": "gVisor + nvproxy (g5.xlarge, 일반 VM)",
-        "gp.b": "Kata + QEMU (g4dn.metal)",
-        "gp.sbx_a": "pod (gVisor)", "gp.host_a": "host (g5.xlarge)",
-        "gp.sbx_b": "guest VM (pod)", "gp.host_b": "host (g4dn.metal)",
-        "gp.code": ["후보 코드", "CUDA 사용자 공간 라이브러리"],
-        "gp.a_rows": [["Sentry (사용자 공간 커널)", "systrap 플랫폼"], ["nvproxy", "드라이버 버전별 ioctl allowlist"],
-                      ["host NVIDIA 드라이버", "580.178.04 proprietary, GSP off"], ["A10G"]],
-        "gp.b_rows": [["guest kernel + guest NVIDIA 드라이버", "kata-deploy 제공, open 615.71.09"],
-                      ["VFIO passthrough", "DMA를 VM 안으로 제한하는 IOMMU"], None, ["T4", "host는 vfio-pci만 bind"]],
-        "gp.no_host_driver": "host에 NVIDIA 드라이버 없음",
-        # 03 pain
-        "p3.a": "학습 중 섞이는 버전, 0점으로 처리되는 pod 장애",
-        "p3.b": "한 group은 한 버전, 인프라 오류는 None으로 제외 (TRL)",
-        "p3.prompt": "prompt", "p3.prompt_sub": "1개",
-        "p3.group": "group (같은 prompt)",
-        "p3.ca": ["completion A", "v1로 채점"],
-        "p3.cb_a": ["completion B (A와 같은 코드)", "v2로 채점"],
-        "p3.cb_b": ["completion B (A와 같은 코드)", "v1로 채점"],
-        "p3.cc_a": ["completion C (정답)", "pod 장애"],
-        "p3.cc_b": ["completion C (정답)", "sandbox_error"],
-        "p3.s_a": ["1.85", "1.35", "0점"], "p3.s_b": ["1.85", "1.85", "None"],
-        "p3.adv": ["advantage", "group 평균과 비교"],
-        "p3.bad": ["advantage에 섞이는", "버전 차이와", "인프라 잡음"],
-        "p3.good": ["policy 차이만 반영", "C는 baseline에서 제외"],
+        "gp.title": "샌드박스에서 GPU에 접근하는 두 가지 방식",
+        "gp.desc": "gVisor의 nvproxy는 노드의 NVIDIA 드라이버에 요청을 전달합니다. Kata VM 안의 NVIDIA 드라이버는 그 VM에 할당된 GPU를 제어합니다.",
+        "gp.sandboxes": ("gVisor 샌드박스", "Kata 샌드박스 VM"),
+        "gp.code": "제출 코드와 CUDA 라이브러리",
+        "gp.proxy": "Sentry의 nvproxy", "gp.filter": "지원하는 장치 제어 요청만 전달",
+        "gp.host_driver": "노드의 NVIDIA 드라이버", "gp.guest_driver": "VM의 NVIDIA 드라이버",
+        "gp.guest_kernel": "게스트 Linux 커널에서 실행", "gp.assigned": "VFIO로 이 VM에 직접 할당",
+        "pt.title": "물리 GPU 한 장을 Kata VM에 할당하는 과정",
+        "pt.desc": "GPU는 서버의 PCIe 슬롯에 남습니다. QEMU가 VFIO로 GPU를 할당하면 VM의 NVIDIA 드라이버가 이 GPU를 제어합니다. GPU의 시스템 RAM 접근은 IOMMU가 허용한 범위로 제한됩니다.",
+        "pt.host": "물리 서버", "pt.setup": "GPU를 VM에 할당할 때", "pt.run": "VM이 실행 중일 때",
+        "pt.bind": "호스트 Linux", "pt.bind_sub": "GPU에 vfio-pci 드라이버 연결",
+        "pt.assign": "QEMU", "pt.assign_sub": "VFIO로 GPU를 VM의 PCI 장치로 연결",
+        "pt.vm": "Kata VM", "pt.app": "PyTorch와 CUDA", "pt.driver": "VM의 NVIDIA 드라이버",
+        "pt.driver_sub": "할당된 GPU를 PCI 장치로 인식", "pt.command": "연산 명령",
+        "pt.gpu": "물리 GPU", "pt.vram": "GPU 칩과 전용 메모리(VRAM)", "pt.slot": "서버의 PCIe 슬롯",
+        "pt.dma": "시스템 RAM에 DMA 요청", "pt.iommu": "DMA 주소 변환과 권한 확인",
+        "pt.allow": "접근 허용", "pt.deny": "접근 차단",
+        "pt.mapped": "이 GPU에 매핑된 VM 메모리", "pt.other": "다른 VM이나 호스트 전용 메모리",
+        "vmm.title": "게스트 명령 실행과 가상 디스크 구성",
+        "vmm.desc": "QEMU는 하드웨어 가상화와 명령어 번역을 지원하고, Cloud Hypervisor는 하드웨어 가상화를 이용합니다. 같은 디스크 이미지를 QEMU는 IDE나 virtio-blk로, Cloud Hypervisor는 virtio-blk로 제공합니다.",
+        "vmm.qemu": "다양한 컴퓨터와 장치를 재현", "vmm.clh": "최신 클라우드 게스트에 맞춘 VMM",
+        "vmm.qemu_exec": "하드웨어 가상화 또는 명령어 번역", "vmm.clh_exec": "하드웨어 가상화로 게스트 명령 실행",
+        "vmm.ide": "IDE 컨트롤러", "vmm.ide_request": "IDE 드라이버가 레지스터에 명령 기록",
+        "vmm.virtio": "virtio-blk 디스크", "vmm.virtio_request": "virtio 드라이버가 공유 큐에 요청 등록",
+        "vmm.disk": "호스트의 디스크 이미지", "vmm.read": "요청한 블록의 데이터를 읽음",
         # 03 version-swap
         "vs.ops": "운영자: scripts/ops/rollout.sh",
         "vs.steps": [["1. v2 배포", "트래픽 없음"], ["2. v2 검증", "격리 증거,", "golden verdict"],
@@ -125,36 +100,17 @@ T = {
         "vs.inflight": "첫 전환: v1에 보낸 batch는 v1에서 마무리",
         "vs.event": "sandbox_version_switch 기록",
         "vs.time": "시간 (학습은 계속 진행)",
-        # 04 pain
-        "p4.a": "샌드박스도 기본 AMI의 HyperPod 노드에 두면: gVisor와 Kata 모두 실행 불가",
-        "p4.b": "B1: trainer만 HyperPod에, 샌드박스는 같은 클러스터의 EC2 노드에",
-        "p4.eks": "EKS 클러스터", "p4.hp": "HyperPod 인스턴스 그룹", "p4.ec2": "EC2 노드 그룹",
-        "p4.trainer": ["trainer", "ml.g5.2xlarge"],
-        "p4.gv_a": ["gVisor 샌드박스", "드라이버 595.91.07은 unknown"],
-        "p4.kt_a": ["Kata 샌드박스", "ml.*.metal, nested virtualization 없음"],
-        "p4.gv_b": ["gVisor 샌드박스", "g5.xlarge"],
-        "p4.kt_b": ["Kata 샌드박스", "g4dn.metal (GPU), c8i.2xlarge (CPU)"],
-        # 05 pain
-        "p5.cols": [["T4"], ["최신 GPU", "L4, L40S, H100"]],
-        "p5.rows": ["VM 경계", "사용자 공간 커널 경계", "AWS 관리형 격리"],
-        "p5.vm_t4": ["Kata + QEMU", "g4dn.metal, VFIO"],
-        "p5.vm_new": ["EC2에 없음"],
-        "p5.us_t4": ["gVisor on g4dn", "이 에셋에서 미검증"],
-        "p5.us_new": ["gVisor + nvproxy", "G/P 계열 VM (g5, g6, g6e, p5)"],
-        "p5.managed": ["Nitro Sandboxes, EKS isolated pods", "출시 시점 CPU 전용 (GPU passthrough 미지원)"],
-        # 05 decision tree
-        "dt.A": ["샌드박스 안에서 GPU 필요"],
-        "dt.B": ["관리형 서비스 선호"],
-        "dt.C": ["관리형 GPU 샌드박스 선호"],
-        "dt.D": ["VM 경계 필요", "(서로 다른 고객의 적대적 코드)"],
-        "dt.E": ["T4에서 측정한 timing으로 충분"],
-        "dt.B1": ["AgentCore Code Interpreter 또는", "Nitro Sandboxes, EKS isolated pods", "(CPU 전용)"],
-        "dt.B2": ["Kata + CLH on c8i", "(nested virtualization)"],
-        "dt.C1": ["서드파티 서비스", "(예: Modal, gVisor 기반)", "이 에셋 범위 밖"],
-        "dt.F": ["gVisor + nvproxy on G/P 계열 VM", "g5 (A10G), g6 (L4), g6e (L40S), p5 (H100)"],
-        "dt.E1": ["Kata + QEMU on g4dn.metal", "VM 경계 + VFIO"],
-        "dt.E2": ["EC2에 없는 VM 경계 + 최신 GPU 조합", "gVisor + 보완 통제로 위험을 수용하거나", "요구 사항을 다시 검토"],
-        "dt.yes": "예", "dt.no": "아니오",
+        # 04 worker placement
+        "p4.b1": "B1  학습 워커만 HyperPod에 배치", "p4.b2": "B2  모든 워커를 HyperPod에 배치",
+        "p4.title": "B1과 B2의 워커 배치", "p4.desc": "B1은 시스템과 채점 워커를 EC2에 두고, B2는 세 역할을 모두 HyperPod에 둡니다.",
+        "p4.roles": ("학습 GPU", "시스템 CPU", "gVisor 채점 GPU"),
+        # 05 platform and runtime choices
+        "p5.title": "GPU 실습의 플랫폼과 채점 런타임",
+        "p5.desc": "A와 B1의 EC2 채점 노드는 gVisor 또는 Kata + QEMU를 사용합니다. B2의 HyperPod 채점 워커는 gVisor를 사용합니다.",
+        "p5.platforms": (("A  EC2 자체 운영", "EC2에서 학습"), ("B1  혼합형", "HyperPod에서 학습"),
+                         ("B2  HyperPod 관리형", "HyperPod에서 학습")),
+        "p5.ec2": "EC2에서 GPU 채점", "p5.hp": "HyperPod에서 GPU 채점",
+        "p5.gvisor": "기본 (A10G)", "p5.kata": "선택 (T4)",
         # 06 pain
         "p6.a": "reward pool: turn마다 다른 pod와 GPU",
         "p6.b": "Agent Sandbox: 에피소드 하나가 끝까지 쓰는 샌드박스 하나",
@@ -170,19 +126,6 @@ T = {
         "p6.hand": "대기 중인 Sandbox 전달",
     },
     "en": {
-        "p1.a": "A CPU sandbox cannot score the task; attaching a GPU brings risks",
-        "p1.b": "This asset: filter on CPU first, one countermeasure per risk",
-        "p1.code": "Candidate kernel", "p1.code_sub": "Triton, by the model",
-        "p1.cpu_a": "CPU-only sandbox", "p1.cpu_a_sub": "no GPU",
-        "p1.gpu_a": "GPU sandbox", "p1.gpu_a_sub": "GPU attached",
-        "p1.cpu_b": "Checks on CPU first", "p1.cpu_b_sub": "format, AST policy",
-        "p1.gpu_b": "GPU sandbox pod", "p1.gpu_b_sub": "1 GPU, 1 evaluation per pod",
-        "p1.oa": ["cannot score tasks measured on a GPU", "untrusted code reaches the GPU driver",
-                  "state leaks into the next evaluation", "one GPU per sandbox, higher cost",
-                  "fools the measurement for reward"],
-        "p1.ob": ["violations get a verdict before the GPU", "gVisor or Kata protects the node",
-                  "new process tree and caches per run", "the GPU measures only correctness and timing",
-                  "host clock timing, output checksums"],
         "tt.trainer": "trainer process (CPU)",
         "tt.comp": "completion",
         "tt.kr": ["KernelRewards", "code block extraction,", "AST policy (check_source)"],
@@ -202,41 +145,31 @@ T = {
         "rl.grpo": ["GRPO", "group-relative advantage"],
         "rl.lora": ["LoRA update", "one optimizer step"],
         "rl.sync": "weight sync",
-        "p2.cols": [
-            ("gVisor + GPU", [["host driver", "forwards only allowed ioctls"], ["no /dev/kvm needed", "systrap platform"],
-                              ["regular GPU VM", "g5.xlarge and others"], ["not applicable", "boundary: user-space kernel"]]),
-            ("Kata + GPU", [["guest driver", "whole GPU into the VM (VFIO)"], ["/dev/kvm, IOMMU", "a host that owns the GPU"],
-                            ["g4dn.metal only", "the only x86 NVIDIA .metal"],
-                            ["upstream: QEMU only", "Cloud Hypervisor not supported"]]),
-            ("Kata CPU only", [["no GPU", "CPU sandbox"], ["/dev/kvm", "from nested virtualization"],
-                               ["nested virtualization VM", "c8i.2xlarge etc., since 2026-02"],
-                               ["Cloud Hypervisor, QEMU", "both supported"]]),
-        ],
-        "p2.rows": ["GPU path", "requires", "instance", "hypervisor"],
-        "gp.a": "gVisor + nvproxy (g5.xlarge, regular VM)",
-        "gp.b": "Kata + QEMU (g4dn.metal)",
-        "gp.sbx_a": "pod (gVisor)", "gp.host_a": "host (g5.xlarge)",
-        "gp.sbx_b": "guest VM (pod)", "gp.host_b": "host (g4dn.metal)",
-        "gp.code": ["candidate code", "CUDA user-space libraries"],
-        "gp.a_rows": [["Sentry (user-space kernel)", "systrap platform"], ["nvproxy", "ioctl allowlist per driver version"],
-                      ["host NVIDIA driver", "580.178.04 proprietary, GSP off"], ["A10G"]],
-        "gp.b_rows": [["guest kernel + guest NVIDIA driver", "shipped by kata-deploy, open 615.71.09"],
-                      ["VFIO passthrough", "IOMMU confines DMA to the VM"], None,
-                      ["T4", "the host binds only vfio-pci"]],
-        "gp.no_host_driver": "no NVIDIA driver on the host",
-        "p3.a": "Versions mix during training, and a pod failure enters as zero",
-        "p3.b": "One version per group, infrastructure errors excluded as None (TRL)",
-        "p3.prompt": "prompt", "p3.prompt_sub": "one",
-        "p3.group": "group (same prompt)",
-        "p3.ca": ["completion A", "scored by v1"],
-        "p3.cb_a": ["completion B (same code as A)", "scored by v2"],
-        "p3.cb_b": ["completion B (same code as A)", "scored by v1"],
-        "p3.cc_a": ["completion C (correct)", "pod failure"],
-        "p3.cc_b": ["completion C (correct)", "sandbox_error"],
-        "p3.s_a": ["1.85", "1.35", "zero"], "p3.s_b": ["1.85", "1.85", "None"],
-        "p3.adv": ["advantage", "vs group mean"],
-        "p3.bad": ["version gaps and", "infrastructure noise", "mixed into advantage"],
-        "p3.good": ["policy differences only", "C left out of the baseline"],
+        "gp.title": "Two paths from a sandbox to a GPU",
+        "gp.desc": "gVisor’s nvproxy forwards requests to the node’s NVIDIA driver. The driver inside a Kata VM controls the GPU assigned to that VM.",
+        "gp.sandboxes": ("gVisor sandbox", "Kata sandbox VM"),
+        "gp.code": "Code and CUDA libraries",
+        "gp.proxy": "nvproxy in the Sentry", "gp.filter": "Forwards supported device requests",
+        "gp.host_driver": "Node’s NVIDIA driver", "gp.guest_driver": "VM’s NVIDIA driver",
+        "gp.guest_kernel": "Runs in the guest Linux kernel", "gp.assigned": "Assigned to this VM through VFIO",
+        "pt.title": "Assigning one physical GPU to a Kata VM",
+        "pt.desc": "The GPU stays in the server’s PCIe slot. QEMU assigns it through VFIO, and the guest NVIDIA driver controls it. The IOMMU restricts the GPU’s access to system RAM.",
+        "pt.host": "Physical server", "pt.setup": "Assigning the GPU to the VM", "pt.run": "While the VM runs",
+        "pt.bind": "Host Linux", "pt.bind_sub": "Binds the GPU to the vfio-pci driver",
+        "pt.assign": "QEMU", "pt.assign_sub": "Assigns the GPU as a guest PCI device via VFIO",
+        "pt.vm": "Kata VM", "pt.app": "PyTorch and CUDA", "pt.driver": "Guest NVIDIA driver",
+        "pt.driver_sub": "Sees the GPU as a PCI device", "pt.command": "GPU commands",
+        "pt.gpu": "Physical GPU", "pt.vram": "GPU chip and memory (VRAM)", "pt.slot": "Server PCIe slot",
+        "pt.dma": "DMA request to system RAM", "pt.iommu": "DMA translation and access checks",
+        "pt.allow": "Access allowed", "pt.deny": "Access denied",
+        "pt.mapped": "VM memory mapped for this GPU", "pt.other": "Host-only memory or other VMs’ RAM",
+        "vmm.title": "Guest execution and virtual disk interfaces",
+        "vmm.desc": "QEMU supports hardware virtualization and instruction translation. Cloud Hypervisor uses hardware virtualization. QEMU offers IDE and virtio-blk disks, and Cloud Hypervisor offers virtio-blk.",
+        "vmm.qemu": "Models many machines and devices", "vmm.clh": "VMM for modern cloud guests",
+        "vmm.qemu_exec": "Hardware virtualization or translation", "vmm.clh_exec": "Guest runs with hardware virtualization",
+        "vmm.ide": "IDE controller", "vmm.ide_request": "IDE driver writes a command to a register",
+        "vmm.virtio": "virtio-blk disk", "vmm.virtio_request": "Virtio driver puts a request in a shared queue",
+        "vmm.disk": "Disk image on the host", "vmm.read": "Read the data for the requested block",
         "vs.ops": "operator: scripts/ops/rollout.sh",
         "vs.steps": [["1. deploy v2", "no traffic"], ["2. verify v2", "isolation evidence,", "golden verdicts"],
                      ["3. parity", "golden results of", "v1 and v2 match"], ["4. switch routing", "v2 from the next", "reward batch"],
@@ -248,34 +181,15 @@ T = {
         "vs.inflight": "first switch: a batch sent to v1 ends on v1",
         "vs.event": "logs sandbox_version_switch",
         "vs.time": "time (training does not stop)",
-        "p4.a": "Sandboxes on default-AMI HyperPod nodes too: gVisor and Kata are both blocked",
-        "p4.b": "B1: only the trainer on HyperPod, sandboxes on EC2 nodes of the same cluster",
-        "p4.eks": "EKS cluster", "p4.hp": "HyperPod instance group", "p4.ec2": "EC2 node groups",
-        "p4.trainer": ["trainer", "ml.g5.2xlarge"],
-        "p4.gv_a": ["gVisor sandbox", "driver 595.91.07 is unknown"],
-        "p4.kt_a": ["Kata sandbox", "no ml.*.metal, no nested virtualization"],
-        "p4.gv_b": ["gVisor sandbox", "g5.xlarge"],
-        "p4.kt_b": ["Kata sandbox", "g4dn.metal (GPU), c8i.2xlarge (CPU)"],
-        "p5.cols": [["T4"], ["current GPU", "L4, L40S, H100"]],
-        "p5.rows": ["VM boundary", "user-space kernel boundary", "AWS managed isolation"],
-        "p5.vm_t4": ["Kata + QEMU", "g4dn.metal, VFIO"],
-        "p5.vm_new": ["not on EC2"],
-        "p5.us_t4": ["gVisor on g4dn", "unverified in this asset"],
-        "p5.us_new": ["gVisor + nvproxy", "G/P family VMs (g5, g6, g6e, p5)"],
-        "p5.managed": ["Nitro Sandboxes, EKS isolated pods", "CPU only at launch (no GPU passthrough)"],
-        "dt.A": ["GPU needed", "inside the sandbox"],
-        "dt.B": ["prefer a", "managed service"],
-        "dt.C": ["prefer a managed", "GPU sandbox"],
-        "dt.D": ["VM boundary needed", "(adversarial code from", "different customers)"],
-        "dt.E": ["T4 is acceptable", "for measurement"],
-        "dt.B1": ["AgentCore Code Interpreter or", "Nitro Sandboxes, EKS isolated pods", "(CPU only)"],
-        "dt.B2": ["Kata + CLH on c8i", "(nested virtualization)"],
-        "dt.C1": ["third-party service", "(for example Modal, gVisor-based)", "out of scope for this asset"],
-        "dt.F": ["gVisor + nvproxy on G/P family VMs", "g5 (A10G), g6 (L4), g6e (L40S), p5 (H100)"],
-        "dt.E1": ["Kata + QEMU on g4dn.metal", "VM boundary + VFIO"],
-        "dt.E2": ["EC2 has no VM boundary +", "current GPU combination", "accept the risk with gVisor +",
-                  "compensating controls, or", "revisit the requirements"],
-        "dt.yes": "yes", "dt.no": "no",
+        "p4.b1": "B1  HyperPod for training", "p4.b2": "B2  HyperPod for all workers",
+        "p4.title": "Worker placement in B1 and B2", "p4.desc": "B1 keeps system and grading workers on EC2. B2 runs all three roles on HyperPod.",
+        "p4.roles": ("Training GPU", "System CPU", "gVisor grading GPUs"),
+        "p5.title": "Choose a platform and a GPU grading runtime",
+        "p5.desc": "A and B1 grade on EC2 with gVisor or Kata + QEMU. B2 grades on HyperPod with gVisor.",
+        "p5.platforms": (("A  Self-managed EC2", "Train on EC2"), ("B1  Hybrid", "Train on HyperPod"),
+                         ("B2  Managed HyperPod", "Train on HyperPod")),
+        "p5.ec2": "Grade on EC2", "p5.hp": "Grade on HyperPod",
+        "p5.gvisor": "Default (A10G)", "p5.kata": "Optional (T4)",
         "p6.a": "Reward pools: each turn on another pod and GPU",
         "p6.b": "Agent Sandbox: one episode keeps one sandbox to the end",
         "p6.ep": ["one episode"],
@@ -290,43 +204,6 @@ T = {
         "p6.hand": "hands over a waiting Sandbox",
     },
 }
-
-
-def concepts_01(lang: str) -> Figure:
-    """docs/concepts/01_why_gpu_sandbox Pain point: CPU-only cannot score; a GPU brings four risks; the page's answers."""
-    t = T[lang]
-    fig = Figure(760, 552)
-    cx, cw, mx, mw, ox, ow = 16, 136, 192, 178, 410, 334
-    for p, (oy, letter, title) in enumerate(((0, "a", t["p1.a"]), (276, "b", t["p1.b"]))):
-        fig.panel(16, oy + 24, letter, title)
-        top = oy + 46
-        fix = p == 1
-        fig.box(cx, top, cw, 212, t["p1.code"], t["p1.code_sub"], icon="code", gid=f"n:code-{letter}")
-        # CPU row and GPU block in the middle column
-        r0 = top + 20
-        rows = [top + 72 + i * 40 for i in range(4)]
-        if fix:
-            fig.box(mx, top, mw, 40, t["p1.cpu_b"], t["p1.cpu_b_sub"], icon="cpu", gid="n:cpu-b")
-            fig.box(mx, top + 52, mw, 160, t["p1.gpu_b"], t["p1.gpu_b_sub"], icon="shield-lock", fill=ACCENT_FILL,
-                    stroke=ACCENT, gid="n:gpu-b")
-        else:
-            fig.box(mx, top, mw, 40, t["p1.cpu_a"], t["p1.cpu_a_sub"], icon="cpu", gid="n:cpu-a")
-            fig.box(mx, top + 52, mw, 160, t["p1.gpu_a"], t["p1.gpu_a_sub"], icon="container", gid="n:gpu-a")
-        # One branch point from the code box to both sandboxes
-        bus, gmid = cx + cw + 20, top + 132
-        fig.line([(cx + cw, top + 106), (bus, top + 106)])
-        dot(fig, bus, top + 106)
-        fig.line([(bus, top + 106), (bus, r0)])
-        fig.arrow([(bus, r0), (mx - 2, r0)])
-        fig.line([(bus, top + 106), (bus, gmid)])
-        fig.arrow([(bus, gmid), (mx - 2, gmid)])
-        outs = t["p1.ob"] if fix else t["p1.oa"]
-        col = ACCENT if fix else RED
-        style = dict(fill=ACCENT_FILL, stroke=ACCENT, color=INK) if fix else dict(fill=RED_FILL, stroke=RED, color=RED)
-        for i, (cy, s) in enumerate(zip([r0] + rows, outs)):
-            fig.arrow([(mx + mw, cy), (ox - 2, cy)], color=col)
-            mbox(fig, ox, cy - 15, ow, 30, [s], gid=f"n:out{i}-{letter}", **style)
-    return fig
 
 
 def concepts_01_two_tier(lang: str) -> Figure:
@@ -389,90 +266,100 @@ def concepts_01_rl_loop(lang: str) -> Figure:
     return fig
 
 
-def concepts_02(lang: str) -> Figure:
-    """docs/concepts/02_isolation_runtimes Pain point: three runtimes; only Kata + GPU needs .metal and QEMU."""
-    t = T[lang]
-    fig = Figure(760, 300)
-    lx, cw, gap, bh = 86, 214, 8, 46
-    rows_y = [50 + i * (bh + 12) for i in range(4)]
-    for y, label in zip(rows_y, t["p2.rows"]):
-        fig.text(16, y + bh / 2 + 4, label, size=SMALL, bold=True, anchor="start")
-    for c, (runtime, cells) in enumerate(t["p2.cols"]):
-        x = lx + c * (cw + gap)
-        fig.container(x, 16, cw, rows_y[-1] + bh + 12 - 16, runtime, bold=True)
-        for r, (y, lines) in enumerate(zip(rows_y, cells)):
-            # The two constraints that only Kata + GPU carries are the bottleneck of the page
-            style = dict(fill=RED_FILL, stroke=RED, color=RED) if c == 1 and r >= 2 else {}
-            mbox(fig, x + 12, y, cw - 24, bh, lines, gid=f"n:c{c}r{r}", **style)
-    return fig
-
-
 def concepts_02_gpu_paths(lang: str) -> Figure:
-    """docs/concepts/02_isolation_runtimes "GPU 경로 두 가지": gVisor nvproxy vs Kata VFIO on the same five rows."""
+    """Place each NVIDIA driver on the side of the sandbox boundary where it runs."""
     t = T[lang]
-    fig = Figure(760, 546)
-    pw, gap, bh, pitch = 356, 16, 46, 100
-    rows = [74 + i * pitch for i in range(5)]  # box tops
-    for p, (letter, title, sbx, host, body, split) in enumerate((
-            ("a", t["gp.a"], t["gp.sbx_a"], t["gp.host_a"], t["gp.a_rows"], 3),
-            ("b", t["gp.b"], t["gp.sbx_b"], t["gp.host_b"], t["gp.b_rows"], 2))):
-        x = 16 + p * (pw + gap)
-        fig.panel(x, 26, letter, title)
-        # The isolation boundary (accent) holds the rows above the split; the host holds the rest
-        fig.container(x, rows[0] - 30, pw, rows[split - 1] + bh + 10 - (rows[0] - 30), sbx, icon="shield-lock",
-                      stroke=ACCENT, color=ACCENT, bold=True)
-        fig.container(x, rows[split] - 30, pw, rows[4] + bh + 10 - (rows[split] - 30), host, icon="server", bold=True)
-        bx, bw = x + 20, pw - 40
-        cx = bx + bw / 2
-        labels = [t["gp.code"]] + body
-        prev_bottom = None
-        for i, (y, lines) in enumerate(zip(rows, labels)):
-            if lines is None:
-                # Kata: nothing on the host sits between VFIO and the GPU
-                side_label(fig, cx, y + bh / 2 + 4, t["gp.no_host_driver"])
-                continue
-            inside = i < split
-            mbox(fig, bx, y, bw, bh, lines, gid=f"n:{letter}{i}",
-                 **(dict(fill=ACCENT_FILL, stroke=ACCENT) if inside else {}))
-            if prev_bottom is not None:
-                fig.arrow([(cx, prev_bottom), (cx, y - 2)])
-            prev_bottom = y + bh
+    fig = Figure(638, 352)
+    fig.parts.append(f'<title>{escape(t["gp.title"])}</title><desc>{escape(t["gp.desc"])}</desc>')
+    panels = zip((8, 326), ("gVisor", "Kata + QEMU"), ("g5.xlarge", "g4dn.metal"), t["gp.sandboxes"], strict=True)
+    for x, runtime, instance, sandbox in panels:
+        center = x + 152
+        fig.text(x + 4, 24, runtime, size=20, bold=True, anchor="start")
+        fig.container(x, 36, 304, 308, instance, icon="server", bold=True)
+        fig.container(x + 12, 66, 280, 142, sandbox, icon="shield-lock", stroke=ACCENT, color=ACCENT, bold=True)
+        fig.box(x + 24, 96, 256, 36, t["gp.code"], icon="code", fill=WHITE)
+        fig.arrow([(center, 132), (center, 148)])
+        if runtime == "gVisor":
+            fig.box(x + 24, 150, 256, 46, t["gp.proxy"], t["gp.filter"], fill=ACCENT_FILL, stroke=ACCENT)
+            fig.arrow([(center, 196), (center, 230)])
+            fig.box(x + 24, 232, 256, 36, t["gp.host_driver"], icon="gear")
+            fig.arrow([(center, 268), (center, 286)])
+            fig.box(x + 24, 288, 256, 44, "NVIDIA A10G", icon="cpu")
+        else:
+            fig.box(x + 24, 150, 256, 46, t["gp.guest_driver"], t["gp.guest_kernel"], icon="gear",
+                    fill=ACCENT_FILL, stroke=ACCENT)
+            fig.arrow([(center, 196), (center, 286)])
+            fig.box(x + 24, 288, 256, 44, "NVIDIA T4", t["gp.assigned"], icon="cpu")
     return fig
 
 
-def concepts_03(lang: str) -> Figure:
-    """docs/concepts/03_onpolicy_rl_with_sandboxes Pain point: mixed versions and zeroed failures vs pinned + None."""
+def concepts_02_gpu_passthrough(lang: str) -> Figure:
+    """Separate PCI device assignment, guest commands and the GPU's DMA requests."""
     t = T[lang]
-    fig = Figure(760, 542)
-    px, pw, gx, gw, ax, aw, ox, ow = 16, 104, 152, 226, 446, 104, 590, 154
-    for p, (oy, letter, title) in enumerate(((0, "a", t["p3.a"]), (268, "b", t["p3.b"]))):
-        fix = p == 1
-        fig.panel(16, oy + 24, letter, title)
-        top = oy + 44
-        ys = [top + 52 + i * 64 for i in range(3)]
-        mid = ys[1]
-        fig.box(px, mid - 25, pw, 50, t["p3.prompt"], t["p3.prompt_sub"], icon="comment", gid=f"n:prompt-{letter}")
-        fig.container(gx - 12, top, gw + 24, 216, t["p3.group"], icon="stack")
-        rows = [t["p3.ca"], t["p3.cb_b"] if fix else t["p3.cb_a"], t["p3.cc_b"] if fix else t["p3.cc_a"]]
-        scores = t["p3.s_b"] if fix else t["p3.s_a"]
-        fig.arrow([(px + pw, mid), (gx - 14, mid)])
-        mbox(fig, ax, top + 28, aw, 176, t["p3.adv"], gid=f"n:adv-{letter}")
-        for i, (y, lines, s) in enumerate(zip(ys, rows, scores)):
-            mbox(fig, gx, y - 24, gw, 48, lines, gid=f"n:c{i}-{letter}")
-            if fix and i == 2:
-                col, dash = MUTED_STROKE, "5 4"
-            elif not fix and i > 0:
-                col, dash = RED, None
-            else:
-                col, dash = INK, None
-            fig.arrow([(gx + gw, y), (ax - 2, y)], color=col, dash=dash, label=s,
-                      label_at=((gx + gw + ax) / 2, y - 8), label_color=RED if col == RED else INK)
-        if fix:
-            fig.arrow([(ax + aw, mid), (ox - 2, mid)], color=ACCENT)
-            mbox(fig, ox, mid - 44, ow, 88, t["p3.good"], fill=ACCENT_FILL, stroke=ACCENT, gid="n:outcome-b")
-        else:
-            fig.arrow([(ax + aw, mid), (ox - 2, mid)], color=RED)
-            mbox(fig, ox, mid - 44, ow, 88, t["p3.bad"], fill=RED_FILL, stroke=RED, color=RED, gid="n:outcome-a")
+    fig = Figure(656, 495)
+    fig.parts.append(f'<title>{escape(t["pt.title"])}</title><desc>{escape(t["pt.desc"])}</desc>')
+    fig.container(6, 6, 644, 483, t["pt.host"], icon="server", bold=True)
+    fig.text(20, 55, t["pt.setup"], size=17, bold=True, anchor="start")
+    fig.box(20, 68, 247, 48, t["pt.bind"], t["pt.bind_sub"], icon="plug")
+    fig.arrow([(267, 92), (307, 92)])
+    fig.box(309, 68, 325, 48, t["pt.assign"], t["pt.assign_sub"], icon="gear")
+
+    fig.line([(20, 132), (634, 132)], color=MUTED_STROKE, width=1)
+    fig.text(20, 157, t["pt.run"], size=17, bold=True, anchor="start")
+    fig.container(20, 169, 246, 143, t["pt.vm"], icon="shield-lock", stroke=ACCENT, color=ACCENT, bold=True)
+    fig.box(31, 199, 224, 34, t["pt.app"], icon="code", fill=WHITE)
+    fig.arrow([(143, 233), (143, 247)], color=ACCENT)
+    fig.box(31, 249, 224, 51, t["pt.driver"], t["pt.driver_sub"], fill=ACCENT_FILL, stroke=ACCENT)
+
+    # The card appears once, outside the VM but inside the physical server.
+    fig.arrow([(255, 274), (383, 274)], color=ACCENT, width=2)
+    fig.text(324, 263, t["pt.command"], size=13, color=ACCENT)
+    fig.text(388, 218, t["pt.slot"], size=14, bold=True, anchor="start")
+    fig.rect(385, 228, 249, 65, fill=ACCENT_FILL, stroke=ACCENT)
+    fig.icon("cpu", 395, 245, 30, ACCENT)
+    fig.text(435, 254, t["pt.gpu"], size=17, bold=True, anchor="start")
+    fig.text(435, 275, t["pt.vram"], size=12, anchor="start")
+    for x, width in ((401, 20), (426, 51)):
+        fig.rect(x, 293, width, 5, fill=ACCENT, stroke=ACCENT, rx=0)
+
+    fig.arrow([(519, 293), (519, 322), (328, 322), (328, 338)])
+    fig.text(418, 315, t["pt.dma"], size=13)
+    fig.box(195, 340, 266, 46, "IOMMU", t["pt.iommu"], icon="shield-lock")
+    fig.line([(328, 386), (328, 399)])
+    fig.arrow([(328, 399), (168, 399), (168, 431)], color=ACCENT)
+    fig.text(175, 422, t["pt.allow"], size=13, color=ACCENT, anchor="start")
+    fig.line([(328, 399), (488, 399), (488, 426)], color=RED, dash="4 3")
+    fig.line([(481, 426), (495, 426)], color=RED, width=2)
+    fig.text(497, 422, t["pt.deny"], size=13, color=RED, anchor="start")
+    fig.box(27, 433, 282, 39, t["pt.mapped"], fill=ACCENT_FILL, stroke=ACCENT)
+    fig.box(347, 433, 282, 39, t["pt.other"])
+    return fig
+
+
+def concepts_02_kata_hypervisors(lang: str) -> Figure:
+    """Compare guest-visible disk interfaces backed by the same disk image."""
+    t = T[lang]
+    fig = Figure(600, 304)
+    fig.parts.append(f'<title>{escape(t["vmm.title"])}</title><desc>{escape(t["vmm.desc"])}</desc>')
+    fig.text(300, 23, t["vmm.title"], size=18, bold=True)
+    for left, name, scope, execution in (
+        (10, "QEMU", t["vmm.qemu"], t["vmm.qemu_exec"]),
+        (310, "Cloud Hypervisor", t["vmm.clh"], t["vmm.clh_exec"]),
+    ):
+        fig.rect(left, 40, 280, 82, fill=WHITE, stroke=MUTED_STROKE)
+        fig.text(left + 140, 64, name, size=17, bold=True)
+        fig.text(left + 140, 85, scope, size=13)
+        fig.text(left + 140, 109, execution, size=12, bold=True)
+
+    # QEMU offers either interface. Both VMMs implement the virtio path.
+    fig.arrow([(150, 122), (150, 167)])
+    fig.arrow([(222, 122), (222, 145), (379, 145), (379, 167)], color=ACCENT)
+    fig.arrow([(450, 122), (450, 167)], color=ACCENT)
+    fig.box(10, 169, 280, 51, t["vmm.ide"], t["vmm.ide_request"])
+    fig.box(310, 169, 280, 51, t["vmm.virtio"], t["vmm.virtio_request"], fill=ACCENT_FILL, stroke=ACCENT)
+    fig.line([(150, 220), (150, 232), (450, 232), (450, 220)])
+    fig.arrow([(300, 232), (300, 250)])
+    fig.box(155, 252, 290, 44, t["vmm.disk"], t["vmm.read"], icon="database", fill=WHITE)
     return fig
 
 
@@ -527,116 +414,55 @@ def concepts_03_version_swap(lang: str) -> Figure:
 
 
 def concepts_04(lang: str) -> Figure:
-    """docs/concepts/04_platforms_and_instances Pain point: sandboxes on HyperPod blocked vs B1 placement."""
+    """Keep each role in the same column and show who manages its workers in B1 and B2."""
     t = T[lang]
-    fig = Figure(760, 482)
-    tx, tw, sx, swid = 46, 170, 404, 310
-    for p, (oy, letter, title) in enumerate(((0, "a", t["p4.a"]), (240, "b", t["p4.b"]))):
-        fix = p == 1
-        fig.panel(16, oy + 24, letter, title)
-        top = oy + 46
-        fig.container(16, top, 728, 182, t["p4.eks"], icon="cloud")
-        if fix:
-            fig.container(30, top + 30, 202, 138, t["p4.hp"], icon="server")
-            fig.container(388, top + 30, 342, 138, t["p4.ec2"], icon="server", stroke=ACCENT, color=ACCENT, bold=True)
-        else:
-            fig.container(30, top + 30, 700, 138, t["p4.hp"], icon="server")
-        mbox(fig, tx, top + 62, tw, 96, t["p4.trainer"], icon="hubot", gid=f"n:trainer-{letter}")
-        boxes = (t["p4.gv_b"], t["p4.kt_b"]) if fix else (t["p4.gv_a"], t["p4.kt_a"])
-        for i, (y, lines) in enumerate(zip((top + 62, top + 114), boxes)):
-            if fix:
-                mbox(fig, sx, y, swid, 44, lines, icon="shield-lock", fill=ACCENT_FILL, stroke=ACCENT, gid=f"n:sbx{i}-b")
-            else:
-                mbox(fig, sx, y, swid, 44, lines, icon="alert", fill=RED_FILL, stroke=RED, color=RED, gid=f"n:sbx{i}-a")
+    fig = Figure(544, 304)
+    fig.parts.append(f'<title>{escape(t["p4.title"])}</title><desc>{escape(t["p4.desc"])}</desc>')
+    for top, scenario, types in ((0, "b1", ("ml.g5.2xlarge × 1", "m6i.large × 2", "g5.xlarge × 2")),
+                                 (152, "b2", ("ml.g5.2xlarge × 1", "ml.m5.xlarge × 1", "ml.g5.xlarge × 2"))):
+        fig.text(10, top + 25, t[f"p4.{scenario}"], size=20, bold=True, anchor="start")
+        hyperpod_width = 172 if scenario == "b1" else 528
+        fig.rect(8, top + 35, hyperpod_width, 110, fill=ACCENT_FILL, stroke=ACCENT)
+        fig.text(18, top + 55, "HyperPod", size=15, bold=True, color=ACCENT, anchor="start")
+        if scenario == "b1":
+            fig.rect(186, top + 35, 350, 110, fill=GREY_FILL, stroke=MUTED_STROKE)
+            fig.text(196, top + 55, "EC2", size=15, bold=True, anchor="start")
+        for x, icon, role, instance in zip((94, 272, 450), ("ai-model", "server", "shield-lock"),
+                                           t["p4.roles"], types, strict=True):
+            fig.icon(icon, x - 12, top + 65, 24)
+            fig.text(x, top + 110, role, size=17, bold=True)
+            fig.text(x, top + 133, instance, size=16)
     return fig
 
 
 def concepts_05(lang: str) -> Figure:
-    """docs/concepts/05_decision_guide Pain point: isolation boundary x measurement GPU, plus managed isolation."""
+    """Map the three GPU deployment scenarios to the grading runtimes available in the labs."""
     t = T[lang]
-    fig = Figure(760, 278)
-    hx, hw, c1, c2, cw = 16, 176, 204, 478, 266
-    hy, rh, rg = 16, 56, 14
-    for x, lines in zip((c1, c2), t["p5.cols"]):
-        fig.text(x + cw / 2, hy + 18, lines[0], size=SMALL, bold=True)
-        if len(lines) > 1:
-            fig.text(x + cw / 2, hy + 35, lines[1], size=SMALL)
-    ys = [hy + 50 + i * (rh + rg) for i in range(3)]
-    for y, label in zip(ys, t["p5.rows"]):
-        fig.text(hx, y + rh / 2 + 4, label, size=SMALL, bold=True, anchor="start")
-    ok = dict(fill=ACCENT_FILL, stroke=ACCENT)
-    bad = dict(fill=RED_FILL, stroke=RED, color=RED)
-    mbox(fig, c1, ys[0], cw, rh, t["p5.vm_t4"], icon="check-circle", gid="n:vm-t4", **ok)
-    mbox(fig, c2, ys[0], cw, rh, t["p5.vm_new"], icon="x-circle", gid="n:vm-new", **bad)
-    mbox(fig, c1, ys[1], cw, rh, t["p5.us_t4"], icon="question", gid="n:us-t4")
-    mbox(fig, c2, ys[1], cw, rh, t["p5.us_new"], icon="check-circle", gid="n:us-new", **ok)
-    mbox(fig, c1, ys[2], c2 + cw - c1, rh, t["p5.managed"], icon="x-circle", gid="n:managed", **bad)
-    return fig
+    fig = Figure(590, 276)
+    fig.parts.append(f'<title>{escape(t["p5.title"])}</title><desc>{escape(t["p5.desc"])}</desc>')
+    fig.text(10, 26, t["p5.title"], size=21, bold=True, anchor="start")
+    platforms = zip((10, 205, 400), ("server", "git-merge", "cloud"), t["p5.platforms"], strict=True)
+    for x, icon, (title, training) in platforms:
+        center = x + 90
+        fig.rect(x, 42, 180, 88, fill=GREY_FILL, stroke=MUTED_STROKE)
+        fig.icon(icon, center - 12, 49, 24, ACCENT)
+        fig.text(center, 96, title, size=15, bold=True)
+        fig.text(center, 118, training, size=15)
 
-
-def concepts_05_decision_tree(lang: str) -> Figure:
-    """docs/concepts/05_decision_guide "결정 트리": every branch and leaf of the Mermaid tree, as an orthogonal ladder."""
-    t = T[lang]
-    yes, no = t["dt.yes"], t["dt.no"]
-    dx, dw, bx, bw, lx, lw = 16, 196, 272, 140, 452, 292
-
-    def height(key):
-        return max(40, (len(t[key]) - 1) * PITCH + 30)
-
-    leaf_rows = ["dt.B1", "dt.B2", "dt.C1", "dt.F", "dt.E1", "dt.E2"]
-    spine = {0: "dt.A", 2: "dt.C", 3: "dt.D", 4: "dt.E"}
-    hs = [max(height(k), height(spine[i]) if i in spine else 0) for i, k in enumerate(leaf_rows)]
-    # Rows joined by a vertical spine edge (C to D, D to E) need room for the edge and its label
-    gaps = [14, 14, 34, 34, 14]
-    ys, y = [], 16
-    for i, h in enumerate(hs):
-        ys.append(y + h / 2)
-        y += h + (gaps[i] if i < len(gaps) else 0)
-    fig = Figure(760, int(y + 16))
-    decision = dict(fill=WHITE, stroke=INK)
-    accent = dict(fill=ACCENT_FILL, stroke=ACCENT)
-
-    def dbox(x, w, key, cy, gid):
-        h = height(key)
-        mbox(fig, x, cy - h / 2, w, h, t[key], gid=gid, **decision)
-        return cy - h / 2, cy + h / 2
-
-    def leaf(i, gid, **style):
-        h = height(leaf_rows[i])
-        mbox(fig, lx, ys[i] - h / 2, lw, h, t[leaf_rows[i]], gid=gid, **style)
-
-    a_top, a_bot = dbox(dx, dw, "dt.A", ys[0], "n:A")
-    b_top, b_bot = dbox(bx, bw, "dt.B", ys[0], "n:B")
-    c_top, c_bot = dbox(dx, dw, "dt.C", ys[2], "n:C")
-    d_top, d_bot = dbox(dx, dw, "dt.D", ys[3], "n:D")
-    e_top, e_bot = dbox(dx, dw, "dt.E", ys[4], "n:E")
-    leaf(0, "n:B1")
-    leaf(1, "n:B2", **accent)
-    leaf(2, "n:C1")
-    leaf(3, "n:F", **accent)
-    leaf(4, "n:E1", **accent)
-    leaf(5, "n:E2", fill=RED_FILL, stroke=RED, color=RED)
-
-    def h_edge(x0, x1, cy, label):
-        fig.arrow([(x0, cy), (x1 - 2, cy)], label=label, label_at=((x0 + x1) / 2, cy - 8))
-
-    def v_edge(x, y0, y1, label):
-        fig.arrow([(x, y0), (x, y1 - 2)])
-        side_label(fig, x, (y0 + y1) / 2 + 4, label)
-
-    dcx, bcx = dx + dw / 2, bx + bw / 2
-    h_edge(dx + dw, bx, ys[0], no)
-    h_edge(bx + bw, lx, ys[0], yes)
-    fig.arrow([(bcx, b_bot), (bcx, ys[1]), (lx - 2, ys[1])])
-    side_label(fig, bcx, (b_bot + ys[1]) / 2 + 4, no)
-    v_edge(dcx, a_bot, c_top, yes)
-    h_edge(dx + dw, lx, ys[2], yes)
-    v_edge(dcx, c_bot, d_top, no)
-    h_edge(dx + dw, lx, ys[3], no)
-    v_edge(dcx, d_bot, e_top, yes)
-    h_edge(dx + dw, lx, ys[4], yes)
-    fig.arrow([(dcx, e_bot), (dcx, ys[5]), (lx - 2, ys[5])])
-    side_label(fig, dcx, (e_bot + ys[5]) / 2 + 4, no)
+    # A and B1 share the EC2 grading choices. B2 has its own HyperPod grading group.
+    fig.line([(100, 130), (100, 139), (295, 139), (295, 130)], color=ACCENT, width=2)
+    fig.arrow([(197.5, 139), (197.5, 152)], color=ACCENT, width=2)
+    fig.arrow([(490, 130), (490, 152)], color=ACCENT, width=2)
+    for x, width, title in ((10, 375, t["p5.ec2"]), (400, 180, t["p5.hp"])):
+        fig.rect(x, 154, width, 114, fill=ACCENT_FILL, stroke=ACCENT)
+        fig.text(x + width / 2, 178, title, size=15, bold=True, color=ACCENT)
+    for x, width, name, info, icon in ((20, 169, "gVisor", t["p5.gvisor"], "shield-lock"),
+                                       (200, 175, "Kata + QEMU", t["p5.kata"], "device-desktop"),
+                                       (410, 160, "gVisor", t["p5.gvisor"], "shield-lock")):
+        fig.rect(x, 189, width, 69, fill=WHITE, stroke=MUTED_STROKE)
+        fig.icon(icon, x + 9, 206, 22, ACCENT)
+        fig.text(x + width / 2 + 12, 217, name, size=16, bold=True)
+        fig.text(x + width / 2 + 12, 242, info, size=15)
     return fig
 
 
@@ -677,15 +503,13 @@ def concepts_06(lang: str) -> Figure:
 
 
 FIGURES = {
-    "concepts-01_why_gpu_sandbox": concepts_01,
     "concepts-01_why_gpu_sandbox--two-tier": concepts_01_two_tier,
     "concepts-01_why_gpu_sandbox--rl-loop": concepts_01_rl_loop,
-    "concepts-02_isolation_runtimes": concepts_02,
     "concepts-02_isolation_runtimes--gpu-paths": concepts_02_gpu_paths,
-    "concepts-03_onpolicy_rl_with_sandboxes": concepts_03,
+    "concepts-02_isolation_runtimes--gpu-passthrough": concepts_02_gpu_passthrough,
+    "concepts-02_isolation_runtimes--kata-hypervisors": concepts_02_kata_hypervisors,
     "concepts-03_onpolicy_rl_with_sandboxes--version-swap": concepts_03_version_swap,
     "concepts-04_platforms_and_instances": concepts_04,
-    "concepts-05_decision_guide": concepts_05,
-    "concepts-05_decision_guide--decision-tree": concepts_05_decision_tree,
+    "concepts-05_decision_guide--exercise-path": concepts_05,
     "concepts-06_agent_sandbox": concepts_06,
 }

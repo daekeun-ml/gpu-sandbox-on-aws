@@ -5,7 +5,7 @@ hide:
 
 # Provision EKS and workers through HyperPod (B2)
 
-Check the regional SageMaker quotas, then use one wizard stack to create the control plane and four workers.
+Check the regional SageMaker quotas, then run the deployment script to create the EKS cluster and its four HyperPod workers.
 
 ## Check regional quotas { #check-regional-quotas }
 

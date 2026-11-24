@@ -130,8 +130,8 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 **ioctl**
 :   The system call a program uses to send device-specific commands to a driver. GPU work also reaches the driver as ioctls on the NVIDIA device files, and gVisor nvproxy filters those ioctls through an allowlist. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
 
-**IOMMU**
-:   Hardware that limits which memory a device can reach through DMA. In VFIO passthrough it confines the GPU's memory access to the VM. On AL2023 kernels it needs the `intel_iommu=on` kernel argument. Used in: [Kata sandboxes (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
+**IOMMU (Input/Output Memory Management Unit)**
+:   Hardware that translates device addresses to physical memory addresses and checks read and write permissions when a device accesses system RAM. [The IOMMU’s role in GPU passthrough](../concepts/02_isolation_runtimes.md#iommu) / [Kata sandbox configuration](../handson/common/02_runtimes/kata.md)
 
 ## J
 

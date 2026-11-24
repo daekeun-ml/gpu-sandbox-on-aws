@@ -8,7 +8,7 @@ When each answer needs a single, independent evaluation, any free sandbox in the
 
 **Agent Sandbox** manages a dedicated sandbox on Kubernetes for each episode. Even when several agents work at once, each can return to its assigned address to pick up where it left off. The agent releases its sandbox when the episode ends. A runtime such as gVisor or Kata isolates the code running inside it. [Agent Sandbox documentation](https://agent-sandbox.sigs.k8s.io/docs/)
 
-![Independent answers can go to any free sandbox. Revisions within one episode go to the same sandbox.](../images/figures/beginner-06_multi_turn_agent.en.svg?v=2)
+![Independent answers can go to any free sandbox. Revisions within one episode go to the same sandbox.](../images/figures/beginner-06_multi_turn_agent.en.svg?v=3)
 
 <span id="what-carries-over-to-the-next-turn"></span>
 

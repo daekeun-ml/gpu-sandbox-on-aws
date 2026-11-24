@@ -16,7 +16,7 @@ In either sandbox, a physical GPU does the addition from the example above. Look
 
 **With gVisor, GPU requests go to a driver outside the sandbox.** When the code opens a file or asks to use the GPU, **Sentry**, gVisor’s sandbox kernel, receives the request. For GPU requests, Sentry’s `nvproxy` checks which ones it can forward. Only those requests reach the NVIDIA driver on the node, the server that holds the GPU.
 
-![Inside the gVisor sandbox, nvproxy checks GPU requests. Its arrow crosses the boundary to reach the node’s NVIDIA driver.](../images/figures/beginner-03_gpu_sandbox--gvisor.en.svg)
+![Inside the gVisor sandbox, nvproxy checks GPU requests. Its arrow crosses the boundary to reach the node’s NVIDIA driver.](../images/figures/beginner-03_gpu_sandbox--gvisor.en.svg?v=3)
 
 <span id="nvproxy"></span>
 
@@ -28,7 +28,7 @@ In either sandbox, a physical GPU does the addition from the example above. Look
 
 **With Kata + QEMU, the driver inside the sandbox controls the GPU directly.** Kata uses QEMU to start a virtual machine (VM). When the code opens a file, the VM’s Linux kernel handles the request. When the code adds the numbers on the GPU, the NVIDIA driver in that same VM controls the device. Assigning a physical GPU directly to a VM this way is called **GPU passthrough**.
 
-![The Kata VM boundary encloses both its Linux kernel and its NVIDIA driver. The driver controls the physical GPU assigned to this VM.](../images/figures/beginner-03_gpu_sandbox--kata-qemu.en.svg)
+![The Kata VM boundary encloses both its Linux kernel and its NVIDIA driver. The driver controls the physical GPU assigned to this VM.](../images/figures/beginner-03_gpu_sandbox--kata-qemu.en.svg?v=3)
 
 <span id="gpu-support-in-cloud-hypervisor"></span>
 

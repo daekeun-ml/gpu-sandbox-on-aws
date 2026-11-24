@@ -43,14 +43,5 @@
     "alt_en": "a: several scripts run in order create the cluster in step 1, node groups in step 2 and launch templates and log groups in step 3, and deletion goes step by step, resource by resource, so one leftover costs money or makes the next creation fail. b: cdk/deploy.sh deploys the same resources as one CDK stack (CloudFormation) and cdk/destroy.sh deletes the whole stack with everything in it, while the HyperPod cluster, AMIs and ECR are deleted separately",
     "takeaway_ko": "단계마다 만든 리소스는 단계마다 따로 삭제해야 하고, 하나만 놓쳐도 비용이 나가거나 다음 생성이 실패합니다. CDK 스택 하나로 만들면 스택에 든 리소스를 스택 단위로 삭제할 수 있습니다.",
     "takeaway_en": "Resources made in each step must be deleted in each step, and missing one costs money or blocks the next creation. With one CDK stack the stack is the unit of deletion, so one command removes everything."
-  },
-  "reference-faq": {
-    "page": "docs/reference/faq.md",
-    "section": "기존 Pain Point",
-    "replaces": "pain",
-    "alt_ko": "a: 학습 도중 샌드박스 버전을 rolling update로 교체하면 한 group이 두 규칙으로 채점됩니다. pod 장애 같은 인프라 오류에 reward 0을 주면 장애 때문에 0점을 받은 정답이 억제됩니다. 두 경우 모두 학습은 멈추지 않고 reward만 잘못 계산되므로 오류가 눈에 띄지 않습니다. b: 버전 교체는 blue/green pool로 하고, 한 reward batch는 한 버전으로만 채점합니다. 인프라 오류는 sandbox_error로 남기고, TRL은 이를 None으로 처리해 baseline에서 제외합니다. 그래서 group 기준 advantage에는 한 버전의 점수와 실제로 채점한 샘플만 들어갑니다.",
-    "alt_en": "a: a mid-run sandbox version change done as a rolling update scores one group by two rules, and reward 0 on infrastructure errors such as a pod failure suppresses correct answers that were zeroed; in both cases training does not stop and rewards drift silently. b: version changes switch blue/green pools, and each reward batch is scored by one version only, and infrastructure errors become sandbox_error, which TRL returns as None to leave out of the baseline, so the group-relative advantage holds one version and scored samples only",
-    "takeaway_ko": "버전 교체와 인프라 오류는 학습을 멈추지 않기 때문에, reward가 잘못 계산되어도 눈에 띄지 않습니다. blue/green pool로 버전을 바꾸면서 한 batch는 한 버전으로만 채점하고, 채점하지 못한 샘플은 TRL처럼 None으로 제외하면 group 기준 advantage가 올바르게 계산됩니다.",
-    "takeaway_en": "In both cases training keeps running, so nothing looks wrong while the rewards drift. Switching blue/green pools only at step boundaries and dropping unscored samples with None, as TRL does, keeps the group-relative advantage sound."
   }
 }

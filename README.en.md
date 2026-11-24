@@ -9,7 +9,7 @@ This AWS lab runs model-generated GPU kernels in sandboxes separate from the tra
 <a href="docs/images/figures/index--aws-architecture.en.svg">
   <picture>
     <source media="(max-width: 544px)" srcset="docs/images/figures/index--aws-architecture-compact.en.svg">
-    <img src="docs/images/figures/index--aws-architecture.en.svg" alt="An EC2 trainer in A or a HyperPod trainer in B1 sends code to EC2 sandboxes in the same EKS cluster and receives a verdict and timing.">
+    <img src="docs/images/figures/index--aws-architecture.en.svg" alt="A trains and grades on EC2. B1 trains on HyperPod and grades on EC2. In B2 the system CPU worker, training GPU worker and two grading GPU workers all run on HyperPod.">
   </picture>
 </a>
 
@@ -33,7 +33,7 @@ The training node sends a generated kernel to the selected sandbox pool. The tra
 
 ## Architecture
 
-A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the control plane and workers from the SageMaker HyperPod EKS wizard. C runs scoring and version changes on CPU sandboxes.
+A, B1 and C use the CDK stack with a private EKS API. Managed B2 provisions the EKS cluster and HyperPod workers in one CloudFormation stack. C runs scoring and version changes on CPU sandboxes.
 
 ### Scenario A: EC2 GPU (default)
 

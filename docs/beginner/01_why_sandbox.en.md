@@ -8,7 +8,7 @@ If a bug in the loop keeps the function from finishing, the training program wai
 
 In this lab, the training program sends the code to a **sandbox**. This is a separate environment that limits which files the code can access, where it can connect and how long it can run.
 
-![The training program on the left sends code to the sandbox on the right and receives the result.](../images/figures/beginner-01_why_sandbox--execution-boundary.en.svg?v=2)
+![The training program on the left sends code to the sandbox on the right and receives the result.](../images/figures/beginner-01_why_sandbox--execution-boundary.en.svg?v=3)
 
 Follow the arrow to the right. The training program sends the code along with a **task ID** that identifies the problem it should solve. The sandbox runs the function on test inputs for that problem and compares its output with the expected answers. If `[3, 1, 2]` comes back as `[1, 3, 2]`, for example, the function finished but the result is `wrong_answer`. The training program uses the result to calculate a reward.
 
@@ -22,7 +22,7 @@ Suppose the same function gets an empty list `[]` and never leaves its loop. Onc
 
 <span id="sandbox-limits"></span>
 
-![A time limit stops a function that keeps running. Model files stay on the training server, and new connections from the sandbox to external servers are blocked by default.](../images/figures/beginner-01_why_sandbox--layers.en.svg?v=2)
+![A time limit stops a function that keeps running. Model files stay on the training server, and new connections from the sandbox to external servers are blocked by default.](../images/figures/beginner-01_why_sandbox--layers.en.svg?v=3)
 
 Follow the arrow towards the external server. Sorting numbers needs no internet connection. The sandbox can reply to the training program's request, and the default rules block any new connection the sorting function tries to open to a server on the internet.
 

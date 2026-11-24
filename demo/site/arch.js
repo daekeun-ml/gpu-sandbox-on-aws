@@ -281,8 +281,8 @@ const PATTERNS = [
       {
         id: "setup", title: L("준비와 배포", "Setup and deploy"), init: { hide: ["v2"], routing: "v1" },
         steps: [
-          S("HyperPod EKS 마법사가 EKS와 세 워커 그룹을 만듭니다. CoreDNS는 시스템 CPU에서 실행됩니다.",
-            "The HyperPod wizard provisions EKS and three worker groups. CoreDNS runs on the system CPU worker.",
+          S("배포 스크립트가 EKS 클러스터와 HyperPod 인스턴스 그룹 세 개를 만듭니다. CoreDNS는 시스템 CPU에서 실행됩니다.",
+            "The deployment script provisions the EKS cluster and three HyperPod instance groups. CoreDNS runs on the system CPU worker.",
             { light: ["operator", "eks", "system", "trainer", "v1"], moves: [{ e: "e_managed_api", c: "ctl" }, { e: "e_system", c: "ctl" }] }),
           S("S3의 시작 스크립트가 gVisor를 준비합니다. 지원 드라이버를 설치한 채점 노드는 HyperPod에서 재부팅합니다.",
             "The S3 lifecycle scripts prepare gVisor. The grading workers reboot through HyperPod to activate the supported driver.",

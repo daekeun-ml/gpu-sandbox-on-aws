@@ -10,7 +10,7 @@ Components: 18, Relationships: 14
 |---|---|---|---|---|
 | Scenario A | cdk/ with SCENARIO=A, k8s/, scripts/ 20 to 80 | CDK stack CLUSTER_NAME-cdk (cdk/deploy.sh), then numbered scripts with kubectl and helm through cdk/tunnel.sh | us-west-2 by default (scripts/config.env.example:5) | scenario-a |
 | Scenario B1 (this diagram) | cdk/ with SCENARIO=B1 (scripts/02_create_cluster.sh --hyperpod), scripts/hyperpod/, infra/hyperpod/ | same stack, plus scripts/hyperpod/create.sh (Helm chart, S3 bucket, IAM role, sagemaker create-cluster, EKS add-on) | same | scenario-b1 |
-| Scenario B2 | `scripts/hyperpod/create_managed.sh` | HyperPod EKS wizard template, three HyperPod instance groups | us-east-1 | scenario-b2 |
+| Scenario B2 | `scripts/hyperpod/create_managed.sh` | CloudFormation template for HyperPod on EKS, three HyperPod instance groups | us-east-1 | scenario-b2 |
 | Scenario C (CPU only) | cdk/ with SCENARIO=C, scripts/kata/cpu_nodes.sh, ops/simulate.sh, ops/rollout.sh | same stack, only the c8i node group added | same | scenario-c |
 
 Cross-unit: one CDK stack (cdk/gpusandbox_cdk/stack.py) builds A, B1 and C; for B1 it creates the system and sandbox-gvisor node groups and no trainer node group (stack.py:224-232). The HyperPod cluster is created outside CDK by scripts/hyperpod/create.sh with the EKS cluster as its orchestrator (infra/hyperpod/cluster.json.tpl:3).

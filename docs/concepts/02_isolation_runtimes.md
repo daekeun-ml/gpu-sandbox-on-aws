@@ -1,133 +1,92 @@
 # 격리 런타임 비교
 
 !!! info "TL;DR"
-    gVisor는 시스템 호출을 사용자 공간 커널에서 처리하고, Kata는 pod마다 별도의 커널이 있는 VM을 띄웁니다. Kata GPU 실습에서는 QEMU로 VM을 띄웁니다. CPU 격리 실습에서는 Cloud Hypervisor와 QEMU를 비교합니다.
+    보통 같은 서버에서 실행되는 컨테이너들은 하나의 Linux 커널을 공유합니다. 커널은 프로그램이 파일을 열거나 메모리를 할당받을 때 그 요청을 처리하는 운영체제의 핵심입니다. **gVisor와 Kata Containers**는 모델이 만든 코드처럼 신뢰하기 어려운 프로그램을 서버의 다른 작업과 격리해 실행하는 컨테이너 런타임입니다.
 
-## 시스템 호출은 어디에서 처리될까?
+    - **gVisor**는 프로그램과 서버의 커널 사이에 **Sentry**라는 소프트웨어를 둡니다. 프로그램이 파일을 열면 Sentry가 커널 역할을 맡아 요청을 처리하고, 필요한 작업만 서버 커널에 요청합니다. 이 방식은 샌드박스마다 가상 머신을 띄울 필요가 없습니다.
+    - **Kata Containers**는 **pod마다 작은 가상 머신(VM)**을 띄우고 그 안에서 컨테이너를 실행합니다. 프로그램이 파일을 열면 **그 VM의 Linux 커널**이 요청을 처리합니다. 같은 서버에 있는 다른 Kata pod는 별도의 VM과 커널을 사용합니다.
+
+## 같은 이미지를 실행해도 격리가 달라지는 이유 { #시스템-호출은-어디에서-처리될까 }
 
 <span id="코드가-운영체제에-일을-부탁할-때"></span>
+<span id="네-런타임의-구조"></span>
 
-파일을 열거나 GPU를 사용하려면 프로그램이 운영체제에 요청을 보냅니다. 모델이 만든 코드도 마찬가지입니다. 격리 런타임을 고를 때는 그 요청을 어디서 받아 처리할지 정합니다.
+채점 코드가 파일에서 입력 텐서를 읽은 뒤 `tensor.to("cuda")`로 GPU에 옮긴다고 해 봅시다. 파일을 열려면 프로그램이 운영체제의 커널에 **시스템 호출**을 보냅니다. GPU에 메모리를 할당하고 데이터를 복사하려면 CUDA 라이브러리를 통해 **NVIDIA 드라이버**에도 요청을 보냅니다.
 
-| 런타임 | 요청을 처음 받는 곳 | 실습에서 맡는 역할 |
+컨테이너 이미지에는 채점 코드와 PyTorch가 들어 있습니다. 같은 이미지라도 **어느 커널이 시스템 호출을 처리하는지**는 런타임에 따라 달라집니다. Kubernetes에서는 pod의 `runtimeClassName`으로 런타임을 고릅니다.
+
+| 런타임 | 파일 열기 요청을 처리하는 곳 | 같은 노드의 다른 pod와 무엇을 공유하나요? |
 |---|---|---|
-| runc | 노드의 Linux 커널 | trainer와 시스템 pod |
-| gVisor | 사용자 공간 커널(Sentry) | CPU 및 GPU 샌드박스 |
-| Kata | pod마다 띄운 VM의 Linux 커널 | CPU 샌드박스, QEMU 기반 GPU 샌드박스 |
+| **runc** (일반 컨테이너) | 노드의 Linux 커널 | 컨테이너마다 보이는 파일과 프로세스는 달라도 Linux 커널은 공유합니다. |
+| **gVisor** (`runsc`) | gVisor의 사용자 공간 커널인 [Sentry](#sentry) | Sentry가 필요한 작업만 노드 커널에 요청합니다. GPU를 쓸 때는 노드의 NVIDIA 드라이버를 이용합니다. |
+| **Kata Containers** | pod 전용 VM의 Linux 커널. 이 커널을 *게스트 커널*이라고 합니다. | 같은 pod의 컨테이너끼리는 게스트 커널을 공유합니다. 다른 Kata pod는 별도 VM에서 실행됩니다. |
 
-## 샌드박스에서 GPU에 접근하는 두 가지 방식
+## GPU 요청은 어느 드라이버로 갈까요? { #샌드박스에서-gpu에-접근하는-두-가지-방식 }
 
 <span id="gpu-경로-두-가지"></span>
+<span id="격리-경계와-운영-조건"></span>
 
-### gVisor + nvproxy
+![왼쪽은 gVisor의 nvproxy가 노드의 NVIDIA 드라이버로 요청을 전달하는 경로입니다. 오른쪽은 Kata VM 안의 NVIDIA 드라이버가 전용 T4를 제어하는 경로입니다.](../images/figures/concepts-02_isolation_runtimes--gpu-paths.ko.svg?v=2)
 
-`nvproxy`는 GPU 요청 중 지원 목록에 있는 요청만 노드의 NVIDIA 드라이버로 전달합니다. 일반 GPU VM에서도 쓸 수 있지만 드라이버 버전이 `nvproxy` 지원 목록과 맞아야 합니다.
+### gVisor는 노드의 GPU 드라이버를 사용합니다 { #gvisor--nvproxy }
 
-### Kata + VFIO passthrough
+<span id="sentry"></span>
 
-GPU를 작은 VM에 직접 연결하고 VM 안의 NVIDIA 드라이버가 장치를 제어합니다. x86 GPU 실습은 T4를 장착한 `g4dn.metal`에서 진행합니다. GPU 없이 Kata를 실습할 때는 `c8i`의 중첩 가상화를 이용할 수 있습니다.
+???+ question "Sentry는 어떤 일을 하나요?"
+    채점 코드가 `open("input.pt", "rb")`를 호출하면 Sentry가 샌드박스의 파일 시스템에서 경로를 찾고 읽기 권한을 확인합니다. 프로그램에는 Sentry가 커널 역할을 하고, 노드에서는 Sentry 자체가 하나의 프로세스로 실행됩니다. 그래서 **사용자 공간 커널**이라고 부릅니다. [gVisor 공식 문서의 Sentry 설명](https://gvisor.dev/docs/architecture_guide/intro/)
 
-![gVisor는 노드 드라이버로 GPU 요청을 전달하고, Kata의 VM은 연결된 GPU를 자체 드라이버로 사용합니다.](../images/figures/concepts-02_isolation_runtimes--gpu-paths.ko.svg)
+<span id="nvproxy"></span>
 
-GPU **passthrough**는 물리 GPU를 VM에 직접 할당하는 방식입니다. Linux의 **VFIO**는 VM이 그 장치를 사용할 수 있게 하고, **IOMMU**는 GPU가 직접 접근할 수 있는 메모리 범위를 제한합니다. CPU 전용 Kata는 GPU를 직접 할당하지 않으므로, 지원되는 EC2 VM에서 **nested virtualization**을 켜 VM 안에 Kata VM을 띄울 수 있습니다.
+???+ question "nvproxy는 Sentry 안에서 무엇을 맡나요?"
+    nvproxy는 Sentry 안에서 **NVIDIA 드라이버에 보내는 장치 제어 요청(`ioctl`)**을 처리합니다. 예를 들어 CUDA 라이브러리가 텐서를 담을 GPU 메모리를 요청하면, nvproxy는 노드의 드라이버 버전에서 지원하는 명령만 골라 전달합니다. 이후 텐서 연산은 노드에 장착된 GPU에서 실행됩니다. [gVisor가 지원하는 GPU 요청](https://gvisor.dev/docs/user_guide/gpu/#ioctls)
 
-## 격리 경계와 운영 조건
+GPU를 제어하는 드라이버가 노드에 있으므로, 같은 컨테이너 이미지라도 노드의 드라이버 버전에 따라 샌드박스에서 사용할 수 있는 GPU 기능이 달라집니다. [gVisor의 드라이버 호환성](https://gvisor.dev/docs/user_guide/gpu/)
 
-파일 접근 요청은 어느 커널이 처리하고, GPU 드라이버는 어디에서 실행될까요? gVisor에서 요청은 Sentry를 거치며 일부 GPU 요청은 노드 드라이버까지 전달됩니다. 그래서 이미지가 같아도 노드의 드라이버를 바꾸면 GPU 실행 여부가 달라질 수 있습니다. Kata에서는 드라이버를 VM 안에 둡니다. 대신 VM이 쓸 메모리를 확보하고 장치를 직접 할당해야 합니다.
+### Kata의 GPU 패스스루는 어떻게 동작하나요? { #kata--vfio-passthrough }
 
-## Kata에서 QEMU와 Cloud Hypervisor의 역할
+**GPU 패스스루(passthrough)**는 서버에 꽂힌 물리 GPU 한 장을 특정 VM의 전용 장치로 연결하는 방식입니다. GPU는 서버의 PCIe 슬롯에 그대로 있습니다. 달라지는 것은 **어느 드라이버가 그 GPU를 제어하느냐**입니다. VM 안의 운영체제는 GPU를 자기 PCI 장치로 인식하고, VM 안의 NVIDIA 드라이버가 제어합니다.
 
-QEMU와 Cloud Hypervisor는 Kata가 pod의 VM을 띄울 때 쓰는 **hypervisor**입니다. Cloud Hypervisor로 VM을 직접 만들 때도 VFIO로 물리 GPU를 연결할 수 있습니다. [Cloud Hypervisor의 VFIO 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md)
+![서버의 GPU 한 장을 QEMU가 VFIO로 Kata VM에 할당합니다. VM 안의 드라이버가 GPU에 연산 명령을 보내고, IOMMU는 GPU가 시스템 RAM에 접근할 때 이 VM에 매핑된 영역만 허용합니다.](../images/figures/concepts-02_isolation_runtimes--gpu-passthrough.ko.svg)
 
-Kata GPU 실습에서는 pod가 `nvidia.com/pgpu`로 물리 GPU를 요청합니다. Kata가 할당된 GPU를 hypervisor에 전달하고, VM 안의 드라이버가 GPU를 제어합니다. 이 과정까지 검증한 구성은 **Kata + QEMU**입니다. **Kata + Cloud Hypervisor**는 CPU 샌드박스에서 검증했고, GPU 실험에서는 VM 부팅이 타임아웃으로 끝났습니다. [Kata 핸즈온](../handson/common/02_runtimes/kata.md)
+**장치를 할당할 때** 호스트에서 GPU에 연결하는 드라이버는 `vfio-pci`입니다. QEMU는 **VFIO**라는 Linux 인터페이스를 이용해 그 GPU를 VM의 PCI 장치로 연결합니다. VM이 장치를 반납할 때까지 이 GPU는 해당 VM 전용입니다. [Linux 커널의 VFIO 설명](https://docs.kernel.org/driver-api/vfio.html)
 
-## AWS에서 각 런타임을 실행할 수 있는 위치
+**VM 안에서 두 텐서를 GPU로 옮겨 더한다면** 먼저 GPU가 시스템 RAM에서 입력 데이터를 읽어 자신의 전용 메모리(VRAM)로 복사합니다. 입력이 준비되면 게스트의 NVIDIA 드라이버가 연산 명령을 보내고, 덧셈은 서버에 꽂힌 GPU에서 실행됩니다.
 
-<span id="적용-범위와-한계"></span>
+<span id="iommu"></span>
 
-| 실습 | 노드 | 확인할 조건 |
-|---|---|---|
-| gVisor GPU | EC2 `g5.xlarge` | 노드 드라이버가 nvproxy 지원 목록에 있어야 함. T4에서 gVisor를 실행하는 구성은 이 실습에서 검증하지 않음 |
-| Kata + QEMU GPU | EC2 `g4dn.metal` | GPU passthrough용 AMI와 IOMMU 필요. 실습 환경은 AL2023과 T4이며, NVIDIA의 EKS 검증 환경(Ubuntu)과 Kata CI 대상 GPU(A100, H100)와 다름 |
-| Kata CPU (QEMU, Cloud Hypervisor) | EC2 `c8i.2xlarge` | 중첩 가상화 필요. 실습의 HyperPod GPU 노드에서는 Kata CPU도 실행하기 어려울 것으로 보이며 직접 검증하지 않음 |
+???+ question "IOMMU는 무엇이고, GPU 패스스루에 왜 필요한가요?"
+    **IOMMU(Input/Output Memory Management Unit)**는 GPU 같은 장치가 시스템 RAM을 직접 읽거나 쓸 때(**DMA**) 주소를 변환하고 접근 권한을 확인하는 하드웨어입니다. GPU 한 장을 VM 전용으로 할당해도 서버의 RAM에는 다른 VM의 데이터가 함께 있으므로 이 구분이 필요합니다.
 
-런타임을 선택한 뒤에는 누가 pool에 요청을 보낼 수 있는지, 샌드박스에서 나가는 연결은 어디까지 허용되는지도 확인해야 합니다. 직접 비교하려면 [gVisor 핸즈온](../handson/common/02_runtimes/gvisor.md)과 [Kata 핸즈온](../handson/common/02_runtimes/kata.md)을 보세요.
+    위 그림에서 GPU가 입력 텐서를 읽으려고 주소를 보내면, IOMMU는 호스트가 이 GPU에 설정한 주소표를 확인합니다. 읽기가 허용된 주소라면 텐서가 저장된 RAM의 실제 주소로 바꿔 줍니다. 다른 VM의 메모리처럼 주소표에 없는 영역에 접근하거나 읽기 전용 영역에 쓰려고 하면 그 요청을 차단합니다. [Linux 커널 문서의 DMA 주소 설명](https://docs.kernel.org/core-api/dma-api-howto.html#cpu-and-dma-addresses)
 
-## 같은 노드에서 런타임 비교하기
-
-두 pool의 GPU 모델이 다르면 채점 시간에 영향을 준 요인이 GPU인지 런타임인지 구분하기 어렵습니다. 아래 CPU 실험에서는 `c8i.2xlarge` 한 대에 런타임별로 pool을 띄웠고, 세 pool 모두 Ready 상태인 pod가 한 개씩이었습니다. 같은 `relu_bias_torch_only` 답안을 pool마다 32번 채점한 결과입니다.
-
-| pool | 파일과 메모리 요청을 받는 곳 | 성공 | 채점 p50 |
-|---|---|---:|---:|
-| `gvisor-cpu` | Sentry | 32/32 | 3.576초 |
-| `kata-clh-cpu` | Cloud Hypervisor VM의 게스트 커널 | 32/32 | 4.043초 |
-| `kata-qemu-cpu` | QEMU VM의 게스트 커널 | 32/32 | 3.819초 |
-
-세 pool 모두 요청을 처리할 준비가 된 상태에서 잰 값입니다. VM 부팅 시간을 알고 싶다면 pod 생성부터 Ready까지를 재야 합니다. 이 비교를 새 노드에서 되풀이할 때는 이미지 캐시 상태, pod 수, RuntimeClass의 CPU와 메모리 예약량도 기록하세요. [벤치마크 조건](../handson/benchmarks/index.md#runtime-results), [직접 커널을 확인하는 실습](../beginner/05_hands_on.md#aws-cpu)
-
-<a id="더-살펴보기"></a>
-
-## 네 런타임의 구조
-
-runc에서는 컨테이너가 host 커널을 공유합니다. gVisor에서는 사용자 공간 커널(Sentry)이 syscall을 먼저 처리합니다. Kata는 pod마다 별도의 VM(guest 커널)을 실행합니다.
-
-| 항목 | runc | gVisor (runsc) | Kata (QEMU, Cloud Hypervisor) | Firecracker |
-|---|---|---|---|---|
-| syscall을 처리하는 곳 | host kernel | Sentry(사용자 공간 커널). VM에서는 systrap 플랫폼, KVM 플랫폼은 bare metal에서만 | VM 안의 guest kernel | microVM 안의 guest kernel |
-| 격리 경계 | namespace, cgroup, seccomp | 사용자 공간 커널 | 하드웨어 가상화 (KVM) | 하드웨어 가상화 (KVM), 최소 장치 모델 |
-| NVIDIA 드라이버 위치 | host | host | guest (host에는 NVIDIA 드라이버를 설치하지 않음) | 해당 없음 |
-| GPU 경로 | device node 직접 접근 | nvproxy가 허용된 ioctl만 host 드라이버로 전달 | QEMU로 VFIO passthrough (cold-plug) | 없음 |
-| `/dev/kvm` | 불필요 | 불필요 (systrap) | 필요 | 필요 |
-| 실습 구성 | trainer와 시스템 pod | `gvisor` RuntimeClass (handler `runsc`) | `kata-qemu-nvidia-gpu`, `kata-qemu`, `kata-clh` | 사용하지 않음 (Kata의 hypervisor로도 쓰임) |
-
-세 런타임의 샌드박스 이미지는 동일합니다. 이미지에는 NVIDIA 커널 드라이버가 없고, PyTorch wheel에 포함된 CUDA 사용자 공간 라이브러리만 들어 있습니다.
-
-## QEMU와 Cloud Hypervisor의 자원 예약량
-
-| 항목 | QEMU | Cloud Hypervisor (CLH) |
-|---|---|---|
-| Kata CPU pod | 지원 (`kata-qemu`) | 지원 (`kata-clh`) |
-| Kata NVIDIA GPU pod | 지원 (`kata-qemu-nvidia-gpu`) | Kata 지원표에서 미지원. 실험용 `kata-clh-nvidia-gpu`는 EKS에서 VM 부팅 실패 |
-| RuntimeClass `overhead.podFixed` (Kata 4.3.1) | 320Mi, 250m. GPU class는 10240Mi, 1 CPU | 130Mi, 250m. 실험용 `kata-clh-nvidia-gpu`는 10240Mi, 1 CPU |
-| boot to workload (Kata metrics CI, 3.28.0) | 0.71 s | 0.39 s |
-
-`overhead.podFixed`는 RuntimeClass에 지정된 설정값이며 측정값이 아닙니다. 스케줄러는 이 값을 VM 자체가 사용하는 메모리와 CPU로 보고 pod 요청량에 합산합니다.
-
-Kata의 Go 런타임에는 Cloud Hypervisor VM을 띄우기 전에 VFIO 장치를 연결하는 코드가 있습니다. EKS에서 이 조합을 시험할 때도 Go 런타임의 해당 코드를 사용했습니다. Kata의 Rust 런타임(`runtime-rs`)도 일반 VFIO 장치를 처리하며, 새 VFIO 인터페이스의 장치를 Cloud Hypervisor에 전달하는 데 남은 작업은 별도 이슈에 정리돼 있습니다. [Go 런타임 코드](https://github.com/kata-containers/kata-containers/blob/4.3.1/src/runtime/virtcontainers/clh.go#L1173-L1209) [Kata 4.3.1 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [Kata 이슈 #13992](https://github.com/kata-containers/kata-containers/issues/13992)
-
-!!! warning "오버헤드 수치를 읽는 법"
-    - **위 boot 시간**: Kata metrics CI(3.28.0)가 서로 다른 머신에서 넓은 허용 오차로 측정한 값이며 AWS 측정값이 아닙니다.
-    - **AWS China 블로그의 "CLH 약 130 MB, QEMU 약 160 MB"**: Kata 3.31.0의 `podFixed` 기본값과 같아서 측정값이 아닐 가능성이 높습니다(추론). 같은 글에 실린 측정값은 cold start 약 3 s, 미리 시작해 둔 pool에서 가져올 때 약 230 ms입니다.
-    - **AWS 실습 계정에서 측정한 값**: [런타임 벤치마크](../handson/benchmarks/index.md)에 있습니다. 그 표의 cold start는 pod 생성부터 Ready까지의 시간이라 위 표의 boot to workload와 측정 구간이 다릅니다. `g4dn.metal`에서 GPU 프로필 `kata-qemu`(RuntimeClass `kata-qemu-nvidia-gpu`)로 띄운 pod 4개는 중앙값 30.5초였습니다.
-
-`kata-qemu-nvidia-gpu`의 VM 크기는 `default_memory` 8192 MiB에 컨테이너 limit을 더한 값입니다. VFIO type1은 guest RAM 전체를 pin하므로 메모리를 overcommit할 수 없습니다. 실습용 GPU 프로필은 T4 pod마다 CPU 8개와 메모리 16 GiB를 할당합니다. 8 x (16 + 10) GiB = 208 GiB이므로 `g4dn.metal`의 384 GiB 안에 들어갑니다.
-
-## 런타임별 격리 범위와 한계
-
+<span id="런타임별-격리-범위와-한계"></span>
 <span id="격리-강도와-남는-위험"></span>
 
-| 런타임 | 제출 코드와 호스트를 분리하는 방식 | 격리 후에도 주의할 점 | 실습의 보완 조치 |
-|---|---|---|---|
-| runc | host kernel과 드라이버를 공유 | kernel이나 드라이버 취약점이 그대로 노출 | 샌드박스에 쓰지 않음 |
-| gVisor + nvproxy | syscall은 Sentry, GPU는 ioctl allowlist | VM 경계보다 약함(표 아래 목록) | pod마다 GPU 1개(time-sharing 없음), 노드당 샌드박스 1개, egress 차단을 확인한 뒤 Ready, node guard iptables |
-| Kata + VFIO | VM 경계 + IOMMU | hypervisor와 GPU 장치 자체(표 아래 목록) | v2는 200회 평가 후 pod를 draining으로 바꾸고, Production gateway의 recycler가 그 pod를 삭제하고 새 pod(Kata에서는 새 VM)로 교체 |
-| Kata (CPU 전용) | VM 경계 | hypervisor | 같은 네트워크 통제 |
+??? question "런타임을 정하면 파일과 네트워크 접근 권한도 정해지나요?"
+    런타임은 제출 코드와 노드 사이에 격리 경계를 만듭니다. 샌드박스에 어떤 파일을 마운트하고 어디로 접속을 허용할지는 pod 설정과 네트워크 정책으로 정합니다. 예를 들어 Kata VM 안에서도 샌드박스에 마운트한 파일은 그 파일의 권한에 따라 읽을 수 있습니다. [샌드박스의 접근 권한 설정](../production/02_security.md)
 
-- **gVisor + nvproxy에서 호스트 드라이버를 공유할 때 주의할 점** gVisor 문서는 NVIDIA 드라이버 자체의 취약점을 완화하는 데에는 nvproxy의 효과가 제한적이라고 설명합니다("much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves"). DMA 버퍼 등도 검증하지 않습니다("no validation of things like DMA buffers").
-- **Kata + VFIO로 GPU를 할당할 때 주의할 점**
-    - IOMMU는 DMA로 접근할 수 있는 메모리를 해당 VM 안으로 제한합니다(unsafe noiommu 모드는 켜지 않음).
-    - vfio-pci는 장치를 해제할 때 function 또는 bus를 초기화합니다. T4에서 `reset_method=bus`가 나타났다는 제3자 보고가 있지만 NVIDIA가 보증한 동작은 아닙니다.
-    - T4는 confidential computing을 지원하지 않습니다.
+??? question "Firecracker도 GPU 샌드박스를 실행하나요?"
+    Firecracker는 KVM으로 작은 VM을 실행합니다. 이 가이드에서 비교한 버전(v1.18.0)은 물리 GPU 패스스루를 지원하지 않아 CPU 샌드박스에 적합합니다. [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md)
 
-GKE Sandbox 문서도 "Don't use GPU time-sharing in sandboxed Pods"라고 권고합니다. 보안 경계 전체와 위협 모델은 [Production 02 보안](../production/02_security.md)에서 다룹니다.
+## QEMU와 Cloud Hypervisor의 설계 차이 { #kata에서-qemu와-cloud-hypervisor의-역할 }
 
-??? note "참고 자료"
-    | 주제 | 링크 |
-    |---|---|
-    | EC2 nested virtualization (User Guide, What's New) | https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html , https://aws.amazon.com/about-aws/whats-new/2026/02/amazon-ec2-nested-virtualization-on-virtual/ |
-    | EC2 가속 컴퓨팅 인스턴스 사양 | https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html |
-    | gVisor 설치, GPU 지원, GitHub | https://gvisor.dev/docs/user_guide/install/ , https://gvisor.dev/docs/user_guide/gpu/ , https://github.com/google/gvisor |
-    | Kata NVIDIA GPU passthrough (4.3.1) | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md |
-    | gVisor와 Kata 런타임 설정 파일 | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml |
+Kata는 **QEMU**나 **Cloud Hypervisor**에 pod 전용 VM의 실행을 맡깁니다. 둘 다 **가상 머신 모니터(VMM)**로서 VM 안의 운영체제(게스트 OS)에 디스크와 네트워크 장치를 제공합니다. 차이는 어떤 컴퓨터를 게스트 OS에 보여주도록 설계했느냐에 있습니다.
 
-    [관련 대표 자료](../reference/references.md#ref-concepts-02-isolation-runtimes)
+- **QEMU는 여러 종류의 컴퓨터를 소프트웨어로 재현하는 범용 에뮬레이터입니다.** 게스트의 명령어를 어떻게 실행할지와 어떤 장치를 보여 줄지는 별개입니다. 예를 들어 x86 서버에서 x86 게스트의 명령은 Linux의 가상화 기능인 KVM을 통해 프로세서가 직접 실행하고, 디스크는 QEMU가 오래된 PC의 IDE 컨트롤러처럼 보이게 합니다. x86 서버에서 Arm용 운영체제를 실행할 때는 QEMU가 Arm 명령을 소프트웨어로 번역합니다. [QEMU의 시스템 에뮬레이션](https://www.qemu.org/docs/master/system/introduction.html)
+- **Cloud Hypervisor는 최신 운영체제를 클라우드 VM에서 실행하도록 설계한 VMM입니다.** 게스트 명령은 호스트 프로세서의 하드웨어 가상화 기능을 이용해 실행합니다. 디스크와 네트워크에는 주로 `virtio`를 사용합니다. 이는 가상 장치와 게스트 드라이버가 요청을 주고받는 표준입니다. 게스트에 이 드라이버가 있으면 VMM이 옛 장치의 동작을 일일이 재현할 필요가 줄어듭니다. [Cloud Hypervisor의 설계 목표](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/README.md#objectives)
+
+![QEMU는 게스트 명령을 하드웨어 가상화 또는 소프트웨어 번역으로 실행하고, Cloud Hypervisor는 하드웨어 가상화를 이용합니다. 같은 디스크 이미지를 QEMU는 IDE 또는 virtio-blk로, Cloud Hypervisor는 virtio-blk로 제공합니다.](../images/figures/concepts-02_isolation_runtimes--kata-hypervisors.ko.svg?v=3)
+
+디스크 내용을 담은 파일(디스크 이미지)이 같아도 **게스트 OS에 어떤 드라이버가 있느냐**가 중요합니다. IDE 드라이버만 있는 옛 OS라면 QEMU가 IDE 컨트롤러를 재현해 주므로 기존 드라이버로 디스크를 읽을 수 있습니다. 가상 디스크용 `virtio-blk` 드라이버가 있는 Linux는 QEMU에서도 Cloud Hypervisor에서도 같은 드라이버로 디스크를 읽습니다. 게스트 드라이버가 공유 메모리의 큐에 읽을 블록을 적어 두면 가상 장치가 그 요청을 처리합니다. [QEMU의 PC 장치 모델](https://www.qemu.org/docs/master/system/i386/pc.html) / [Virtio 장치 표준](https://docs.oasis-open.org/virtio/virtio/v1.3/virtio-v1.3.html)
+
+<span id="더-살펴보기"></span>
+<span id="qemu와-cloud-hypervisor의-자원-예약량"></span>
+
+## VM의 시작 비용과 실행 중 비용 { #같은-노드에서-런타임-비교하기 }
+
+Kata가 새 pod를 시작하면 VM의 메모리를 준비하고 게스트 커널을 부팅합니다. 한 번 시작한 pod가 여러 요청을 처리하면 이 부팅 비용은 처음에 한 번만 듭니다. 실행 중 디스크를 읽거나 네트워크로 데이터를 보낼 때 드는 비용은 선택한 장치와 드라이버, 작업의 입출력 패턴에 따라 달라집니다.
+
+<span id="aws에서-각-런타임을-실행할-수-있는-위치"></span>
+<span id="적용-범위와-한계"></span>
+
+[플랫폼과 인스턴스 선택](04_platforms_and_instances.md) / [격리 런타임 참고 자료](../reference/references.md#runtimes) / [런타임 벤치마크](../handson/benchmarks/index.md#runtime-results)

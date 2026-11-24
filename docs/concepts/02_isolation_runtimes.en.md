@@ -1,128 +1,89 @@
 # Isolation runtimes
 
 !!! info "TL;DR"
-    gVisor handles system calls in a user-space kernel. Kata starts a VM with its own kernel for each pod. This repository uses QEMU for the Kata GPU lab and compares Cloud Hypervisor and QEMU in the CPU isolation lab.
+    Containers running on the same server usually share one Linux kernel, the part of the operating system that handles requests to open files or allocate memory. **gVisor and Kata Containers** are two container runtimes that isolate untrusted programs, such as model-generated code, from other workloads on that server.
 
-## System calls and isolation boundaries
+    - **gVisor** places a software kernel called the **Sentry** between the program and the server’s kernel. When the program opens a file, the Sentry handles the request and calls on the server’s kernel only for the operations it needs. This design does not require a VM per sandbox.
+    - **Kata Containers** starts a **small virtual machine (VM) for each pod** and runs the pod’s containers inside it. The same request to open a file goes to **the Linux kernel inside that VM**. Other Kata pods on the server each have their own VM and kernel.
 
-Opening a file or accessing a device requires a request to the operating system. The runtime determines which kernel receives that request.
+## How the same image runs under different kernels { #system-calls-and-isolation-boundaries }
 
-| Runtime | First handler | Use in this repository |
+<span id="structure-of-the-four-runtimes"></span>
+
+Suppose the grader reads an input tensor from a file, then moves it to the GPU with `tensor.to("cuda")`. Opening the file requires a **system call** to the operating system kernel. Allocating GPU memory and copying the data also require the CUDA libraries to communicate with the **NVIDIA driver**.
+
+The container image supplies the grading code and PyTorch. The runtime determines **which kernel handles the program’s system calls**. In Kubernetes you select that runtime through the pod’s `runtimeClassName` field.
+
+| Runtime | What handles a request to open a file? | What do pods on the same node share? |
 |---|---|---|
-| runc | Node's Linux kernel | Trainer and system pods |
-| gVisor | Sentry, a user-space kernel | CPU and GPU sandboxes |
-| Kata | Linux kernel inside a VM per pod | CPU sandboxes and QEMU-based GPU sandboxes |
+| **runc** (regular containers) | The node’s Linux kernel | Containers can see different files and processes while sharing the kernel. |
+| **gVisor** (`runsc`) | [The Sentry](#sentry), gVisor’s user-space kernel | The Sentry invokes the node’s kernel for the operations it needs. GPU workloads also rely on the node’s NVIDIA driver. |
+| **Kata Containers** | The Linux kernel inside the pod’s VM, called the *guest kernel* | Containers in one pod share a guest kernel. Other Kata pods run in separate VMs. |
 
-## Two GPU paths
+## Which driver handles a GPU request? { #two-gpu-paths }
 
-### gVisor and nvproxy
+<span id="running-and-maintaining-each-runtime"></span>
 
-`nvproxy` forwards supported GPU requests to the node's NVIDIA driver. This works on a regular GPU VM when the driver version matches the `nvproxy` support list.
+![On the left, gVisor’s nvproxy forwards requests to the node’s NVIDIA driver. On the right, the NVIDIA driver inside the Kata VM controls its dedicated T4.](../images/figures/concepts-02_isolation_runtimes--gpu-paths.en.svg?v=2)
 
-### Kata and VFIO passthrough
+### gVisor uses the node’s GPU driver { #gvisor-and-nvproxy }
 
-The VM gets a physical GPU and its own NVIDIA driver controls it. VFIO makes the device available to the VM. The IOMMU limits which memory the device can access. CPU-only Kata can use nested virtualization on supported EC2 nodes.
+<span id="sentry"></span>
 
-![gVisor forwards GPU requests to the host driver. Kata uses the driver in the VM.](../images/figures/concepts-02_isolation_runtimes--gpu-paths.en.svg)
+???+ question "What does the Sentry do?"
+    When the grader calls `open("input.pt", "rb")`, the Sentry resolves the path in the sandbox’s filesystem and checks whether the process has permission to read the file. From the program’s perspective, the Sentry acts as its kernel. On the node, the Sentry itself runs as a process, which is why it’s called a **user-space kernel**. [The Sentry in gVisor’s architecture guide](https://gvisor.dev/docs/architecture_guide/intro/)
 
-## Running and maintaining each runtime
+<span id="nvproxy"></span>
 
-With gVisor, a driver change can affect GPU compatibility even if the sandbox image stays the same. Kata requires memory for the VM and a GPU that can be assigned directly.
+???+ question "What does nvproxy do inside the Sentry?"
+    nvproxy handles **device control requests (`ioctl`) for the NVIDIA driver**. For example, when the CUDA libraries request GPU memory for a tensor, nvproxy forwards only the commands it supports for the node’s driver version. The physical GPU on the node then performs the tensor computation. [GPU requests supported by gVisor](https://gvisor.dev/docs/user_guide/gpu/#ioctls)
 
-## QEMU and Cloud Hypervisor in Kata
+The node’s driver controls the GPU. Even with the same container image, the GPU features available to a sandbox depend on which driver version the node runs. [gVisor driver compatibility](https://gvisor.dev/docs/user_guide/gpu/)
 
-QEMU and Cloud Hypervisor are **hypervisors** that Kata uses to start pod VMs. When you create a VM directly with Cloud Hypervisor, you can also use VFIO to attach a physical GPU. [Cloud Hypervisor VFIO documentation](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md)
+### How does GPU passthrough work in Kata? { #kata-and-vfio-passthrough }
 
-In the Kata GPU lab, a pod requests a physical GPU via `nvidia.com/pgpu`. Kata passes the allocated GPU to the hypervisor, and the driver inside the VM controls the device. This repository verified that path with **Kata + QEMU**. It verified **Kata + Cloud Hypervisor** with CPU sandboxes, and the GPU experiment timed out while starting the VM. [Kata exercise](../handson/common/02_runtimes/kata.md)
+**GPU passthrough** gives one VM exclusive use of a physical GPU. The card stays in the server’s PCIe slot. What changes is **which driver controls it**. The guest OS sees the GPU as one of its PCI devices, and the NVIDIA driver inside the VM controls it.
 
-## Where each runtime can run on AWS
+![QEMU assigns one physical GPU to the Kata VM through VFIO. The guest driver sends work to the GPU. When the GPU accesses system RAM, the IOMMU permits access only to memory mapped for the VM’s device.](../images/figures/concepts-02_isolation_runtimes--gpu-passthrough.en.svg)
 
+**For device assignment**, the host binds the GPU to the Linux `vfio-pci` driver. QEMU uses the Linux **VFIO** interface to present the GPU as a PCI device to the VM. The VM has exclusive use of the device until it releases it. [Linux kernel VFIO documentation](https://docs.kernel.org/driver-api/vfio.html)
+
+**Suppose code inside the VM moves two tensors to the GPU and adds them.** First, the GPU reads the inputs from system RAM and copies them into its own memory (VRAM). Once the inputs are ready, the guest’s NVIDIA driver submits the work, and the physical GPU in the server performs the addition.
+
+<span id="iommu"></span>
+
+???+ question "What is an IOMMU, and why does GPU passthrough need one?"
+    An **input/output memory management unit (IOMMU)** is hardware that translates addresses and checks permissions when a device reads or writes system RAM using **direct memory access (DMA)**. A VM can have a GPU all to itself while the server’s RAM still holds data belonging to other VMs.
+
+    In the diagram, the GPU issues a read for the input tensor. The IOMMU looks up the device’s address in the mapping set up by the host. If the mapping allows reads, the IOMMU translates the address to the physical location of the tensor in RAM. It blocks requests to unmapped memory, such as another VM’s pages, and writes to read-only mappings. [CPU and DMA addresses in the Linux kernel documentation](https://docs.kernel.org/core-api/dma-api-howto.html#cpu-and-dma-addresses)
+
+<span id="isolation-strength-and-residual-risk"></span>
+
+??? question "Does choosing a runtime also set file and network permissions?"
+    The runtime establishes the boundary between submitted code and the node. The pod configuration determines which files are mounted, and network policies control which connections are allowed. For example, code inside a Kata VM can still read a file mounted into the sandbox if file permissions allow it. [Sandbox access controls](../production/02_security.md)
+
+??? question "Can Firecracker run these GPU sandboxes?"
+    Firecracker runs small VMs with KVM. The version covered here (v1.18.0) supports CPU sandboxes and has no physical GPU passthrough. [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md)
+
+## How QEMU and Cloud Hypervisor differ by design { #qemu-and-cloud-hypervisor-in-kata }
+
+Kata uses either **QEMU** or **Cloud Hypervisor** to run a pod’s VM. Both act as a **virtual machine monitor (VMM)**, presenting disks and network devices to the operating system inside the VM (the guest OS). Their designs reflect different goals for **which machines and guest operating systems they need to support**.
+
+- **QEMU is a general-purpose system emulator.** The choice of device model is independent of how guest instructions run. On an x86 server, Linux’s KVM virtualization facility can run x86 guest instructions directly on the processor while QEMU presents the disk through a legacy PC’s IDE controller. To run an Arm OS on that same x86 server, QEMU can translate Arm instructions in software. [QEMU system emulation](https://www.qemu.org/docs/master/system/introduction.html)
+- **Cloud Hypervisor is a VMM designed for modern operating systems in cloud VMs.** It runs guest instructions using the host processor’s hardware virtualization support and uses `virtio` for most disk and network I/O. Virtio gives a virtual device and its guest driver a standard interface for exchanging requests. A guest with that driver can use the device without the VMM having to reproduce the behavior of a legacy controller. [Cloud Hypervisor design goals](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/README.md#objectives)
+
+![QEMU can run guest instructions with hardware virtualization or software translation. Cloud Hypervisor uses hardware virtualization. QEMU can present the same disk image through IDE or virtio-blk, and Cloud Hypervisor offers virtio-blk.](../images/figures/concepts-02_isolation_runtimes--kata-hypervisors.en.svg?v=3)
+
+Even when a VM uses the same disk image (the file holding the disk’s contents), **the drivers available inside the guest OS matter**. An old OS with only an IDE driver can read the disk when QEMU emulates the controller it expects. A Linux guest with the `virtio-blk` driver can use the same virtual disk interface under either QEMU or Cloud Hypervisor. The guest driver places a request for a block in a shared-memory queue, and the virtual device handles the read. [QEMU’s PC device models](https://www.qemu.org/docs/master/system/i386/pc.html) / [Virtio specification](https://docs.oasis-open.org/virtio/virtio/v1.3/virtio-v1.3.html)
+
+<span id="further-detail"></span>
+<span id="resource-reservations-for-qemu-and-cloud-hypervisor"></span>
+
+## VM startup and steady-state costs { #compare-runtimes-on-one-node }
+
+When Kata starts a new pod, it sets up memory for the VM and boots the guest kernel. A pod that serves multiple requests incurs that startup cost once. The cost of disk and network I/O while it runs depends on the device model, the guest driver and the workload’s I/O pattern.
+
+<span id="where-each-runtime-can-run-on-aws"></span>
 <span id="scope-and-limits"></span>
 
-??? note "Which combinations have been tested"
-    T4 with gVisor and CPU-only Kata on HyperPod have not been tested here. NVIDIA’s Kata GPU CI covers A100 and H100, and its documented EKS setup uses Ubuntu. The practice run on T4 with AL2023 has no corresponding upstream validation.
-
-| Exercise | Node | Requirement |
-|---|---|---|
-| gVisor GPU | EC2 `g5.xlarge` | Driver supported by nvproxy |
-| Kata + QEMU GPU | EC2 `g4dn.metal` | Passthrough AMI and IOMMU setup |
-| Kata CPU (QEMU, Cloud Hypervisor) | EC2 `c8i.2xlarge` | Nested virtualization enabled |
-
-The runtime controls the execution boundary. Pool access and network controls also matter. Compare the [gVisor exercise](../handson/common/02_runtimes/gvisor.md) and [Kata exercise](../handson/common/02_runtimes/kata.md).
-
-## Compare runtimes on one node
-
-If two GPU pools use different devices, runtime and device differences both affect the result. The CPU comparison keeps more of the setup fixed. These pools shared one `c8i.2xlarge`, with one ready pod each. Each graded the same `relu_bias_torch_only` submission 32 times.
-
-| Pool | Where file and memory requests are handled | Successful | Evaluation p50 |
-|---|---|---:|---:|
-| `gvisor-cpu` | Sentry | 32/32 | 3.576 s |
-| `kata-clh-cpu` | Guest kernel in a Cloud Hypervisor VM | 32/32 | 4.043 s |
-| `kata-qemu-cpu` | Guest kernel in a QEMU VM | 32/32 | 3.819 s |
-
-The pods were ready before these requests arrived. To study VM startup, measure pod creation to Ready. When repeating the comparison, record image cache state, pod counts, and the CPU and memory reservations of each RuntimeClass. [Benchmark conditions](../handson/benchmarks/index.md#runtime-results), [Inspect the kernels yourself](../beginner/05_hands_on.md#aws-cpu)
-
-<a id="further-detail"></a>
-
-## Structure of the four runtimes
-
-runc shares the host kernel, gVisor has a user-space kernel (the Sentry) receive syscalls first, and Kata gives each pod its own VM (with its own guest kernel).
-
-| Item | runc | gVisor (runsc) | Kata (QEMU, Cloud Hypervisor) | Firecracker |
-|---|---|---|---|---|
-| Who receives syscalls | host kernel | the Sentry (a user-space kernel). systrap platform on VMs; the KVM platform only on bare metal | guest kernel inside the VM | guest kernel inside the microVM |
-| Isolation boundary | namespaces, cgroups, seccomp | user-space kernel | hardware virtualization (KVM) | hardware virtualization (KVM), minimal device model |
-| NVIDIA driver location | host | host | guest (the host does not load the NVIDIA driver) | n/a |
-| GPU path | direct access to device nodes | nvproxy forwards only allowed ioctls to the host driver | VFIO passthrough with QEMU (cold-plug) | none |
-| `/dev/kvm` | not needed | not needed (systrap) | needed | needed |
-| In this asset | trainer and system pods | `gvisor` RuntimeClass (handler `runsc`) | `kata-qemu-nvidia-gpu`, `kata-qemu`, `kata-clh` | not used (it is also one of Kata's hypervisors) |
-
-The sandbox image is the same for all three runtimes and contains no NVIDIA kernel driver, only the CUDA user-space libraries bundled with the PyTorch wheel.
-
-## Resource reservations for QEMU and Cloud Hypervisor
-
-| Item | QEMU | Cloud Hypervisor (CLH) |
-|---|---|---|
-| Kata CPU pod | supported (`kata-qemu`) | supported (`kata-clh`) |
-| Kata NVIDIA GPU pod | supported (`kata-qemu-nvidia-gpu`) | unsupported in Kata's support table. The experimental `kata-clh-nvidia-gpu` VM failed to start on EKS |
-| RuntimeClass `overhead.podFixed` (Kata 4.3.1) | 320Mi, 250m. The GPU class is 10240Mi, 1 CPU | 130Mi, 250m. The experimental `kata-clh-nvidia-gpu` is 10240Mi, 1 CPU |
-| Boot to workload (Kata metrics CI, 3.28.0) | 0.71 s | 0.39 s |
-
-`overhead.podFixed` is a RuntimeClass setting, not a measurement, that tells the scheduler to add the memory and CPU of the VM itself to the pod's requests.
-
-Kata's Go runtime can add VFIO devices to the Cloud Hypervisor VM before boot. The GPU experiment uses that code. Kata's Rust runtime (`runtime-rs`) also handles general VFIO devices. The remaining work to pass devices that use the newer VFIO interface to Cloud Hypervisor is tracked separately. [Go runtime code](https://github.com/kata-containers/kata-containers/blob/4.3.1/src/runtime/virtcontainers/clh.go#L1173-L1209) [Kata 4.3.1 support table](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [Kata issue #13992](https://github.com/kata-containers/kata-containers/issues/13992)
-
-!!! warning "How to read the overhead numbers"
-    - **The boot times above**: they come from the Kata metrics CI (3.28.0), measured on different machines with a wide tolerance; they are not AWS measurements.
-    - **The AWS China blog's "CLH about 130 MB, QEMU about 160 MB"**: it equals the Kata 3.31.0 `podFixed` defaults, so it is probably not a measurement (inference). What the post did measure is a cold start of about 3 s and about 230 ms to take a sandbox from a pre-started pool.
-    - **Values measured in the AWS practice account**: they are in [Runtime benchmark](../handson/benchmarks/index.md). Its cold start runs from pod creation to Ready, a different interval from boot to workload in the table above. Four pods started with the GPU profile `kata-qemu` (RuntimeClass `kata-qemu-nvidia-gpu`) on `g4dn.metal` had a median of 30.5 s.
-
-The VM size of `kata-qemu-nvidia-gpu` is `default_memory` 8192 MiB plus the container limits. VFIO type1 pins all guest RAM, so memory cannot be overcommitted. This asset's profile gives each T4 pod 8 CPUs and 16 GiB, and 8 x (16 + 10) GiB = 208 GiB fits in the 384 GiB of `g4dn.metal`.
-
-## Isolation strength and residual risk
-
-| Runtime | Between untrusted code and the host | Residual risk | What this asset adds |
-|---|---|---|---|
-| runc | shares the host kernel and driver | kernel or driver vulnerabilities are exposed directly | not used for sandboxes |
-| gVisor + nvproxy | syscalls go to the Sentry, the GPU goes through an ioctl allowlist | weaker than a VM boundary (list below the table) | one GPU per pod (no time-sharing), one sandbox per node, Ready only after egress denial is verified, node guard iptables |
-| Kata + VFIO | VM boundary + IOMMU | the hypervisor and the GPU device itself (list below the table) | v2 marks a pod as draining after 200 evaluations, and the production gateway's recycler deletes it so that a new pod (a new VM with Kata) replaces it |
-| Kata (CPU only) | VM boundary | the hypervisor | the same network controls |
-
-- **Residual risk of gVisor + nvproxy**: per the gVisor documentation nvproxy is "much less effective at mitigating vulnerabilities within the NVIDIA GPU drivers themselves" and has "no validation of things like DMA buffers".
-- **Residual risk of Kata + VFIO**:
-    - The IOMMU confines DMA to the VM (the unsafe noiommu mode stays off).
-    - vfio-pci resets the function (or the bus) on release, and T4 reports `reset_method=bus` (third-party report, not an NVIDIA guarantee).
-    - T4 has no confidential computing.
-
-The GKE Sandbox documentation also advises "Don't use GPU time-sharing in sandboxed Pods". The full security boundary and threat model are in [Production 02 Security](../production/02_security.md).
-
-??? note "References"
-    | Topic | Link |
-    |---|---|
-    | EC2 nested virtualization (User Guide, What's New) | https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html , https://aws.amazon.com/about-aws/whats-new/2026/02/amazon-ec2-nested-virtualization-on-virtual/ |
-    | EC2 accelerated computing instance specifications | https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html |
-    | gVisor installation, GPU support, GitHub | https://gvisor.dev/docs/user_guide/install/ , https://gvisor.dev/docs/user_guide/gpu/ , https://github.com/google/gvisor |
-    | Kata NVIDIA GPU passthrough (4.3.1) | https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md |
-    | This asset's runtime settings | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/gvisor/install-gvisor.sh , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/kata-deploy-values.yaml , https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/infra/kata/gpu-operator-values.yaml |
-
-    [Selected references on this topic](../reference/references.md#ref-concepts-02-isolation-runtimes)
+[Platforms and instances](04_platforms_and_instances.md) / [Isolation runtime references](../reference/references.md#runtimes) / [Runtime benchmarks](../handson/benchmarks/index.md#runtime-results)

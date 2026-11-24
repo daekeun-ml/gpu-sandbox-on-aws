@@ -130,8 +130,8 @@
 **ioctl**
 :   프로그램이 장치 드라이버에 장치별 명령을 보내는 system call입니다. GPU 작업도 NVIDIA 장치 파일에 대한 ioctl로 드라이버에 전달되고, gVisor nvproxy는 이 ioctl을 허용 목록으로 필터링합니다. [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
 
-**IOMMU**
-:   장치가 DMA로 접근할 수 있는 메모리 범위를 제한하는 하드웨어입니다. VFIO passthrough에서 GPU의 메모리 접근을 VM 안으로 제한합니다. AL2023 커널에서는 `intel_iommu=on` 커널 인자가 있어야 켜집니다. [Kata 샌드박스 (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
+**IOMMU (Input/Output Memory Management Unit)**
+:   GPU 같은 장치가 시스템 RAM에 접근할 때 장치 주소를 실제 메모리 주소로 변환하고 읽기와 쓰기 권한을 확인하는 하드웨어입니다. [GPU 패스스루에서 IOMMU가 하는 일](../concepts/02_isolation_runtimes.md#iommu) / [Kata 샌드박스 설정](../handson/common/02_runtimes/kata.md)
 
 ## J
 

@@ -177,7 +177,7 @@ For A, B1 and C, run the CDK command in the tab for your scenario. For A, set `S
 
 === "B2 (HyperPod)"
 
-    Follow [Create the cluster through HyperPod](hyperpod.md#create-the-cluster-through-hyperpod). The wizard stack provisions the EKS control plane and all three worker groups together.
+    Follow [Create the cluster through HyperPod](hyperpod.md#create-the-cluster-through-hyperpod). The B2 deployment script provisions the EKS cluster and all three HyperPod instance groups together.
 
 === "C (CPU)"
 

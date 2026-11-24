@@ -1,4 +1,4 @@
-"""Pain point schematics for production 05 to 09 and reference/faq (group ff).
+"""Pain point schematics for production 05 to 09 (group ff).
 
 Each function draws one figure in one language from shared geometry. Every box, label and value comes
 from the page named in the docstring (its Pain point prose, Why bullets and body).
@@ -83,17 +83,6 @@ T = {
         "p09.del_b": "cdk/destroy.sh", "p09.del_b_s": "스택 전체 삭제",
         "p09.out_a": "하나라도 남으면", "p09.out_a_s": "비용, 다음 생성 실패",
         "p09.out_b": "스택과 함께 삭제", "p09.out_b_s": "AMI, ECR은 따로 삭제",
-        # reference/faq
-        "faq.a": "눈에 띄지 않는 오류: 학습은 계속되고 reward만 잘못 계산되는 상황",
-        "faq.b": "blue/green 전환, 채점하지 못한 샘플은 제외",
-        "faq.ev1": "샌드박스 버전 교체", "faq.ev1s": "학습 도중",
-        "faq.ev2": "인프라 오류", "faq.ev2s": "pod 장애",
-        "faq.m1a": "rolling update", "faq.m1as": "한 group을 두 규칙으로 채점",
-        "faq.m2a": "reward 0", "faq.m2as": "장애로 0점을 받아 억제되는 정답",
-        "faq.m1b": "blue/green pool", "faq.m1bs": "batch마다 한 버전으로 전환",
-        "faq.m2b": "sandbox_error", "faq.m2bs": "TRL은 None으로 baseline에서 제외",
-        "faq.oa": "멈추지 않는 학습", "faq.oas": "reward만 잘못 계산되는 상태",
-        "faq.ob": "group 기준 advantage", "faq.obs": "한 버전, 채점한 샘플만",
     },
     "en": {
         "p05.a": "Rolling update: old and new pods answer side by side",
@@ -163,16 +152,6 @@ T = {
         "p09.del_b": "cdk/destroy.sh", "p09.del_b_s": "whole stack",
         "p09.out_a": "one leftover", "p09.out_a_s": "cost, next create fails",
         "p09.out_b": "stack deleted whole", "p09.out_b_s": "AMI, ECR: separately",
-        "faq.a": "Silent errors: training keeps running while rewards drift",
-        "faq.b": "Blue/green switches, unscored samples excluded",
-        "faq.ev1": "New sandbox version", "faq.ev1s": "mid-run",
-        "faq.ev2": "Infrastructure error", "faq.ev2s": "pod failure",
-        "faq.m1a": "rolling update", "faq.m1as": "one group scored by two rules",
-        "faq.m2a": "reward 0", "faq.m2as": "zeroed correct answers suppressed",
-        "faq.m1b": "blue/green pools", "faq.m1bs": "switch with one version per batch",
-        "faq.m2b": "sandbox_error", "faq.m2bs": "TRL: None, out of the baseline",
-        "faq.oa": "training does not stop", "faq.oas": "rewards drift silently",
-        "faq.ob": "group-relative advantage", "faq.obs": "one version, scored samples",
     },
 }
 
@@ -411,38 +390,10 @@ def production_09(lang: str) -> Figure:
     return fig
 
 
-def reference_faq(lang: str) -> Figure:
-    """docs/reference/faq: two silent errors (rolling update, reward 0 on infrastructure errors) that keep
-    training running while rewards drift (a) vs blue/green switching and TRL's None for sandbox_error (b)."""
-    t = T[lang]
-    fig = Figure(760, 486)
-    ex, ew, mx, mw, ox, ow = 16, 184, 252, 220, 560, 184
-    for p, (oy, letter, title) in enumerate(((0, "a", t["faq.a"]), (246, "b", t["faq.b"]))):
-        fig.panel(16, oy + 26, letter, title)
-        top = oy + 64
-        ys = (top + 28, top + 124)
-        events = ((t["faq.ev1"], t["faq.ev1s"], "sync"), (t["faq.ev2"], t["faq.ev2s"], "server"))
-        sfx = "a" if p == 0 else "b"
-        ways = ((t[f"faq.m1{sfx}"], t[f"faq.m1{sfx}s"]), (t[f"faq.m2{sfx}"], t[f"faq.m2{sfx}s"]))
-        for i, cy in enumerate(ys):
-            fig.box(ex, cy - 28, ew, 56, events[i][0], events[i][1], icon=events[i][2], gid=f"n:event{i}-{letter}")
-            fig.arrow([(ex + ew, cy), (mx - 2, cy)])
-            fig.box(mx, cy - 28, mw, 56, *ways[i], gid=f"n:way{i}-{letter}")
-            fig.arrow([(mx + mw, cy), (ox - 2, cy)], color=RED if p == 0 else ACCENT)
-        if p == 0:
-            fig.box(ox, top, ow, 152, t["faq.oa"], t["faq.oas"], icon="alert", fill=RED_FILL, stroke=RED, color=RED,
-                    gid="n:outcome-a")
-        else:
-            fig.box(ox, top, ow, 152, t["faq.ob"], t["faq.obs"], icon="check-circle", fill=ACCENT_FILL,
-                    stroke=ACCENT, gid="n:outcome-b")
-    return fig
-
-
 FIGURES = {
     "production-05_sandbox_updates": production_05,
     "production-06_scaling_with_verl": production_06,
     "production-07_observability_and_operations": production_07,
     "production-08_cost": production_08,
     "production-09_cdk": production_09,
-    "reference-faq": reference_faq,
 }

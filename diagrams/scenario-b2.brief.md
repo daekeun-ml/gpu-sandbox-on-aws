@@ -4,7 +4,7 @@ This diagram describes the managed HyperPod EKS lab in `us-east-1`. It follows a
 
 | Component | Responsibility | Source |
 |---|---|---|
-| AWS CloudFormation | Regional HyperPod wizard template creates the VPC, EKS and HyperPod cluster together | [Stack entry point](../scripts/hyperpod/create_managed.sh), [stack parameters](../infra/hyperpod/managed-parameters.py) |
+| AWS CloudFormation | The regional template creates the VPC, EKS cluster and HyperPod cluster together | [Stack entry point](../scripts/hyperpod/create_managed.sh), [stack parameters](../infra/hyperpod/managed-parameters.py) |
 | Amazon EKS 1.36 | Kubernetes API and pod scheduling on the registered workers | [Node and node-group checks](../docs/handson/scenarios/b/b2.en.md) |
 | HyperPod `system` | One `ml.m5.xlarge` runs CoreDNS and CPU benchmark jobs | [CoreDNS placement](../scripts/hyperpod/prepare_managed.sh), [benchmark clients](../scripts/hyperpod/bench_b2.sh) |
 | HyperPod `trainer` | One `ml.g5.2xlarge` runs a GRPO job and subsequently the second benchmark client | [Training job](../k8s/trainer/hyperpod-job-grpo.yaml.tpl), [run record](../docs/handson/data/hyperpod-b2.json) |

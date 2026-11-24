@@ -124,7 +124,7 @@ Creating a cluster starts charges for nodes and the NAT gateway. Choose a tab fo
 
 ## Clean up the lab { #next-step }
 
-For A, B1 and C, follow [Cleanup](cleanup.md). For managed B2, use [HyperPod wizard stack cleanup](scenarios/b/b2.md#cleanup). Nodes still incur charges after you scale pods to zero. To pause an EC2 lab, see [Scaling node groups to zero](cleanup.md#pausing-scale-node-groups-to-zero).
+For A, B1 and C, follow [Cleanup](cleanup.md). For managed B2, use [B2 CloudFormation stack cleanup](scenarios/b/b2.md#cleanup). Nodes still incur charges after you scale pods to zero. To pause an EC2 lab, see [Scaling node groups to zero](cleanup.md#pausing-scale-node-groups-to-zero).
 
 ## Architecture and log details { #architecture }
 

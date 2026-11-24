@@ -12,7 +12,7 @@
 
 프로그램이 어떤 환경에서 실행될지는 **런타임**이 정합니다. 그림 왼쪽에서 실행 환경을 하나 고르고, 오른쪽으로 화살표를 따라가 보세요.
 
-![파일을 여는 코드는 runc에서 노드 커널에, gVisor에서 Sentry에, Kata에서 가상 머신의 커널에 요청합니다.](../images/figures/beginner-02_container_vs_sandbox--three-walls.ko.svg?v=2)
+![파일을 여는 코드는 runc에서 노드 커널에, gVisor에서 Sentry에, Kata에서 가상 머신의 커널에 요청합니다.](../images/figures/beginner-02_container_vs_sandbox--three-walls.ko.svg?v=3)
 
 - **일반 컨테이너(runc)**에서는 노드의 Linux 커널이 파일 열기 요청을 직접 처리합니다.
 - **gVisor**에서는 **Sentry**라는 프로그램이 샌드박스 안에서 커널 역할을 합니다. Sentry가 파일 열기 요청을 먼저 처리하고, 필요한 작업은 노드의 커널에 요청합니다.

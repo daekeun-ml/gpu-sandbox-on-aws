@@ -12,7 +12,7 @@ A **container** can give each program its own view of files and processes on the
 
 The **runtime** sets up the environment a program runs in. Pick an environment on the left of the figure and follow its arrow to the right.
 
-![A file request goes to the node kernel under runc, to Sentry under gVisor, or to a virtual machine’s kernel under Kata.](../images/figures/beginner-02_container_vs_sandbox--three-walls.en.svg?v=2)
+![A file request goes to the node kernel under runc, to Sentry under gVisor, or to a virtual machine’s kernel under Kata.](../images/figures/beginner-02_container_vs_sandbox--three-walls.en.svg?v=3)
 
 - **Ordinary container (runc).** The node’s Linux kernel handles the file request directly.
 - **gVisor.** A program called **Sentry** acts as the kernel for code inside the sandbox. It handles the request first and asks the node kernel to do the work it needs from the host.

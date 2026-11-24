@@ -616,7 +616,7 @@ kubectl -n sandbox-gateway exec deploy/gateway -- cat /etc/gpusandbox/routing/ro
 | 실습에서 본 증상 | 해결 방법 |
 |---|---|
 | 그룹은 `InService`인데 `CurrentCount`가 `TargetCount`보다 작음 | `list-cluster-nodes --include-node-logical-ids`로 각 요청을 확인합니다. 이번에는 `INSUFFICIENT_CAPACITY_ERROR`가 발생했고 HyperPod가 `Continuous` 모드에서 다시 요청해 GPU 세 대를 확보했습니다. |
-| 마법사 스택은 `CREATE_COMPLETE`인데 학습 애드온이 cert-manager 관련 `K8sResourceNotFound`를 반환 | 워커가 준비된 뒤 `scripts/hyperpod/prepare_managed.sh`를 실행합니다. 인증서 웹훅이 준비될 때까지 기다린 뒤 실패한 애드온을 같은 버전으로 다시 설치합니다. |
+| B2 CloudFormation 스택은 `CREATE_COMPLETE`인데 학습 애드온이 cert-manager 관련 `K8sResourceNotFound`를 반환 | 워커가 준비된 뒤 `scripts/hyperpod/prepare_managed.sh`를 실행합니다. 인증서 웹훅이 준비될 때까지 기다린 뒤 실패한 애드온을 같은 버전으로 다시 설치합니다. |
 | 채점 노드에 `595.112.07`이 표시되거나 `nvidia_uvm` 모듈이 사용 중 | 두 채점 워커가 `Ready`가 되면 `scripts/hyperpod/reboot_sandboxes.sh`로 `580.178.04`를 디스크에 설치하고 HyperPod API로 재부팅합니다. 마지막에 실행 중인 커널 모듈의 버전을 확인합니다. |
 
 [재현 명령과 실행 화면, 정리 절차](../handson/scenarios/b/b2.md)

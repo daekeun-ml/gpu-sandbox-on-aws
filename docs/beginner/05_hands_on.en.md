@@ -14,7 +14,7 @@ cd gpu-sandbox-on-aws
 
 The script prepares the Python environment and starts a test. The test launches two CPU grading servers on your computer, sends prepared answers and shuts the servers down when it finishes. Look for `1 passed` at the end.
 
-![When a wrong submission receives the expected wrong_answer verdict, the check for that submission passes.](../images/figures/beginner-05_hands_on--local-scoring.en.svg?v=2)
+![When a wrong submission receives the expected wrong_answer verdict, the check for that submission passes.](../images/figures/beginner-05_hands_on--local-scoring.en.svg?v=3)
 
 ??? note "Install the environment by hand or rerun just the test"
     Follow the [local Python setup](../handson/start.md#2-local-python-environment) for your operating system. After installation, the following command reruns the same test from the project directory.

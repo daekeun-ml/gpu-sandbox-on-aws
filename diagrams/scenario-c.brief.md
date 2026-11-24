@@ -10,7 +10,7 @@ Components: 17, Relationships: 12
 |---|---|---|---|---|
 | Scenario A | cdk/ with SCENARIO=A, k8s/, scripts/ 20 to 80 | CDK stack CLUSTER_NAME-cdk (cdk/deploy.sh), then numbered scripts with kubectl and helm through cdk/tunnel.sh | us-west-2 by default (scripts/config.env.example:5) | scenario-a |
 | Scenario B1 | cdk/ with SCENARIO=B1, scripts/hyperpod/, infra/hyperpod/ | same stack, plus sagemaker create-cluster | same | scenario-b1 |
-| Scenario B2 | `scripts/hyperpod/create_managed.sh` | HyperPod EKS wizard template, three HyperPod instance groups | us-east-1 | scenario-b2 |
+| Scenario B2 | `scripts/hyperpod/create_managed.sh` | CloudFormation template for HyperPod on EKS, three HyperPod instance groups | us-east-1 | scenario-b2 |
 | Scenario C (this diagram) | cdk/ with SCENARIO=C (scripts/02_create_cluster.sh --cpu-only), scripts/03_build_push_images.sh --no-trainer, kata/cpu_nodes.sh, 05_setup_namespaces_auth.sh, 06_deploy_sandboxes.sh, ops/verify.sh, ops/simulate.sh, ops/rollout.sh | same stack: system node group plus sandbox-kata-cpu, then the scripts above through the tunnel | same | scenario-c |
 
 Cross-unit: one CDK stack builds A, B1 and C; SCENARIO=C turns on the sandbox-kata-cpu node group and drops every GPU node group (cdk/gpusandbox_cdk/config.py:95, stack.py:224-242). The same c8i node group is an optional CPU tier in the other CDK scenarios (WITH_KATA_CPU=1).

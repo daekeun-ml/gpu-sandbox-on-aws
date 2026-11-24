@@ -120,7 +120,7 @@ B2의 설정만 먼저 만들려면 `./scripts/quickstart.sh B2 init`을 실행�
 
 - **하는 일**: 클러스터 이름을 입력받은 뒤 `cdk/destroy.sh --yes`로 pool, Job, CDK 스택을 지우고, `config.env`에 ID가 있는 AMI(`KATA_IOMMU_AMI_ID`, `HYPERPOD_B2_AMI_ID`)와 스냅샷을 하나씩 확인한 뒤 지웁니다. 마지막에 남은 인스턴스를 조회합니다.
 - **사용법**: `scripts/08_cleanup.sh`, ECR 리포지토리까지 지우려면 `--images`. B1과 기존 CDK 방식의 B2는 먼저 `scripts/hyperpod/delete.sh`를 실행합니다.
-- **실행 시점**: CDK로 만든 클러스터를 정리할 때 실행합니다. 터널을 켜 두면 클러스터 안의 워크로드부터 지웁니다. 관리형 B2는 [마법사 스택 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b2/#cleanup)를 따르세요.
+- **실행 시점**: CDK로 만든 클러스터를 정리할 때 실행합니다. 터널을 켜 두면 클러스터 안의 워크로드부터 지웁니다. 관리형 B2는 [B2 CloudFormation 스택 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b2/#cleanup)를 따르세요.
 - **시간과 과금**: 기록 없음(CloudFormation 삭제를 기다림). CDK 스택 리소스의 과금이 끝나고, secrets용 KMS 키는 7일 삭제 대기에 들어갑니다.
 - **다시 실행할 때**: 실행할 때마다 확인 단어를 묻고 `cdk/destroy.sh`부터 다시 실행합니다. 이미 지운 AMI의 ID가 `config.env`에 남아 있으면 AMI 단계에서 멈출 수 있으니, `--images`로 다시 실행하기 전에 그 ID를 지우세요.
 - **성공 여부 확인**: 마지막 표(`project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스)가 비어 있습니다.
@@ -232,7 +232,7 @@ EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다
 
 | 명령 | 하는 일 |
 |---|---|
-| `scripts/hyperpod/create_managed.sh` | HyperPod EKS 생성 마법사의 AWS 템플릿으로 제어 영역과 `system`, `trainer`, `sandbox` HyperPod 그룹을 만듭니다. |
+| `scripts/hyperpod/create_managed.sh` | AWS가 제공하는 CloudFormation 템플릿으로 EKS 클러스터와 HyperPod의 `system`, `trainer`, `sandbox` 인스턴스 그룹을 만듭니다. |
 | `scripts/hyperpod/reboot_sandboxes.sh` | 채점 노드에 지원 드라이버를 설치하고, 전환이 필요한 노드만 HyperPod API로 재부팅해 실행 버전을 확인합니다. |
 | `scripts/hyperpod/prepare_managed.sh` | VPC CNI NetworkPolicy를 켜고 CoreDNS를 `system`에 배치합니다. 학습 오퍼레이터와 인증서 웹훅도 확인합니다. |
 | `scripts/hyperpod/bench_b2.sh 32` | `system`과 `trainer`에서 같은 Triton 평가를 차례로 실행하고 요청 위치별로 JSONL 파일을 남깁니다. |
@@ -305,7 +305,7 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](https://daekeun-ml
 
 - **하는 일**: HyperPod 클러스터 이름을 입력받은 뒤 HyperPodPyTorchJob, HyperPod 클러스터(사라질 때까지 대기), execution role을 지우고, 한 번 더 확인한 뒤 lifecycle 버킷을 비우고 지웁니다. EKS 클러스터는 남습니다.
 - **사용법**: `scripts/hyperpod/delete.sh` (인자 없음)
-- **실행 시점**: B1과 기존 CDK 방식의 B2를 정리할 때 `08_cleanup.sh`보다 먼저 실행합니다. 관리형 B2는 [마법사 스택 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b2/#cleanup)를 따르세요.
+- **실행 시점**: B1과 기존 CDK 방식의 B2를 정리할 때 `08_cleanup.sh`보다 먼저 실행합니다. 관리형 B2는 [B2 CloudFormation 스택 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b2/#cleanup)를 따르세요.
 - **시간과 과금**: 문서에 기록 없음([시나리오 B1](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b1/) 참고). HyperPod 리소스의 과금이 끝납니다.
 - **재실행**: 클러스터가 이미 삭제됐다면 남은 실행 역할과 전용 버킷을 정리합니다. 버킷을 비우기 전에 다시 확인합니다.
 - **성공 여부 확인**: `waiting for the cluster to disappear`, `deleted role <이름>-execution` 뒤에 마지막 줄 `HyperPod resources deleted`가 나옵니다.

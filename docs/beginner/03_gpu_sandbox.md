@@ -16,7 +16,7 @@ GPU가 실행하는 계산 코드를 **GPU 커널**이라고 합니다. 2편에�
 
 **gVisor에서는 샌드박스 밖에 있는 드라이버에 GPU 요청을 보냅니다.** 코드가 파일을 열거나 GPU를 쓰려고 하면 gVisor에서 커널 역할을 하는 **Sentry**가 먼저 요청을 받습니다. GPU 요청은 Sentry의 `nvproxy`가 검사합니다. 허용된 요청만 GPU가 장착된 서버(노드)의 NVIDIA 드라이버로 넘어갑니다.
 
-![gVisor의 nvproxy에서 출발한 GPU 요청 화살표가 샌드박스 테두리를 지나 노드의 NVIDIA 드라이버에 닿습니다.](../images/figures/beginner-03_gpu_sandbox--gvisor.ko.svg)
+![gVisor의 nvproxy에서 출발한 GPU 요청 화살표가 샌드박스 테두리를 지나 노드의 NVIDIA 드라이버에 닿습니다.](../images/figures/beginner-03_gpu_sandbox--gvisor.ko.svg?v=3)
 
 <span id="nvproxy"></span>
 
@@ -28,7 +28,7 @@ GPU가 실행하는 계산 코드를 **GPU 커널**이라고 합니다. 2편에�
 
 **Kata + QEMU에서는 샌드박스 안의 드라이버가 GPU를 직접 제어합니다.** Kata는 QEMU로 가상 머신(VM)을 띄우고 물리 GPU 한 장을 그 VM에 직접 연결합니다. 이 방식을 **GPU 패스스루(passthrough)**라고 합니다. 코드가 파일을 열 때는 VM의 Linux 커널이 요청을 받고, GPU에 덧셈을 맡길 때는 같은 VM 안의 NVIDIA 드라이버가 GPU를 제어합니다.
 
-![Kata VM의 테두리 안에 Linux 커널과 NVIDIA 드라이버가 함께 있습니다. 드라이버는 이 VM에 할당된 물리 GPU를 제어합니다.](../images/figures/beginner-03_gpu_sandbox--kata-qemu.ko.svg)
+![Kata VM의 테두리 안에 Linux 커널과 NVIDIA 드라이버가 함께 있습니다. 드라이버는 이 VM에 할당된 물리 GPU를 제어합니다.](../images/figures/beginner-03_gpu_sandbox--kata-qemu.ko.svg?v=3)
 
 <span id="cloud-hypervisor의-gpu-지원-범위"></span>
 

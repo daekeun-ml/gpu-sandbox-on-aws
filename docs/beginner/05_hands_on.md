@@ -14,7 +14,7 @@ cd gpu-sandbox-on-aws
 
 스크립트는 Python 환경을 준비하고 테스트를 실행합니다. 테스트는 내 PC에 CPU 채점 서버 두 개를 띄워 준비된 답안을 보내고, 끝나면 서버를 종료합니다. 마지막에 `1 passed`가 나오면 됩니다.
 
-![틀린 답안을 보냈을 때 채점기가 돌려준 wrong_answer와 기대한 판정이 일치하는 예](../images/figures/beginner-05_hands_on--local-scoring.ko.svg?v=2)
+![틀린 답안을 보냈을 때 채점기가 돌려준 wrong_answer와 기대한 판정이 일치하는 예](../images/figures/beginner-05_hands_on--local-scoring.ko.svg?v=3)
 
 ??? note "설치 과정을 직접 따라가거나 테스트만 다시 실행하려면"
     [로컬 Python 환경 설정](../handson/start.md#2-로컬-python-환경)에서 운영체제별 설치 순서를 보세요. 설치 후에는 프로젝트 폴더에서 다음 명령으로 같은 테스트를 다시 실행합니다.

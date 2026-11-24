@@ -119,7 +119,7 @@ Use `./scripts/quickstart.sh B2 plan` to preview the steps and `./scripts/quicks
 ### `scripts/08_cleanup.sh`
 
 - **What it does**: Asks for the cluster name, deletes the pools, Jobs and the CDK stack with `cdk/destroy.sh --yes`, then deletes the AMIs whose IDs are in `config.env` (`KATA_IOMMU_AMI_ID`, `HYPERPOD_B2_AMI_ID`) and their snapshots, asking for each. At the end it lists the remaining instances.
-- **Usage**: `scripts/08_cleanup.sh`, or `--images` to delete the ECR repositories too. For B1 or legacy CDK B2, run `scripts/hyperpod/delete.sh` first. Managed B2 uses its wizard stack.
+- **Usage**: `scripts/08_cleanup.sh`, or `--images` to delete the ECR repositories too. For B1 or legacy CDK B2, run `scripts/hyperpod/delete.sh` first. For managed B2, delete the B2 CloudFormation stack.
 - **When**: When you finish. All scenarios; with the tunnel open, the workloads in the cluster go first.
 - **Time and cost**: Not recorded (it waits for the CloudFormation deletion). Billing for the stack's resources ends, and the secrets KMS key enters its 7-day deletion window.
 - **Running it again**: Every run asks for the confirmation word and starts again with `cdk/destroy.sh`. If the ID of an AMI you already deleted is still in `config.env`, it can stop at the AMI step, so remove that ID before you run it again with `--images`.
@@ -230,7 +230,7 @@ All five EKS pools completed 32 requests each (160/160). [Results and run condit
 
 | Command | What it does |
 |---|---|
-| `scripts/hyperpod/create_managed.sh` | Submits the same AWS template as the HyperPod EKS wizard. Creates the control plane and the `system`, `trainer` and `sandbox` HyperPod groups. |
+| `scripts/hyperpod/create_managed.sh` | Deploys the AWS CloudFormation template for HyperPod on EKS. The stack creates the EKS cluster and the `system`, `trainer` and `sandbox` HyperPod instance groups. |
 | `scripts/hyperpod/reboot_sandboxes.sh` | Stages the supported driver on the two grading workers, reboots workers that need it through HyperPod and verifies the running module. |
 | `scripts/hyperpod/prepare_managed.sh` | Enables VPC CNI NetworkPolicy, places CoreDNS on `system` and checks the training operator and its certificate webhook. |
 | `scripts/hyperpod/bench_b2.sh 32` | Runs the same Triton evaluation from the `system` and `trainer` groups in sequence. Writes one JSONL file per client. |

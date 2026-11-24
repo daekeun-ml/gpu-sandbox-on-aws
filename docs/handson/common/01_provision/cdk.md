@@ -7,7 +7,7 @@ hide:
 
 <span id="01-클러스터와-이미지"></span>
 
-HyperPod 마법사로 만드는 관리형 B2는 [B2 프로비저닝](hyperpod.md)를 따르세요. 이 페이지의 CDK 명령은 A, B1, C와 기존 custom AMI 경로에 적용됩니다.
+관리형 B2를 선택했다면 [HyperPod로 EKS와 워커 만들기](hyperpod.md)를 따르세요. 이 페이지의 CDK 명령은 A, B1, C와 기존 custom AMI 경로에 적용됩니다.
 
 내 PC에서 EKS 노드를 조회하고 샌드박스 컨테이너 이미지를 ECR에 올립니다. 처음 배포한다면 [준비물](../../start.md#준비물)과 [경로별 쿼터](../../index.md#사전-준비)를 먼저 확인하세요.
 
@@ -174,7 +174,7 @@ A, B1, C는 해당 탭의 명령으로 CDK 스택을 배포합니다. A는 `scri
 
 === "B2 (HyperPod)"
 
-    [HyperPod에서 클러스터 만들기](hyperpod.md#hyperpod에서-클러스터-만들기)로 이동하세요. 마법사 스택이 EKS 제어 영역과 세 워커 그룹을 함께 만듭니다.
+    [HyperPod에서 클러스터 만들기](hyperpod.md#hyperpod에서-클러스터-만들기)로 이동하세요. B2 배포 스크립트는 EKS 클러스터와 세 HyperPod 인스턴스 그룹을 함께 만듭니다.
 
 === "C (CPU)"
 
