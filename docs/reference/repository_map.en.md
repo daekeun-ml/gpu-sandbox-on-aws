@@ -29,3 +29,5 @@ Use the [script reference](scripts.md) for commands and [Configuration](configur
 The tests in `tests/` run without AWS. Start with `test_harness_cpu.py` and `test_server_and_client.py` for local evaluation, `test_routing_and_rewards.py` for version switches and rewards, and `test_manifests.py` for deployment templates. CDK stack tests are in `cdk/tests/`.
 
 Guide sources are in `docs/`, and `mkdocs.yml` sets the menu order. Edit the [script reference](scripts.md) and run `python3 tools/sync_scripts_md.py` to refresh the root script reference.
+
+The hands-on sources follow the sidebar. `docs/handson/common/` contains provisioning, runtime setup and pool verification. `scenarios/` holds the A, B and C walkthroughs. The benchmark and multi-turn lab live in `benchmarks/` and `extensions/`.

@@ -16,9 +16,9 @@ Components: 18, Relationships: 14
 Cross-unit: one CDK stack (cdk/gpusandbox_cdk/stack.py) builds A, B1 and C; for B1 it creates the system and sandbox-gvisor node groups and no trainer node group (stack.py:224-232). The HyperPod cluster is created outside CDK by scripts/hyperpod/create.sh with the EKS cluster as its orchestrator (infra/hyperpod/cluster.json.tpl:3).
 
 Out of scope (not drawn), one line each:
-- WITH_KATA_GPU=1: sandbox-kata-gpu node group (g4dn.metal, Kata QEMU with GPU passthrough), optional Kata pools for B1 (stack.py:243-255, docs/handson/07_hyperpod.md:57).
+- WITH_KATA_GPU=1: sandbox-kata-gpu node group (g4dn.metal, Kata QEMU with GPU passthrough), optional Kata pools for B1 (stack.py:243-255, docs/handson/scenarios/b/index.md).
 - WITH_KATA_CPU=1: adds the c8i sandbox-kata-cpu node group drawn in scenario-c (stack.py:233-242).
-- Kata on HyperPod nodes: not possible (docs/handson/07_hyperpod.md:495).
+- Kata on HyperPod nodes: not possible (docs/handson/scenarios/b/index.md).
 - Demo site (hands-on page 09): private S3 + CloudFront replaying recorded verdicts, demo/infra/site.yaml; no path to the cluster.
 - Agent Sandbox extension: scripts/extensions/agent_sandbox.sh and k8s/extensions/agent-sandbox/ (unit tested only).
 - Production reference (docs/production/): sandbox gateway (k8s/production/gateway.yaml.tpl), jwks-sync CronJob, Karpenter NodePools (infra/karpenter/nodepools.yaml), veRL RayCluster.
@@ -34,7 +34,7 @@ Out of scope (not drawn), one line each:
 | kms | KMS secrets key (`key_management_service`) | Customer-managed key with rotation; EKS envelope-encrypts Kubernetes Secrets with it | EKS control plane | cdk/gpusandbox_cdk/stack.py:100-109 | deployed |
 | trainer | HyperPod GRPO trainer (`sagemaker`) | HyperPodPyTorchJob in ns rl-trainer (hyperpodrun, the same train_grpo.py) on HyperPod instance group trainer, 1x ml.g5.2xlarge; NodeRecovery Automatic, job retries and log-based hang detection | HyperPod trainer ml.g5.2xlarge | k8s/trainer/hyperpod-job-grpo.yaml.tpl:1-64, infra/hyperpod/cluster.json.tpl:1-22, scripts/config.env.example:45 | deployed |
 | sbx_v1 | gvisor pool v1 (`container_1`, resource) | Active pool: Deployment and headless Service sandbox-gvisor-v1 in ns sandbox, RuntimeClass gvisor (runsc + nvproxy), one pod per A10G, 2 replicas, default-deny NetworkPolicy | sandbox-gvisor nodes g5.xlarge x2 | k8s/sandbox/deployment.yaml.tpl:1-40, k8s/sandbox/profiles/gvisor.env:1-11, cdk/gpusandbox_cdk/stack.py:228-232 | deployed |
-| sbx_v2 | gvisor pool v2 (`container_1`, resource) | Next version sandbox-gvisor-v2 beside v1 (blue/green: 5 seeds, speedup cap 10x); no traffic until parity passes and the routing switch; the node group is scaled to 4 for it | sandbox-gvisor nodes g5.xlarge x2 | k8s/sandbox/versions/v2.env:1-7, scripts/ops/rollout.sh:1-10, docs/handson/06_sandbox_update.md:51-58 | deployed |
+| sbx_v2 | gvisor pool v2 (`container_1`, resource) | Next version sandbox-gvisor-v2 beside v1 (blue/green: 5 seeds, speedup cap 10x); no traffic until parity passes and the routing switch; the node group is scaled to 4 for it | sandbox-gvisor nodes g5.xlarge x2 | k8s/sandbox/versions/v2.env:1-7, scripts/ops/rollout.sh:1-10, docs/handson/scenarios/a/pool_update.md:53 | deployed |
 | ecr | ECR repositories (`ecr`) | Private repositories gpu-sandbox/sandbox, trainer and control (scan on push, immutable tags), created by scripts/03_build_push_images.sh from the workstation, outside the CDK stack | Shared services | scripts/03_build_push_images.sh:24-40 | deployed |
 | cw | CloudWatch Logs (`cloudwatch_2`) | Log group /aws/eks/CLUSTER_NAME/cluster for five control plane log types and the VPC flow log group (REJECT), one-month retention | Shared services | cdk/gpusandbox_cdk/stack.py:66-72, cdk/gpusandbox_cdk/stack.py:110-113 | deployed |
 | nat | NAT gateway (`nat_gateway`, resource) | The single egress of the private subnets, which the HyperPod instance group also uses | Egress | cdk/gpusandbox_cdk/stack.py:47-58, scripts/hyperpod/create.sh:74-81 | deployed |

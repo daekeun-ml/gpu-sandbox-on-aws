@@ -34,6 +34,6 @@ In this lab `gvisor-cpu` printed `4.19.0-gvisor`. QEMU and Cloud Hypervisor boot
 
 A loop that computes in memory and a program that repeatedly opens small files make different demands on the kernel. In an AWS comparison on the same `m7i.xlarge`, a CPU loop took 0.144 s under runc and 0.146 s under gVisor. For 200,000 `getppid` calls the times were 0.035 s and 0.444 s. The ratio for one workload will not predict the other. [AWS comparison and conditions](https://aws.amazon.com/ko/blogs/tech/aws-ai-agent-sandbox-eks-isolation-part-2/)
 
-Kata boots a VM when it starts a pod. A request sent to a ready pod reuses that VM. Compare time to Ready separately from the time a running pod takes to grade one submission. [Runtime benchmark](../handson/08_benchmark.md#runtime-results)
+Kata boots a VM when it starts a pod. A request sent to a ready pod reuses that VM. Compare time to Ready separately from the time a running pod takes to grade one submission. [Runtime benchmark](../handson/benchmarks/index.md#runtime-results)
 
 [Chapter 03](03_gpu_sandbox.md) follows requests to a GPU. [Runtime comparison](../concepts/02_isolation_runtimes.md) covers the trade-offs and node requirements.

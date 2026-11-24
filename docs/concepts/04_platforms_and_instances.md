@@ -18,7 +18,7 @@
 | B2 | HyperPod `trainer` | HyperPod `sandbox` | 시스템 Pod, 학습, 채점을 각각의 HyperPod 그룹에 배치 |
 | C | 모델 없이 시뮬레이터 실행 | EC2 `c8i.2xlarge`의 CPU pool | GPU 없이 런타임 비교, 채점, 버전 교체 |
 
-A, B1, C는 `us-west-2`에서, [관리형 B2](../handson/07_hyperpod_b2.md)는 `us-east-1`에서 실행했습니다.
+A, B1, C는 `us-west-2`에서, [관리형 B2](../handson/scenarios/b/b2.md)는 `us-east-1`에서 실행했습니다.
 
 B1에서는 학습과 채점에 필요한 조건을 각각 맞출 수 있습니다. 학습 노드에는 HyperPod의 Job 재시작 기능을 적용하고, EC2 채점 노드에는 gVisor가 지원하는 드라이버나 Kata에 필요한 가상화 환경을 그대로 둡니다. 관리형 B2는 등록된 채점 노드에 gVisor가 지원하는 드라이버를 설치하고 HyperPod API로 재부팅합니다.
 
@@ -32,7 +32,7 @@ B1에서는 학습과 채점에 필요한 조건을 각각 맞출 수 있습니�
 
     **그림 설명**　운영 PC는 SSM 터널을 통해 EKS의 프라이빗 API에 접속합니다(그림의 `kubectl tunnel`). 학습 중에는 `GRPO trainer Job`이 모델이 생성한 코드를 gVisor pool에 보냅니다(`kernel code` 화살표). pool은 GPU에서 코드를 실행해 결과가 맞는지, 얼마나 빠른지 확인합니다. trainer는 이 채점 결과로 reward를 계산합니다.
 
-    **차이점**　학습과 채점 모두 EC2에서 직접 운영하는 기본 GPU 구성입니다. [시나리오 A 실습](../handson/scenario_a.md)
+    **차이점**　학습과 채점 모두 EC2에서 직접 운영하는 기본 GPU 구성입니다. [시나리오 A 실습](../handson/scenarios/a/index.md)
 
 === "B1: HyperPod 학습"
 
@@ -40,13 +40,13 @@ B1에서는 학습과 채점에 필요한 조건을 각각 맞출 수 있습니�
 
     **그림 설명**　EKS에 `HyperPodPyTorchJob`을 제출하면 training operator가 HyperPod 학습 노드에서 trainer를 실행합니다. trainer는 같은 EKS 클러스터의 EC2 샌드박스 pool에 코드를 보내고(`kernel code` 화살표), 샌드박스는 GPU에서 코드를 실행해 채점 결과를 돌려줍니다.
 
-    **차이점**　A와 달리 학습 노드를 HyperPod에서 관리하므로 노드 복구와 Job 재시작 기능을 이용할 수 있습니다. [시나리오 B1 실습](../handson/07_hyperpod_b1.md)
+    **차이점**　A와 달리 학습 노드를 HyperPod에서 관리하므로 노드 복구와 Job 재시작 기능을 이용할 수 있습니다. [시나리오 B1 실습](../handson/scenarios/b/b1.md)
 
-=== "B2 · CPU와 GPU 모두 HyperPod"
+=== "B2 (CPU와 GPU 모두 HyperPod)"
 
     [![Amazon EKS가 Pod를 배치하고 HyperPod의 system, trainer, sandbox 그룹이 실행하는 B2 구성도](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
-    `system`은 CoreDNS를, `trainer`는 GRPO Job을, `sandbox`는 gVisor 채점을 맡습니다. Kubernetes API는 EKS에서 제공합니다. [B2 배포 실습](../handson/07_hyperpod_b2.md)
+    `system`은 CoreDNS를, `trainer`는 GRPO Job을, `sandbox`는 gVisor 채점을 맡습니다. Kubernetes API는 EKS에서 제공합니다. [B2 배포 실습](../handson/scenarios/b/b2.md)
 
 === "C: CPU 전용"
 
@@ -54,19 +54,19 @@ B1에서는 학습과 채점에 필요한 조건을 각각 맞출 수 있습니�
 
     **그림 설명**　시스템 노드의 `simulate and probe Jobs`는 예상 채점 결과를 아는 테스트 코드(`golden code`)를 c8i 노드의 Kata CPU v1 pool에 보냅니다. 라우팅을 v2로 바꾸면 시뮬레이터 로그에서도 v2의 채점 결과를 확인할 수 있습니다. 같은 노드의 gVisor와 Kata + QEMU CPU pool은 검증과 벤치마크에 쓰입니다.
 
-    **차이점**　모델 학습과 GPU 없이 gVisor와 Kata의 채점 및 버전 교체를 실습합니다. [시나리오 C 실습](../handson/10_cpu_only.md)
+    **차이점**　모델 학습과 GPU 없이 gVisor와 Kata의 채점 및 버전 교체를 실습합니다. [시나리오 C 실습](../handson/scenarios/c/index.md)
 
 ## 복구 기능과 체크포인트는 각각 필요합니다
 
 HyperPod는 문제가 생긴 노드를 복구하고 training operator가 Job을 다시 시작할 수 있게 합니다. 이전 학습 상태에서 이어가려면 새 pod에서도 체크포인트를 읽을 수 있어야 합니다. 실습에서 체크포인트를 보관한 `emptyDir`는 pod를 삭제하면 함께 사라집니다. B1 실습에서는 노드 교체 후 체크포인트로 학습을 재개하는 과정까지 시험하지는 않았습니다.
 
-[HyperPod 핸즈온](../handson/07_hyperpod_b1.md)에 배치 절차가 있습니다. 샌드박스에 어떤 노드가 필요한지는 [런타임 비교](02_isolation_runtimes.md)에서 확인하세요.
+[HyperPod 핸즈온](../handson/scenarios/b/b1.md)에 배치 절차가 있습니다. 샌드박스에 어떤 노드가 필요한지는 [런타임 비교](02_isolation_runtimes.md)에서 확인하세요.
 
 ## B1에서 학습 GPU와 채점 GPU 구분하기
 
-B1에서는 HyperPod 학습 노드(`ml.g5.2xlarge`)의 A10G 한 장으로 모델의 답안을 생성하고 가중치를 업데이트했습니다. 학습 Job의 `Completed`는 GRPO 한 스텝을 마쳤다는 뜻입니다. 답안별 채점 결과는 `reward_batch` 로그에 남습니다. EC2 `g5.xlarge` 두 대의 gVisor 샌드박스가 채점한 코드 12개 중 정답은 1개였습니다. [학습 노드 배치와 완료 로그](../handson/07_hyperpod_b1.md#확인-방법)
+B1에서는 HyperPod 학습 노드(`ml.g5.2xlarge`)의 A10G 한 장으로 모델의 답안을 생성하고 가중치를 업데이트했습니다. 학습 Job의 `Completed`는 GRPO 한 스텝을 마쳤다는 뜻입니다. 답안별 채점 결과는 `reward_batch` 로그에 남습니다. EC2 `g5.xlarge` 두 대의 gVisor 샌드박스가 채점한 코드 12개 중 정답은 1개였습니다. [학습 노드 배치와 완료 로그](../handson/scenarios/b/b1.md#확인-방법)
 
-학습이 끝난 뒤에는 같은 EC2 pool에 채점을 요청하는 노드만 바꿔 비교했습니다. 먼저 EKS 시스템 노드에서 테스트 커널(`relu_bias_triton`)의 채점을 32회 요청했습니다. 이어서 HyperPod 학습 노드에서도 같은 커널로 32회 요청했습니다. 채점 시간의 중앙값은 각각 9.918초와 9.937초였고, pool 처리량은 두 경우 모두 초당 0.199건이었습니다. [B1 클라이언트 비교](../handson/08_benchmark.md#hyperpod-b1)
+학습이 끝난 뒤에는 같은 EC2 pool에 채점을 요청하는 노드만 바꿔 비교했습니다. 먼저 EKS 시스템 노드에서 테스트 커널(`relu_bias_triton`)의 채점을 32회 요청했습니다. 이어서 HyperPod 학습 노드에서도 같은 커널로 32회 요청했습니다. 채점 시간의 중앙값은 각각 9.918초와 9.937초였고, pool 처리량은 두 경우 모두 초당 0.199건이었습니다. [B1 클라이언트 비교](../handson/benchmarks/index.md#hyperpod-b1)
 
 <a id="더-살펴보기"></a>
 
@@ -119,7 +119,7 @@ HyperPod 노드에서는 기본적으로 hostNetwork pod만 IMDS에 접근할 �
 
 gVisor의 GPU 연결 기능인 nvproxy에는 드라이버 버전별 지원 목록이 있습니다. B2의 기본 이미지에 들어 있던 `595.112.07`은 gVisor `20261109.0`의 목록에 없었습니다. 채점 노드 두 대에 `580.178.04`를 설치하고 HyperPod API로 재부팅한 뒤, 각 노드의 gVisor Pod에서 A10G로 코드를 실행했습니다. GPU를 직접 쓰는 학습 노드는 기본 드라이버를 유지했습니다.
 
-[채점 노드 준비와 CUDA 실행 화면](../handson/07_hyperpod_b2.md) · [같은 커널로 측정한 채점 성능](../handson/08_benchmark.md#hyperpod-b2)
+[채점 노드 준비와 CUDA 실행 화면](../handson/scenarios/b/b2.md), [같은 커널로 측정한 채점 성능](../handson/benchmarks/index.md#hyperpod-b2)
 
 ## 인스턴스 선택
 
@@ -134,7 +134,7 @@ gVisor의 GPU 연결 기능인 nvproxy에는 드라이버 버전별 지원 목�
 
 가격은 us-east-1과 us-west-2의 온디맨드 요금입니다.
 
-L4 GPU가 필요하면 `g6`를 선택하세요. [g5·g6 드라이버 호환성 확인](../handson/02_gvisor.md#g5-노드의-드라이버와-검증-범위)
+L4 GPU가 필요하면 `g6`를 선택하세요. [g5와 g6 드라이버 호환성 확인](../handson/common/02_runtimes/gvisor.md#g5-노드의-드라이버와-검증-범위)
 
 ??? info "다른 후보의 가격과 GPU"
     | EC2 | GPU | USD/시간 |
@@ -179,7 +179,7 @@ Standard quota가 더 필요한 경우는 다음과 같습니다.
 - **Kata CPU를 실습하면**: 추가 필요량은 `c8i.2xlarge` 8(합계 14)입니다.
 - **기존 CDK B2 또는 Kata GPU용 AMI를 만드는 동안에는**: builder `m6i.large` 2가 더 필요합니다(8, Kata CPU 노드가 있으면 16).
 
-`scripts/01_check_prereqs.sh`가 G and VT quota, `c8i.2xlarge`의 nested virtualization 지원, GPU 타입의 AZ별 제공 여부를 읽기 전용으로 조회해 출력합니다. 실행 방법과 확인할 내용은 [시작하기](../getting_started.md)의 5장에 있습니다.
+`scripts/01_check_prereqs.sh`가 G and VT quota, `c8i.2xlarge`의 nested virtualization 지원, GPU 타입의 AZ별 제공 여부를 읽기 전용으로 조회해 출력합니다. 실행 방법과 확인할 내용은 [시작하기](../handson/start.md)의 5장에 있습니다.
 
 ## 핸즈온 구성의 시간당 비용 (추정)
 
@@ -193,7 +193,7 @@ Standard quota가 더 필요한 경우는 다음과 같습니다.
 온디맨드 요금으로 계산한 추정치이며, EKS 컨트롤 플레인, NAT gateway, SSM 접속용 `t4g.nano`, EBS, 데이터 전송, ECR, CloudWatch 비용은 포함하지 않았습니다.
 
 !!! warning "`g4dn.metal` 노드 그룹은 쓰지 않을 때 0으로 줄이세요"
-    A + Kata GPU 구성에서는 `g4dn.metal` 한 대가 노드 비용의 약 70%를 차지합니다(7.824 / 11.24). 쓰지 않을 때는 아래 명령으로 노드 그룹 크기를 0으로 줄이고, 실습이 끝나면 [99 정리](../handson/99_cleanup.md)를 실행하세요.
+    A + Kata GPU 구성에서는 `g4dn.metal` 한 대가 노드 비용의 약 70%를 차지합니다(7.824 / 11.24). 쓰지 않을 때는 아래 명령으로 노드 그룹 크기를 0으로 줄이고, 실습이 끝나면 [정리](../handson/cleanup.md)를 실행하세요.
 
     ```bash
     aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu \

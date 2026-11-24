@@ -39,7 +39,7 @@ GPU **passthrough**는 물리 GPU를 VM에 직접 할당하는 방식입니다. 
 
 QEMU와 Cloud Hypervisor는 Kata가 pod의 VM을 띄울 때 쓰는 **hypervisor**입니다. Cloud Hypervisor로 VM을 직접 만들 때도 VFIO로 물리 GPU를 연결할 수 있습니다. [Cloud Hypervisor의 VFIO 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md)
 
-Kata GPU 실습에서는 pod가 `nvidia.com/pgpu`로 물리 GPU를 요청합니다. Kata가 할당된 GPU를 hypervisor에 전달하고, VM 안의 드라이버가 GPU를 제어합니다. 이 과정까지 검증한 구성은 **Kata + QEMU**입니다. **Kata + Cloud Hypervisor**는 CPU 샌드박스에서 검증했고, GPU 실험에서는 VM 부팅이 타임아웃으로 끝났습니다. [Kata 핸즈온](../handson/03_kata.md)
+Kata GPU 실습에서는 pod가 `nvidia.com/pgpu`로 물리 GPU를 요청합니다. Kata가 할당된 GPU를 hypervisor에 전달하고, VM 안의 드라이버가 GPU를 제어합니다. 이 과정까지 검증한 구성은 **Kata + QEMU**입니다. **Kata + Cloud Hypervisor**는 CPU 샌드박스에서 검증했고, GPU 실험에서는 VM 부팅이 타임아웃으로 끝났습니다. [Kata 핸즈온](../handson/common/02_runtimes/kata.md)
 
 ## AWS에서 각 런타임을 실행할 수 있는 위치
 
@@ -51,19 +51,19 @@ Kata GPU 실습에서는 pod가 `nvidia.com/pgpu`로 물리 GPU를 요청합니�
 | Kata + QEMU GPU | EC2 `g4dn.metal` | GPU passthrough용 AMI와 IOMMU 필요. 실습 환경은 AL2023과 T4이며, NVIDIA의 EKS 검증 환경(Ubuntu)과 Kata CI 대상 GPU(A100, H100)와 다름 |
 | Kata CPU (QEMU, Cloud Hypervisor) | EC2 `c8i.2xlarge` | 중첩 가상화 필요. 실습의 HyperPod GPU 노드에서는 Kata CPU도 실행하기 어려울 것으로 보이며 직접 검증하지 않음 |
 
-런타임을 선택한 뒤에는 누가 pool에 요청을 보낼 수 있는지, 샌드박스에서 나가는 연결은 어디까지 허용되는지도 확인해야 합니다. 직접 비교하려면 [gVisor 핸즈온](../handson/02_gvisor.md)과 [Kata 핸즈온](../handson/03_kata.md)을 보세요.
+런타임을 선택한 뒤에는 누가 pool에 요청을 보낼 수 있는지, 샌드박스에서 나가는 연결은 어디까지 허용되는지도 확인해야 합니다. 직접 비교하려면 [gVisor 핸즈온](../handson/common/02_runtimes/gvisor.md)과 [Kata 핸즈온](../handson/common/02_runtimes/kata.md)을 보세요.
 
 ## 같은 노드에서 런타임 비교하기
 
 두 pool의 GPU 모델이 다르면 채점 시간에 영향을 준 요인이 GPU인지 런타임인지 구분하기 어렵습니다. 아래 CPU 실험에서는 `c8i.2xlarge` 한 대에 런타임별로 pool을 띄웠고, 세 pool 모두 Ready 상태인 pod가 한 개씩이었습니다. 같은 `relu_bias_torch_only` 답안을 pool마다 32번 채점한 결과입니다.
 
-| pool | 파일·메모리 요청을 받는 곳 | 성공 | 채점 p50 |
+| pool | 파일과 메모리 요청을 받는 곳 | 성공 | 채점 p50 |
 |---|---|---:|---:|
 | `gvisor-cpu` | Sentry | 32/32 | 3.576초 |
 | `kata-clh-cpu` | Cloud Hypervisor VM의 게스트 커널 | 32/32 | 4.043초 |
 | `kata-qemu-cpu` | QEMU VM의 게스트 커널 | 32/32 | 3.819초 |
 
-세 pool 모두 요청을 처리할 준비가 된 상태에서 잰 값입니다. VM 부팅 시간을 알고 싶다면 pod 생성부터 Ready까지를 재야 합니다. 이 비교를 새 노드에서 되풀이할 때는 이미지 캐시 상태, pod 수, RuntimeClass의 CPU·메모리 예약량도 기록하세요. [벤치마크 조건](../handson/08_benchmark.md#runtime-results) · [직접 커널을 확인하는 실습](../beginner/05_hands_on.md#aws-cpu)
+세 pool 모두 요청을 처리할 준비가 된 상태에서 잰 값입니다. VM 부팅 시간을 알고 싶다면 pod 생성부터 Ready까지를 재야 합니다. 이 비교를 새 노드에서 되풀이할 때는 이미지 캐시 상태, pod 수, RuntimeClass의 CPU와 메모리 예약량도 기록하세요. [벤치마크 조건](../handson/benchmarks/index.md#runtime-results), [직접 커널을 확인하는 실습](../beginner/05_hands_on.md#aws-cpu)
 
 <a id="더-살펴보기"></a>
 
@@ -98,7 +98,7 @@ Kata의 Go 런타임에는 Cloud Hypervisor VM을 띄우기 전에 VFIO 장치�
 !!! warning "오버헤드 수치를 읽는 법"
     - **위 boot 시간**: Kata metrics CI(3.28.0)가 서로 다른 머신에서 넓은 허용 오차로 측정한 값이며 AWS 측정값이 아닙니다.
     - **AWS China 블로그의 "CLH 약 130 MB, QEMU 약 160 MB"**: Kata 3.31.0의 `podFixed` 기본값과 같아서 측정값이 아닐 가능성이 높습니다(추론). 같은 글에 실린 측정값은 cold start 약 3 s, 미리 시작해 둔 pool에서 가져올 때 약 230 ms입니다.
-    - **AWS 실습 계정에서 측정한 값**: [08 런타임 벤치마크](../handson/08_benchmark.md)에 있습니다. 그 표의 cold start는 pod 생성부터 Ready까지의 시간이라 위 표의 boot to workload와 측정 구간이 다릅니다. `g4dn.metal`에서 GPU 프로필 `kata-qemu`(RuntimeClass `kata-qemu-nvidia-gpu`)로 띄운 pod 4개는 중앙값 30.5초였습니다.
+    - **AWS 실습 계정에서 측정한 값**: [런타임 벤치마크](../handson/benchmarks/index.md)에 있습니다. 그 표의 cold start는 pod 생성부터 Ready까지의 시간이라 위 표의 boot to workload와 측정 구간이 다릅니다. `g4dn.metal`에서 GPU 프로필 `kata-qemu`(RuntimeClass `kata-qemu-nvidia-gpu`)로 띄운 pod 4개는 중앙값 30.5초였습니다.
 
 `kata-qemu-nvidia-gpu`의 VM 크기는 `default_memory` 8192 MiB에 컨테이너 limit을 더한 값입니다. VFIO type1은 guest RAM 전체를 pin하므로 메모리를 overcommit할 수 없습니다. 실습용 GPU 프로필은 T4 pod마다 CPU 8개와 메모리 16 GiB를 할당합니다. 8 x (16 + 10) GiB = 208 GiB이므로 `g4dn.metal`의 384 GiB 안에 들어갑니다.
 

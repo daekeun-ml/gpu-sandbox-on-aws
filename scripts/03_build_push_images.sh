@@ -28,6 +28,17 @@ build() {
     || aws ecr create-repository --region "${AWS_REGION}" --repository-name "${repo}" \
          --image-scanning-configuration scanOnPush=true --image-tag-mutability IMMUTABLE >/dev/null
   local uri="${registry}/${repo}:${IMAGE_TAG}"
+  if [[ "${REUSE_EXISTING_IMAGES:-0}" == 1 ]]; then
+    local lookup
+    if lookup=$(aws ecr describe-images --region "${AWS_REGION}" --repository-name "${repo}" \
+        --image-ids "imageTag=${IMAGE_TAG}" 2>&1); then
+      log "reusing ${uri}; change IMAGE_TAG to build a new revision" >&2
+      echo "${uri}"
+      return
+    elif [[ "${lookup}" != *ImageNotFoundException* ]]; then
+      die "cannot check ${uri}: ${lookup}"
+    fi
+  fi
   log "building ${uri}"
   # build runs inside "$(...)", where set -e is not inherited: without "|| die" a failed build
   # would still print the URI and the script would exit 0.

@@ -24,7 +24,7 @@
     - **전환 전에 검증을 통과해야 합니다.** `scripts/ops/verify.sh`와 `parity`를 통과해야 트래픽이 신버전으로 전환됩니다.
     - **batch나 group 단위로 전환하고, 채점 결과에 버전을 기록합니다.** 샌드박스가 채점한 verdict마다 `sandbox_version`과 `harness_version`이, TRL batch마다 `version`, `served_versions`, `global_step`이 기록됩니다. reward가 달라진 배치를 찾으면 이 필드에서 채점 버전을 확인하세요. trainer가 로컬에서 판정한 `no_code`, `policy_violation`과 TRL의 캐시 적중 결과에는 새로 채점한 버전 정보가 없습니다.
 
-**읽기 전에**　group 안에서 버전이 섞이는 문제는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 핸즈온 절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)에 있습니다.
+**읽기 전에**　group 안에서 버전이 섞이는 문제는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에, 핸즈온 절차는 [학습 중 샌드박스 업데이트](../handson/scenarios/a/pool_update.md)에 있습니다.
 
 ??? note "용어"
     - **blue/green**: 기존 버전(blue)을 그대로 둔 채 새 버전(green)을 따로 띄우고, 검증이 끝나면 트래픽만 한 번에 전환하는 배포 방식입니다. 문제가 생기면 트래픽을 되돌립니다.
@@ -201,7 +201,7 @@ veRL 경로의 gateway는 group 고정 정보를 메모리에 저장하므로 re
 
 <span id="적용-범위와-한계"></span>
 
-[gVisor 학습 중 전환한 로그](../handson/06_sandbox_update.md#switch-batches)에는 시나리오 A의 v2 판정과 `--finish` 시점이 나옵니다. 학습 중 Kata GPU pool을 전환하는 절차는 별도로 검증해야 합니다.
+[gVisor 학습 중 전환한 로그](../handson/scenarios/a/pool_update.md#switch-batches)에는 시나리오 A의 v2 판정과 `--finish` 시점이 나옵니다. 학습 중 Kata GPU pool을 전환하는 절차는 별도로 검증해야 합니다.
 
 운영에서는 라우팅 설정이 적용된 시점과 학습이 실제로 새 pool의 결과를 받은 시점이 다를 수 있습니다. 아래 절차로 trainer 로그의 버전과 채점 상태를 확인한 뒤 구버전 정리 여부를 판단하세요.
 
@@ -291,7 +291,7 @@ GRPO advantage는 group 안에서 상대적으로 계산되므로, group 전체 
 - **Kata pool**: 기본 replica가 각각 4개라면 두 pool에 필요한 GPU는 T4 8개로, g4dn.metal 한 대의 GPU 수와 같습니다.
 - **전환 때문에 노드를 추가했다면**: 구버전 pool을 줄인 뒤 그 노드가 반납됐는지 확인하세요.
 
-핸즈온 절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)에 있습니다.
+핸즈온 절차는 [학습 중 샌드박스 업데이트](../handson/scenarios/a/pool_update.md)에 있습니다.
 
 관련 페이지: [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md), [04 Reward 무결성](04_reward_integrity.md), [07 Observability와 운영](07_observability_and_operations.md), [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)
 

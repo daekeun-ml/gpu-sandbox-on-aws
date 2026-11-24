@@ -1226,7 +1226,7 @@ function renderRuntimeResults() {
   for (const article of document.querySelectorAll("article#hyperpod-b1, article#hyperpod-b2")) article.remove();
   if (panel.hidden) return;
   const guide = "https://daekeun-ml.github.io/gpu-sandbox-on-aws/";
-  const chapter = `${guide}${lang === "en" ? "en/" : ""}handson/08_benchmark/`;
+  const chapter = `${guide}${lang === "en" ? "en/" : ""}handson/benchmarks/`;
   const table = panel.querySelector("table");
   for (const body of [...table.tBodies]) body.remove();
   for (const { id, rows, bench, run } of groups) {

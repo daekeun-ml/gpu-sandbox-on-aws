@@ -1,4 +1,4 @@
-# Recorder pod for the replay demo (docs/handson/09_demo_site.md, section 2).
+# Recorder pod for the replay demo (docs/reference/demo_site.md, section 2).
 # It meets the conditions `gpusandbox.tools record` needs without a running training Job:
 # rl-trainer namespace and client label (sandbox NetworkPolicy), an allowlisted ServiceAccount and
 # a projected token with the sandbox audience (sandbox auth), and the trainer image (torch, for the

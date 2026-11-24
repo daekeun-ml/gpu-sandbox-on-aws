@@ -1,7 +1,7 @@
 # 보안
 
 !!! info "TL;DR"
-    모델이 만든 코드는 신뢰할 수 없는 입력으로 취급합니다. gVisor 또는 Kata로 코드를 격리하고, pod·네트워크·노드·토큰·프로세스별로 접근을 제한합니다. 가령 gVisor에서는 이 설정을 모두 적용해도 샌드박스와 호스트가 GPU 드라이버를 공유합니다.
+    모델이 만든 코드는 신뢰할 수 없는 입력으로 취급합니다. gVisor 또는 Kata로 코드를 격리하고, pod, 네트워크, 노드, 토큰, 프로세스별로 접근을 제한합니다. 가령 gVisor에서는 이 설정을 모두 적용해도 샌드박스와 호스트가 GPU 드라이버를 공유합니다.
 
 ## 격리 경계와 접근 경로
 
@@ -23,7 +23,7 @@
     - **계층마다 다른 위험을 차단합니다.** 런타임은 커널 접근을, NetworkPolicy는 egress를, 노드 가드는 VPC CNI가 예외로 허용하는 노드 IP 트래픽을 제한합니다. pod는 egress가 실제로 차단됐는지 확인한 뒤에만 Ready가 됩니다.
     - **pod에 없는 자격 증명은 탈취할 수 없습니다.** 샌드박스 pod에는 API token도 시크릿도 넣지 않습니다.
 
-**읽기 전에**　[02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)에서 pool과 토큰 배포 절차를 먼저 보세요.
+**읽기 전에**　[02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)에서 gVisor와 Kata가 GPU를 다루는 방식을, [샌드박스 pool 배포와 검증](../handson/common/03_pools/details.md)에서 pool과 토큰 배포 절차를 먼저 보세요.
 
 ??? note "용어"
     - **runc, gVisor, Kata**: runc는 호스트 커널을 공유합니다. gVisor에서는 사용자 공간 커널(Sentry)이 system call을 먼저 받아 처리하고, Kata는 pod마다 별도의 VM(guest 커널)을 실행합니다.
@@ -158,7 +158,7 @@ kubectl -n sandbox get pod "$pod" \
 7. **이 구성에는 upstream에서 검증하지 않은 조합이 포함됩니다.**
     - **Kata**: NVIDIA의 Kata CI는 A100과 H100을 테스트하고 T4(`g4dn.metal`)는 테스트하지 않습니다. GPU Operator의 Kata 구성은 EKS에서 Ubuntu로만 검증되었고 AL2023은 목록에 없습니다.
     - **gVisor와 proprietary 드라이버**: gVisor 문서는 nvproxy를 NVIDIA open 드라이버 기준으로 설명하고 proprietary 드라이버는 언급하지 않습니다. gVisor pool의 기본값인 g5(A10G)에서는 AMI가 proprietary 커널 모듈(GSP 꺼짐)을 로드하므로, gVisor 문서에서 다루지 않는 이 조합은 실습 환경에서 직접 확인했습니다.
-    - **드라이버, AMI, gVisor 버전을 바꾸면**: smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요. 샌드박스 pool이 노드의 GPU를 모두 쓰고 있으면 smoke pod가 `Pending`으로 남으니, pool의 replica를 하나 줄여 GPU를 비운 뒤 실행합니다([02 gVisor](../handson/02_gvisor.md)).
+    - **드라이버, AMI, gVisor 버전을 바꾸면**: smoke test와 `scripts/ops/verify.sh`를 다시 실행하세요. 샌드박스 pool이 노드의 GPU를 모두 쓰고 있으면 smoke pod가 `Pending`으로 남으니, pool의 replica를 하나 줄여 GPU를 비운 뒤 실행합니다([gVisor](../handson/common/02_runtimes/gvisor.md)).
     - **gVisor에서 T4(g4dn)**: 드라이버 조건이 g5와 같지만 이번 실습에서는 테스트하지 않았습니다.
 
 ## Production 옵션

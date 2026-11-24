@@ -2,7 +2,7 @@
 
 <span id="earlier-b2-custom-ami-path"></span>
 
-For all-HyperPod workers, follow the [managed B2 lab](../handson/07_hyperpod_b2.md).
+For all-HyperPod workers, follow the [managed B2 lab](../handson/scenarios/b/b2.md).
 
 B2 puts both the trainer and the GPU sandboxes on HyperPod instance groups. The sandbox instance group (`sandbox`) boots from a custom AMI that swaps the NVIDIA driver to 580.178.04 and installs gVisor, and runs the same kind of gVisor pool as scenario A (`gvisor-hyperpod`).
 

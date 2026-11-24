@@ -26,7 +26,7 @@ GPU 한 장에서 실행한 GRPO를 여러 GPU로 옮길 때는 필요한 메모
     - **샘플을 따로 보내더라도 group의 채점 버전은 고정합니다.** reward 함수가 요청마다 `group_key`를 붙이면 gateway는 이 키를 기준으로 샘플을 같은 샌드박스 버전으로 보냅니다.
     - **긴 run을 중단 지점부터 재개합니다.** checkpoint를 공유 PVC에 두고 `trainer.resume_mode=auto`를 쓰면, HyperPod가 노드를 교체한 뒤 같은 `CKPT_DIR`로 job을 다시 제출할 때 마지막 checkpoint부터 이어서 학습합니다.
 
-**읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 TRL 루프와 [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)의 gateway API, group pin을 먼저 보세요.
+**읽기 전에**　[On-policy GRPO 학습](../handson/scenarios/a/grpo.md)의 TRL 루프와 [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)의 gateway API, group pin을 먼저 보세요.
 
 ??? note "용어"
     - **veRL**: 여러 GPU와 노드에 걸쳐 RL post-training을 실행하는 오픈소스 프레임워크입니다. 이 페이지는 0.9.1을 기준으로 합니다.
@@ -350,7 +350,7 @@ GPU 8장을 장착한 trainer 노드가 비용의 대부분을 차지합니다(�
 - **구버전 샌드박스 pool**: [05 샌드박스 버전 관리](05_sandbox_updates.md)의 `--finish`로 0으로 줄입니다.
 - **학습이 끝나 활성 pool도 쓰지 않으면**: 그 pool의 replica 수도 0으로 줄이세요.
 
-관련 페이지: [05 On-policy GRPO 학습](../handson/05_grpo_training.md), [07 HyperPod 시나리오](../handson/07_hyperpod.md), [01 용량과 노드 관리](01_capacity_and_nodes.md), [02 보안](02_security.md).
+관련 페이지: [On-policy GRPO 학습](../handson/scenarios/a/grpo.md), [HyperPod 학습 경로](../handson/scenarios/b/index.md), [01 용량과 노드 관리](01_capacity_and_nodes.md), [02 보안](02_security.md).
 
 ??? note "참고 자료"
     | 주제 | 링크 |

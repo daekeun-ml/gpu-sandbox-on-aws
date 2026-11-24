@@ -40,7 +40,7 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
 `ModuleNotFoundError`가 나오면 `gpu-sandbox-on-aws` 폴더에서 `.venv`를 활성화했는지 확인하고 설치 명령을 다시 실행하세요.
 
 ??? note "macOS에서 서버를 직접 띄워 판정 보기"
-    Linux 호스트에서는 위의 pytest 명령으로 테스트를 실행하세요. 서버를 직접 띄울 때의 차이는 [로컬 실행 환경](../getting_started.md)에 설명돼 있습니다.
+    Linux 호스트에서는 위의 pytest 명령으로 테스트를 실행하세요. 서버를 직접 띄울 때의 차이는 [로컬 실행 환경](../handson/start.md)에 설명돼 있습니다.
 
     ### 서버 두 개 띄우기
 
@@ -99,7 +99,7 @@ python -m pytest -q tests/test_server_and_client.py::test_golden_probe_and_parit
 
 로컬 서버 두 개는 채점을 연습할 수 있게 해 줍니다. 두 서버 모두 내 PC의 운영체제를 사용합니다. 이번에는 EKS의 `c8i.2xlarge` 한 대에서 같은 컨테이너 이미지를 gVisor, Kata + Cloud Hypervisor, Kata + QEMU로 실행합니다. pod마다 `uname -r`가 어떤 값을 출력하는지 예상해 보세요.
 
-**비용과 준비물**　이 단계부터 EKS, EC2, NAT gateway 등에 요금이 발생합니다. 실습용 계정과 리전에서 진행하세요. 예제 구성은 system 노드 두 대, `c8i.2xlarge` 한 대, 터널용 인스턴스 한 대를 만듭니다. Standard 온디맨드 vCPU가 14개 필요합니다. AWS CLI 자격 증명, Node.js, CDK CLI, Session Manager plugin, `kubectl`, Helm, Docker와 `jq` 설치 방법은 [클러스터 준비](../handson/01_cluster_and_images.md)에 있습니다. [시나리오 C 비용](../handson/10_cpu_only.md)
+**비용과 준비물**　이 단계부터 EKS, EC2, NAT gateway 등에 요금이 발생합니다. 실습용 계정과 리전에서 진행하세요. 예제 구성은 system 노드 두 대, `c8i.2xlarge` 한 대, 터널용 인스턴스 한 대를 만듭니다. Standard 온디맨드 vCPU가 14개 필요합니다. AWS CLI 자격 증명, Node.js, CDK CLI, Session Manager plugin, `kubectl`, Helm, Docker와 `jq` 설치 방법은 [클러스터 준비](../handson/common/01_provision/cdk.md)에 있습니다. [시나리오 C 비용](../handson/scenarios/c/index.md)
 
 ### 설정과 클러스터 준비
 
@@ -177,10 +177,10 @@ scripts/kata/cpu_nodes.sh
 
 ### 실습 리소스 정리
 
-이 클러스터에서 [CPU pool을 배포하고 버전을 교체하는 실습](../handson/10_cpu_only.md)으로 이어갈 수 있습니다. 여기서 끝내려면 **터널을 열어 둔 상태에서** 아래 명령을 실행합니다. 확인 메시지에 표시된 계정, 리전, 클러스터 이름이 실습 환경과 일치하는지 보세요.
+이 클러스터에서 [CPU pool을 배포하고 버전을 교체하는 실습](../handson/scenarios/c/index.md)으로 이어갈 수 있습니다. 여기서 끝내려면 **터널을 열어 둔 상태에서** 아래 명령을 실행합니다. 확인 메시지에 표시된 계정, 리전, 클러스터 이름이 실습 환경과 일치하는지 보세요.
 
 ```bash
 scripts/08_cleanup.sh
 ```
 
-스택 삭제가 끝나고 마지막 인스턴스 조회에 실습 노드가 보이지 않으면 터널을 종료합니다. [정리 확인 항목](../handson/99_cleanup.md) · [다음 편에서 에피소드 따라가기](06_multi_turn_agent.md)
+스택 삭제가 끝나고 마지막 인스턴스 조회에 실습 노드가 보이지 않으면 터널을 종료합니다. [정리 확인 항목](../handson/cleanup.md), [다음 편에서 에피소드 따라가기](06_multi_turn_agent.md)

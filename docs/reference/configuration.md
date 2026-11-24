@@ -76,7 +76,7 @@ flowchart LR
 - **`AWS_REGION`**: 데모 사이트(`demo/deploy.sh`)는 이 값과 관계없이 `us-east-1`에 배포합니다.
 - **`K8S_VERSION`**: 예시 값 `1.36`은 EKS standard support(2027-08-02까지)와 HyperPod EKS AMI 릴리스 노트의 지원 범위에 포함됩니다.
 - **`SCENARIO`**: `A`(system, trainer, gVisor), `B1`(system, gVisor), 기존 CDK `B2`(EC2 system만), `C`(system, Kata CPU). `02_create_cluster.sh`의 옵션(`--hyperpod`, `--hyperpod-b2`, `--cpu-only`)이 이 값을 덮어씁니다.
-- **관리형 B2**는 `SCENARIO=B2`로 [`create_managed.sh`를 실행](../handson/07_hyperpod_b2.md)해 EKS와 HyperPod의 `system`, `trainer`, `sandbox`를 함께 만듭니다.
+- **관리형 B2**는 `SCENARIO=B2`로 [`create_managed.sh`를 실행](../handson/scenarios/b/b2.md)해 EKS와 HyperPod의 `system`, `trainer`, `sandbox`를 함께 만듭니다.
 - **`CHANGE_SCENARIO`**: 첫 배포와 같은 시나리오의 재배포에는 필요 없습니다. 시나리오가 다를 때 이 값이 없으면 `cdk/deploy.sh`가 멈춥니다.
 - **`ADMIN_PRINCIPAL_ARN`**: 여러 개는 쉼표로 구분합니다(STS 세션 ARN 불가). 역할에 path가 있으면 직접 적습니다.
 - **`WITH_KATA_CPU`**: `1`로 설정하면 `cdk/deploy.sh <시나리오> --with-kata-cpu`와 같습니다. Kata CPU 노드 추가(`kata/cpu_nodes.sh`) 전에 넣고 `02_create_cluster.sh`를 다시 실행합니다.
@@ -200,7 +200,7 @@ egress 점검은 다음과 같이 동작합니다.
     서버는 평가가 끝날 때마다 `/proc`에 보이는 프로세스 중 자신과 상위 프로세스를 뺀 모든 프로세스에 SIGKILL을 보냅니다. Linux 호스트에서 직접 실행한 서버에 평가 요청을 보내면 같은 사용자의 편집기나 다른 서버도 종료됩니다. 가상 환경과 loopback bind는 프로세스를 격리하지 않습니다.
 
     - **`/readyz` 확인**: 아래 `/readyz` 확인까지는 괜찮습니다.
-    - **평가 요청까지 보낼 때**: 별도 PID namespace를 가진 컨테이너에서 서버를 실행하세요. 기본 bind가 `127.0.0.1`이므로 호스트에서 요청을 보내려면 호스트 네트워크를 함께 쓰는 컨테이너(예: `docker run --network host`)로 띄웁니다([시작하기](../getting_started.md)의 경고).
+    - **평가 요청까지 보낼 때**: 별도 PID namespace를 가진 컨테이너에서 서버를 실행하세요. 기본 bind가 `127.0.0.1`이므로 호스트에서 요청을 보내려면 호스트 네트워크를 함께 쓰는 컨테이너(예: `docker run --network host`)로 띄웁니다([시작하기](../handson/start.md)의 경고).
     - **macOS**: `/proc`가 없어서 이 동작이 실행되지 않습니다.
 
 ```bash
@@ -220,7 +220,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 
 - **확인**: 다른 터미널에서 `curl -s http://127.0.0.1:8000/readyz`를 실행하면 `{"status":"ready"}`가 나옵니다.
 - **멈추기**: 서버는 Ctrl-C로 멈춥니다.
-- **`command not found: gpusandbox-server`가 나올 때**: 가상 환경이 활성화되지 않은 것이니 [시작하기](../getting_started.md)의 설치 단계를 다시 보세요.
+- **`command not found: gpusandbox-server`가 나올 때**: 가상 환경이 활성화되지 않은 것이니 [시작하기](../handson/start.md)의 설치 단계를 다시 보세요.
 
 ## 3. 인증 (SANDBOX_AUTH_*)
 
@@ -270,7 +270,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 | `--allow-cuda-cpp` | 꺼짐 | `HARNESS_ALLOW_CUDA_CPP` | `cpp_extension` 허용 |
 | `--max-speedup` | `0.0` | `HARNESS_MAX_SPEEDUP` | speedup 상한, `0`이면 끔 |
 
-아래 예시는 후보 파일 하나를 만들고, harness로 CPU에서 평가한 뒤 verdict JSON을 출력합니다. 후보는 Triton 없이 torch만 쓴 정답입니다. CPU용 torch와 이 패키지를 설치한 로컬 환경([시작하기](../getting_started.md))에서 실행해 확인했습니다.
+아래 예시는 후보 파일 하나를 만들고, harness로 CPU에서 평가한 뒤 verdict JSON을 출력합니다. 후보는 Triton 없이 torch만 쓴 정답입니다. CPU용 torch와 이 패키지를 설치한 로컬 환경([시작하기](../handson/start.md))에서 실행해 확인했습니다.
 
 ```bash
 mkdir -p /tmp/gs-eval

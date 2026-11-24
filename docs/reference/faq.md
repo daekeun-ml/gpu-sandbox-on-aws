@@ -30,22 +30,22 @@
 
     **문제가 생기면:** [문제 해결](troubleshooting.md)의 Kata 표를 보세요.
 
-    자세히: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), [03 Kata 샌드박스](../handson/03_kata.md)
+    자세히: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), [Kata 샌드박스](../handson/common/02_runtimes/kata.md)
 
 ??? question "gVisor의 GPU 격리는 VM 격리와 같은 수준이다"
     **실제:** gVisor는 호스트의 NVIDIA 드라이버를 그대로 공유하므로 GPU 격리가 VM보다 약합니다.
 
     nvproxy는 드라이버 버전별 ioctl allowlist로 드라이버에 전달되는 호출을 제한합니다. 그래도 gVisor 문서는 드라이버 내부 취약점을 완화하는 데는 "much less effective"하고, DMA buffer 같은 내용은 검증하지 않는다고 적습니다. GKE Sandbox 문서도 sandbox pod에서 GPU time-sharing을 쓰지 말라고 권합니다. 드라이버까지 분리해야 한다면 guest VM 안에서 별도의 드라이버를 쓰는 Kata + VFIO를 선택하세요. 자세히: [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md), [02 보안](../production/02_security.md)
 
-??? question "Firecracker로도 GPU를 VM에 직접 할당할 수 있다"
-    **실제:** Firecracker는 GPU passthrough를 제공하지 않습니다.
+??? note "Firecracker와 E2B의 GPU 지원 범위"
+    Firecracker v1.18.0에는 물리 GPU를 VM에 직접 연결하는 GPU passthrough 기능이 없습니다. E2B는 샌드박스에 vCPU와 RAM을 할당하는 CPU 전용 서비스를 제공합니다. [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md) [E2B GPU 지원 범위](https://docs.e2b.dev/faq/gpu-support)
 
-    Firecracker가 가상 머신에 제공하는 장치는 대부분 virtio 장치입니다. 1.13.0에서 PCI 지원이 추가됐지만 변경 이력에 VFIO GPU passthrough는 없습니다. E2B 같은 Firecracker 기반 샌드박스가 CPU 위주인 것도 이 때문입니다. 이 실습에서는 gVisor(nvproxy)나 Kata + QEMU(VFIO)로 GPU 코드를 실행합니다. 자세히: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
+    이 실습에서는 gVisor가 `nvproxy`로 GPU 요청을 전달하고, Kata + QEMU가 물리 GPU를 VM에 직접 연결합니다. [격리 런타임 비교](../concepts/02_isolation_runtimes.md)
 
-??? question "Kata + Cloud Hypervisor도 QEMU처럼 GPU를 VM에 직접 할당할 수 있다"
-    **실제:** upstream은 Cloud Hypervisor의 GPU passthrough를 지원하지 않습니다. 지원되는 Kata GPU 경로는 QEMU(`kata-qemu-nvidia-gpu`)입니다.
+??? note "Cloud Hypervisor의 GPU passthrough와 Kata GPU pod"
+    Cloud Hypervisor로 VM을 직접 띄울 때는 VFIO로 물리 GPU를 연결할 수 있습니다. [Cloud Hypervisor 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md)
 
-    Kata의 `docs/hypervisors.md`에는 Cloud Hypervisor의 GPU 지원 여부가 not supported로 나옵니다. 2025-08에 유지보수 담당자도 GPU를 연결하려면 QEMU GPU runtime class를 선택하라고 안내했습니다(issue #11687). `kata-clh-nvidia-gpu`는 지원 여부를 살펴보기 위한 실험용 구성이고, CPU 샌드박스(`kata-clh-cpu`)는 Kata + Cloud Hypervisor로 실행합니다. 자세히: [03 Kata 샌드박스](../handson/03_kata.md)
+    EKS에서 pod에 할당된 GPU를 VM에 연결하려면 Kata도 해당 조합을 지원해야 합니다. 이 실습에서 검증한 Kata GPU 구성은 QEMU(`kata-qemu-nvidia-gpu`)입니다. Cloud Hypervisor는 Kata CPU pool(`kata-clh-cpu`)에서 검증했고, GPU 실험에서는 VM 부팅이 타임아웃으로 끝났습니다. [Kata 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [Kata 샌드박스](../handson/common/02_runtimes/kata.md)
 
 ??? question "Kata GPU pool(T4)에서도 Triton 커널은 당연히 동작한다"
     **실제:** T4(`g4dn.metal`)에서 Triton 커널이 동작하는지는 여러분의 노드에서 golden 커널로 확인해야 합니다. 이 가이드는 Triton의 공식 지원 GPU 범위를 단정하지 않습니다.
@@ -65,7 +65,7 @@
 ## 플랫폼과 관리형 서비스
 
 ??? question "HyperPod 기본 AMI 노드에 이 샌드박스를 바로 올릴 수 있다"
-    관리형 B2 실습에서 확인한 HyperPod EKS 1.36 기본 이미지의 NVIDIA 드라이버는 `595.112.07`이었습니다. B1은 EC2에서 채점했습니다. 관리형 B2에서는 HyperPod 채점 노드 두 대에 `580.178.04`를 설치하고 재부팅한 뒤 A10G에서 gVisor를 실행했습니다. [B2 실습](../handson/07_hyperpod_b2.md)
+    관리형 B2 실습에서 확인한 HyperPod EKS 1.36 기본 이미지의 NVIDIA 드라이버는 `595.112.07`이었습니다. B1은 EC2에서 채점했습니다. 관리형 B2에서는 HyperPod 채점 노드 두 대에 `580.178.04`를 설치하고 재부팅한 뒤 A10G에서 gVisor를 실행했습니다. [B2 실습](../handson/scenarios/b/b2.md)
 
     - **기본 AMI의 gVisor GPU 샌드박스**: HyperPod EKS AMI(1.34~1.36)의 10월 릴리스에 포함된 NVIDIA 드라이버 595.91.07도 gVisor release-20261109.0의 nvproxy 지원 목록에 없어서 쓸 수 없습니다(목록에 없는 unknown 버전은 플래그와 관계없이 실패).
     - **기존 custom AMI 방식**에서는 CDK로 만든 EKS 클러스터를 사용하며, 별도 AMI에 드라이버를 넣습니다. 관리형 실습은 등록된 채점 노드에 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다.
@@ -87,7 +87,7 @@
 
     **문제가 생기면:** [문제 해결](troubleshooting.md)의 HyperPod 표를 보세요.
 
-    자세히: [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md), [07 HyperPod 시나리오](../handson/07_hyperpod.md)
+    자세히: [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md), [HyperPod 학습 경로](../handson/scenarios/b/index.md)
 
 ??? question "EKS Auto Mode 노드에 gVisor나 Kata를 설치하면 된다"
     **실제:** EKS 문서는 "You can't directly access or install software on instances managed by EKS Auto Mode"라고 적습니다. Auto Mode 노드에는 runsc나 kata-deploy의 런타임을 등록할 수 없습니다.
@@ -114,7 +114,7 @@
 
     **문제가 생기면:** [문제 해결](troubleshooting.md)의 "샌드박스 pool과 readiness" 표를 보세요.
 
-    자세히: [02 보안](../production/02_security.md), [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)
+    자세히: [02 보안](../production/02_security.md), [샌드박스 pool 배포와 검증](../handson/common/03_pools/details.md)
 
 ??? question "정적 정책(AST 검사)이 샌드박스의 보안 경계다"
     **실제:** 정적 정책은 reward 무결성을 위한 검사이고, 노드를 보호하는 보안 경계는 gVisor나 Kata, 그리고 네트워크 통제입니다.
@@ -138,7 +138,7 @@
     - **batch의 결과가 모두 같은 pool에 캐시된 경우**: 샌드박스에 다시 요청할 필요 없이 캐시에 있는 결과를 반환합니다.
     - **TRL 기본 설정**: batch 경계가 step 경계와 같습니다.
 
-    아래 명령이 그 절차(배포, 검증, parity, 전환)를 차례로 실행합니다. 기본 시나리오 A에서는 v1이 `sandbox-gvisor` 노드 두 대의 GPU를 이미 쓰고 있으므로, 먼저 이 노드 그룹을 4대로 늘리고 노드가 `Ready`인지 확인합니다. 늘리지 않으면 v2 pod가 GPU를 받지 못해 1단계가 최대 30분 기다린 뒤 실패합니다(노드 수를 늘리는 명령은 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)의 준비 절에 있습니다).
+    아래 명령이 그 절차(배포, 검증, parity, 전환)를 차례로 실행합니다. 기본 시나리오 A에서는 v1이 `sandbox-gvisor` 노드 두 대의 GPU를 이미 쓰고 있으므로, 먼저 이 노드 그룹을 4대로 늘리고 노드가 `Ready`인지 확인합니다. 늘리지 않으면 v2 pod가 GPU를 받지 못해 1단계가 최대 30분 기다린 뒤 실패합니다(노드 수를 늘리는 명령은 [학습 중 샌드박스 업데이트](../handson/scenarios/a/pool_update.md)의 준비 절에 있습니다).
 
     ```bash
     scripts/ops/rollout.sh gvisor v1 v2
@@ -152,7 +152,7 @@
 
     **문제가 생기면:** [문제 해결](troubleshooting.md)의 "버전 전환 (routing)" 표를 보세요.
 
-    자세히: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md), [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)
+    자세히: [05 샌드박스 버전 관리](../production/05_sandbox_updates.md), [학습 중 샌드박스 업데이트](../handson/scenarios/a/pool_update.md)
 
 ??? question "인프라 오류에 reward 0을 주면 보수적이라 안전하다"
     **실제:** 0점은 "이 completion은 나쁘다"는 학습 신호라서, 채점하지 못한 샘플에 0을 주면 reward가 왜곡됩니다.
@@ -178,7 +178,7 @@
 ??? question "speedup은 어떤 GPU에서 측정해도 비슷하다"
     **실제:** speedup은 측정한 GPU에서만 의미가 있는 값입니다. gVisor pool(A10G)과 Kata pool(T4)의 speedup은 서로 다른 reward 함수로 다뤄야 합니다.
 
-    `scripts/ops/bench.sh`도 GPU 종류가 다른 pool의 speedup은 GPU별로 따로 비교하라고 안내합니다. 배포할 GPU가 정해져 있다면 그와 같거나 가까운 GPU로 reward를 측정하는 편이 좋습니다. 자세히: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), [08 런타임 벤치마크](../handson/08_benchmark.md)
+    `scripts/ops/bench.sh`도 GPU 종류가 다른 pool의 speedup은 GPU별로 따로 비교하라고 안내합니다. 배포할 GPU가 정해져 있다면 그와 같거나 가까운 GPU로 reward를 측정하는 편이 좋습니다. 자세히: [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), [런타임 벤치마크](../handson/benchmarks/index.md)
 
 ## Agent Sandbox
 
@@ -202,7 +202,7 @@
 ??? question "warm pool의 GPU 샌드박스는 요청이 없는 동안 비용이 들지 않는다"
     **실제:** warm 샌드박스는 claim을 기다리는 동안에도 GPU를 점유하고 있으므로, 그 GPU 노드의 비용이 계속 발생합니다.
 
-    warm pool 크기(`replicas`)는 동시에 진행할 episode 수에 맞춰 필요한 만큼만 두세요. 노드 비용과 정리 방법은 [08 비용](../production/08_cost.md)과 [99 정리](../handson/99_cleanup.md)에 있습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
+    warm pool 크기(`replicas`)는 동시에 진행할 episode 수에 맞춰 필요한 만큼만 두세요. 노드 비용과 정리 방법은 [08 비용](../production/08_cost.md)과 [정리](../handson/cleanup.md)에 있습니다. 자세히: [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 ## 모델, 데모, 검증 상태
 
@@ -226,12 +226,12 @@
     실습 계정에서 실행한 것은 다음과 같습니다.
 
     - 시나리오 A의 gVisor 경로(`03`부터 `08`까지)를 `g5`로 실행했습니다.
-    - 다섯 개 pool(gVisor A10G, Kata QEMU T4, CPU 런타임 세 개)을 배포 직후와 pool 재시작 뒤에 한 번씩 `ops/bench.sh`로 측정했습니다. [08 런타임 벤치마크](../handson/08_benchmark.md)의 결과 표는 두 번째 측정값이고 측정 조건과 함께 있습니다.
+    - 다섯 개 pool(gVisor A10G, Kata QEMU T4, CPU 런타임 세 개)을 배포 직후와 pool 재시작 뒤에 한 번씩 `ops/bench.sh`로 측정했습니다. [런타임 벤치마크](../handson/benchmarks/index.md)의 결과 표는 두 번째 측정값이고 측정 조건과 함께 있습니다.
     - A10G와 T4 pool에서 golden 제출물을 채점한 녹화는 `demo/recordings/2026-11-18-eks-gpu.json`에 있습니다.
 
     날짜별 실행 기록은 [검증된 사실과 출처](sources.md#aws-실행-기록)에 있습니다. 그 밖의 수치는 여전히 공식 문서와 공개 자료의 값입니다.
 
-    로컬에서 확인한 것은 CPU에서 실행하는 pytest 테스트와 TRL GRPO dry run(2 step)입니다. 런타임별 지연과 speedup이 필요하면 `scripts/ops/bench.sh`로 직접 측정하세요. 출처와 검증 수준은 [검증된 사실과 출처](sources.md)에 모았습니다. 자세히: [홈](../index.md), [08 런타임 벤치마크](../handson/08_benchmark.md)
+    로컬에서 확인한 것은 CPU에서 실행하는 pytest 테스트와 TRL GRPO dry run(2 step)입니다. 런타임별 지연과 speedup이 필요하면 `scripts/ops/bench.sh`로 직접 측정하세요. 출처와 검증 수준은 [검증된 사실과 출처](sources.md)에 모았습니다. 자세히: [홈](../index.md), [런타임 벤치마크](../handson/benchmarks/index.md)
 
 ??? note "참고 자료"
     | 주제 | 링크 |

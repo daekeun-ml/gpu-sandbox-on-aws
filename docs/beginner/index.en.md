@@ -11,7 +11,7 @@ When a model writes code, you can run it, check the result, and turn the result 
 | [05 Try it yourself](05_hands_on.md) | How to read a local verdict and compare kernels on EKS |
 | [06 Multi-turn agents](06_multi_turn_agent.md) | How one episode gets its own sandbox |
 
-Start with the [local exercise](05_hands_on.md) if you prefer to run something first. For an AWS deployment, see the [hands-on overview](../handson/00_overview.md).
+Start with the [local exercise](05_hands_on.md) if you prefer to run something first. For an AWS deployment, see the [hands-on overview](../handson/index.md).
 
 ## Choose what to run first
 

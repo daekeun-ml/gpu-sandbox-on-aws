@@ -145,7 +145,7 @@ Decide the runtime from your isolation requirement first, and for Kata size the 
 
 ### CPU tier and Spot
 
-- **Kata CPU tier (c8i)**: nested virtualization runs Kata without `.metal`. In the hands-on it is a cheap way to practice Kata before turning on `g4dn.metal`; in production it can filter work that needs no GPU (static checks, nvcc compilation) in front of the GPU tier. The CPU pools (`gvisor-cpu`, `kata-*-cpu`) are in the routing table and the reward loop of scenario C ([10 Hands-on lab with CPUs only](../handson/10_cpu_only.md)) uses them, but this two-stage setup is not wired.
+- **Kata CPU tier (c8i)**: nested virtualization runs Kata without `.metal`. In the hands-on it is a cheap way to practice Kata before turning on `g4dn.metal`; in production it can filter work that needs no GPU (static checks, nvcc compilation) in front of the GPU tier. The CPU pools (`gvisor-cpu`, `kata-*-cpu`) are in the routing table and the reward loop of scenario C ([CPU lab (C)](../handson/scenarios/c/index.md)) uses them, but this two-stage setup is not wired.
 - **Savings already built in**: the three reward functions of `KernelRewards` share one sandbox result.
     - **Not sent**: completions already in the cache, and completions without code or rejected by the static policy, are not sent to a sandbox.
     - **Identical completions in one call**: they are sent once.
@@ -203,7 +203,7 @@ The minimal path is what `scripts/02_create_cluster.sh` creates (scenario A, gVi
 | EKS control plane, NAT gateway, EBS gp3, SSM access instance (`t4g.nano`), KMS key | | See each pricing page | Extra |
 
 - Scenario B1 uses `ml.g5.2xlarge` instead of `g5.2xlarge`, so the minimal path is 3.719 and the full path 11.91784 USD per hour.
-- [Managed B2](../handson/07_hyperpod_b2.md) uses an `ml.m5.xlarge` CPU worker (0.230), an `ml.g5.2xlarge` trainer (1.515) and two `ml.g5.xlarge` graders (2 × 1.408). The four HyperPod workers total **4.561 USD/hour** at `us-east-1` on-demand rates. EKS, storage and networking are billed separately.
+- [Managed B2](../handson/scenarios/b/b2.md) uses an `ml.m5.xlarge` CPU worker (0.230), an `ml.g5.2xlarge` trainer (1.515) and two `ml.g5.xlarge` graders (2 × 1.408). The four HyperPod workers total **4.561 USD/hour** at `us-east-1` on-demand rates. EKS, storage and networking are billed separately.
 - Worked example: 8 hours of the minimal path plus 2 hours of `g4dn.metal` is 3.416 × 8 + 7.824 × 2 = 42.976 USD (EC2 only; the durations are assumptions).
 - After the cluster is deleted, the EBS snapshot of the Kata AMI and the ECR images can remain and keep billing. `scripts/08_cleanup.sh` asks before deregistering the AMI, and `--images` deletes the ECR repositories as well.
 
@@ -229,7 +229,7 @@ aws ec2 describe-instances --region "${AWS_REGION}" \
 
 **If it fails:** if billing continues after cleanup, see the cleanup and cost table in [Troubleshooting](../reference/troubleshooting.md).
 
-When you finish the hands-on, run [99 Cleanup](../handson/99_cleanup.md) (for scenario B, run `scripts/hyperpod/delete.sh` first). Related pages: [04 Platforms and instances](../concepts/04_platforms_and_instances.md), [01 Capacity and nodes](01_capacity_and_nodes.md), [06 Scaling with veRL](06_scaling_with_verl.md).
+When you finish the hands-on, run [Cleanup](../handson/cleanup.md) (for scenario B, run `scripts/hyperpod/delete.sh` first). Related pages: [04 Platforms and instances](../concepts/04_platforms_and_instances.md), [01 Capacity and nodes](01_capacity_and_nodes.md), [06 Scaling with veRL](06_scaling_with_verl.md).
 
 ??? note "References"
     | Topic | Link |

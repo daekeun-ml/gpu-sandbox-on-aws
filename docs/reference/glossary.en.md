@@ -30,16 +30,16 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 ## C
 
 **CDI (Container Device Interface)**
-:   A standard format that describes which device files and libraries go into a container. This repository installs the NVIDIA device plugin with `deviceListStrategy: cdi-cri`, and gVisor (runsc) uses the GPU devices it receives through CDI as they are. Used in: [02 gVisor GPU sandboxes](../handson/02_gvisor.md)
+:   A standard format that describes which device files and libraries go into a container. This repository installs the NVIDIA device plugin with `deviceListStrategy: cdi-cri`, and gVisor (runsc) uses the GPU devices it receives through CDI as they are. Used in: [gVisor GPU sandboxes](../handson/common/02_runtimes/gvisor.md)
 
 **Checksum**
 :   A short fingerprint computed from the contents of data. On every timed iteration the harness compares the checksum of the candidate's output with the reference, which catches output that is wrong only during measurement ("correct until the benchmark starts"). Used in: [04 Reward integrity](../production/04_reward_integrity.md)
 
 **Cloud Hypervisor (CLH)**
-:   A lightweight hypervisor that Kata can use. This repository uses it for the device-free Kata CPU pool. Kata upstream does not support GPU passthrough with CLH.
+:   A hypervisor that starts virtual machines. You can use VFIO to attach a physical GPU to a VM you create directly with Cloud Hypervisor. This repository verified it with Kata in the CPU pool.
 
-    - **When you create the CPU pool**: the profile you pass to the deploy script is `kata-clh-cpu`. The v1 Deployment is named `sandbox-kata-clh-cpu-v1`, and the profile selects the RuntimeClass `kata-clh`.
-    - **When you pass `kata-clh` to the deploy script**: it selects the experimental GPU profile instead.
+    - The **CPU pool** uses the deploy profile `kata-clh-cpu` and the RuntimeClass `kata-clh`. The v1 Deployment is named `sandbox-kata-clh-cpu-v1`.
+    - The **experimental GPU pool** uses the deploy profile `kata-clh` and the RuntimeClass `kata-clh-nvidia-gpu`. The VM failed to start in the EKS experiment. [Experiment record](../handson/common/02_runtimes/kata.md#stage-3-optional-experimental-kata--cloud-hypervisor-gpu)
 
     Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
 
@@ -58,10 +58,10 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 ## D
 
 **Deep health check**
-:   The checks SageMaker HyperPod runs to find faults in GPU instances (InstanceStress, InstanceConnectivity). While a check runs the node carries a taint, and nodes in instance groups with these checks turned on cannot have custom taints. Used in: [07 HyperPod scenario](../handson/07_hyperpod.md)
+:   The checks SageMaker HyperPod runs to find faults in GPU instances (InstanceStress, InstanceConnectivity). While a check runs the node carries a taint, and nodes in instance groups with these checks turned on cannot have custom taints. Used in: [HyperPod training paths](../handson/scenarios/b/index.md)
 
 **Device plugin**
-:   A Kubernetes component that advertises a node's devices (such as GPUs) to kubelet under a resource name such as `nvidia.com/gpu`. When a pod requests that resource, the scheduler places it on a node with a free device. GPUs for Kata passthrough are advertised by the GPU Operator as `nvidia.com/pgpu`. Used in: [02 gVisor GPU sandboxes](../handson/02_gvisor.md)
+:   A Kubernetes component that advertises a node's devices (such as GPUs) to kubelet under a resource name such as `nvidia.com/gpu`. When a pod requests that resource, the scheduler places it on a node with a free device. GPUs for Kata passthrough are advertised by the GPU Operator as `nvidia.com/pgpu`. Used in: [gVisor GPU sandboxes](../handson/common/02_runtimes/gvisor.md)
 
 **Draining, recycling**
 :   Draining is the state a sandbox enters, leaving Ready, after a set number of evaluations (`SANDBOX_MAX_EVALS`) or a GPU error. Recycling is the gateway deleting that pod so that the Deployment creates a new one; under Kata a new pod is a new VM. Used in: [03 Gateway and pools](../production/03_gateway_and_pools.md)
@@ -114,13 +114,13 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 :   The evaluation code that runs candidate code, checks correctness and speed, and produces a verdict. This repository's harness is split into a trusted parent process (policy check, reference, timing, verdict) and an untrusted child process (runs the candidate). Used in: [04 Reward integrity](../production/04_reward_integrity.md)
 
 **Headless Service**
-:   A Kubernetes Service without a virtual IP (`clusterIP: None`) whose DNS returns the IPs of the Ready pods directly. A client or the gateway can pick a pod itself and send one evaluation per pod. Used in: [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md)
+:   A Kubernetes Service without a virtual IP (`clusterIP: None`) whose DNS returns the IPs of the Ready pods directly. A client or the gateway can pick a pod itself and send one evaluation per pod. Used in: [Deploy and verify sandbox pools](../handson/common/03_pools/details.md)
 
 **HyperPod instance group**
-:   A set of nodes in a SageMaker HyperPod cluster that share one instance type and configuration. Scenario B in this repository puts the trainer on an `ml.g5.2xlarge` instance group and attaches those nodes to the same EKS cluster as the sandboxes. Used in: [07 HyperPod scenario](../handson/07_hyperpod.md)
+:   A set of nodes in a SageMaker HyperPod cluster that share one instance type and configuration. Scenario B in this repository puts the trainer on an `ml.g5.2xlarge` instance group and attaches those nodes to the same EKS cluster as the sandboxes. Used in: [HyperPod training paths](../handson/scenarios/b/index.md)
 
 **HyperPodPyTorchJob**
-:   The training job resource provided by the HyperPod training operator add-on. It starts with the `hyperpodrun` launcher and supports restarts per `jobMaxRetryCount` and stall detection from log patterns (`logMonitoringConfiguration`). Used in: [07 HyperPod scenario](../handson/07_hyperpod.md)
+:   The training job resource provided by the HyperPod training operator add-on. It starts with the `hyperpodrun` launcher and supports restarts per `jobMaxRetryCount` and stall detection from log patterns (`logMonitoringConfiguration`). Used in: [HyperPod training paths](../handson/scenarios/b/index.md)
 
 ## I
 
@@ -131,7 +131,7 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 :   The system call a program uses to send device-specific commands to a driver. GPU work also reaches the driver as ioctls on the NVIDIA device files, and gVisor nvproxy filters those ioctls through an allowlist. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
 
 **IOMMU**
-:   Hardware that limits which memory a device can reach through DMA. In VFIO passthrough it confines the GPU's memory access to the VM. On AL2023 kernels it needs the `intel_iommu=on` kernel argument. Used in: [03 Kata sandboxes (CLH, QEMU)](../handson/03_kata.md)
+:   Hardware that limits which memory a device can reach through DMA. In VFIO passthrough it confines the GPU's memory access to the VM. On AL2023 kernels it needs the `intel_iommu=on` kernel argument. Used in: [Kata sandboxes (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
 
 ## J
 
@@ -150,7 +150,7 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 :   A public benchmark (MIT license) that measures the ability to write GPU kernels. This repository follows its task format (`Model`, `ModelNew`), correctness tolerances, timing approach and `excessive_speedup_threshold` of 10. Used in: [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md)
 
 **KL penalty (`beta`)**
-:   A KL divergence term added to the loss, with its coefficient, that keeps the policy under training from drifting too far from a reference model. The TRL 1.18.0 GRPO default is `beta` 0.0, so there is no KL term and no reference model is loaded. This repository keeps that default. Used in: [05 On-policy GRPO training](../handson/05_grpo_training.md)
+:   A KL divergence term added to the loss, with its coefficient, that keeps the policy under training from drifting too far from a reference model. The TRL 1.18.0 GRPO default is `beta` 0.0, so there is no KL term and no reference model is loaded. This repository keeps that default. Used in: [On-policy GRPO training](../handson/scenarios/a/grpo.md)
 
 **KVM**
 :   The hardware virtualization feature built into the Linux kernel, used through the `/dev/kvm` device. Kata's QEMU and Cloud Hypervisor start VMs on KVM, so Kata nodes need `/dev/kvm`. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
@@ -158,10 +158,10 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 ## L
 
 **Lifecycle script**
-:   A setup script that HyperPod downloads from S3 and runs when it creates a node. This repository's `infra/hyperpod/lifecycle/on_create.sh` for the trainer group installs nothing, and `on_create_sandbox.sh` for the B2 sandbox group checks the driver, then registers `runsc` and installs the node guard. Keep the `sagemaker-` prefix in the bucket name. Used in: [07 HyperPod scenario](../handson/07_hyperpod.md)
+:   A setup script that HyperPod downloads from S3 and runs when it creates a node. This repository's `infra/hyperpod/lifecycle/on_create.sh` for the trainer group installs nothing, and `on_create_sandbox.sh` for the B2 sandbox group checks the driver, then registers `runsc` and installs the node guard. Keep the `sagemaker-` prefix in the bucket name. Used in: [HyperPod training paths](../handson/scenarios/b/index.md)
 
 **LoRA**
-:   A fine-tuning method that trains small low-rank matrices instead of all model weights. It reduces the trainable parameters and optimizer state, and the hands-on is configured to train a 1.5B model on one A10G this way. The defaults are `r` 32, `lora_alpha` 64, all linear layers. Used in: [05 On-policy GRPO training](../handson/05_grpo_training.md)
+:   A fine-tuning method that trains small low-rank matrices instead of all model weights. It reduces the trainable parameters and optimizer state, and the hands-on is configured to train a 1.5B model on one A10G this way. The defaults are `r` 32, `lora_alpha` 64, all linear layers. Used in: [On-policy GRPO training](../handson/scenarios/a/grpo.md)
 
 ## M
 
@@ -177,7 +177,7 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 :   A Kubernetes rule that defines, by namespace and label, which traffic a pod may send and receive. On EKS the VPC CNI enforces it (`enableNetworkPolicy`), and in standard mode a new pod starts default-allow until its policies apply. Used in: [02 Security](../production/02_security.md)
 
 **NodeConfig, nodeadm**
-:   nodeadm is the bootstrap tool that joins EKS AL2023 nodes to the cluster, and NodeConfig is its configuration passed in user data. This repository uses NodeConfig to add the `runsc` runtime to containerd. nodeadm rewrites `/etc/containerd/config.toml` on every boot. Used in: [02 gVisor GPU sandboxes](../handson/02_gvisor.md)
+:   nodeadm is the bootstrap tool that joins EKS AL2023 nodes to the cluster, and NodeConfig is its configuration passed in user data. This repository uses NodeConfig to add the `runsc` runtime to containerd. nodeadm rewrites `/etc/containerd/config.toml` on every boot. Used in: [gVisor GPU sandboxes](../handson/common/02_runtimes/gvisor.md)
 
 **nvproxy**
 :   The gVisor component that lets containers use NVIDIA GPUs. It filters the ioctls to the GPU driver through an allowlist per driver version and forwards them to the host driver; it works only when the driver version is exactly on the support list. Used in: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md)
@@ -216,7 +216,7 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 ## Q
 
 **QEMU**
-:   One of the hypervisors Kata uses. QEMU is the only hypervisor with which Kata officially supports NVIDIA GPU passthrough, so this repository's Kata GPU pool uses the `kata-qemu-nvidia-gpu` RuntimeClass. Used in: [03 Kata sandboxes (CLH, QEMU)](../handson/03_kata.md)
+:   One of the hypervisors Kata uses. QEMU is the only hypervisor with which Kata officially supports NVIDIA GPU passthrough, so this repository's Kata GPU pool uses the `kata-qemu-nvidia-gpu` RuntimeClass. Used in: [Kata sandboxes (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
 
 ## R
 
@@ -256,7 +256,7 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 :   The Agent Sandbox resource that keeps a set number of sandboxes from a SandboxTemplate started ahead of time. A claim gets a sandbox that is already prepared, which shortens the wait. Warm GPU sandboxes hold their GPU even while idle. Used in: [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md)
 
 **Speedup**
-:   The reference implementation's run time divided by the candidate kernel's run time. By default only correct custom kernels get a speedup score; with `--allow-torch-only`, correct PyTorch-only answers are scored on the same scale. The score is log2-scaled: 0 at 0.5x, 0.5 at 1x, 1.0 at 2x, capped at 1.5 (4x). Used in: [05 On-policy GRPO training](../handson/05_grpo_training.md)
+:   The reference implementation's run time divided by the candidate kernel's run time. By default only correct custom kernels get a speedup score; with `--allow-torch-only`, correct PyTorch-only answers are scored on the same scale. The score is log2-scaled: 0 at 0.5x, 0.5 at 1x, 1.0 at 2x, capped at 1.5 (4x). Used in: [On-policy GRPO training](../handson/scenarios/a/grpo.md)
 
 **SSM Session Manager port forwarding**
 :   An AWS Systems Manager feature that connects a local port on your machine to an address inside the VPC through an instance with the SSM agent. The instance needs no inbound port and no public IP, and your machine needs the Session Manager plugin for the AWS CLI. This repository's `cdk/tunnel.sh` connects `127.0.0.1:8443` to the private API endpoint. Used in: [09 Provisioning with CDK](../production/09_cdk.md)
@@ -264,7 +264,7 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 ## T
 
 **T4**
-:   An NVIDIA GPU model. On EC2 it comes in `g4dn` instances, and `g4dn.metal` has eight of them. It is the only x86 NVIDIA GPU on EC2 that can be assigned directly to a VM, so the Kata GPU sandboxes of this asset measure the reward on a T4. Used in: [Decision guide](../concepts/05_decision_guide.md), [03 Kata sandboxes (CLH, QEMU)](../handson/03_kata.md)
+:   An NVIDIA GPU model. On EC2 it comes in `g4dn` instances, and `g4dn.metal` has eight of them. It is the only x86 NVIDIA GPU on EC2 that can be assigned directly to a VM, so the Kata GPU sandboxes of this asset measure the reward on a T4. Used in: [Decision guide](../concepts/05_decision_guide.md), [Kata sandboxes (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
 
 **Taint, toleration**
 :   A taint is a mark on a node that keeps pods without a matching toleration from being scheduled there, and a toleration is a pod setting that lets the pod be scheduled on a node with that taint. This repository makes sandbox nodes dedicated with `gpusandbox/role=<role>:NoSchedule` taints. Used in: [01 Capacity and nodes](../production/01_capacity_and_nodes.md)
@@ -284,10 +284,10 @@ In RL, a rollout generates answers. In Kubernetes, a rollout updates a deploymen
 :   The JSON result the harness returns after scoring one candidate. It contains `status` (`ok`, `wrong_answer`, `policy_violation` and so on), `speedup` and `flags`, and the trainer turns it into a reward. Used in: [04 Reward integrity](../production/04_reward_integrity.md)
 
 **VFIO**
-:   The Linux kernel feature that hands a whole PCI device such as a GPU to user space or a VM (the `vfio-pci` driver). Kata GPU passthrough uses this path. VFIO pins all VM memory, so memory cannot be overcommitted. Used in: [03 Kata sandboxes (CLH, QEMU)](../handson/03_kata.md)
+:   The Linux kernel feature that hands a whole PCI device such as a GPU to user space or a VM (the `vfio-pci` driver). Kata GPU passthrough uses this path. VFIO pins all VM memory, so memory cannot be overcommitted. Used in: [Kata sandboxes (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
 
 **vLLM colocate mode**
-:   In TRL GRPO, running the vLLM generation engine inside the training process so that both share one GPU (`vllm_mode="colocate"`). This repository gives vLLM 35% of the GPU memory (`--vllm-gpu-memory-utilization 0.35`) and uses sleep mode to free that memory during the optimizer step. Used in: [05 On-policy GRPO training](../handson/05_grpo_training.md)
+:   In TRL GRPO, running the vLLM generation engine inside the training process so that both share one GPU (`vllm_mode="colocate"`). This repository gives vLLM 35% of the GPU memory (`--vllm-gpu-memory-utilization 0.35`) and uses sleep mode to free that memory during the optimizer step. Used in: [On-policy GRPO training](../handson/scenarios/a/grpo.md)
 
 ## W
 

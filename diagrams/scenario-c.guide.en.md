@@ -52,7 +52,7 @@ See the [architecture brief](scenario-c.brief.md) for the component evidence and
 ## Outside the diagram
 
 - WITH_KATA_GPU=1: sandbox-kata-gpu node group (g4dn.metal, Kata QEMU with GPU passthrough), stack.py:243-255.
-- Agent Sandbox extension (docs/handson/10_cpu_only.md:262): scripts/extensions/agent_sandbox.sh, k8s/extensions/agent-sandbox/ (unit tested only).
+- Agent Sandbox extension (docs/handson/scenarios/c/index.md): scripts/extensions/agent_sandbox.sh, k8s/extensions/agent-sandbox/ (unit tested only).
 - Demo site (hands-on page 09): private S3 + CloudFront, demo/infra/site.yaml; no path to the cluster.
 - Production reference (docs/production/): gateway, jwks-sync CronJob, Karpenter NodePools (sandbox-kata-cpu NodePool with c8i, m8i, r8i), veRL RayCluster.
 - EKS_PUBLIC_ACCESS_CIDR: optional public endpoint for one /32 (cdk/gpusandbox_cdk/config.py:78-83), off by default.

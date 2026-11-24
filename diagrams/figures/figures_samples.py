@@ -84,7 +84,7 @@ def beginner_01(lang: str) -> Figure:
 
 
 def handson_06(lang: str) -> Figure:
-    """docs/handson/06_sandbox_update: v1 and v2 scoring one GRPO group vs a version pinned per group."""
+    """docs/handson/scenarios/a/pool_update.md: v1 and v2 scoring one GRPO group vs a version pinned per group."""
     t = T[lang]
     fig = Figure(760, 556)
     # Columns: prompt | answers (x8) | edge labels | pools | advantage | outcome

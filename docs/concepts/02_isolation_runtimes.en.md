@@ -33,7 +33,7 @@ With gVisor, a driver change can affect GPU compatibility even if the sandbox im
 
 QEMU and Cloud Hypervisor are **hypervisors** that Kata uses to start pod VMs. When you create a VM directly with Cloud Hypervisor, you can also use VFIO to attach a physical GPU. [Cloud Hypervisor VFIO documentation](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md)
 
-In the Kata GPU lab, a pod requests a physical GPU via `nvidia.com/pgpu`. Kata passes the allocated GPU to the hypervisor, and the driver inside the VM controls the device. This repository verified that path with **Kata + QEMU**. It verified **Kata + Cloud Hypervisor** with CPU sandboxes, and the GPU experiment timed out while starting the VM. [Kata exercise](../handson/03_kata.md)
+In the Kata GPU lab, a pod requests a physical GPU via `nvidia.com/pgpu`. Kata passes the allocated GPU to the hypervisor, and the driver inside the VM controls the device. This repository verified that path with **Kata + QEMU**. It verified **Kata + Cloud Hypervisor** with CPU sandboxes, and the GPU experiment timed out while starting the VM. [Kata exercise](../handson/common/02_runtimes/kata.md)
 
 ## Where each runtime can run on AWS
 
@@ -48,7 +48,7 @@ In the Kata GPU lab, a pod requests a physical GPU via `nvidia.com/pgpu`. Kata p
 | Kata + QEMU GPU | EC2 `g4dn.metal` | Passthrough AMI and IOMMU setup |
 | Kata CPU (QEMU, Cloud Hypervisor) | EC2 `c8i.2xlarge` | Nested virtualization enabled |
 
-The runtime controls the execution boundary. Pool access and network controls also matter. Compare the [gVisor exercise](../handson/02_gvisor.md) and [Kata exercise](../handson/03_kata.md).
+The runtime controls the execution boundary. Pool access and network controls also matter. Compare the [gVisor exercise](../handson/common/02_runtimes/gvisor.md) and [Kata exercise](../handson/common/02_runtimes/kata.md).
 
 ## Compare runtimes on one node
 
@@ -60,7 +60,7 @@ If two GPU pools use different devices, runtime and device differences both affe
 | `kata-clh-cpu` | Guest kernel in a Cloud Hypervisor VM | 32/32 | 4.043 s |
 | `kata-qemu-cpu` | Guest kernel in a QEMU VM | 32/32 | 3.819 s |
 
-The pods were ready before these requests arrived. To study VM startup, measure pod creation to Ready. When repeating the comparison, record image cache state, pod counts, and the CPU and memory reservations of each RuntimeClass. [Benchmark conditions](../handson/08_benchmark.md#runtime-results) · [Inspect the kernels yourself](../beginner/05_hands_on.md#aws-cpu)
+The pods were ready before these requests arrived. To study VM startup, measure pod creation to Ready. When repeating the comparison, record image cache state, pod counts, and the CPU and memory reservations of each RuntimeClass. [Benchmark conditions](../handson/benchmarks/index.md#runtime-results), [Inspect the kernels yourself](../beginner/05_hands_on.md#aws-cpu)
 
 <a id="further-detail"></a>
 
@@ -95,7 +95,7 @@ Kata's Go runtime can add VFIO devices to the Cloud Hypervisor VM before boot. T
 !!! warning "How to read the overhead numbers"
     - **The boot times above**: they come from the Kata metrics CI (3.28.0), measured on different machines with a wide tolerance; they are not AWS measurements.
     - **The AWS China blog's "CLH about 130 MB, QEMU about 160 MB"**: it equals the Kata 3.31.0 `podFixed` defaults, so it is probably not a measurement (inference). What the post did measure is a cold start of about 3 s and about 230 ms to take a sandbox from a pre-started pool.
-    - **Values measured in the AWS practice account**: they are in [08 Runtime benchmark](../handson/08_benchmark.md). Its cold start runs from pod creation to Ready, a different interval from boot to workload in the table above. Four pods started with the GPU profile `kata-qemu` (RuntimeClass `kata-qemu-nvidia-gpu`) on `g4dn.metal` had a median of 30.5 s.
+    - **Values measured in the AWS practice account**: they are in [Runtime benchmark](../handson/benchmarks/index.md). Its cold start runs from pod creation to Ready, a different interval from boot to workload in the table above. Four pods started with the GPU profile `kata-qemu` (RuntimeClass `kata-qemu-nvidia-gpu`) on `g4dn.metal` had a median of 30.5 s.
 
 The VM size of `kata-qemu-nvidia-gpu` is `default_memory` 8192 MiB plus the container limits. VFIO type1 pins all guest RAM, so memory cannot be overcommitted. This asset's profile gives each T4 pod 8 CPUs and 16 GiB, and 8 x (16 + 10) GiB = 208 GiB fits in the 384 GiB of `g4dn.metal`.
 

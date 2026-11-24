@@ -40,7 +40,7 @@ A **verdict** is the grader's decision on one answer. If the function above leav
 If Python reports `ModuleNotFoundError`, activate `.venv` in the repository root and rerun the installation commands.
 
 ??? note "Run the servers directly on macOS"
-    On a Linux host, use the pytest route above. See [Getting started](../getting_started.md) for the difference when starting the server directly.
+    On a Linux host, use the pytest route above. See [Getting started](../handson/start.md) for the difference when starting the server directly.
 
     ### Start two sandbox servers
 
@@ -99,7 +99,7 @@ If Python reports `ModuleNotFoundError`, activate `.venv` in the repository root
 
 The two local servers let you practice scoring. Both use your computer's operating system. In this part, gVisor, Kata with Cloud Hypervisor, and Kata with QEMU run the same container image on one EKS `c8i.2xlarge`. Predict the release that `uname -r` will report in each pod.
 
-**Cost and prerequisites.** This part incurs charges for EKS, EC2 and the NAT gateway. Use a practice account and Region. The example creates two system nodes, one `c8i.2xlarge`, and a tunnel access instance. It needs 14 Standard On-Demand vCPUs. For AWS CLI credentials, Node.js, the CDK CLI, the Session Manager plugin, `kubectl`, Helm, Docker and `jq`, see [cluster setup](../handson/01_cluster_and_images.md). [Scenario C costs](../handson/10_cpu_only.md)
+**Cost and prerequisites.** This part incurs charges for EKS, EC2 and the NAT gateway. Use a practice account and Region. The example creates two system nodes, one `c8i.2xlarge`, and a tunnel access instance. It needs 14 Standard On-Demand vCPUs. For AWS CLI credentials, Node.js, the CDK CLI, the Session Manager plugin, `kubectl`, Helm, Docker and `jq`, see [cluster setup](../handson/common/01_provision/cdk.md). [Scenario C costs](../handson/scenarios/c/index.md)
 
 ### Configure and create the cluster
 
@@ -177,10 +177,10 @@ The script installs Kata on the CPU node and starts a short-lived test pod with 
 
 ### Clean up the lab resources
 
-You can continue on this cluster by [deploying the CPU pools and switching versions](../handson/10_cpu_only.md). To finish here, keep the tunnel open and run the command below. Check the account, Region and cluster name before confirming deletion.
+You can continue on this cluster by [deploying the CPU pools and switching versions](../handson/scenarios/c/index.md). To finish here, keep the tunnel open and run the command below. Check the account, Region and cluster name before confirming deletion.
 
 ```bash
 scripts/08_cleanup.sh
 ```
 
-Once the stack is deleted and the final instance query shows no lab nodes, close the tunnel. [Cleanup checks](../handson/99_cleanup.md) · [Follow an episode in the next chapter](06_multi_turn_agent.md)
+Once the stack is deleted and the final instance query shows no lab nodes, close the tunnel. [Cleanup checks](../handson/cleanup.md), [Follow an episode in the next chapter](06_multi_turn_agent.md)

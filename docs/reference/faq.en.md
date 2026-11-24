@@ -30,22 +30,22 @@
 
     **If it fails:** see the Kata table in [Troubleshooting](troubleshooting.md).
 
-    Details: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), [03 Kata sandboxes](../handson/03_kata.md)
+    Details: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), [Kata sandboxes](../handson/common/02_runtimes/kata.md)
 
 ??? question "gVisor's GPU isolation equals a VM boundary"
     **Actually:** gVisor shares the host's NVIDIA driver as it is, so it is weaker than a VM boundary.
 
     nvproxy reduces the exposed surface with an ioctl allowlist per driver version, but the gVisor documentation says it is "much less effective" at mitigating vulnerabilities inside the driver itself and that there is no validation of things like DMA buffers. The GKE Sandbox documentation also advises against GPU time-sharing in sandboxed pods. If the driver itself must be separated, choose Kata + VFIO, where the guest has its own driver. Details: [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), [02 Security](../production/02_security.md)
 
-??? question "Firecracker can pass a GPU through"
-    **Actually:** Firecracker does not provide GPU passthrough.
+??? note "GPU support in Firecracker and E2B"
+    Firecracker v1.18.0 lacks GPU passthrough for attaching a physical GPU to a VM. E2B provides CPU-only sandboxes sized by vCPU and RAM. [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md) [E2B GPU support](https://docs.e2b.dev/faq/gpu-support)
 
-    Firecracker uses a minimal device model built around virtio devices. PCI support was added in 1.13.0, but the changelog has no VFIO GPU passthrough. That is the background for Firecracker-based sandboxes such as E2B being mostly CPU only. This asset uses gVisor (nvproxy) or Kata + QEMU (VFIO) for GPU sandboxes. Details: [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md)
+    In this repository, gVisor forwards GPU requests through `nvproxy`, and Kata + QEMU attaches the physical GPU to the VM. [Isolation runtimes](../concepts/02_isolation_runtimes.md)
 
-??? question "Kata + Cloud Hypervisor can pass a GPU through just like QEMU"
-    **Actually:** upstream does not support GPU passthrough with Cloud Hypervisor. The supported Kata GPU path is QEMU (`kata-qemu-nvidia-gpu`).
+??? note "Cloud Hypervisor GPU passthrough and Kata GPU pods"
+    When you start a VM directly with Cloud Hypervisor, you can attach a physical GPU using VFIO. [Cloud Hypervisor documentation](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md)
 
-    Kata's `docs/hypervisors.md` marks GPU support for Cloud Hypervisor as not supported, and a maintainer answered in 2025-08 that you should use the QEMU GPU runtime class (issue #11687). This asset's `kata-clh-nvidia-gpu` is an experiment for evaluation, and Kata + Cloud Hypervisor is used as a CPU sandbox (`kata-clh-cpu`). Details: [03 Kata sandboxes](../handson/03_kata.md)
+    On EKS, Kata also needs to attach the GPU allocated to the pod. This repository verified Kata GPU pods with QEMU (`kata-qemu-nvidia-gpu`) and the Cloud Hypervisor CPU pool (`kata-clh-cpu`). The Kata + Cloud Hypervisor GPU experiment timed out while starting the VM. [Kata support table](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [Kata sandboxes](../handson/common/02_runtimes/kata.md)
 
 ??? question "Triton kernels obviously work on the Kata GPU pool (T4) too"
     **Actually:** whether Triton kernels work on T4 (`g4dn.metal`) has to be checked on your nodes with the golden kernels. This guide does not assert the range of GPUs that Triton officially supports.
@@ -65,7 +65,7 @@
 ## Platforms and managed services
 
 ??? question "these sandboxes can run on default-AMI HyperPod nodes today"
-    **In the lab** the unmodified EKS 1.36 HyperPod image used NVIDIA `595.112.07`. B1 kept the graders on EC2. In managed B2 the two HyperPod grading workers rebooted into driver `580.178.04`, and both ran gVisor on A10G. [B2 walkthrough](../handson/07_hyperpod_b2.md)
+    **In the lab** the unmodified EKS 1.36 HyperPod image used NVIDIA `595.112.07`. B1 kept the graders on EC2. In managed B2 the two HyperPod grading workers rebooted into driver `580.178.04`, and both ran gVisor on A10G. [B2 walkthrough](../handson/scenarios/b/b2.md)
 
     - **gVisor GPU sandboxes on the default AMI**: blocked, because the nvproxy of gVisor release-20261109.0 does not know the NVIDIA driver 595.91.07 in the HyperPod EKS AMIs (1.34 to 1.36) (unknown versions, which are not on the list, fail regardless of flags).
     - **Earlier custom AMI option**. The CDK route bakes the driver into a separate AMI. The managed lab stages it on the registered sandbox workers and reboots them through HyperPod.
@@ -87,7 +87,7 @@
 
     **If it fails:** see the HyperPod table in [Troubleshooting](troubleshooting.md).
 
-    Details: [04 Platforms and instances](../concepts/04_platforms_and_instances.md), [07 HyperPod scenario](../handson/07_hyperpod.md)
+    Details: [04 Platforms and instances](../concepts/04_platforms_and_instances.md), [HyperPod training paths](../handson/scenarios/b/index.md)
 
 ??? question "you can just install gVisor or Kata on EKS Auto Mode nodes"
     **Actually:** the EKS documentation states "You can't directly access or install software on instances managed by EKS Auto Mode". You cannot register runsc or kata-deploy on Auto Mode nodes.
@@ -114,7 +114,7 @@
 
     **If it fails:** see the "Sandbox pools and readiness" table in [Troubleshooting](troubleshooting.md).
 
-    Details: [02 Security](../production/02_security.md), [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md)
+    Details: [02 Security](../production/02_security.md), [Deploy and verify sandbox pools](../handson/common/03_pools/details.md)
 
 ??? question "the static policy (AST check) is the sandbox's security boundary"
     **Actually:** the static policy is a reward integrity device; the security boundary that protects the node is gVisor or Kata plus the network controls.
@@ -138,7 +138,7 @@
     - **A batch whose results are all cached from one pool**: it uses that pool's results without calling the sandbox.
     - **TRL defaults**: a batch boundary is a step boundary.
 
-    The following command runs that procedure (deploy, verify, parity, switch) in order. In the default scenario A, v1 already uses the GPUs of the two `sandbox-gvisor` nodes, so first scale that node group to 4 and check that the nodes are `Ready`. Otherwise the v2 pods get no GPU and step 1 waits up to 30 minutes and fails (the scaling command is in the preparation section of [06 Updating the sandbox during training](../handson/06_sandbox_update.md)).
+    The following command runs that procedure (deploy, verify, parity, switch) in order. In the default scenario A, v1 already uses the GPUs of the two `sandbox-gvisor` nodes, so first scale that node group to 4 and check that the nodes are `Ready`. Otherwise the v2 pods get no GPU and step 1 waits up to 30 minutes and fails (the scaling command is in the preparation section of [Updating the sandbox during training](../handson/scenarios/a/pool_update.md)).
 
     ```bash
     scripts/ops/rollout.sh gvisor v1 v2
@@ -152,7 +152,7 @@
 
     **If it fails:** see the "Version switches (routing)" table in [Troubleshooting](troubleshooting.md).
 
-    Details: [05 Sandbox versioning](../production/05_sandbox_updates.md), [06 Updating the sandbox during training](../handson/06_sandbox_update.md)
+    Details: [05 Sandbox versioning](../production/05_sandbox_updates.md), [Updating the sandbox during training](../handson/scenarios/a/pool_update.md)
 
 ??? question "giving reward 0 on infrastructure errors is conservative and therefore safe"
     **Actually:** a 0 is a learning signal that says "this answer is bad", so giving 0 to samples that could not be scored distorts the reward.
@@ -178,7 +178,7 @@
 ??? question "speedups are about the same on any GPU"
     **Actually:** a speedup means something only on the GPU it was measured on. Treat speedups from the gVisor pool (A10G) and the Kata pool (T4) as different reward functions.
 
-    `scripts/ops/bench.sh` also tells you to read the speedups of pools with different GPU types as per-GPU numbers. If the GPU you will deploy on is fixed, it is better to measure the reward on the same or a similar GPU. Details: [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md), [08 Runtime benchmark](../handson/08_benchmark.md)
+    `scripts/ops/bench.sh` also tells you to read the speedups of pools with different GPU types as per-GPU numbers. If the GPU you will deploy on is fixed, it is better to measure the reward on the same or a similar GPU. Details: [01 When the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md), [Runtime benchmark](../handson/benchmarks/index.md)
 
 ## Agent Sandbox
 
@@ -202,7 +202,7 @@
 ??? question "GPU sandboxes in a warm pool cost nothing while idle"
     **Actually:** a warm sandbox holds its GPU while it waits for a claim, so the cost of that GPU node keeps running.
 
-    Keep the warm pool size (`replicas`) to what you need for the episodes running at the same time. Node costs and cleanup are covered in [08 Cost](../production/08_cost.md) and [99 Cleanup](../handson/99_cleanup.md). Details: [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md)
+    Keep the warm pool size (`replicas`) to what you need for the episodes running at the same time. Node costs and cleanup are covered in [08 Cost](../production/08_cost.md) and [Cleanup](../handson/cleanup.md). Details: [06 Extending with Agent Sandbox](../concepts/06_agent_sandbox.md)
 
 ## Models, demo and validation status
 
@@ -226,12 +226,12 @@
     This is what ran in the practice account.
 
     - Scenario A's gVisor path (`03` through `08`) ran on `g5`.
-    - `ops/bench.sh` measured five pools (gVisor A10G, Kata QEMU T4 and the three CPU runtimes) twice, right after deployment and after a pool restart. The result table in [08 Runtime benchmark](../handson/08_benchmark.md) holds the second pass, with the measurement conditions.
+    - `ops/bench.sh` measured five pools (gVisor A10G, Kata QEMU T4 and the three CPU runtimes) twice, right after deployment and after a pool restart. The result table in [Runtime benchmark](../handson/benchmarks/index.md) holds the second pass, with the measurement conditions.
     - A recording of golden submissions scored on the A10G and T4 pools is in `demo/recordings/2026-11-18-eks-gpu.json`.
 
     The dated run record is in [Verified facts and sources](sources.md#aws-run-record). Other numbers still come from official documentation and public material.
 
-    What was verified locally are the pytest tests that run on CPU and a TRL GRPO dry run (2 steps). If you need latencies and speedups per runtime, measure them yourself with `scripts/ops/bench.sh`. Sources and evidence levels are collected in [Verified facts and sources](sources.md). Details: [Home](../index.md), [08 Runtime benchmark](../handson/08_benchmark.md)
+    What was verified locally are the pytest tests that run on CPU and a TRL GRPO dry run (2 steps). If you need latencies and speedups per runtime, measure them yourself with `scripts/ops/bench.sh`. Sources and evidence levels are collected in [Verified facts and sources](sources.md). Details: [Home](../index.md), [Runtime benchmark](../handson/benchmarks/index.md)
 
 ??? note "References"
     | Topic | Link |

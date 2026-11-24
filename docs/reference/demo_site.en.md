@@ -10,10 +10,10 @@ In the [public demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en#try), pick a 
 <details class="note" markdown="1">
 <summary>What you need to make your own recordings</summary>
 
-- You need the local Python environment (section 2 of [Getting started](../getting_started.md)).
-- **GPU recording**: needs the pools deployed in [04](../handson/04_sandbox_pools.md).
-- **GRPO chart in section 4**: needs the training log from [05](../handson/05_grpo_training.md).
-- **Version switch chart in section 4**: can come from a training log that went through the switch in [06](../handson/06_sandbox_update.md) or from the CPU simulation log in [10](../handson/10_cpu_only.md).
+- You need the local Python environment (section 2 of [Getting started](../handson/start.md)).
+- **GPU recording**: needs the pools deployed in [pool setup and verification](../handson/common/03_pools/details.md).
+- **GRPO chart in section 4**: needs the training log from [GRPO training on EC2](../handson/scenarios/a/grpo.md).
+- **Version switch chart in section 4**: can come from a training log that went through the switch in [switching grading pools](../handson/scenarios/a/pool_update.md) or from the CPU simulation log in [Scenario C](../handson/scenarios/c/index.md).
 - What the verdicts and rewards mean is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md).
 
 </details>
@@ -62,7 +62,7 @@ The published data and recordings are these.
 
 - **Published files**: HTML, CSS, JavaScript, AWS architecture icons (SVG), the tour videos (MP4) with their thumbnails (JPG), and two recording JSON files (`data/recording.json`, `data/extras.json`).
 - **The repository's `recording.json` sample**: a laptop CPU pool recording; replace it with a GPU recording made on your cluster.
-- The GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. EC2 graded the generated code in B1, and HyperPod graded it in B2. Each benchmark changes the client while keeping the pool fixed within that cluster. [B1 results](../handson/08_benchmark.md#hyperpod-b1) · [B2 results](../handson/08_benchmark.md#hyperpod-b2)
+- The GPU scoring replay uses `demo/recordings/2026-11-18-eks-gpu.json`. EC2 graded the generated code in B1, and HyperPod graded it in B2. Each benchmark changes the client while keeping the pool fixed within that cluster. [B1 results](../handson/benchmarks/index.md#hyperpod-b1), [B2 results](../handson/benchmarks/index.md#hyperpod-b2)
 - **Progress bar in section 2**: the recorded total evaluation time. Per-stage times are not recorded, so the stages are filled in from the verdict once the evaluation ends.
 
 </details>
@@ -71,7 +71,7 @@ The published data and recordings are these.
 
 ![One table comparing four HyperPod client runs and five EC2 runtime runs](../images/demo/runtime-results-en.png)
 
-[Open the public B1 benchmark](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1) · [Open the B2 results](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b2)
+[Open the public B1 benchmark](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b1), [Open the B2 results](https://dohbsn4kn34ya.cloudfront.net/?lang=en#hyperpod-b2)
 
 ![CloudFront demo with EKS and HyperPod clients scoring the same kernel](../images/demo/hyperpod-b1-benchmark-en.png)
 
@@ -96,7 +96,7 @@ flowchart LR
 - **WAF cost**: about 5 USD per month for the web ACL, 1 USD per rule per month (5 rules), and 0.60 USD per million requests ([AWS WAF pricing](https://aws.amazon.com/waf/pricing/)). While the stack exists, the fixed part (about 10 USD per month) bills even without traffic.
 - **Video transfer cost**: the Korean and English videos are 6.1 and 6.8 MiB respectively. Transfer bills per [CloudFront pricing](https://aws.amazon.com/cloudfront/pricing/), and WAF limits `/media/` requests to 100 per 5 minutes per IP, which caps the transfer one client can cause. If you expect heavy use, set an AWS Budgets alert.
 - **Log cost**: only S3 storage for the log bucket. Objects expire after 90 days, and the bucket stays after cleanup (section 6).
-- **GPU recording cost**: the GPU sandbox nodes must be up while you record (`g5.2xlarge` 1.212 USD per hour, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1 and us-west-2 On-Demand). The recorder pod runs on a system node without a GPU; recording from a trainer pod also needs the trainer node. Once you have the recording, scale the GPU nodes down with [99 Cleanup](../handson/99_cleanup.md).
+- **GPU recording cost**: the GPU sandbox nodes must be up while you record (`g5.2xlarge` 1.212 USD per hour, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1 and us-west-2 On-Demand). The recorder pod runs on a system node without a GPU; recording from a trainer pod also needs the trainer node. Once you have the recording, scale the GPU nodes down with [Cleanup](../handson/cleanup.md).
 
 ## 1. Preview locally
 
@@ -179,8 +179,8 @@ The recorder pod runs only `sleep` in the trainer image (`rl-trainer`).
 ### 2.1 Pick the moment to record
 
 - **Without a training Job, record from the recorder pod (2.2).** The recording then has no training events. The version switch chart in section 4 uses `simulation` in `extras.json` first and the recording's training events only when that is missing; with neither, the chart is not shown.
-- **When you record from a trainer pod, run it while the training Job is Running.** Once it ends, the container stops and the events file in the emptyDir can no longer be copied out ([05 On-policy GRPO training](../handson/05_grpo_training.md)).
-- **To get a version switch into the training events**, switch routing with `scripts/ops/rollout.sh gvisor v1 v2` from [06](../handson/06_sandbox_update.md) and record after `sandbox_version_switch` appears in the trainer log. `record` reads only the events that are in the `--training-events` file when it runs.
+- **When you record from a trainer pod, run it while the training Job is Running.** Once it ends, the container stops and the events file in the emptyDir can no longer be copied out ([On-policy GRPO training](../handson/scenarios/a/grpo.md)).
+- **To get a version switch into the training events**, switch routing with `scripts/ops/rollout.sh gvisor v1 v2` from [switching grading pools](../handson/scenarios/a/pool_update.md) and record after `sandbox_version_switch` appears in the trainer log. `record` reads only the events that are in the `--training-events` file when it runs.
     - **To record the goldens of both pools as well**: the addresses passed with `--pool` are where the goldens run, so record before you scale v1 down with `--finish` and pass the v1 and v2 addresses as separate `--pool` options, as in the example in 2.3.
     - **In B2**: the Service name uses `gvisor-hyperpod` (`sandbox-gvisor-hyperpod-v1`).
     - **To show your own switch in the section 4 chart**: the chart in section 4 uses `simulation` in `extras.json` first, so leave out `--simulation-log` when you build `extras.json` in 2.6.
@@ -200,7 +200,7 @@ echo "${POD}"
 **What to look for:**
 
 - One pod name is printed (in scenario A, `grpo-<RUN_ID>-<suffix>`).
-- **If it is empty**: no training is running; start with [05](../handson/05_grpo_training.md), or use the recorder pod below.
+- **If it is empty**: no training is running; start with [GRPO training on EC2](../handson/scenarios/a/grpo.md), or use the recorder pod below.
 
 **To record without a training Job,** create the recorder pod. The template is rendered with `TRAINER_IMAGE_URI` and `SANDBOX_AUDIENCE` from `scripts/config.env`.
 
@@ -283,7 +283,7 @@ The page shows the recording verbatim, so check the following before publishing.
 | `training` | Only `reward_batch` and `sandbox_version_switch` events go in. Make sure the version names and routing revisions are fine to publish |
 
 - **If `egress_blocked` is missing or `false`**: it shows as "open" on the page; do not publish it that way, fix the pool first.
-- **If status and `expected_status` differ**: a verdict went against expectations; find the cause first with the pool verification (`scripts/ops/verify.sh`) in [04](../handson/04_sandbox_pools.md).
+- **If status and `expected_status` differ**: a verdict went against expectations; find the cause first with the pool verification (`scripts/ops/verify.sh`) in [pool setup and verification](../handson/common/03_pools/details.md).
 
 The following script prints a summary.
 
@@ -331,7 +331,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 | GRPO training | `kubectl -n rl-trainer logs job/<job> > grpo.log`. It reads the reward function's `reward_batch` JSON lines and the trainer's metric lines (`{'loss': ...}`) | `--training-log grpo.log --model <model-id>` |
 | HyperPod B1 | The published B1 training log summary and fixed-kernel benchmark | `--b1-record docs/handson/data/hyperpod-b1.json` |
 | HyperPod B2 | GRPO and both 32-request benchmarks on the all-HyperPod cluster | `--b2-record docs/handson/data/hyperpod-b2.json` |
-| Version switch | Save the output of `scripts/ops/simulate.sh 30 20` to `simulate.log`, and switch the version with `rollout.sh` from [06](../handson/06_sandbox_update.md) meanwhile | `--simulation-log simulate.log` |
+| Version switch | Save the output of `scripts/ops/simulate.sh 30 20` to `simulate.log`, and switch the version with `rollout.sh` from [switching grading pools](../handson/scenarios/a/pool_update.md) meanwhile | `--simulation-log simulate.log` |
 | Terminal output | Save the output of commands such as `scripts/ops/verify.sh gvisor v1` to a file | `--transcript verify-gvisor=verify-gvisor.txt` (repeatable) |
 
 - **If you measured the benchmark twice**: `bench.sh` prints no separator, so put a `=== run 1` and a `=== run 2` line before each run's output yourself.
@@ -418,7 +418,7 @@ python3 demo/check_arch_layout.py --shots /tmp/arch  # also saves one PNG per pa
 Regenerate the sample `demo/site/data/recording.json` on a laptop, with no GPU.
 
 !!! warning "On a Linux host, run it inside a container"
-    `record_local.py` starts the sandbox servers inside its own process, and after every evaluation a server sends SIGKILL to every process visible in `/proc` except itself and its ancestors, so on a Linux host it can kill other processes of the same user (the same reason as the warning in [Getting started](../getting_started.md)). Run it inside a container with its own PID namespace (off on macOS, which has no `/proc`).
+    `record_local.py` starts the sandbox servers inside its own process, and after every evaluation a server sends SIGKILL to every process visible in `/proc` except itself and its ancestors, so on a Linux host it can kill other processes of the same user (the same reason as the warning in [Getting started](../handson/start.md)). Run it inside a container with its own PID namespace (off on macOS, which has no `/proc`).
 
 ```bash
 # Regenerate the shipped sample (repo root, local venv; on Linux inside a container with its own PID namespace)
@@ -440,7 +440,7 @@ The script does the following.
 
 After regenerating, check the schema and reward consistency with `python -m pytest -q tests/test_demo.py`.
 
-**If it fails:** `ModuleNotFoundError` means the virtual environment is not active or an install step was missed; run section 2 of [Getting started](../getting_started.md) again.
+**If it fails:** `ModuleNotFoundError` means the virtual environment is not active or an install step was missed; run section 2 of [Getting started](../handson/start.md) again.
 
 </details>
 
@@ -676,7 +676,7 @@ demo/teardown.sh
 
 The log objects expire after 90 days, but the bucket itself stays. When you no longer need the logs, delete the log bucket with the printed `aws s3 rb` command.
 
-GPU node and cluster cleanup are in [99 Cleanup](../handson/99_cleanup.md).
+GPU node and cluster cleanup are in [Cleanup](../handson/cleanup.md).
 
 <span id="scope-and-limits"></span>
 

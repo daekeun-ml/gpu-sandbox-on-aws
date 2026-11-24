@@ -24,7 +24,7 @@ Verify the new pool and compare the same reference submissions before changing r
     - **Evidence before the switch.** Traffic moves only after `scripts/ops/verify.sh` and `parity` pass.
     - **Switch per batch or per group, and record the version with each scored result.** Each verdict from the sandbox records `sandbox_version` and `harness_version`, and each TRL batch records `version`, `served_versions` and `global_step`, so causes can be traced. Verdicts the trainer decides locally (`no_code`, `policy_violation`) and TRL cache hits carry no freshly scored version.
 
-**Before you start:** the problem of mixed versions inside a group is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and the hands-on procedure is in [06 Updating the sandbox during training](../handson/06_sandbox_update.md).
+**Before you start:** the problem of mixed versions inside a group is in [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md), and the hands-on procedure is in [Updating the sandbox during training](../handson/scenarios/a/pool_update.md).
 
 ??? note "Terms"
     - **blue/green**: a deployment style that leaves the current version (blue) running, starts the new version (green) next to it, and moves traffic in one step after verification. If something goes wrong, traffic moves back.
@@ -198,7 +198,7 @@ On the veRL path the gateway holds the group pins in memory, so it runs as a sin
 <span id="scope-and-limits"></span>
 
 ??? note "What the switch logs have shown"
-    In scenario C the CPU rollout completed deployment, verification, parity and switching; the simulator logged `sandbox_version_switch` in its eighth batch (`demo/site/data/extras.json`). Scenario A also switched gVisor during training and retired v1 with `--finish`. A live Kata GPU switch during training still needs a separate run. [AWS runs](../reference/sources.md#aws-run-record) · [Scenario A switch](../handson/06_sandbox_update.md#switch-batches)
+    In scenario C the CPU rollout completed deployment, verification, parity and switching; the simulator logged `sandbox_version_switch` in its eighth batch (`demo/site/data/extras.json`). Scenario A also switched gVisor during training and retired v1 with `--finish`. A live Kata GPU switch during training still needs a separate run. [AWS runs](../reference/sources.md#aws-run-record), [Scenario A switch](../handson/scenarios/a/pool_update.md#switch-batches)
 
     Local tests cover revision changes, missing pools, group pins and CPU probe/parity. Canary switching and automated re-baselining are not implemented. Karpenter drift and kubelet propagation times follow the respective upstream documentation.
 
@@ -288,7 +288,7 @@ GRPO advantages are computed relative to the group, so a change that adds the sa
 - **Kata pool**: with the default 4 replicas each, both pools can share one g4dn.metal (8 T4).
 - **If the switch added nodes**: check that they are returned after you scale the old pool down.
 
-The hands-on procedure is in [06 Updating the sandbox during training](../handson/06_sandbox_update.md).
+The hands-on procedure is in [Updating the sandbox during training](../handson/scenarios/a/pool_update.md).
 
 Related pages: [03 Gateway and pools](03_gateway_and_pools.md), [04 Reward integrity](04_reward_integrity.md), [07 Observability and operations](07_observability_and_operations.md), [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md)
 

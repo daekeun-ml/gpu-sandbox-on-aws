@@ -37,11 +37,11 @@
 
 미리 띄우면 첫 턴의 대기 시간을 줄일 수 있지만 대기 중에도 CPU나 GPU를 점유합니다. GPU warm pool을 얼마나 크게 둘지는 대기 시간과 비용을 함께 보고 결정합니다.
 
-[시나리오 C](../handson/10_cpu_only.md)에서는 `kata-clh-cpu` 샌드박스를 할당하고 반납한 뒤 warm pool이 다시 채워지는지 확인했습니다. [Multi-turn 실습](../handson/11_multi_turn.md)에서는 에피소드 두 개를 실행했습니다. 로그에서 각 에피소드의 턴마다 `claim`이 같고, 마지막에 `released: true`가 기록되는지 확인할 수 있습니다.
+[시나리오 C](../handson/scenarios/c/index.md)에서는 `kata-clh-cpu` 샌드박스를 할당하고 반납한 뒤 warm pool이 다시 채워지는지 확인했습니다. [Multi-turn 실습](../handson/extensions/multi_turn.md)에서는 에피소드 두 개를 실행했습니다. 로그에서 각 에피소드의 턴마다 `claim`이 같고, 마지막에 `released: true`가 기록되는지 확인할 수 있습니다.
 
 ## 템플릿에서 반납까지 따라가기
 
-[CPU 에피소드 실습](../handson/11_multi_turn.md)의 준비 단계에서 `sandbox`와 `rl-trainer` 네임스페이스, 인증 설정, CPU 노드와 이미지가 준비됐다고 가정합니다. 아래 명령으로 controller를 설치하고 대기 pool을 만든 뒤, 에피소드가 샌드박스를 할당받아 반납하는 과정을 확인합니다.
+[CPU 에피소드 실습](../handson/extensions/multi_turn.md)의 준비 단계에서 `sandbox`와 `rl-trainer` 네임스페이스, 인증 설정, CPU 노드와 이미지가 준비됐다고 가정합니다. 아래 명령으로 controller를 설치하고 대기 pool을 만든 뒤, 에피소드가 샌드박스를 할당받아 반납하는 과정을 확인합니다.
 
 ```bash
 scripts/extensions/agent_sandbox.sh install
@@ -58,7 +58,7 @@ scripts/extensions/agent_sandbox.sh episodes kata-clh-cpu 2 3
 
 ![CPU warm pool에서 claim을 할당하고 반납한 결과](../images/terminal/agent-sandbox-claim.png)
 
-Kata CPU 실습은 에피소드 두 개를 순서대로 처리했습니다. 각 에피소드는 세 번째 턴에 정답을 냈습니다. `2`는 에피소드 수, `3`은 에피소드당 최대 턴 수입니다. 첫 턴에 정답이면 그 에피소드는 바로 끝납니다. `replicas: 1`은 대기 목표입니다. 샌드박스 하나는 한 에피소드에 할당되지만 노드에 여유가 있으면 controller가 다음 claim을 위한 샌드박스를 더 준비할 수 있습니다. [턴별 결과와 정리](../handson/11_multi_turn.md)
+Kata CPU 실습은 에피소드 두 개를 순서대로 처리했습니다. 각 에피소드는 세 번째 턴에 정답을 냈습니다. `2`는 에피소드 수, `3`은 에피소드당 최대 턴 수입니다. 첫 턴에 정답이면 그 에피소드는 바로 끝납니다. `replicas: 1`은 대기 목표입니다. 샌드박스 하나는 한 에피소드에 할당되지만 노드에 여유가 있으면 controller가 다음 claim을 위한 샌드박스를 더 준비할 수 있습니다. [턴별 결과와 정리](../handson/extensions/multi_turn.md)
 
 ### `Ready`가 늦을 때 어디에서 기다리는지 확인하기
 
@@ -205,7 +205,7 @@ veRL tool의 에피소드 요약과 `compute_score` 결과에는 채점 버전�
     | EKS Auto Mode에는 runsc를 등록할 수 없습니다 (1부) | 커스텀 런타임이 필요한 GPU 샌드박스에도 같은 제약이 적용됩니다 | CDK 스택의 EKS 관리형 노드 그룹과 Karpenter NodePool을 씁니다 |
     | warm pool을 쓰자 SandboxClaim 생성부터 Ready까지 걸리는 시간이 cold start 약 2 s에서 약 55 ms로 줄었습니다 (2부: EKS 1.36, `m7i.xlarge`, CPU, NetworkPolicy를 켜기 전, pool마다 10회) | GPU 샌드박스의 cold start는 더 길 수 있습니다. Kata GPU VM은 첫 Ready까지 몇 분이 걸릴 수 있으므로(템플릿 주석) warm pool의 효과와 비용이 모두 커집니다 | 이 시간은 블로그 저자가 측정한 값입니다. 실습에서는 claim을 만들어 주소를 얻기까지 걸린 시간은 `episode_start` 이벤트의 `claim_ready_s`에 기록됩니다 |
     | 3개짜리 pool에 claim 6개를 동시에 보내자 3개는 100~179 ms, 나머지 3개 중 2개는 약 15 s가 걸렸습니다. 원인은 VPC CNI의 IP cooldown이었고, 블로그는 Prefix Delegation, `WARM_IP_TARGET`, peak 기준 pool 크기 설정을 권장합니다 (2부) | gVisor GPU 프로필은 노드당 샌드박스가 하나이므로 IP보다 GPU와 노드 수가 먼저 제약이 될 수 있습니다(추론) | pool replicas를 동시 에피소드 수에 맞춥니다 |
-    | gVisor의 오버헤드는 syscall 수에 비례합니다. syscall당 시간은 약 0.18 us에서 2.2 us로, 파일 작업과 프로세스 생성은 4.7~6.5배, exec는 0.6 ms에서 3.8 ms로 늘었고, 순수 연산은 차이가 없었습니다 (2부) | 이 harness는 요청마다 새 프로세스 트리를 만들므로 평가마다 고정 오버헤드가 늘어날 수 있습니다(추론) | [08 런타임 벤치마크](../handson/08_benchmark.md)로 직접 측정합니다 |
+    | gVisor의 오버헤드는 syscall 수에 비례합니다. syscall당 시간은 약 0.18 us에서 2.2 us로, 파일 작업과 프로세스 생성은 4.7~6.5배, exec는 0.6 ms에서 3.8 ms로 늘었고, 순수 연산은 차이가 없었습니다 (2부) | 이 harness는 요청마다 새 프로세스 트리를 만들므로 평가마다 고정 오버헤드가 늘어날 수 있습니다(추론) | [런타임 벤치마크](../handson/benchmarks/index.md)로 직접 측정합니다 |
     | pause는 Pod를 삭제하고 Sandbox 객체와 PVC를 유지하며, 메모리 상태는 보존하지 않습니다 (2부) | pause하면 GPU가 해제되지만, resume은 cold start이므로 Kata GPU라면 몇 분이 걸릴 수 있습니다(추론) | 이 확장은 pause를 쓰지 않고, 에피소드가 끝나면 claim을 삭제합니다 |
     | `SandboxClaim.spec.env`를 쓰면 warm pool을 거치지 않고 template으로 Sandbox를 새로 만듭니다 (3부, upstream v1.0.8). v1.0.11 소스 주석에도 같은 내용이 있고, claim에 `volumeClaimTemplates`를 지정해도 cold start가 발생합니다 | GPU 샌드박스에서는 cold start에 몇 분이 걸릴 수 있습니다 | `envVarsInjectionPolicy: Disallowed`로 claim에서 env를 지정하지 못하게 하고, `EpisodeSandbox`는 env와 볼륨을 지정하지 않습니다 |
     | 에이블리는 전용 on-demand Karpenter NodePool에 `karpenter.sh/do-not-disrupt`와 일정 기반 disruption budget을 설정합니다 (3부) | 에피소드 도중 노드가 종료되면 그 에피소드는 폐기해야 합니다 | GPU 샌드박스 NodePool은 `consolidationPolicy: WhenEmpty`라 샌드박스가 실행 중인 노드를 consolidation하지 않습니다. `sandbox-kata-cpu`는 `WhenEmptyOrUnderutilized`이므로, CPU 계층에서 에피소드 샌드박스를 실행한다면 `do-not-disrupt`를 검토하세요 |

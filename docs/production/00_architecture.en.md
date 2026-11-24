@@ -25,7 +25,7 @@ The gateway selects an available pod and remembers the grading version. Karpente
     - **Nodes follow the number of sandbox pods.** Karpenter NodePools start sandbox nodes from zero, and a warm placeholder keeps one slow-booting `g4dn.metal` ready.
     - **Training requests reach sandboxes only through the gateway.** The production NetworkPolicy admits only the gateway pod into sandbox pods. The `sandbox-probe` Jobs that run verification and parity need a separate policy ([03 Gateway and pools](03_gateway_and_pools.md)).
 
-**Before you start**: this page compares against the hands-on setup, so read [Hands-on 00 Overview](../handson/00_overview.md), [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md) and [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md) first.
+**Before you start**: this page compares against the hands-on setup, so read [Overview](../handson/index.md), [Deploy and verify sandbox pools](../handson/common/03_pools/details.md) and [03 On-policy RL with sandboxes](../concepts/03_onpolicy_rl_with_sandboxes.md) first.
 
 ??? note "Terms"
     - **sandbox gateway**: an HTTP service between trainers and sandbox pods. It authenticates callers, picks the pod for each request and pins the sandbox version.
@@ -166,11 +166,11 @@ veRL sends each sample with a `group_key` to `POST /v1/evaluate`, and the gatewa
 ## Scenario B: training on HyperPod
 
 - **B1**: moves only the trainer to a HyperPod instance group and keeps the sandbox pools on EC2 NodePools in the same EKS cluster. The veRL RayCluster template selects HyperPod nodes through `VERL_NODE_SELECTOR`.
-- **B2** runs system pods, the trainer and both gVisor graders on HyperPod. The two grading workers activate a supported NVIDIA driver with a managed reboot. [Managed B2 deployment](../handson/07_hyperpod_b2.md)
+- **B2** runs system pods, the trainer and both gVisor graders on HyperPod. The two grading workers activate a supported NVIDIA driver with a managed reboot. [Managed B2 deployment](../handson/scenarios/b/b2.md)
 
 ## Order of operations
 
-1. Prepare the EKS cluster and the three images (`sandbox`, `trainer`, `control`) with hands-on [01 Cluster and images](../handson/01_cluster_and_images.md).
+1. Prepare the EKS cluster and the three images (`sandbox`, `trainer`, `control`) with hands-on [Cluster and images](../handson/common/01_provision/cdk.md).
 2. Install Karpenter with the official guide, then apply the EC2NodeClasses and NodePools. ([01 Capacity and nodes](01_capacity_and_nodes.md))
     - **The IOMMU AMI comes first**: all four EC2NodeClasses render from one template, so the IOMMU AMI for Kata GPU must exist first.
     - **If the AMI does not exist**: build it with `infra/kata/build-iommu-ami.sh` and put the printed `export KATA_IOMMU_AMI_ID=...` line into `scripts/config.env`.

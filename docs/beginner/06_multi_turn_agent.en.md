@@ -18,7 +18,7 @@ A warm pool reduces startup wait and uses CPU or GPU capacity while idle. See [A
 
 ## Reading one episode in the logs
 
-In the [multi-turn exercise](../handson/11_multi_turn.md), the CPU runner submits prepared answers in sequence. This abbreviated example shows selected fields for the final two turns and the end of an episode.
+In the [multi-turn exercise](../handson/extensions/multi_turn.md), the CPU runner submits prepared answers in sequence. This abbreviated example shows selected fields for the final two turns and the end of an episode.
 
 ```text
 turn         episode=1  turn=2  claim=episode-ab12  status=wrong_answer
@@ -44,10 +44,10 @@ The CPU exercise uses a `scripted` policy with prepared submissions so you can r
 
 ## Choose a pool or an episode claim
 
-For 30 independent submissions, send the next request whenever a pod becomes available. For an agent that revises one answer three times, holding a sandbox from the first turn through the last makes the placement easy to trace. An idle GPU sandbox still holds a GPU, so size the warm pool for the episodes you intend to run concurrently. [Follow a claim in the lab](../handson/11_multi_turn.md) · [Agent Sandbox resources and code](../concepts/06_agent_sandbox.md)
+For 30 independent submissions, send the next request whenever a pod becomes available. For an agent that revises one answer three times, holding a sandbox from the first turn through the last makes the placement easy to trace. An idle GPU sandbox still holds a GPU, so size the warm pool for the episodes you intend to run concurrently. [Follow a claim in the lab](../handson/extensions/multi_turn.md), [Agent Sandbox resources and code](../concepts/06_agent_sandbox.md)
 
 ### Why a warm sandbox may remain after release
 
 Suppose the warm pool targets one idle sandbox and an episode ends. You may see zero `SandboxClaim` objects and one ready sandbox again. The used sandbox was removed and the controller replenished the pool for the next episode. The **claim count** tells you how many allocations remain. The **warm replica count** tells you how much capacity is being kept for future allocations.
 
-Scaling a GPU warm pool to zero can free the device reserved for idle work. EC2 charges continue until the node is scaled down or the lab stack is deleted. [Cleanup and cost](../handson/11_multi_turn.md)
+Scaling a GPU warm pool to zero can free the device reserved for idle work. EC2 charges continue until the node is scaled down or the lab stack is deleted. [Cleanup and cost](../handson/extensions/multi_turn.md)

@@ -17,7 +17,7 @@ Cross-unit: one CDK stack builds A, B1 and C; SCENARIO=C turns on the sandbox-ka
 
 Out of scope (not drawn), one line each:
 - WITH_KATA_GPU=1: sandbox-kata-gpu node group (g4dn.metal, Kata QEMU with GPU passthrough), stack.py:243-255.
-- Agent Sandbox extension (docs/handson/10_cpu_only.md:262): scripts/extensions/agent_sandbox.sh, k8s/extensions/agent-sandbox/ (unit tested only).
+- Agent Sandbox extension (docs/handson/scenarios/c/index.md): scripts/extensions/agent_sandbox.sh, k8s/extensions/agent-sandbox/ (unit tested only).
 - Demo site (hands-on page 09): private S3 + CloudFront, demo/infra/site.yaml; no path to the cluster.
 - Production reference (docs/production/): gateway, jwks-sync CronJob, Karpenter NodePools (sandbox-kata-cpu NodePool with c8i, m8i, r8i), veRL RayCluster.
 - EKS_PUBLIC_ACCESS_CIDR: optional public endpoint for one /32 (cdk/gpusandbox_cdk/config.py:78-83), off by default.
@@ -31,8 +31,8 @@ Out of scope (not drawn), one line each:
 | eks | EKS 1.36 private API (`eks`) | Control plane, private endpoint only, access entries, add-ons vpc-cni with NetworkPolicy, kube-proxy, pod identity agent, CoreDNS | EKS control plane | cdk/gpusandbox_cdk/stack.py:116-166, scripts/config.env.example:9 | deployed |
 | kms | KMS secrets key (`key_management_service`) | Customer-managed key with rotation; EKS envelope-encrypts Kubernetes Secrets with it | EKS control plane | cdk/gpusandbox_cdk/stack.py:100-109 | deployed |
 | sim | simulate and probe Jobs (`container_1`, resource) | One-shot Jobs from one template in ns rl-trainer (control image, label gpusandbox/client=true): simulate (71) scores golden submissions batch by batch through the routing table with the trainer's reward code; probe (61), parity (80) and bench (90) use the same template | system nodes m6i.large x2 | k8s/probe/job-probe.yaml.tpl:1-56, scripts/ops/simulate.sh:1-21, src/gpusandbox/tools.py:229-259, cdk/gpusandbox_cdk/stack.py:218-220 | deployed |
-| sbx_v1 | kata-clh-cpu pool v1 (`container_1`, resource) | Active pool sandbox-kata-clh-cpu-v1 in ns sandbox: one Kata microVM per pod on Cloud Hypervisor (RuntimeClass kata-clh), CPU only, default-deny NetworkPolicy | sandbox-kata-cpu node c8i.2xlarge | k8s/sandbox/profiles/kata-clh-cpu.env:1-12, docs/handson/10_cpu_only.md:186-194, cdk/gpusandbox_cdk/stack.py:233-242 | deployed |
-| sbx_v2 | kata-clh-cpu pool v2 (`container_1`, resource) | Next version sandbox-kata-clh-cpu-v2 beside v1 (blue/green, recycles each pod VM every 200 evaluations); no traffic until parity passes and the routing switch | sandbox-kata-cpu node c8i.2xlarge | k8s/sandbox/versions/v2.env:1-7, docs/handson/10_cpu_only.md:211-225 | deployed |
+| sbx_v1 | kata-clh-cpu pool v1 (`container_1`, resource) | Active pool sandbox-kata-clh-cpu-v1 in ns sandbox: one Kata microVM per pod on Cloud Hypervisor (RuntimeClass kata-clh), CPU only, default-deny NetworkPolicy | sandbox-kata-cpu node c8i.2xlarge | k8s/sandbox/profiles/kata-clh-cpu.env:1-12, docs/handson/scenarios/c/index.md:78, cdk/gpusandbox_cdk/stack.py:233-242 | deployed |
+| sbx_v2 | kata-clh-cpu pool v2 (`container_1`, resource) | Next version sandbox-kata-clh-cpu-v2 beside v1 (blue/green, recycles each pod VM every 200 evaluations); no traffic until parity passes and the routing switch | sandbox-kata-cpu node c8i.2xlarge | k8s/sandbox/versions/v2.env:1-7, docs/handson/scenarios/c/index.md:103 | deployed |
 | sbx_gvisor | gvisor-cpu pool v1 (`container_1`, resource) | Pool sandbox-gvisor-cpu-v1: gVisor runsc on the systrap platform without nvproxy (RuntimeClass gvisor-cpu), installed by the node's user data | sandbox-kata-cpu node c8i.2xlarge | k8s/sandbox/profiles/gvisor-cpu.env:1-12, k8s/runtimes/runtimeclass-gvisor-cpu.yaml, infra/eks/userdata.py:78-86 | deployed |
 | sbx_qemu | kata-qemu-cpu pool v1 (`container_1`, resource) | Pool sandbox-kata-qemu-cpu-v1: one Kata microVM per pod on QEMU (RuntimeClass kata-qemu), the comparison baseline | sandbox-kata-cpu node c8i.2xlarge | k8s/sandbox/profiles/kata-qemu-cpu.env:1-11, scripts/kata/cpu_nodes.sh:16-27 | deployed |
 | ecr | ECR repositories (`ecr`) | Private repositories gpu-sandbox/sandbox and control (scan on push, immutable tags); the trainer image is skipped with --no-trainer | Registry | scripts/03_build_push_images.sh:8-46 | deployed |
@@ -50,8 +50,8 @@ Out of scope (not drawn), one line each:
 | 2 | ssm → access | port forward | sync | cdk/tunnel.sh:20-31, cdk/gpusandbox_cdk/stack.py:79-80 |
 | 3 | access → eks | HTTPS 443 | sync | cdk/gpusandbox_cdk/stack.py:78, cdk/gpusandbox_cdk/stack.py:94-97 |
 | 4 | eks → sim | Job, active pool | async (dashed) | scripts/lib_jobs.sh:6-13, k8s/probe/job-probe.yaml.tpl:45-49, scripts/ops/simulate.sh:13-21 |
-| 5 | sim → sbx_v1 | golden code | sync | src/gpusandbox/tools.py:229-259, k8s/base/networkpolicies.yaml:15-36, docs/handson/10_cpu_only.md:211-218 |
-| 6 | sim → sbx_v2 | after switch | sync, after switch (dashed) | scripts/ops/rollout.sh:36-48, docs/handson/10_cpu_only.md:220-240 |
+| 5 | sim → sbx_v1 | golden code | sync | src/gpusandbox/tools.py:229-259, k8s/base/networkpolicies.yaml:15-36, docs/handson/scenarios/c/index.md:103 |
+| 6 | sim → sbx_v2 | after switch | sync, after switch (dashed) | scripts/ops/rollout.sh:36-48, docs/handson/scenarios/c/index.md |
 | 7 | sim → sbx_gvisor | probe, bench | sync, test runs (dashed) | scripts/ops/verify.sh:52, scripts/ops/bench.sh:30 |
 | 8 | sim → sbx_qemu | probe, bench | sync, test runs (dashed) | scripts/ops/verify.sh:52, scripts/ops/bench.sh:30 |
 | 9 | sbx_v1 → ecr | image pull | aux (dashed) | k8s/sandbox/deployment.yaml.tpl:66, cdk/gpusandbox_cdk/stack.py:169 |
@@ -92,7 +92,7 @@ Skipped: no AWS documentation MCP server (`search_documentation` / `retrieve_ski
 
 ## Decisions & assumptions
 - Correction: the reward loop runs in the cluster, as Job simulate in ns rl-trainer on the system nodes (scripts/ops/simulate.sh:3-5, scripts/lib_jobs.sh:12-13), not from the workstation through the tunnel; the workstation only applies it and follows its logs.
-- Correction: the three CPU pools are named gvisor-cpu, kata-clh-cpu and kata-qemu-cpu; their RuntimeClasses are gvisor-cpu, kata-clh and kata-qemu. The active pool, and the one rolled from v1 to v2, is kata-clh-cpu (docs/handson/10_cpu_only.md:191, docs/handson/10_cpu_only.md:224). The node group sandbox-kata-cpu carries label gpusandbox/role=sandbox-kata (stack.py:241).
+- Correction: the three CPU pools are named gvisor-cpu, kata-clh-cpu and kata-qemu-cpu; their RuntimeClasses are gvisor-cpu, kata-clh and kata-qemu. The active pool, and the one rolled from v1 to v2, is kata-clh-cpu (docs/handson/scenarios/c/index.md, docs/handson/scenarios/c/index.md). The node group sandbox-kata-cpu carries label gpusandbox/role=sandbox-kata (stack.py:241).
 - Correction: only two images are built (sandbox and control, scripts/03_build_push_images.sh --no-trainer).
 - The node `sim` stands for the one Job template that every tool run uses (simulate, probe, parity, bench); edges 7 and 8 are its probe and bench runs against the two pools that are not active. They are dashed but required, so no pool is left without an edge.
 - Substitution: Kubernetes workloads (the Jobs, the pool Deployments) use the Containers category resource icon `container_1`, labelled with the workload name; the `eks` service icon is the control plane only.

@@ -25,7 +25,7 @@ Compare the cost of keeping a metal node warm with the first-batch delay it avoi
     - **Each runtime needs a different kind of node.** Instances, taints, labels, caps and disruption policy are split per NodePool so that one setting never leaks into another.
     - **The coupling between driver and runtime stays visible.** nvproxy needs an exact driver match, so the AMI and gVisor are pinned together and checked in CI before a change.
 
-**Before you start**: read the NodePool table in [00 Architecture](00_architecture.md), the instance choices in [04 Platforms and instances](../concepts/04_platforms_and_instances.md) and the IOMMU AMI step in [03 Kata sandboxes (CLH, QEMU)](../handson/03_kata.md) first.
+**Before you start**: read the NodePool table in [00 Architecture](00_architecture.md), the instance choices in [04 Platforms and instances](../concepts/04_platforms_and_instances.md) and the IOMMU AMI step in [Kata sandboxes (CLH, QEMU)](../handson/common/02_runtimes/kata.md) first.
 
 ??? note "Terms"
     - **NodePool, EC2NodeClass**: a NodePool states which nodes Karpenter may start (instances, taints, caps, disruption policy). An EC2NodeClass holds the AWS launch settings of those nodes (AMI, disks, subnets, user data).
@@ -236,7 +236,7 @@ To nvproxy a driver is supported, unsupported (needs `--nvproxy-allow-unsupporte
 | EKS AL2023 NVIDIA AMI | v20261107 |
 | g5 driver | 580.178.04 (proprietary kernel module, GSP off), supported by nvproxy since release-20260831.0. g6 loads the open kernel module of the same version |
 | gVisor | release-20261109.0 (`GVISOR_RELEASE="20261109.0"`) |
-| Version to watch | gVisor `20261109.0` does not recognize 595.91.07 or the B2 default driver, 595.112.07. The [B2 lab](../handson/07_hyperpod_b2.md) installed 580.178.04 on both grading workers and rebooted them through HyperPod. |
+| Version to watch | gVisor `20261109.0` does not recognize 595.91.07 or the B2 default driver, 595.112.07. The [B2 lab](../handson/scenarios/b/b2.md) installed 580.178.04 on both grading workers and rebooted them through HyperPod. |
 
 Today the `sandbox-gvisor` EC2NodeClass uses `alias: al2023@latest`, so Karpenter replaces nodes through drift when a new EKS AMI appears. If nvproxy does not know the new driver, this happens.
 

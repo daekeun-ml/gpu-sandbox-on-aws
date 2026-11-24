@@ -4,7 +4,7 @@
 
 This AWS lab runs model-generated GPU kernels in sandboxes separate from the training node. During GRPO training, the reward reflects whether a kernel produces the correct output and how fast it runs compared with the reference implementation.
 
-[Guidebook](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/) | [Replay demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en) | [Scripts](SCRIPTS.en.md) | [Troubleshooting](TROUBLESHOOTING.en.md)
+[Quickstart](#getting-started) | [Guidebook](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/) | [Replay demo](https://dohbsn4kn34ya.cloudfront.net/?lang=en) | [Scripts](SCRIPTS.en.md) | [Troubleshooting](TROUBLESHOOTING.en.md)
 
 <a href="docs/images/figures/index--aws-architecture.en.svg">
   <picture>
@@ -13,7 +13,7 @@ This AWS lab runs model-generated GPU kernels in sandboxes separate from the tra
   </picture>
 </a>
 
-The diagram shows **A** training on EC2 and **B1** training on SageMaker HyperPod. Both send code to sandboxes on EC2 for grading. In **B2**, HyperPod runs the system, training and grading workers. [B2 architecture and hands-on guide](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
+The diagram shows **A** training on EC2 and **B1** training on SageMaker HyperPod. Both send code to sandboxes on EC2 for grading. In **B2**, HyperPod runs the system, training and grading workers. [B2 architecture and hands-on guide](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/scenarios/b/b2/)
 
 <details>
 <summary><b>Follow one grading request</b></summary>
@@ -28,8 +28,8 @@ The training node sends a generated kernel to the selected sandbox pool. The tra
 |---|---|
 | Understand how execution and training fit together | [Beginner guide](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/beginner/) |
 | Grade code on your computer | [Local exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/beginner/05_hands_on/) (no AWS account or GPU needed) |
-| Compare runtimes on AWS | [CPU-only exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/10_cpu_only/) (billed) |
-| Connect GPU grading to training | [Hands-on overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/00_overview/), starting with A |
+| Compare runtimes on AWS | [CPU-only exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/scenarios/c/) (billed) |
+| Connect GPU grading to training | [Hands-on overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/), starting with A |
 
 ## Architecture
 
@@ -57,7 +57,7 @@ A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the con
 
 *EKS schedules the training job. The HyperPod `trainer` sends code to the `sandbox` group on the right, and the CPU worker in `system` sends benchmark requests to the same grading pool.*
 
-[B2 hands-on](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/) · [Earlier worker overview](diagrams/variants/b2-worker-overview/scenario-b2.drawio.png)
+[B2 hands-on](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/scenarios/b/b2/), [Earlier worker overview](diagrams/variants/b2-worker-overview/scenario-b2.drawio.png)
 
 </details>
 
@@ -79,24 +79,47 @@ A, B1 and C use the CDK stack with a private EKS API. Managed B2 creates the con
 - The trainer resolves the headless Service through CoreDNS and sends `POST /v1/evaluate` straight to each Ready pod. A busy pod answers `503`, and the trainer retries another pod.
 - Each request carries a projected ServiceAccount token with the audience `gpu-sandbox`, which the pod verifies offline against the JWKS. The `sandbox` namespace is default-deny, so only labelled pods from `rl-trainer` can connect.
 
-The production layout (Karpenter NodePools, sandbox gateway, veRL on KubeRay) is in [Production 00 Architecture](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/production/00_architecture/), and node groups, namespaces and a reading of each arrow are in [Hands-on 00 Overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/00_overview/). The diagram sources (`.drawio`) are in [`diagrams/`](diagrams/).
+The production layout (Karpenter NodePools, sandbox gateway, veRL on KubeRay) is in [Production 00 Architecture](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/production/00_architecture/), and node groups, namespaces and a reading of each arrow are in [Hands-on 00 Overview](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/). The diagram sources (`.drawio`) are in [`diagrams/`](diagrams/).
 
 ## Getting started
 
-The local exercise checks whether prepared answers receive the expected verdicts on a CPU. Follow [environment setup](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/getting_started/) to install the tools.
+Clone the project and run the quickstart script. Choose your scenario from the menu. The script shows each command before it runs. Press Enter to run it or type `q` to stop.
 
-Choose an AWS path that matches your goal.
+```bash
+git clone https://github.com/daekeun-ml/gpu-sandbox-on-aws.git
+cd gpu-sandbox-on-aws
+./scripts/quickstart.sh
+```
 
-- **C (CPU only)** Run scoring without a model and compare gVisor and Kata. [CPU exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/10_cpu_only/)
-- **A (EC2 GPU)** Score GPU kernels and use the results for GRPO training. [A lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/scenario_a/)
-- **HyperPod B1 and B2**. B1 puts the trainer on HyperPod and uses EC2 graders. B2 puts the CPU worker and all three GPU workers on HyperPod. [B1 lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b1/) · [B2 lab](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
+For the AWS labs, sign in to your lab account with the AWS CLI and install Bash, Python 3, `jq`, `kubectl`, Helm and Docker Buildx. A, B1 and C also need uv, Node.js, the AWS CDK CLI and the Session Manager plugin. Use Bash 4 or newer for B2.
 
-AWS resources can incur charges while idle. Check the [cost estimates](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/concepts/04_platforms_and_instances/) before deployment and follow the [cleanup steps](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/99_cleanup/) at the end.
+| Scenario | What you run | Start the walkthrough |
+|---|---|---|
+| C (CPU only) | Verify three CPU grading runtimes and switch pools during a simulation. | `./scripts/quickstart.sh C` |
+| A (EC2 GPUs) | Grade code on EC2 and run five GRPO training steps. | `./scripts/quickstart.sh A` |
+| B1 (HyperPod training, EC2 grading) | Run one training step on HyperPod with EC2 graders. | `./scripts/quickstart.sh B1` |
+| B2 (all workers on HyperPod) | Train and grade on HyperPod, then benchmark 32 requests each from the system and training nodes. | `./scripts/quickstart.sh B2` |
+
+To try CPU grading without an AWS account, install [uv](https://docs.astral.sh/uv/) and choose `local` from the menu. Look for `PASSED` at the end.
+
+For example, the complete B2 workflow is:
+
+```bash
+./scripts/quickstart.sh B2 plan    # list the steps
+./scripts/quickstart.sh B2         # Enter runs the next step, q stops
+./scripts/quickstart.sh B2 cleanup # remove compute after reviewing results
+```
+
+The `init` step checks the account and Region and creates `.quickstart/B2/config.env`. Set `AWS_PROFILE` before starting if you use a named profile. B2 defaults to `us-east-1`; the other scenarios default to `us-west-2`. Review the configuration and quotas before `infra` creates billable resources. To pick up later, run a named step. For example, after B2 training, `./scripts/quickstart.sh B2 bench` runs just the benchmark. When retrying `images`, the script reuses tags already present in ECR. Change `IMAGE_TAG` in the scenario configuration to rebuild after editing the code.
+
+For A, B1 and C, `connect` asks you to keep the scenario's `tunnel` command open in another terminal, for example `./scripts/quickstart.sh C tunnel`. After C grades its first v1 batch, run `./scripts/quickstart.sh C switch` in a separate work terminal to switch to v2. B2 connects directly to the EKS API.
+
+Run `cleanup` separately when finished. ECR images, logs and the dedicated B2 lifecycle bucket can still incur storage charges. [Cost estimates](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/concepts/04_platforms_and_instances/) and [how to check for remaining resources](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/cleanup/)
 
 ## Further reading
 
 - **Isolation** Compare GPU access and node requirements in [gVisor and Kata](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/concepts/02_isolation_runtimes/).
-- **Multi-turn grading** The [Agent Sandbox exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/11_multi_turn/) sends an episode's submissions to the same sandbox.
+- **Multi-turn grading** The [Agent Sandbox exercise](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/extensions/multi_turn/) sends an episode's submissions to the same sandbox.
 - **Production** See the [reference architecture](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/production/00_architecture/) and [security design](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/production/02_security/).
 
 ## Validation status

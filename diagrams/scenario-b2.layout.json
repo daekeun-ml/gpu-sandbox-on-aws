@@ -34,7 +34,7 @@
     },
     {
       "id": "system",
-      "label": "system · ml.m5.xlarge × 1",
+      "label": "system  ml.m5.xlarge × 1",
       "parent": "hp",
       "bounds": [
         754,
@@ -45,7 +45,7 @@
     },
     {
       "id": "train",
-      "label": "trainer · ml.g5.2xlarge × 1",
+      "label": "trainer  ml.g5.2xlarge × 1",
       "parent": "hp",
       "bounds": [
         754,
@@ -56,7 +56,7 @@
     },
     {
       "id": "grading",
-      "label": "sandbox · ml.g5.xlarge × 2",
+      "label": "sandbox  ml.g5.xlarge × 2",
       "parent": "hp",
       "bounds": [
         1327,
@@ -125,7 +125,7 @@
     },
     {
       "id": "cpu",
-      "label": "CoreDNS · CPU benchmark",
+      "label": "CoreDNS, CPU benchmark",
       "icon": "sagemaker",
       "group": "system",
       "bounds": [
@@ -149,7 +149,7 @@
     },
     {
       "id": "sandbox",
-      "label": "gVisor v1 · 2 pods 1 A10G per pod",
+      "label": "gVisor v1 (2 pods) 1 A10G per pod",
       "icon": "container_1",
       "group": "grading",
       "bounds": [
@@ -232,7 +232,7 @@
       "from": "operator",
       "to": "eks",
       "num": 2,
-      "label": "kubectl · HTTPS"
+      "label": "kubectl (HTTPS)"
     },
     {
       "from": "stack",

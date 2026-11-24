@@ -1,6 +1,6 @@
 """Script reference (docs/reference/scripts): what the hands-on scripts do, in order, and where each one acts.
 
-Every box and edge comes from docs/reference/scripts.md and docs/handson/00_overview.md. Shared geometry draws
+Every box and edge comes from docs/reference/scripts.md and docs/handson/index.md. Shared geometry draws
 both languages.
 """
 

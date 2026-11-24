@@ -23,11 +23,11 @@ An agent may need to revise an answer several times. Assigning one sandbox keeps
 
 The template's `RuntimeClass` selects the isolation runtime. Agent Sandbox manages the lifecycle. Ready sandboxes reduce the first-turn delay and hold CPU or GPU capacity while idle.
 
-The [multi-turn exercise](../handson/11_multi_turn.md) starts with a CPU pool. Check that `claim` stays the same through the episode and that `released: true` appears at the end. The Kata GPU template and veRL integration have not been verified in AWS exercises.
+The [multi-turn exercise](../handson/extensions/multi_turn.md) starts with a CPU pool. Check that `claim` stays the same through the episode and that `released: true` appears at the end. The Kata GPU template and veRL integration have not been verified in AWS exercises.
 
 ## Trace one template from allocation to release
 
-Start with the prerequisites for the [CPU episode lab](../handson/11_multi_turn.md), including the `sandbox` and `rl-trainer` namespaces, authentication, CPU node and images. These commands let you observe the three roles in the deployment.
+Start with the prerequisites for the [CPU episode lab](../handson/extensions/multi_turn.md), including the `sandbox` and `rl-trainer` namespaces, authentication, CPU node and images. These commands let you observe the three roles in the deployment.
 
 ```bash
 scripts/extensions/agent_sandbox.sh install
@@ -44,7 +44,7 @@ scripts/extensions/agent_sandbox.sh episodes kata-clh-cpu 2 3
 
 ![A claim allocated and released from the CPU warm pool](../images/terminal/agent-sandbox-claim.png)
 
-The Kata CPU exercise processed two episodes in sequence. Each solved the task on turn three. Here `2` is the episode count and `3` is the maximum number of turns per episode. An episode that gets the first answer right stops there. `replicas: 1` is an idle capacity target. Each sandbox is assigned to one episode, and the controller can prepare another when the node has capacity. [Turn-by-turn results and cleanup](../handson/11_multi_turn.md)
+The Kata CPU exercise processed two episodes in sequence. Each solved the task on turn three. Here `2` is the episode count and `3` is the maximum number of turns per episode. An episode that gets the first answer right stops there. `replicas: 1` is an idle capacity target. Each sandbox is assigned to one episode, and the controller can prepare another when the node has capacity. [Turn-by-turn results and cleanup](../handson/extensions/multi_turn.md)
 
 ### Find the wait when a claim is slow
 
@@ -86,7 +86,7 @@ with EpisodeSandbox("kernel-eval-kata-clh-cpu", token_file=token_file) as episod
 
     The template has no liveness probe. After a GPU fault, a draining sandbox returns `sandbox_error` for the rest of the episode. Discard the episode and take a new claim. When constructing many `EpisodeSandbox` instances, pass a shared `BackgroundLoop` as `loop`; otherwise each creates a thread that outlives it. The CLI and veRL tool already share one.
 
-    Scenario C verified the `kata-clh-cpu` claim and release, warm-pool replenishment and two episodes. Local tests exercise the seven rendered profiles, claim and episode cleanup, a fake Kubernetes API and two loopback CPU servers. The GPU Kata template and the veRL integration with a live job remain untested. API fields follow `sandboxclaim_types.go` in v1.0.11. [CPU warm pool](../handson/10_cpu_only.md) · [Episode run](../handson/11_multi_turn.md)
+    Scenario C verified the `kata-clh-cpu` claim and release, warm-pool replenishment and two episodes. Local tests exercise the seven rendered profiles, claim and episode cleanup, a fake Kubernetes API and two loopback CPU servers. The GPU Kata template and the veRL integration with a live job remain untested. API fields follow `sandboxclaim_types.go` in v1.0.11. [CPU warm pool](../handson/scenarios/c/index.md), [Episode run](../handson/extensions/multi_turn.md)
 
 Agent Sandbox decides the lifetime and assignment of pods; the `runtimeClassName` in the podTemplate decides the isolation. Rendering the same template with a different runtime profile therefore gives you gVisor or Kata (Cloud Hypervisor or QEMU), as long as the nodes can run that RuntimeClass. The profile sets the node selector and the GPU resource name (`nvidia.com/gpu` or `nvidia.com/pgpu`) along with the RuntimeClass.
 
@@ -186,7 +186,7 @@ None of this has run with veRL, so the following items are unconfirmed (`# TODO 
     | runsc cannot be registered on EKS Auto Mode (part 1) | The same holds for GPU sandboxes that need a custom runtime | EKS managed node groups from the CDK stack and Karpenter NodePools |
     | A warm pool cut SandboxClaim-to-Ready from about 2 s (cold start) to about 55 ms (part 2: EKS 1.36, `m7i.xlarge`, CPU, before turning on NetworkPolicy, 10 runs per pool) | Cold starts of GPU sandboxes can be longer. A Kata GPU VM can take several minutes to its first Ready (template comment), so a warm pool saves more and also costs more | These are the blog's numbers, not this repository's. In this extension, the time from creating a claim to getting a usable address is recorded as `claim_ready_s` in the `episode_start` event |
     | Six simultaneous claims on a pool of three: three took 100 to 179 ms, and two of the other three took about 15 s. The cause was the VPC CNI IP cooldown; the blog recommends Prefix Delegation, `WARM_IP_TARGET` and sizing pools for the peak (part 2) | The gVisor GPU profile runs one sandbox per node, so GPUs and node count can become the limit before IPs do (inference) | Size pool replicas to the number of concurrent episodes |
-    | gVisor's cost scales with syscalls: about 0.18 us to 2.2 us per syscall, file operations and process creation 4.7 to 6.5 times slower, exec from 0.6 ms to 3.8 ms, no difference for pure computation (part 2) | This harness creates a fresh process tree per request, so the fixed cost per evaluation can grow (inference) | Measure it with [08 Runtime benchmark](../handson/08_benchmark.md) |
+    | gVisor's cost scales with syscalls: about 0.18 us to 2.2 us per syscall, file operations and process creation 4.7 to 6.5 times slower, exec from 0.6 ms to 3.8 ms, no difference for pure computation (part 2) | This harness creates a fresh process tree per request, so the fixed cost per evaluation can grow (inference) | Measure it with [Runtime benchmark](../handson/benchmarks/index.md) |
     | Pause deletes the Pod and keeps the Sandbox object and the PVC; memory state is not kept (part 2) | Pausing frees the GPU, but resume is a cold start, which can take minutes under Kata GPU (inference) | This extension does not pause; it deletes the claim when the episode ends |
     | Setting `SandboxClaim.spec.env` skips the warm pool and starts fresh from the template (part 3, upstream v1.0.8). The v1.0.11 source comments say the same, and `volumeClaimTemplates` on a claim also force a cold start | On GPU sandboxes this can be a cold start of several minutes | `envVarsInjectionPolicy: Disallowed` blocks env on claims, and `EpisodeSandbox` adds neither env nor volumes |
     | Ably uses a dedicated on-demand Karpenter NodePool with `karpenter.sh/do-not-disrupt` and scheduled disruption budgets (part 3) | If a node goes away mid-episode, that episode has to be discarded | The GPU sandbox NodePools use `consolidationPolicy: WhenEmpty`, so nodes with running sandboxes are not consolidated. `sandbox-kata-cpu` uses `WhenEmptyOrUnderutilized`; if you run episode sandboxes on the CPU tier, consider `do-not-disrupt` |

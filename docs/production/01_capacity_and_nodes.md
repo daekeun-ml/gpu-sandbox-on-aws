@@ -25,7 +25,7 @@ metal 노드의 부팅을 기다리느라 첫 배치가 늦어진다면, 한 대
     - **런타임마다 필요한 노드 설정이 다릅니다.** 인스턴스, taint, label, 상한, 회수 정책을 NodePool 단위로 분리하면 한 런타임의 설정이 다른 런타임에 영향을 주지 않습니다.
     - **드라이버와 런타임의 버전 조합을 명시적으로 관리합니다.** nvproxy는 드라이버 버전이 정확히 맞아야 동작하므로, AMI와 gVisor 버전을 같이 고정하고 바꾸기 전에 CI로 확인합니다.
 
-**읽기 전에**　[00 아키텍처](00_architecture.md)의 NodePool 표, [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)의 인스턴스 선택 이유, [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)의 IOMMU AMI 단계를 먼저 보세요.
+**읽기 전에**　[00 아키텍처](00_architecture.md)의 NodePool 표, [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md)의 인스턴스 선택 이유, [Kata 샌드박스 (CLH, QEMU)](../handson/common/02_runtimes/kata.md)의 IOMMU AMI 단계를 먼저 보세요.
 
 ??? note "용어"
     - **NodePool, EC2NodeClass**: NodePool은 Karpenter가 띄울 노드의 조건(인스턴스, taint, 상한, 회수 정책)입니다. EC2NodeClass는 그 노드의 AWS 쪽 실행 설정(AMI, 디스크, subnet, user data)입니다.
@@ -236,7 +236,7 @@ nvproxy는 드라이버 상태를 지원(supported), 미지원(unsupported, `--n
 | EKS AL2023 NVIDIA AMI | v20261107 |
 | g5 드라이버 | 580.178.04 (proprietary kernel module, GSP 꺼짐), release-20260831.0부터 nvproxy가 지원. g6에서는 같은 버전의 open kernel module |
 | gVisor | release-20261109.0 (`GVISOR_RELEASE="20261109.0"`) |
-| 주의할 버전 | gVisor `20261109.0`은 595.91.07과 B2의 기본 드라이버 595.112.07을 인식하지 못합니다. [B2 실습](../handson/07_hyperpod_b2.md)에서는 채점 노드 두 대에 580.178.04를 설치하고 HyperPod API로 재부팅했습니다. |
+| 주의할 버전 | gVisor `20261109.0`은 595.91.07과 B2의 기본 드라이버 595.112.07을 인식하지 못합니다. [B2 실습](../handson/scenarios/b/b2.md)에서는 채점 노드 두 대에 580.178.04를 설치하고 HyperPod API로 재부팅했습니다. |
 
 현재 `sandbox-gvisor` EC2NodeClass는 `alias: al2023@latest`라서, 새 EKS AMI가 나오면 Karpenter가 노드를 drift로 교체합니다. nvproxy가 새 드라이버를 인식하지 못하면 GPU 초기화에 실패합니다.
 

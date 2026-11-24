@@ -37,6 +37,6 @@ Suppose an answer keeps computing and tries to open a training checkpoint. A tim
 
 ### Reading `Ready` and `ok`
 
-`Ready` means the grading server has checked its device and network state and can accept requests. If you send it a deliberately wrong submission, `wrong_answer` is the expected result. This is why the operator checks readiness and then sends submissions with known verdicts, called goldens. [Reading the pool verification results](../handson/04_sandbox_pools.md#gpu-verdicts)
+`Ready` means the grading server has checked its device and network state and can accept requests. If you send it a deliberately wrong submission, `wrong_answer` is the expected result. This is why the operator checks readiness and then sends submissions with known verdicts, called goldens. [Reading the pool verification results](../handson/common/03_pools/details.md#gpu-verdicts)
 
 [Chapter 02](02_container_vs_sandbox.md) follows a file request through runc, gVisor, and Kata.

@@ -5,7 +5,7 @@
 
 ## Choosing an exercise
 
-1. **Compute required for grading.** If CPU unit tests are enough, start with the [CPU path](../handson/10_cpu_only.md). A GPU trainer can use CPU graders.
+1. **Compute required for grading.** If CPU unit tests are enough, start with the [CPU path](../handson/scenarios/c/index.md). A GPU trainer can use CPU graders.
 2. **Target GPU.** Measure performance on the GPU that will execute the deployed code. The default gVisor exercise uses A10G.
 3. **Isolation requirement.** Kata uses a separate VM per pod. The GPU exercise uses T4 on `g4dn.metal`.
 
@@ -19,10 +19,10 @@ If you need L4 measurements and a separate VM per sandbox, neither default GPU p
 
 | Path | First check |
 |---|---|
-| [CPU exercise](../handson/10_cpu_only.md) | Reference submissions return the expected verdicts. |
-| [gVisor GPU](../handson/02_gvisor.md) | The smoke pod prints the GPU name and `cuda ok:`. |
-| [Kata GPU](../handson/03_kata.md) | GPU computation completes inside the VM. |
-| [Per-episode assignment](../handson/11_multi_turn.md) | Turns use the same claim, which is deleted at episode end. |
+| [CPU exercise](../handson/scenarios/c/index.md) | Reference submissions return the expected verdicts. |
+| [gVisor GPU](../handson/common/02_runtimes/gvisor.md) | The smoke pod prints the GPU name and `cuda ok:`. |
+| [Kata GPU](../handson/common/02_runtimes/kata.md) | GPU computation completes inside the VM. |
+| [Per-episode assignment](../handson/extensions/multi_turn.md) | Turns use the same claim, which is deleted at episode end. |
 
 See [runtime comparison](02_isolation_runtimes.md) and [platform selection](04_platforms_and_instances.md) for the underlying requirements.
 
@@ -34,7 +34,7 @@ Suppose a team proposes replacing its sandbox GPU because training feels slow. S
 - If requests wait for a free pod, count the slots available for concurrent grading. Each GPU replica needs an available GPU.
 - If every submission needs a VM boundary, check that the target GPU works inside it. The Kata GPU lab here grades on a T4 with QEMU.
 
-This lets you test the choice of trainer platform independently of the size of the grading pool. [Request latency and throughput for the five pools](../handson/08_benchmark.md#runtime-results)
+This lets you test the choice of trainer platform independently of the size of the grading pool. [Request latency and throughput for the five pools](../handson/benchmarks/index.md#runtime-results)
 
 <a id="further-detail"></a>
 
@@ -73,7 +73,7 @@ Revisit the runtime choice if one of these facts changes.
 
 | Changing fact | Impact | How to check |
 |---|---|---|
-| A new gVisor release supports the default HyperPod driver | Reassess the driver change on B2 grading workers | Test CUDA inside a gVisor pod and rerun the golden cases with that driver and `GVISOR_RELEASE`. [B2 verification steps](../handson/07_hyperpod_b2.md) |
+| A new gVisor release supports the default HyperPod driver | Reassess the driver change on B2 grading workers | Test CUDA inside a gVisor pod and rerun the golden cases with that driver and `GVISOR_RELEASE`. [B2 verification steps](../handson/scenarios/b/b2.md) |
 | The EKS NVIDIA AMI, the NVIDIA driver or the gVisor version changes | gVisor on the default `g5` (proprietary module with GSP off) rests on this repository's verification, not on the gVisor documentation, so it must be checked again | the steps in the list below the table |
 | you can get `g6` On-Demand capacity in the Availability Zones you use | you can choose `g6`, which uses the open driver, matches the gVisor documentation and is cheaper | launch an instance and terminate it at once to check, then change `GVISOR_INSTANCE_TYPE` and `TRAINER_INSTANCE_TYPE` in `scripts/config.env` |
 | A G or P family joins the nested virtualization list | Kata + GPU without `.metal` becomes worth evaluating (check VFIO support separately) | the nested virtualization User Guide, the `describe-instance-types` filter |
@@ -95,7 +95,7 @@ Revisit the runtime choice if one of these facts changes.
     - Runtime structure and AWS placement conditions: [02 Isolation runtimes](02_isolation_runtimes.md)
     - Instances, quotas and hourly cost: [04 Platforms and instances](04_platforms_and_instances.md)
     - Taking a sandbox from a warm pool per episode: [06 Extending with Agent Sandbox](06_agent_sandbox.md)
-    - Building it yourself: [Hands-on 00 Overview](../handson/00_overview.md)
+    - Building it yourself: [Overview](../handson/index.md)
     - Operating design and threat model: [Production 00 Architecture](../production/00_architecture.md), [Production 02 Security](../production/02_security.md)
 
 ??? note "References"

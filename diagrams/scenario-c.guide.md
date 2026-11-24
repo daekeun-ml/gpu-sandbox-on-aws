@@ -52,7 +52,7 @@ GPU가 필요 없어 실습 비용이 가장 낮은 구성입니다. EC2 nested 
 
 ## 설계 결정
 - reward 루프는 system 노드의 rl-trainer 네임스페이스에서 simulate Job으로 실행합니다(scripts/ops/simulate.sh:3-5, scripts/lib_jobs.sh:12-13). 운영자는 워크스테이션에서 Job을 제출하고 로그를 확인합니다.
-- CPU pool 이름은 gvisor-cpu, kata-clh-cpu, kata-qemu-cpu이고 RuntimeClass는 gvisor-cpu, kata-clh, kata-qemu입니다. 채점을 맡고 v1에서 v2로 전환하는 pool은 kata-clh-cpu입니다(docs/handson/10_cpu_only.md:191, docs/handson/10_cpu_only.md:224). node group sandbox-kata-cpu는 label gpusandbox/role=sandbox-kata를 답니다(stack.py:241).
+- CPU pool 이름은 gvisor-cpu, kata-clh-cpu, kata-qemu-cpu이고 RuntimeClass는 gvisor-cpu, kata-clh, kata-qemu입니다. 채점을 맡고 v1에서 v2로 전환하는 pool은 kata-clh-cpu입니다(docs/handson/scenarios/c/index.md, docs/handson/scenarios/c/index.md). node group sandbox-kata-cpu는 label gpusandbox/role=sandbox-kata를 답니다(stack.py:241).
 - 이미지는 sandbox와 control 두 개만 빌드합니다(scripts/03_build_push_images.sh --no-trainer).
 - 노드 `sim`은 모든 tool 실행(simulate, probe, parity, bench)이 쓰는 Job 템플릿 하나를 뜻합니다. 7번과 8번은 활성이 아닌 두 pool에 대한 probe와 bench 실행이고, 점선이지만 선이 없는 pool이 생기지 않도록 꼭 그렸어요.
 - Kubernetes workload(Job, pool Deployment)는 Containers 카테고리의 `container_1`로 그리고 workload 이름을 붙였습니다. `eks` 아이콘은 control plane만 뜻해요.

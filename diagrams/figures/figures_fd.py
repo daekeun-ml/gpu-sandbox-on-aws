@@ -164,7 +164,7 @@ def card(fig: Figure, x, y, w, h, label, subs, *, icon=None, fill=GREY_FILL, str
 
 
 def handson_07(lang: str) -> Figure:
-    """docs/handson/07_hyperpod_b1: node failure, a silent hang and the HyperPod AMI driver, and what HyperPod adds."""
+    """docs/handson/scenarios/b/b1.md: node failure, a silent hang and the HyperPod AMI driver, and what HyperPod adds."""
     t = T[lang]
     fig = Figure(760, 540)
     ex, ew, ox, ow = 16, 230, 494, 250
@@ -188,7 +188,7 @@ def handson_07(lang: str) -> Figure:
 
 
 def handson_08(lang: str) -> Figure:
-    """docs/handson/08_benchmark: gVisor on A10G vs Kata QEMU on T4 mixes runtime and GPU; the fixed c8i pair does not."""
+    """docs/handson/benchmarks/index.md: gVisor on A10G vs Kata QEMU on T4 mixes runtime and GPU; the fixed c8i pair does not."""
     t = T[lang]
     fig = Figure(760, 556)
     hx, hw, px, pw, dx, dw, ox, ow = 16, 140, 204, 180, 428, 140, 604, 140
@@ -246,7 +246,7 @@ def handson_09(lang: str) -> Figure:
 
 
 def handson_10(lang: str) -> Figure:
-    """docs/handson/10_cpu_only: GPU quota, cost and mismatched nodes in scenario A vs one c8i node in scenario C."""
+    """docs/handson/scenarios/c/index.md: GPU quota, cost and mismatched nodes in scenario A vs one c8i node in scenario C."""
     t = T[lang]
     fig = Figure(760, 572)
     qx, qw, sx, sw, px, pw, ox, ow = 16, 128, 210, 166, 418, 118, 576, 168
@@ -285,7 +285,7 @@ def handson_10(lang: str) -> Figure:
 
 
 def handson_99(lang: str) -> Figure:
-    """docs/handson/99_cleanup: what deleting the CDK stack leaves behind, and the command that removes each part."""
+    """docs/handson/cleanup.md: what deleting the CDK stack leaves behind, and the command that removes each part."""
     t = T[lang]
     fig = Figure(760, 572)
     lx, lw, rx, rw, rh, pitch = 16, 200, 448, 296, 36, 46

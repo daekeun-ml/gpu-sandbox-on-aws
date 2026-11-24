@@ -30,7 +30,7 @@ A training server can use GPUs while grading with CPU unit tests. In this reposi
 ## Operating GPU sandboxes
 
 - **Device access** Firecracker v1.18.0 lacks GPU passthrough, which attaches a physical GPU directly to a VM. E2B sandboxes are also CPU-only. This repository uses gVisor and Kata + QEMU for its GPU labs. [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md) [E2B GPU support](https://docs.e2b.dev/faq/gpu-support) [Isolation runtimes](02_isolation_runtimes.md)
-- **Consistent measurements** Other work running on the same GPU can change the execution time of a submission and affect its speed score. The lab assigns one GPU per pod and evaluates one submission at a time in each pod. [Deploy and verify sandbox pools](../handson/04_sandbox_pools.md)
+- **Consistent measurements** Other work running on the same GPU can change the execution time of a submission and affect its speed score. The lab assigns one GPU per pod and evaluates one submission at a time in each pod. [Deploy and verify sandbox pools](../handson/common/03_pools/details.md)
 - **Cost of concurrency** In this setup, ten pods running at the same time need ten GPUs. Pods waiting for requests keep their GPU allocations, so larger pools require more GPU capacity. [Capacity and nodes](../production/01_capacity_and_nodes.md)
 
 ??? note "CUDA errors and subsequent evaluations"
@@ -38,13 +38,13 @@ A training server can use GPUs while grading with CPU unit tests. In this reposi
 
     This repository runs each submission in a fresh process. When it detects a CUDA error while running the reference implementation, the sandbox returns `sandbox_error` and stops accepting requests. The TRL training run skips the failed evaluation. [On-policy RL and error handling](03_onpolicy_rl_with_sandboxes.md)
 
-See [on-policy RL](03_onpolicy_rl_with_sandboxes.md) for how the trainer uses scores. The [CPU exercise](../handson/10_cpu_only.md) demonstrates the scoring flow without GPU instances.
+See [on-policy RL](03_onpolicy_rl_with_sandboxes.md) for how the trainer uses scores. The [CPU exercise](../handson/scenarios/c/index.md) demonstrates the scoring flow without GPU instances.
 
 ## Separate kernel time from grading time
 
 For a `relu_bias_triton` submission, `ref_ms_median` describes **one execution of the reference kernel**. `eval_p50_s` describes **one scoring request** and includes preparing the code, checking correctness, timing it and returning a verdict. The units are milliseconds and seconds respectively.
 
-For example, on the gVisor pool with two A10Gs the reference median was 0.5833 ms, median kernel speedup was 1.743×, and median evaluation time was 9.984 s. Faster kernel code still needs preparation and correctness checks. Use speedup to compare implementations. Use evaluation latency and pool throughput to understand how long training may wait for scores. [Benchmark table and original JSONL](../handson/08_benchmark.md#runtime-results)
+For example, on the gVisor pool with two A10Gs the reference median was 0.5833 ms, median kernel speedup was 1.743×, and median evaluation time was 9.984 s. Faster kernel code still needs preparation and correctness checks. Use speedup to compare implementations. Use evaluation latency and pool throughput to understand how long training may wait for scores. [Benchmark table and original JSONL](../handson/benchmarks/index.md#runtime-results)
 
 <a id="further-detail"></a>
 

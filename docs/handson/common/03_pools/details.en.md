@@ -1,0 +1,461 @@
+---
+hide:
+  - footer
+---
+
+# Grading pool configuration and verification output
+
+<span id="04-deploy-and-verify-sandbox-pools"></span>
+
+A grading pool is a set of pods running the same runtime and grader version. After preparing [gVisor](../02_runtimes/gvisor.md) or [Kata](../02_runtimes/kata.md), check that the trainer can send an answer and receive the expected verdict.
+
+1. [Set up authentication and routing](#namespaces-policies-and-authentication-05_setup_namespaces_authsh) to select the trainer's pool. The EC2 gVisor default is `gvisor/v1`.
+2. [Deploy the selected pool](#deploy-the-sandbox-pools-06_deploy_sandboxessh) and check the pods' `READY` column. It tells you they can accept requests.
+3. [Verify with test submissions](#the-four-checks-opsverifysh). A deliberately incorrect answer should return `wrong_answer`, so that check earns a `PASS`. Look for the final `verified` line before using this pool.
+
+??? note "Terms (expand if a word is new to you)"
+    - **Pod Security (restricted, baseline)**: the Kubernetes feature that enforces a security level for pods per namespace, with its strictest level (restricted) and its default level (baseline).
+    - **ServiceAccount, projected token**: a pod's Kubernetes identity, and the short-lived token kubelet issues for that identity and puts into a file.
+    - **Audience**: the claim that names who may accept the token. Here it is `gpu-sandbox`, so a token meant for another service cannot call the sandbox.
+    - **Issuer, JWKS, RS256**: who issued the token (the cluster's OIDC issuer), the public key list that verifies its signature, and the signature algorithm.
+    - **Subject, allowlist**: the owner of the token (`system:serviceaccount:<ns>:<name>`), and the list of owners allowed to call the sandbox.
+    - **Headless Service**: a Service without a virtual IP that returns Ready pod IPs directly through DNS.
+    - **Startup, readiness, liveness probe**: checks kubelet runs periodically to see, respectively, whether startup has finished, whether the pod may receive requests, and whether it is alive.
+    - **Egress**: connections leaving the pod. A sandbox must have all egress blocked.
+    - **Guaranteed QoS**: the class given to pods whose requests equal their limits; their resources are not taken by other pods.
+    - **Draining**: a pod state in which it takes no new requests and waits to be replaced.
+    - **Golden**: a test submission whose expected verdict is fixed in advance.
+
+??? note "What the practice-account run covered"
+    The deployment and pool verification (`scripts/ops/verify.sh`) of the `gvisor`, `kata-qemu` and CPU pools on this page ran in a practice account and passed; the experimental `kata-clh` GPU pool's VM did not start (see "Scope and limits" below). The dated run record is in [Verified facts and sources](../../../reference/sources.md#aws-run-record). Verify the behavior in the cluster against the "What to look for" items below.
+
+## Namespaces, policies and authentication: `05_setup_namespaces_auth.sh`
+
+<span id="pool-auth"></span>
+
+Choose your starting pool to prepare its authentication keys and routing. For C and managed B2, use the [deployment commands for your scenario](index.md).
+
+=== "gVisor"
+
+    ```bash
+    scripts/05_setup_namespaces_auth.sh
+    ```
+
+=== "Kata QEMU"
+
+    ```bash
+    ACTIVE_RUNTIME=kata-qemu scripts/05_setup_namespaces_auth.sh
+    ```
+
+- **On a rerun**: the active pool in the routing table is rewritten from `ACTIVE_RUNTIME` and `ACTIVE_VERSION` (`gvisor/v1` when unset). Pass the values you want to keep.
+- **When you only need to refresh the signing keys**: use `scripts/ops/sync_jwks.sh`.
+- **On a rerun in a cluster that uses the [Production gateway](../../../production/03_gateway_and_pools.md)**: `allow-clients-to-sandbox-api` in the `sandbox` namespace goes back to the hands-on rule (only client pods in `rl-trainer`), so the gateway can no longer reach the sandboxes. Apply the gateway manifest again in that case.
+
+**What to look for:** near the end, the issuer and the first three lines of routing.json (on a re-run, `configured` or `unchanged` instead of `created`).
+
+```text
+issuer: https://oidc.eks.<region>.amazonaws.com/id/<ID>
+[hh:mm:ss] routing table: active runtime gvisor, version v1
+configmap/sandbox-routing created
+{
+  "active": {"runtime": "gvisor", "version": "v1"},
+  "pools": {
+```
+
+**If it fails:** `empty JWKS` means no JWKS was received; compare the issuer and the keys with the "401 and 403 responses" section of [Troubleshooting](../../../reference/troubleshooting.md).
+
+| Resource | File | Contents |
+|---|---|---|
+| Namespace `sandbox` | `k8s/base/namespaces.yaml` | Pod Security `restricted` enforce (`latest`) and warn, label `gpusandbox/trust=untrusted` |
+| Namespace `rl-trainer` | `k8s/base/namespaces.yaml` | Pod Security `baseline` enforce and `restricted` warn, label `gpusandbox/trust=trusted` (trusted code that downloads models, so not restricted) |
+| ServiceAccounts `grpo-trainer`, `sandbox-probe` (`rl-trainer`), `gpu-sandbox` (`sandbox`) | `k8s/base/trainer-rbac.yaml` | all `automountServiceAccountToken: false`, no Role or RoleBinding |
+| NetworkPolicy `default-deny-all` | `k8s/base/networkpolicies.yaml` | blocks Ingress and Egress for every pod in `sandbox` (DNS, IMDS, internet and the Kubernetes API alike) |
+| NetworkPolicy `allow-clients-to-sandbox-api` | `k8s/base/networkpolicies.yaml` | allows TCP 8000 on `app.kubernetes.io/name=gpu-sandbox` pods only from `gpusandbox/client=true` pods in the `rl-trainer` namespace |
+| ConfigMap `sandbox-auth-jwks` (`sandbox`) | `scripts/ops/sync_jwks.sh` | `jwks.json` from `kubectl get --raw /openid/v1/jwks`, and `issuer` |
+| ConfigMap `sandbox-routing` (`rl-trainer`) | `k8s/base/routing.json.tpl` | the active (runtime, version) and the pool addresses |
+
+The sandbox verifies tokens offline, so even the caller ServiceAccounts need no Kubernetes API permission.
+
+<details class="note" markdown="1">
+<summary>Inside the routing table and request authentication</summary>
+
+### Routing ConfigMap
+
+Below is `k8s/base/routing.json.tpl`. The script fills in `${ACTIVE_RUNTIME}` and `${ACTIVE_VERSION}`, and the rendered result becomes `routing.json` in the `sandbox-routing` ConfigMap; rendered with the defaults, `active` is `gvisor/v1`. All seven profiles have v1 and v2 addresses.
+
+```json
+{
+  "active": {"runtime": "${ACTIVE_RUNTIME}", "version": "${ACTIVE_VERSION}"},
+  "pools": {
+    "gvisor": {
+      "v1": "sandbox-gvisor-v1.sandbox.svc.cluster.local:8000",
+      "v2": "sandbox-gvisor-v2.sandbox.svc.cluster.local:8000"
+    },
+    "kata-qemu": {
+      "v1": "sandbox-kata-qemu-v1.sandbox.svc.cluster.local:8000",
+      "v2": "sandbox-kata-qemu-v2.sandbox.svc.cluster.local:8000"
+    },
+    "kata-clh": {
+      "v1": "sandbox-kata-clh-v1.sandbox.svc.cluster.local:8000",
+      "v2": "sandbox-kata-clh-v2.sandbox.svc.cluster.local:8000"
+    },
+    "gvisor-hyperpod": {
+      "v1": "sandbox-gvisor-hyperpod-v1.sandbox.svc.cluster.local:8000",
+      "v2": "sandbox-gvisor-hyperpod-v2.sandbox.svc.cluster.local:8000"
+    },
+    "gvisor-cpu": {
+      "v1": "sandbox-gvisor-cpu-v1.sandbox.svc.cluster.local:8000",
+      "v2": "sandbox-gvisor-cpu-v2.sandbox.svc.cluster.local:8000"
+    },
+    "kata-clh-cpu": {
+      "v1": "sandbox-kata-clh-cpu-v1.sandbox.svc.cluster.local:8000",
+      "v2": "sandbox-kata-clh-cpu-v2.sandbox.svc.cluster.local:8000"
+    },
+    "kata-qemu-cpu": {
+      "v1": "sandbox-kata-qemu-cpu-v1.sandbox.svc.cluster.local:8000",
+      "v2": "sandbox-kata-qemu-cpu-v2.sandbox.svc.cluster.local:8000"
+    }
+  }
+}
+```
+
+`ACTIVE_RUNTIME` (default `gvisor`) and `ACTIVE_VERSION` (default `v1`) are not in config.env, so pass them on the command line. [Updating the sandbox during training](../../scenarios/a/pool_update.md) covers switching versions during training.
+
+The trainer mounts this ConfigMap as a directory (a subPath mount does not receive updates).
+
+??? note "How the trainer uses the routing table"
+    - The trainer takes a snapshot of the routing table each time it sends work to the sandboxes, scoring one reward batch with one version only.
+    - When every result of a batch is already cached from one pool, it uses those results without calling the sandboxes.
+
+## How sandbox authentication works
+
+The trainer sends a token. The sandbox checks its signature and audience.
+
+```mermaid
+sequenceDiagram
+    participant K as kubelet (caller's node)
+    participant C as caller pod (trainer, probe Job)
+    participant S as sandbox pod
+    K->>C: projected token file (audience gpu-sandbox, 3600 s, rotated before expiry)
+    C->>S: POST /v1/evaluate, Bearer token in the Authorization header
+    S->>S: verify RS256 signature, aud, iss, exp, iat, sub with the JWKS file
+    S->>S: check that sub is on the allowlist
+    S-->>C: 200 verdict, 401 authentication failure, 403 subject not allowed
+```
+
+*Takeaway: the sandbox decides on a token with only a public key file and an allowlist, so there is no secret in the pod to steal.*
+
+- **Caller pod**: it rereads its token file from a `serviceAccountToken` projected volume (audience `${SANDBOX_AUDIENCE}`, `expirationSeconds: 3600`) on every request, because kubelet rotates it before expiry.
+- **Sandbox**: with the public keys in `/etc/gpusandbox/auth/jwks.json`, it checks the RS256 signature, the audience, the issuer (the OIDC issuer from `aws eks describe-cluster`) and the required claims (`exp`, `iat`, `iss`, `aud`, `sub`), with 30 seconds of clock skew allowed.
+- **When the JWKS file changes**: the sandbox rereads it.
+
+| Situation | Response |
+|---|---|
+| any of audience, issuer, allowlist or JWKS file is not configured | 401 `authentication is not configured on this service` (every protected request is rejected) |
+| no `Authorization` header, or it does not start with `Bearer ` | 401 `missing bearer token` |
+| the JWKS file cannot be read or holds no key | 401 `token verification keys unavailable` |
+| no key matches the token's `kid` and the JWKS holds two or more keys | 401 `unknown signing key` |
+| signature, audience, issuer or expiry does not match | 401 `invalid token: ...` |
+| a valid token whose subject is not on the allowlist | 403 `subject '...' is not allowed` |
+
+- **With a single key in the JWKS**: that key verifies the signature even if the token's `kid` does not match, so a failure gives `invalid token: ...`.
+- **401 responses**: they carry a `WWW-Authenticate: Bearer` header.
+- **`/healthz` and `/readyz`**: kubelet probes cannot carry a token, so these are open without authentication and in turn return no sandbox details.
+- **Default allowlist**: `system:serviceaccount:rl-trainer:grpo-trainer`, `system:serviceaccount:rl-trainer:sandbox-probe` and `system:serviceaccount:sandbox-gateway:gateway` (the production gateway). Change it with `SANDBOX_ALLOWED_SUBJECTS` when you deploy a pool (`06_deploy_sandboxes.sh`).
+
+!!! note "Signing key rotation"
+    - **When the API server rotates its signing keys**: rerun `scripts/ops/sync_jwks.sh`. In production a CronJob (`python -m gpusandbox.tools sync-jwks`) does the same ([Production 02 Security](../../../production/02_security.md)).
+    - **`SANDBOX_AUTH_TEST_BYPASS=1` for local smoke tests**: use it only for local tests bound to loopback. The server does not check the caller's address; the deployment manifests do not set this variable, so they keep token verification.
+
+</details>
+
+## Deploy the sandbox pools: `06_deploy_sandboxes.sh`
+
+<span id="pool-deploy"></span>
+
+Deploy one pool from the tab for your GPU nodes. Omitting the final `[replicas]` argument uses the profile’s default pod count. The [CPU-only lab](../../scenarios/c/index.md) lists all three CPU pools and their deployment order.
+
+=== "gVisor"
+
+    ```bash
+    scripts/06_deploy_sandboxes.sh gvisor v1
+    ```
+
+=== "Kata QEMU"
+
+    ```bash
+    scripts/06_deploy_sandboxes.sh kata-qemu v1
+    ```
+
+To choose the pod count, pass it after the version. For example, `scripts/06_deploy_sandboxes.sh kata-qemu v1 2` requests two QEMU pods.
+
+The script works in this order.
+
+1. Reads `k8s/sandbox/profiles/<runtime>.env` and `k8s/sandbox/versions/<version>.env`.
+2. Fills in the OIDC issuer and the allowlist, renders `k8s/sandbox/deployment.yaml.tpl` and applies it.
+3. Waits up to 30 minutes with `kubectl -n sandbox rollout status`.
+4. Lists the pool's pods with `-o wide`.
+
+**What to look for:** for `gvisor`, it ends with output of this shape (example).
+
+```text
+[hh:mm:ss] deploying sandbox-gvisor-v1: 2 replica(s), runtimeClass gvisor
+deployment "sandbox-gvisor-v1" successfully rolled out
+NAME                                 READY   STATUS    RESTARTS   AGE   IP          NODE
+sandbox-gvisor-v1-xxxxxxxxxx-xxxxx   1/1     Running   0          3m    10.0.x.x    ip-192-168-x-x...
+sandbox-gvisor-v1-xxxxxxxxxx-xxxxx   1/1     Running   0          3m    10.0.x.x    ip-192-168-x-x...
+```
+
+**If it fails:**
+
+- **If `rollout status` times out or pods stay at `0/1`**: see the "sandbox pools and readiness" section of [Troubleshooting](../../../reference/troubleshooting.md).
+- **Common causes**: most cases are a failed GPU probe or a failed egress self-test (see "Why readiness is tied to verified egress denial" below).
+
+### Five v1 pools and their Services { #ready-pools }
+
+In `us-west-2`, all nine replicas were Ready: two gVisor GPU pods, four Kata QEMU GPU pods and one pod per CPU runtime. Each pool has a headless Service on port 8000.
+
+![Ready replica counts and headless Services for the five v1 Deployments](../../../images/terminal/pools-v1-replay.png)
+
+<details class="note" markdown="1">
+<summary>Pool profiles, Service configuration and readiness</summary>
+
+### Profiles and versions
+
+| Profile (`<runtime>`) | RuntimeClass | Nodes | Accelerator | CPU, memory | `SANDBOX_DEVICE`, `SANDBOX_SIZE` | Default replicas |
+|---|---|---|---|---|---|---|
+| `gvisor` | `gvisor` | `sandbox-gvisor` | `nvidia.com/gpu: 1` | 3, 12Gi | `cuda`, `full` | `GVISOR_NODES` (2) |
+| `kata-qemu` | `kata-qemu-nvidia-gpu` | `sandbox-kata`, `kata-gpu=true` | `nvidia.com/pgpu: 1` | 8, 16Gi | `cuda`, `full` | `KATA_QEMU_REPLICAS` (4) |
+| `kata-clh` (experimental) | `kata-clh-nvidia-gpu` | `sandbox-kata`, `kata-gpu=true` | `nvidia.com/pgpu: 1` | 8, 16Gi | `cuda`, `full` | `KATA_CLH_REPLICAS` (2) |
+| `kata-clh-cpu` | `kata-clh` | `sandbox-kata`, `kata-gpu=false` | none | 1, 2Gi | `cpu`, `smoke` | `KATA_CPU_REPLICAS` (2) |
+| `kata-qemu-cpu` | `kata-qemu` | `sandbox-kata`, `kata-gpu=false` | none | 1, 2Gi | `cpu`, `smoke` | `KATA_CPU_REPLICAS` (2) |
+
+Use `kata-qemu` for the Kata GPU scoring lab. The `kata-clh` profile is for the GPU experiment, which timed out while starting the VM on AWS. [Kata GPU experiment record](../02_runtimes/kata.md#stage-3-optional-experimental-kata--cloud-hypervisor-gpu)
+
+| Version | `HARNESS_SEEDS` | `HARNESS_MAX_SPEEDUP` | `SANDBOX_MAX_EVALS` | Meaning |
+|---|---|---|---|---|
+| `v1` | 3 | 0 (no cap) | 0 (never recycle) | the initial measurement contract |
+| `v2` | 5 | 10 | 200 | more correctness seeds, plus a speedup cap and a per-pod evaluation limit |
+
+- **v2 speedup cap**: a speedup above 10x is treated as a measurement exploit, flagged `implausible_speedup` and scored as 1x (speed score 0.5).
+- **v2 evaluation limit**: a pod stops taking new requests after 200 evaluations (draining; replacement is described below).
+
+The input size (`SANDBOX_SIZE`) depends on the kind of profile.
+
+- **CPU profiles**: they are for the Kata rehearsal and the CPU tier, so they run with small inputs (`smoke`).
+- **GPU profiles**: they run with sizes at which timing means something (`full`).
+
+How v2 arrives during training continues in [Updating the sandbox during training](../../scenarios/a/pool_update.md).
+
+### Deployment and headless Service design
+
+| Area | Setting (`k8s/sandbox/deployment.yaml.tpl`) | Reason |
+|---|---|---|
+| Name and labels | `sandbox-${RUNTIME}-${VERSION}`, `app.kubernetes.io/name=gpu-sandbox`, `gpusandbox/runtime`, `gpusandbox/version` | one Deployment per (runtime, version). A new version is a new Deployment next to the old one, not an in-place rolling update |
+| Update strategy | `RollingUpdate`, `maxSurge: 0`, `maxUnavailable: 1` | GPUs are the constraint, so no spare GPU is required |
+| Identity | `serviceAccountName: gpu-sandbox`, `automountServiceAccountToken: false`, `enableServiceLinks: false` | candidate code runs in the same pod, so leave nothing to steal |
+| Placement | `runtimeClassName`, `nodeSelector`, tolerations (`gpusandbox/role`, `nvidia.com/gpu`), `topologySpreadConstraints` by hostname (ScheduleAnyway) | spreads pods evenly across nodes |
+| securityContext | pod: `runAsNonRoot`, uid and gid 10001, `fsGroup` 10001, seccomp `RuntimeDefault`. container: `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: ["ALL"]` | meets Pod Security `restricted` |
+| Resources | requests equal limits (CPU, memory, `ephemeral-storage: 12Gi`, accelerator) | Guaranteed QoS. Kata sizes the VM from the limits |
+| Volumes | `/work` emptyDir 8Gi, `/tmp` emptyDir 2Gi, `/etc/gpusandbox/auth` ConfigMap (read-only) | the two emptyDirs are the only writable places |
+| Bind | `SANDBOX_HOST=0.0.0.0` | the server default is 127.0.0.1. It listens only inside the pod network, and the only Service is a headless ClusterIP |
+| Probes | startupProbe `/readyz` 5 s x 120 (up to 10 min), readinessProbe `/readyz` 5 s x 2, livenessProbe `/healthz` 10 s x 3 | waits for the first boot of a Kata GPU VM |
+| Service | `clusterIP: None`, `publishNotReadyAddresses: false`, no `type` | only Ready pod IPs are published as DNS A records, no external exposure |
+
+### Why readiness is tied to verified egress denial
+
+```mermaid
+flowchart TD
+    A["server start"] --> B["GPU probe (once at start)<br/>torch import in a fresh process,<br/>one CUDA kernel on GPU pools (120 s limit)"]
+    A --> C["egress self-test<br/>169.254.169.254:80, API server,<br/>NODE_IP:10250 (2 s each)"]
+    B --> D{"GPU passed, all egress blocked,<br/>not draining"}
+    C --> D
+    D -->|"yes"| E["/readyz 200<br/>the headless Service publishes the IP"]
+    D -->|"no"| F["/readyz 503<br/>IP not published"]
+    F -->|"egress open"| G["egress rechecked<br/>after 5 s"]
+    F -->|"GPU probe failed, gpu_fault"| H["runs again when<br/>the container restarts"]
+    F -->|"evaluation limit (draining)"| I["never Ready again<br/>replace the pod"]
+```
+
+*Takeaway: a pod turns Ready only after it has passed the GPU probe (a CUDA operation on GPU pools, no CUDA on CPU pools) and confirmed itself that every way out is blocked; only then does the trainer get its address.*
+
+`/readyz` returns 200 only when all four of these hold.
+
+- the GPU probe passed
+- egress denial is confirmed
+- the pod is not draining
+- no fatal error occurred
+
+The GPU probe runs only once, when the server starts. If it fails before the pod first turns Ready, the kubelet restarts the container once the startupProbe limit (up to 10 minutes) runs out, and the probe runs again then.
+
+The egress check tries a TCP connection to each target and judges it as follows.
+
+- **If the connection succeeds or is refused**: the packet arrived, so it counts as open.
+- **Only on a timeout or no route**: it counts as blocked.
+- **While blocked**: it rechecks every 30 seconds.
+- **While open**: it rechecks every 5 seconds, logging `egress is open, refusing work: ...`.
+
+The `apiserver` target is replaced with `KUBERNETES_SERVICE_HOST` and `KUBERNETES_SERVICE_PORT`, which kubelet injects even with `enableServiceLinks: false`.
+
+The reason for this check is two behaviors of the VPC CNI.
+
+1. **The node IP is always allowed.** For kubelet liveness and readiness probes, the network policy agent allows traffic between a pod and its own node's IP in both ingress and egress. So even under a default-deny NetworkPolicy a sandbox pod can reach the kubelet (10250) or hostNetwork services on its node's IP.
+    - **What this repository does**: sandbox nodes carry the node guard (iptables drops new pod-originated connections, [cluster provisioning](../01_provision/cdk.md)). Because readiness confirms that `NODE_IP:10250` is blocked, pods on a node without it never turn Ready.
+2. **Policies are applied asynchronously.** In standard mode a new pod starts default-allow until its policies are applied.
+    - **What this repository does**: to keep candidate code from running in that window, the pod turns Ready only after IMDS and the API server are actually blocked.
+
+Strict mode (`NETWORK_POLICY_ENFORCING_MODE`) blocks every pod, CoreDNS included, until policies exist.
+
+??? note "Why standard mode instead of strict mode"
+    Because of that, this repository combines standard mode with the readiness check.
+
+A pod starts draining in the two cases below. In production the gateway deletes draining pods so that the Deployment creates new ones (a new VM with Kata).
+
+- **When `SANDBOX_MAX_EVALS` is reached, as in v2**: in the hands-on, which has no gateway, a pod draining because of the evaluation limit stays out of Ready. Replace it with `kubectl -n sandbox delete pod <pod>`.
+- **When a CUDA error occurs on the reference path (`gpu_fault`)**: a `gpu_fault` is recorded as a fatal error, so `/healthz` returns 500. For a pod with a `gpu_fault`, kubelet restarts the container after the liveness probe fails, and the GPU probe runs again. Check that the `RESTARTS` count in `kubectl -n sandbox get pods` went up and that the pod turns Ready again after the restart.
+
+</details>
+
+## The four checks: `ops/verify.sh`
+
+<span id="pool-verify"></span>
+
+<span id="scope-and-limits"></span>
+
+??? note "Results from the recorded pools"
+    In scenario A a gVisor v1 grader on `g5.xlarge` blocked all four egress targets and traffic from `default`. On the Kata cluster, verification passed for four `kata-qemu` pods on `g4dn.metal` (T4, guest `6.18.56-nvidia-gpu`) and three CPU pools. With the image cached, the four GPU pods took 30, 30, 31 and 36 seconds to reach Ready. The experimental Cloud Hypervisor GPU VM did not start. [Kata run](../02_runtimes/kata.md), [Benchmark](../../benchmarks/index.md)
+
+    CPU tests cover audience, expiry and subject rejection, egress-dependent readiness, golden probes and parity across two servers, and rendering every runtime/version profile.
+
+Deployment readiness checks whether pods can take work. This script sends real reference submissions from the trainer side and also checks that disallowed connections fail.
+
+Run `scripts/ops/verify.sh <runtime> [version]` (version defaults to `v1`) for each pool you deployed with `06_deploy_sandboxes.sh`.
+
+```bash
+scripts/ops/verify.sh gvisor
+```
+
+For Kata, replace `gvisor` with the runtime name you deployed. `pool sandbox-<runtime>-<version> verified` confirms the automated checks. Compare the kernel strings separately.
+
+The script picks the first pod of the pool and runs the checks in the table below in order.
+
+- **Checks 2 to 4**: they stop the script on failure.
+- **Check 1**: it only prints the two kernel strings and does not compare them. It carries on even if they match, so check item 1 yourself.
+
+| Check | Method | Passes when |
+|---|---|---|
+| 1) Kernel comparison (checked by you) | prints `uname -r` inside the pod via `kubectl exec`, and the node's `kernelVersion` | the `sandbox:` and `node:` values differ and the sandbox value fits the chosen runtime |
+| 2) Egress denial | 3-second TCP connections from inside the pod to IMDS `169.254.169.254:80`, the Kubernetes API (`KUBERNETES_SERVICE_HOST:443`), the node kubelet (`NODE_IP:10250`) and a public S3 IP `:443` | all `blocked` |
+| 3) Golden verdicts | a probe Job in `rl-trainer` runs `python -m gpusandbox.tools probe` | every endpoint reports `egress_blocked: true` and the 6 goldens (4 on CPU pools) match their expected verdicts |
+| 4) NetworkPolicy | a temporary pod in the `default` namespace connects to port 8000 on the pod IP | the connection fails |
+
+- **Sandbox value in check 1**: the Sentry version for gVisor, the guest kernel for Kata.
+- **S3 address in check 2**: the sandbox has no DNS, so the S3 address is resolved on your workstation and passed in.
+- **Probe Job in check 3**: it uses the control image, SA `sandbox-probe`, label `gpusandbox/client=true` and an audience token.
+
+The golden submissions are these.
+
+- two Triton kernels (`ok`, custom kernel, GPU only)
+- a PyTorch-only correct answer (`ok`, not a custom kernel)
+- a wrong answer (`wrong_answer`)
+- a benchmark cheat that turns wrong only after the correctness check (`wrong_answer`)
+- code that reads `/etc/hostname` (`policy_violation`)
+
+**What to look for:** for the `gvisor` pool, it ends with output of this shape. Speedups and IPs differ per environment; the values below show the shape of the output and are not measurements.
+
+```text
+[hh:mm:ss] 1) kernel inside sandbox-gvisor-v1-xxxxxxxxxx-xxxxx vs node ip-192-168-x-x.us-west-2.compute.internal
+  sandbox: 4.19.0-gvisor
+  node:    <the node's AL2023 kernel version>
+[hh:mm:ss] 2) egress from inside the sandbox must fail
+  instance metadata                169.254.169.254:80     blocked (TimeoutError)
+  kubernetes api                   <service IP>:443    blocked (TimeoutError)
+  node kubelet                     <node IP>:10250  blocked (TimeoutError)
+  internet (S3 endpoint)           <S3 IP>:443    blocked (TimeoutError)
+[hh:mm:ss] 3) golden verdicts via the authenticated API
+[hh:mm:ss] pod sandbox-gvisor-v1-...  gvisor/v1  kernel 4.19.0-gvisor  NVIDIA A10G  egress blocked
+[hh:mm:ss] pod sandbox-gvisor-v1-...  gvisor/v1  kernel 4.19.0-gvisor  NVIDIA A10G  egress blocked
+PASS vector_add_triton            status=ok                speedup=<measured value>
+PASS relu_bias_triton             status=ok                speedup=<measured value>
+PASS relu_bias_torch_only         status=ok                speedup=<measured value>
+PASS relu_bias_wrong              status=wrong_answer      speedup=None
+PASS relu_bias_benchmark_cheat    status=wrong_answer      speedup=None
+PASS read_host_file               status=policy_violation  speedup=None
+[hh:mm:ss] 4) a pod outside the trainer namespace cannot connect
+  connect from default ns: blocked (errno <n>)
+[hh:mm:ss] pool sandbox-gvisor-v1 verified
+```
+
+![verify.sh gvisor v1 output: the sandbox kernel 4.19.0-gvisor differs from the node kernel, four egress targets blocked, both pods on NVIDIA A10G with egress blocked, the six prepared submissions PASS (Triton answer speedup 1.76), the default namespace blocked, and the last line pool sandbox-gvisor-v1 verified](../../../images/terminal/verify-gvisor-a.png)
+
+- Check 3 prints one `pod` line per endpoint with the pool, kernel, GPU and whether egress is blocked. An endpoint that is not blocked shows `EGRESS OPEN`.
+- In Kata pools the `kernel` value is the guest kernel version, and the GPU slot for `kata-qemu` shows `Tesla T4`. CPU pools (`*-cpu`) show `no GPU` in the GPU slot and skip the two Triton goldens.
+- Prefix the script with `GPUSANDBOX_LOG=json` (`GPUSANDBOX_LOG=json scripts/ops/verify.sh gvisor`) to see the raw JSON lines with every field (`endpoint`, `kernel_release`, `gpu`, `egress_blocked` and so on) instead of the `pod` lines. The raw JSON also stays in the log of the `probe-...` Job that ran in the `rl-trainer` namespace.
+- Depending on the runtime and path, a blocked connection can show another `OSError` subclass instead of `TimeoutError`.
+
+**If it fails:** find the cause from the stop message; fixes are in [Troubleshooting](../../../reference/troubleshooting.md).
+
+| Stop message | Meaning | Section to read |
+|---|---|---|
+| `a denial check failed: see docs/reference/troubleshooting.md` | check 2 failed | `REACHABLE`: "NetworkPolicy", "sandbox pools and readiness". No line: the error from the `kubectl exec` just above |
+| `probe reported failures` | the probe Job of check 3 failed | for a `FAIL` line or `EGRESS OPEN`: "sandbox pools and readiness", "401 and 403 responses". For `did not start`: `kubectl -n rl-trainer describe pod -l job-name=<job name>` |
+| `NetworkPolicy did not block an outside caller` | check 4 failed | `REACHABLE`: "NetworkPolicy". No line: the errors from the `kubectl run` and the check command just above (image pull and so on) |
+| `no pods for gpusandbox/runtime=...` | that pool is not deployed | run `06_deploy_sandboxes.sh` first |
+
+- **On `a denial check failed`**:
+    - **If check 2 shows `REACHABLE` or `REACHABLE (refused)`**: packets reached the target. Read "NetworkPolicy" and "sandbox pools and readiness".
+    - **Without such a line**: `kubectl exec` or the check command itself failed. Read the error from the `kubectl exec` just above.
+- **On `probe reported failures`**: tell the causes apart by which of these appeared: a `FAIL` line, `EGRESS OPEN` (`"egress_blocked": false` in the raw JSON), `no ready endpoints behind ...`, or the warning `job ... did not start`.
+    - **If either a `FAIL` line or `EGRESS OPEN` appears**: read "sandbox pools and readiness" and "401 and 403 responses".
+    - **For `did not start`**: run `kubectl -n rl-trainer describe pod -l job-name=<job name>`.
+- **On `NetworkPolicy did not block an outside caller`**:
+    - **If check 4 printed `connect from default ns: REACHABLE`**: the connection succeeded. Read "NetworkPolicy".
+    - **Without that line**: the temporary pod did not start or the check command failed. Read the errors from the `kubectl run` and the check command just above (image pull and so on).
+
+### Verification on both GPU pools { #gpu-verdicts }
+
+We ran `scripts/ops/verify.sh` on `gvisor v1` and `kata-qemu v1`. Each PASS means the verdict matched the expected result, including `wrong_answer` for intentionally incorrect submissions.
+
+![Golden checks and verification completion from both GPU pools](../../../images/terminal/pools-verify-replay.png)
+
+## Time and cost
+
+| Script | Expected duration (guidance or timeout) | Newly billed resources |
+|---|---|---|
+| `05_setup_namespaces_auth.sh` | short | none |
+| `06_deploy_sandboxes.sh` | `rollout status` up to 30 min | none (uses existing nodes) |
+| `ops/verify.sh` | a few minutes (control image pull, golden evaluations) | none |
+
+- **Why `06_deploy_sandboxes.sh` can take long**: the first pod pulls a large image, and a Kata GPU VM waits up to 10 min through the startupProbe.
+
+The GPU nodes the pools use keep billing. Scaling only the Deployment to zero, as in the first line, leaves the node charges, so while you pause, scale the node groups to zero too with the other two lines.
+
+```bash
+kubectl -n sandbox scale deployment/sandbox-gvisor-v1 --replicas=0   # frees the GPUs, nodes still bill
+source scripts/config.env
+aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" \
+  --nodegroup-name sandbox-gvisor --scaling-config minSize=0,maxSize=4,desiredSize=0
+```
+
+**What to look for:**
+
+- The first line prints `deployment.apps/sandbox-gvisor-v1 scaled`.
+- The last command returns JSON with `"type": "ConfigUpdate"`.
+- When `kubectl get nodes -l gpusandbox/role=sandbox-gvisor` shows no nodes a few minutes later, the node charges have stopped too.
+
+Scaling the Kata node groups to zero is in [Kata sandboxes](../02_runtimes/kata.md), and full deletion in [Cleanup](../../cleanup.md).
+
+## Next step
+
+After verification, start the workload for [A](../../scenarios/a/index.md), [B1](../../scenarios/b/b1.md), [B2](../../scenarios/b/b2.md) or [C](../../scenarios/c/index.md).
+
+??? note "References"
+    | Topic | Link |
+    |---|---|
+    | VPC CNI network policy configuration (standard and strict modes) | https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html |
+    | Kubernetes ServiceAccount token projection, issuer discovery | https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/ |
+    | Kubernetes Service (headless Service) | https://kubernetes.io/docs/concepts/services-networking/service/ |
+    | Sandbox Deployment template | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/k8s/sandbox/deployment.yaml.tpl |
+    | Pool verification script (ops/verify.sh) | https://github.com/daekeun-ml/gpu-sandbox-on-aws/blob/main/scripts/ops/verify.sh |
+
+    [Selected references on this topic](../../../reference/references.md#ref-handson-04-sandbox-pools)

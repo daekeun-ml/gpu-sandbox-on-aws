@@ -76,7 +76,7 @@ Create it only when it does not exist, with `test -f scripts/config.env || cp sc
 - **`AWS_REGION`**: the demo site (`demo/deploy.sh`) deploys to `us-east-1` regardless of this value.
 - **`K8S_VERSION`**: the example value `1.36` is inside EKS standard support (until 2027-08-02) and the versions in the HyperPod EKS AMI release notes.
 - **`SCENARIO`**: `A` (system, trainer, gVisor), `B1` (system, gVisor), earlier CDK `B2` (EC2 system only), `C` (system, Kata CPU). The options of `02_create_cluster.sh` (`--hyperpod`, `--hyperpod-b2`, `--cpu-only`) override it.
-- **Managed B2** uses `SCENARIO=B2` with [`create_managed.sh`](../handson/07_hyperpod_b2.md) to create EKS and the HyperPod `system`, `trainer` and `sandbox` groups together.
+- **Managed B2** uses `SCENARIO=B2` with [`create_managed.sh`](../handson/scenarios/b/b2.md) to create EKS and the HyperPod `system`, `trainer` and `sandbox` groups together.
 - **`CHANGE_SCENARIO`**: not needed for a first deployment or a redeployment of the same scenario. When the scenario differs and this is not `1`, `cdk/deploy.sh` stops.
 - **`ADMIN_PRINCIPAL_ARN`**: comma-separated (not STS session ARNs). Set it yourself if the role has a path.
 - **`WITH_KATA_CPU`**: setting it to `1` is the same as `cdk/deploy.sh <scenario> --with-kata-cpu`. Set it before adding Kata CPU nodes (`kata/cpu_nodes.sh`) and run `02_create_cluster.sh` again.
@@ -200,7 +200,7 @@ The command below starts the server in the foreground from your installed virtua
     After every evaluation the server sends SIGKILL to every process visible in `/proc` except itself and its ancestors. If you send an evaluation request to a server started directly on a Linux host, it also kills your editor and other servers running as the same user. A virtual environment and a loopback bind do not isolate processes.
 
     - **The `/readyz` check**: the `/readyz` check below is safe.
-    - **To send evaluation requests**: run the server in a container with its own PID namespace. The default bind is `127.0.0.1`, so to send requests from the host, start it in a container that shares the host network (for example `docker run --network host`; see the warning in [Getting started](../getting_started.md)).
+    - **To send evaluation requests**: run the server in a container with its own PID namespace. The default bind is `127.0.0.1`, so to send requests from the host, start it in a container that shares the host network (for example `docker run --network host`; see the warning in [Getting started](../handson/start.md)).
     - **macOS**: it has no `/proc`, so this does not happen there.
 
 ```bash
@@ -220,7 +220,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 
 - **Check**: from another terminal, `curl -s http://127.0.0.1:8000/readyz` returns `{"status":"ready"}`.
 - **Stop**: stop the server with Ctrl-C.
-- **If you get `command not found: gpusandbox-server`**: the virtual environment is not active; repeat the installation steps in [Getting started](../getting_started.md).
+- **If you get `command not found: gpusandbox-server`**: the virtual environment is not active; repeat the installation steps in [Getting started](../handson/start.md).
 
 ## 3. Authentication (SANDBOX_AUTH_*)
 
@@ -270,7 +270,7 @@ The server runs `python -I -m gpusandbox.harness.evaluate` fresh for every evalu
 | `--allow-cuda-cpp` | off | `HARNESS_ALLOW_CUDA_CPP` | Allow `cpp_extension` |
 | `--max-speedup` | `0.0` | `HARNESS_MAX_SPEEDUP` | Speedup cap, `0` disables it |
 
-The example below creates one candidate file, evaluates it with the harness on CPU and prints the verdict JSON. The candidate is a correct answer that uses torch only, without Triton. It was run and checked in a local environment with CPU torch and this package installed ([Getting started](../getting_started.md)).
+The example below creates one candidate file, evaluates it with the harness on CPU and prints the verdict JSON. The candidate is a correct answer that uses torch only, without Triton. It was run and checked in a local environment with CPU torch and this package installed ([Getting started](../handson/start.md)).
 
 ```bash
 mkdir -p /tmp/gs-eval

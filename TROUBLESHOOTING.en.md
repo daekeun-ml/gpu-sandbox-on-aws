@@ -18,7 +18,7 @@ Find the symptom you see below. For more diagnostic commands, see the [troublesh
 
 ## Check these first
 
-1. If `kubectl` cannot connect on A, B1 or C, check `cdk/tunnel.sh` and the `<CLUSTER_NAME>-tunnel` context. Managed B2 uses the `$CLUSTER_NAME` context from the [B2 connection step](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/).
+1. If `kubectl` cannot connect on A, B1 or C, check `cdk/tunnel.sh` and the `<CLUSTER_NAME>-tunnel` context. Managed B2 uses the `$CLUSTER_NAME` context from the [B2 connection step](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/scenarios/b/b2/).
 2. Once connected, replace `<pod>` with the pod name from the first command below.
 
 ```bash
@@ -118,9 +118,9 @@ More: [Training](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/reference/tr
 | The wizard stack is `CREATE_COMPLETE`, but the training add-on reports `K8sResourceNotFound` for cert-manager | Run `scripts/hyperpod/prepare_managed.sh` after the workers are ready. It waits for the certificate webhook and recreates the failed add-on at the same version. |
 | The grading nodes report driver `595.112.07` or `nvidia_uvm` is in use | Once both grading workers are `Ready`, `scripts/hyperpod/reboot_sandboxes.sh` stages `580.178.04` on disk, reboots the workers through HyperPod and verifies the running module. |
 
-[Commands, screenshots and cleanup](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b2/)
+[Commands, screenshots and cleanup](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/scenarios/b/b2/)
 
-- **Cluster `InService`, trainer instance `Pending`.** During the B1 run, the cluster reached `InService` before the trainer joined EKS. Run `source scripts/config.env`, check the trainer with `aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME"`, then use `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status` to look for `Ready` and `Schedulable`. [B1 run and screenshots](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/07_hyperpod_b1/#how-to-verify)
+- **Cluster `InService`, trainer instance `Pending`.** During the B1 run, the cluster reached `InService` before the trainer joined EKS. Run `source scripts/config.env`, check the trainer with `aws sagemaker list-cluster-nodes --region "$AWS_REGION" --cluster-name "$HYPERPOD_CLUSTER_NAME"`, then use `kubectl get nodes -L sagemaker.amazonaws.com/node-health-status` to look for `Ready` and `Schedulable`. [B1 run and screenshots](https://daekeun-ml.github.io/gpu-sandbox-on-aws/en/handson/scenarios/b/b1/#how-to-verify)
 - **Worker `Pending` with `Insufficient cpu` or `Insufficient memory`.** Check allocated resources with `kubectl describe node <trainer-node>`. On the `ml.g5.2xlarge` used for B1, the worker shared the node with the operator and system pods. The template requests 5 vCPUs and 24 GiB for the worker.
 
 - **A pod cannot find `hyperpodrun`**: the trainer image was built without `HYPERPOD=1`. Run `HYPERPOD=1 scripts/03_build_push_images.sh` with a new `IMAGE_TAG`, put the printed `TRAINER_IMAGE_URI` in `scripts/config.env`, and start training again.

@@ -39,7 +39,7 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
 
 코드가 틀렸다면 그 결과를 점수에 반영합니다. 이 실습의 TRL 경로에서는 샌드박스 장애로 실행 결과를 얻지 못했다면 `sandbox_error`로 남기고 해당 답을 group 평균 계산에서 제외합니다. 이렇게 해야 일시적인 장애가 답의 품질에 대한 신호로 들어가지 않습니다.
 
-[GRPO 핸즈온](../handson/05_grpo_training.md)에서는 `reward_batch`와 학습 step을 함께 보고 [pool 교체 핸즈온](../handson/06_sandbox_update.md)에서는 두 버전을 비교한 뒤 다음 배치가 새 pool을 쓰는지 확인합니다.
+[GRPO 핸즈온](../handson/scenarios/a/grpo.md)에서는 `reward_batch`와 학습 step을 함께 보고 [pool 교체 핸즈온](../handson/scenarios/a/pool_update.md)에서는 두 버전을 비교한 뒤 다음 배치가 새 pool을 쓰는지 확인합니다.
 
 ## `reward_batch` 한 줄로 확인하는 전환
 
@@ -51,7 +51,7 @@ A가 만든 답과 점수는 A가 현재 어떤 답을 만들어 내고 그 답�
 {"batch": 5, "global_step": 4, "version": "v2", "served_versions": {"v2": 14}, "n": 14, "status": {"compile_error": 6, "runtime_error": 8}, "pass_rate": 0.0}
 ```
 
-`served_versions`의 14건이 모두 `v2`이므로 이번 배치가 새 pool로 넘어갔습니다. 컴파일 오류 6건과 실행 오류 8건이어서, 정상적으로 채점했어도 정답 비율은 0입니다. 이 로그의 `pass_rate`는 `ok` 건수를 이번 호출에 들어간 평가 결과 수(`n`)로 나눈 값입니다. TRL이 학습에서 `sandbox_error`의 reward를 제외하는 규칙은 아래 표에서 따로 확인할 수 있습니다. [배치별 원본](../handson/data/grpo-rollout-2026-11-22.json) · [버전 전환 화면](../handson/06_sandbox_update.md#switch-batches) · [학습 종료 후 v1 복구](../handson/06_sandbox_update.md#rollback-run)
+`served_versions`의 14건이 모두 `v2`이므로 이번 배치가 새 pool로 넘어갔습니다. 컴파일 오류 6건과 실행 오류 8건이어서, 정상적으로 채점했어도 정답 비율은 0입니다. 이 로그의 `pass_rate`는 `ok` 건수를 이번 호출에 들어간 평가 결과 수(`n`)로 나눈 값입니다. TRL이 학습에서 `sandbox_error`의 reward를 제외하는 규칙은 아래 표에서 따로 확인할 수 있습니다. [배치별 원본](../handson/data/grpo-rollout-2026-11-22.json), [버전 전환 화면](../handson/scenarios/a/pool_update.md#switch-batches), [학습 종료 후 v1 복구](../handson/scenarios/a/pool_update.md#rollback-run)
 
 <a id="더-살펴보기"></a>
 
@@ -92,7 +92,7 @@ TRL 경로의 `KernelRewards`는 채점 결과를 과제, prompt, completion으�
     - **`--finish`**: v1의 replica 수를 0으로 줄이고 Deployment는 삭제하지 않습니다. gateway 경로(veRL)에서는 전환 뒤 `GATEWAY_GROUP_PIN_TTL_S`(기본 900초)가 지나 v1에 고정된 요청이 끝난 다음에 실행하세요.
     - **롤백**: 인자 순서를 바꿔 실행하면 v1 설정으로 돌아갑니다. 스크립트는 v1을 현재 `SANDBOX_IMAGE_URI`로 다시 배포하므로, 이미지도 바꾸는 배포라면 버전 파일마다 그 버전의 이미지 URI를 고정해 두세요([Production 05](../production/05_sandbox_updates.md)).
 
-기본 gVisor pool에서는 `g5.xlarge` 2대의 GPU를 v1 pod 2개가 이미 쓰고 있습니다. 그대로 실행하면 v2 pod가 Pending에 머물고, 진행 없이 30분(Deployment `progressDeadlineSeconds` 1800초)이 지나면 1단계의 `rollout status`가 실패해 전환까지 가지 못합니다. 먼저 노드 그룹 `sandbox-gvisor`를 4대로 늘리세요. 시나리오 A에서는 이때 G/VT 쿼터가 24 vCPU 필요합니다(절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md)).
+기본 gVisor pool에서는 `g5.xlarge` 2대의 GPU를 v1 pod 2개가 이미 쓰고 있습니다. 그대로 실행하면 v2 pod가 Pending에 머물고, 진행 없이 30분(Deployment `progressDeadlineSeconds` 1800초)이 지나면 1단계의 `rollout status`가 실패해 전환까지 가지 못합니다. 먼저 노드 그룹 `sandbox-gvisor`를 4대로 늘리세요. 시나리오 A에서는 이때 G/VT 쿼터가 24 vCPU 필요합니다(절차는 [학습 중 샌드박스 업데이트](../handson/scenarios/a/pool_update.md)).
 
 아래 첫 번째 명령은 1~4단계, 두 번째 명령은 5단계, 세 번째 명령은 롤백을 실행합니다.
 
@@ -125,7 +125,7 @@ v2 예시 설정에서는 pod가 200회 평가 후 draining 상태로 바뀝니�
 - **Production gateway에서는**: draining pod를 새 pod로 교체하는 작업은 Production gateway의 recycler가 담당합니다.
 - **핸즈온의 direct 모드에서는**: draining pod가 NotReady 상태로 유지됩니다.
 
-실습 절차는 [06 학습 중 샌드박스 업데이트](../handson/06_sandbox_update.md), 운영 설계는 [Production 05 샌드박스 버전 관리](../production/05_sandbox_updates.md)에 있습니다.
+실습 절차는 [학습 중 샌드박스 업데이트](../handson/scenarios/a/pool_update.md), 운영 설계는 [Production 05 샌드박스 버전 관리](../production/05_sandbox_updates.md)에 있습니다.
 
 **문제가 생기면:** parity가 실패하거나 전환이 반영되지 않으면 [문제 해결](../reference/troubleshooting.md)의 "버전 전환 (routing)" 항목을 보세요.
 

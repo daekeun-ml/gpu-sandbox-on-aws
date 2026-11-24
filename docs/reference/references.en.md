@@ -14,7 +14,8 @@ Core sources used throughout the guide. See [Verified facts and sources](sources
 
 - Runtime selection for pods. [Kubernetes RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/)
 - GPU and driver requirements for nvproxy. [gVisor GPU support](https://gvisor.dev/docs/user_guide/gpu/)
-- Feature support in QEMU and Cloud Hypervisor. [Kata hypervisor support](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md)
+- Feature support when Kata uses QEMU or Cloud Hypervisor. [Kata hypervisor support table](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types)
+- Directly attach physical devices to a Cloud Hypervisor VM. [Cloud Hypervisor VFIO documentation](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md)
 - Instance requirements for Kata CPU. [EC2 nested virtualization](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html)
 
 <span id="ref-beginner-05-hands-on"></span>
@@ -84,4 +85,5 @@ This four-part Korean-language series covers EKS-based isolation, a production c
 - Generation, rewards, and optimizer settings. [TRL GRPOTrainer](https://huggingface.co/docs/trl/main/en/grpo_trainer)
 - Distributed RL and reward integration. [veRL](https://github.com/verl-project/verl)
 - GPU kernel tasks and performance evaluation. [KernelBench](https://arxiv.org/abs/2502.10517)
+- RL with rewards based on GPU kernel correctness and performance. [CUDA Agent](https://cuda-agent.github.io/)
 - Reward hacking cases observed during evaluation. [KernelBench v0.1](https://scalingintelligence.stanford.edu/blogs/kernelbenchv01/)

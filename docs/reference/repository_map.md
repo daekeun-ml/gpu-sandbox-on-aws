@@ -33,3 +33,5 @@
 `tests/`는 AWS 없이 실행하는 테스트입니다. 로컬 채점은 `test_harness_cpu.py`와 `test_server_and_client.py`, 버전 전환과 reward는 `test_routing_and_rewards.py`, 매니페스트는 `test_manifests.py`부터 보세요. CDK 스택 테스트는 `cdk/tests/`에 있습니다.
 
 문서 원본은 `docs/`에 있고 메뉴 순서는 `mkdocs.yml`에서 정합니다. 루트의 `SCRIPTS.md`는 [스크립트 레퍼런스](scripts.md)를 고친 뒤 `python3 tools/sync_scripts_md.py`로 갱신합니다.
+
+핸즈온 원본은 `docs/handson/`에 있습니다. `common/`에는 프로비저닝, 런타임 준비, pool 검증 절차가 있고 `scenarios/`에는 A, B, C 실습이 있습니다. 벤치마크는 `benchmarks/`, 멀티턴 채점은 `extensions/`에서 찾으세요.

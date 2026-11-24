@@ -10,10 +10,10 @@
 <details class="note" markdown="1">
 <summary>직접 기록을 만들 때 필요한 환경과 로그</summary>
 
-- 로컬 Python 환경([시작하기](../getting_started.md) 2장)이 필요합니다.
-- **GPU 기록**: [04](../handson/04_sandbox_pools.md)에서 배포한 pool이 필요합니다.
-- **4절의 GRPO 차트**: [05](../handson/05_grpo_training.md)의 학습 로그가 필요합니다.
-- **4절의 버전 전환 차트**: [06](../handson/06_sandbox_update.md)의 전환을 거친 학습 로그나 [10](../handson/10_cpu_only.md)의 CPU 시뮬레이션 로그로 만들 수 있습니다.
+- 로컬 Python 환경([시작하기](../handson/start.md) 2장)이 필요합니다.
+- **GPU 기록**: [pool 설정과 검증](../handson/common/03_pools/details.md)에서 배포한 pool이 필요합니다.
+- **4절의 GRPO 차트**: [EC2 GRPO 학습](../handson/scenarios/a/grpo.md)의 학습 로그가 필요합니다.
+- **4절의 버전 전환 차트**: [학습 중 pool 교체](../handson/scenarios/a/pool_update.md)의 전환을 거친 학습 로그나 [시나리오 C](../handson/scenarios/c/index.md)의 CPU 시뮬레이션 로그로 만들 수 있습니다.
 - verdict와 reward의 의미는 [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)에서 설명합니다.
 
 </details>
@@ -48,8 +48,8 @@
 | 1. 아키텍처 | 구성 요소를 누르면 설명과 측정값이 열리는 구성도와 재생 버튼 | 페이지의 설명과 `extras.json`의 측정값 |
 | 2. 채점 체험 | golden 제출물을 골라 재생하면 진행 막대가 차고 verdict, reward 구성 요소, 판정 이유가 나옵니다 | `recording.json`의 golden 평가 결과와, trainer와 같은 `score_verdict`로 계산한 reward |
 | 3. 공격 차단 | pool마다 샌드박스 안 커널과 노드 커널, GPU, egress 차단 여부. 격리와 채점 검증 결과 카드 8개와 터미널 출력 재생 | `recording.json`의 `/info`, `extras.json`의 터미널 기록(verify.sh, gVisor 스모크 테스트, rollout.sh) |
-| 4. 학습 | EC2의 5스텝과 HyperPod B1·B2의 한 스텝에서 모델이 제출한 코드와 판정을 비교합니다. 버전 전환 차트는 CPU 모의 실행 기록입니다. | `extras.json`의 `training`, `b1.training`, `b2.training`, `simulation` |
-| 5. 벤치마크 | EKS 다섯 pool의 처리량, B1·B2에서 요청을 보낸 노드별 채점 시간, 이미지 캐시에 따른 시작 시간 | `extras.json`의 `runtime_run`, `b1.bench`, `b2.bench`, `bench` |
+| 4. 학습 | EC2의 5스텝과 HyperPod B1과 B2의 한 스텝에서 모델이 제출한 코드와 판정을 비교합니다. 버전 전환 차트는 CPU 모의 실행 기록입니다. | `extras.json`의 `training`, `b1.training`, `b2.training`, `simulation` |
+| 5. 벤치마크 | EKS 다섯 pool의 처리량, B1과 B2에서 요청을 보낸 노드별 채점 시간, 이미지 캐시에 따른 시작 시간 | `extras.json`의 `runtime_run`, `b1.bench`, `b2.bench`, `bench` |
 | 패턴별 아키텍처 (`architecture.html`) | 시나리오 A, B1, B2, C를 AWS 아이콘으로 그린 구성도 | 페이지에 들어 있는 정적 데이터(`arch.js`). 데이터 파일을 읽지 않습니다 |
 
 - **맨 위의 핵심 수치**: GPU 런타임 수, 기대 판정과 일치한 golden 수, 두 pool의 `verify.sh` 기록에서 막힌 연결 수, 벤치마크 정상 응답 수입니다.
@@ -62,16 +62,16 @@
 
 - **공개되는 파일**: HTML, CSS, JavaScript, AWS 아키텍처 아이콘(SVG), 둘러보기 영상(MP4)과 썸네일(JPG), 기록 JSON 두 개(`data/recording.json`, `data/extras.json`)뿐입니다.
 - **기본 CPU 샘플(`recording.json`)**: 노트북의 CPU pool에서 만든 기록이니, 클러스터에서 만든 GPU 기록으로 교체해 쓰세요.
-- 공개 데모의 GPU 채점 재생은 `demo/recordings/2026-11-18-eks-gpu.json`을 사용합니다. B1에서는 EC2가, B2에서는 HyperPod가 생성 코드를 채점했습니다. 두 벤치마크는 각 클러스터에서 요청을 보낸 노드만 바꿔 비교합니다. [B1 결과](../handson/08_benchmark.md#hyperpod-b1) · [B2 결과](../handson/08_benchmark.md#hyperpod-b2)
+- 공개 데모의 GPU 채점 재생은 `demo/recordings/2026-11-18-eks-gpu.json`을 사용합니다. B1에서는 EC2가, B2에서는 HyperPod가 생성 코드를 채점했습니다. 두 벤치마크는 각 클러스터에서 요청을 보낸 노드만 바꿔 비교합니다. [B1 결과](../handson/benchmarks/index.md#hyperpod-b1), [B2 결과](../handson/benchmarks/index.md#hyperpod-b2)
 - **2절의 진행 막대**: 막대는 평가 전체에 걸린 시간을 보여 줍니다. 단계별 소요 시간은 기록하지 않으므로 각 단계의 상태는 재생이 끝날 때 최종 판정에 맞춰 표시합니다.
 
 </details>
 
-[데모에서 B2·B1·A 벤치마크 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results)
+[데모에서 B2, B1, A 벤치마크 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#runtime-results)
 
-![B2·B1의 요청 워커 네 행과 A의 런타임 다섯 행을 한 표로 비교하는 화면](../images/demo/runtime-results-ko.png)
+![B2와 B1의 요청 워커 네 행과 A의 런타임 다섯 행을 한 표로 비교하는 화면](../images/demo/runtime-results-ko.png)
 
-[공개 데모에서 B1 벤치마크 열기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1) · [B2 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b2)
+[공개 데모에서 B1 벤치마크 열기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b1), [B2 결과 보기](https://dohbsn4kn34ya.cloudfront.net/#hyperpod-b2)
 
 ![EKS와 HyperPod에서 같은 커널의 채점을 요청했을 때 걸린 시간과 pool 처리량을 보여 주는 데모 화면](../images/demo/hyperpod-b1-benchmark-ko.png)
 
@@ -98,7 +98,7 @@ flowchart LR
 - **WAF 비용**: web ACL 월 약 5 USD, 규칙마다 월 1 USD(규칙 5개), 요청 100만 건마다 0.60 USD입니다([AWS WAF 요금](https://aws.amazon.com/waf/pricing/)). 스택이 있는 동안은 트래픽이 없어도 고정 비용(월 약 10 USD)이 나옵니다.
 - **영상 전송 비용**: 한국어 영상은 6.1 MiB, 영어 영상은 6.8 MiB입니다. 전송량은 [CloudFront 요금](https://aws.amazon.com/cloudfront/pricing/)에 따라 과금되고, WAF가 IP마다 `/media/` 요청을 5분에 100건으로 제한해 한 클라이언트가 만들 수 있는 전송량에 상한을 둡니다. 예상보다 많이 쓰일 것 같으면 AWS Budgets 알림을 걸어 두세요.
 - **로그 비용**: 로그 버킷의 S3 저장 요금만 듭니다. 객체는 90일 뒤 만료되고, 버킷은 정리 뒤에도 남습니다(6절).
-- **GPU 기록 비용**: 기록하는 동안 GPU 샌드박스 노드가 실행 중이어야 합니다(`g5.2xlarge` 시간당 1.212 USD, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1과 us-west-2 온디맨드 요금). recorder pod는 system 노드에서 GPU 없이 실행되고, trainer pod로 기록하면 trainer 노드도 실행 중이어야 합니다. 기록을 만든 뒤에는 [99 정리](../handson/99_cleanup.md)에 따라 GPU 노드를 줄이세요.
+- **GPU 기록 비용**: 기록하는 동안 GPU 샌드박스 노드가 실행 중이어야 합니다(`g5.2xlarge` 시간당 1.212 USD, `g5.xlarge` 1.006 USD, `g4dn.metal` 7.824 USD, us-east-1과 us-west-2 온디맨드 요금). recorder pod는 system 노드에서 GPU 없이 실행되고, trainer pod로 기록하면 trainer 노드도 실행 중이어야 합니다. 기록을 만든 뒤에는 [정리](../handson/cleanup.md)에 따라 GPU 노드를 줄이세요.
 
 ## 1. 로컬에서 미리 보기
 
@@ -170,8 +170,8 @@ recorder pod는 trainer 이미지(`rl-trainer`)로 `sleep`만 실행하는 pod�
 ### 2.1 기록할 시점 고르기
 
 - **학습 Job이 없으면 recorder pod로 기록합니다(2.2).** 이때 기록에는 학습 이벤트가 들어가지 않습니다. 4절의 버전 전환 차트에는 `extras.json`의 `simulation`이 우선 표시됩니다. 이 값이 없으면 학습 이벤트를 표시하고, 두 기록이 모두 없으면 차트를 숨깁니다.
-- **trainer pod로 기록할 때는 학습 Job이 Running인 동안 실행합니다.** Job이 끝나면 컨테이너가 종료되어 emptyDir에 있는 이벤트 파일을 복사할 수 없습니다([05 On-policy GRPO 학습](../handson/05_grpo_training.md)).
-- **학습 이벤트에 버전 전환을 넣으려면** [06](../handson/06_sandbox_update.md)의 `scripts/ops/rollout.sh gvisor v1 v2`로 routing을 바꾸고, trainer 로그에 `sandbox_version_switch`가 나온 뒤 기록하세요. `record`는 기록할 때 `--training-events` 파일에 있는 이벤트만 읽습니다.
+- **trainer pod로 기록할 때는 학습 Job이 Running인 동안 실행합니다.** Job이 끝나면 컨테이너가 종료되어 emptyDir에 있는 이벤트 파일을 복사할 수 없습니다([On-policy GRPO 학습](../handson/scenarios/a/grpo.md)).
+- **학습 이벤트에 버전 전환을 넣으려면** [학습 중 pool 교체](../handson/scenarios/a/pool_update.md)의 `scripts/ops/rollout.sh gvisor v1 v2`로 routing을 바꾸고, trainer 로그에 `sandbox_version_switch`가 나온 뒤 기록하세요. `record`는 기록할 때 `--training-events` 파일에 있는 이벤트만 읽습니다.
     - **두 pool의 golden도 기록하려면**: `--pool`로 넘긴 주소는 golden을 실행할 대상이라, `--finish`로 v1을 줄이기 전에 2.3의 예처럼 v1과 v2 주소를 각각 `--pool`로 넘기세요.
     - **B2에서는**: Service 이름에 `gvisor-hyperpod`가 들어갑니다. 예를 들어 `sandbox-gvisor-hyperpod-v1`입니다.
     - **4절 차트에 내 전환을 표시하려면**: 4절 차트에는 `extras.json`의 `simulation`이 우선 표시되므로, 2.6에서 `extras.json`을 만들 때 `--simulation-log`를 빼세요.
@@ -191,7 +191,7 @@ echo "${POD}"
 **확인할 것:**
 
 - pod 이름 한 줄이 출력됩니다(시나리오 A에서는 `grpo-<RUN_ID>-<접미사>` 형태).
-- **비어 있으면**: 학습이 실행 중이 아닌 것이니 [05](../handson/05_grpo_training.md)부터 실행하거나, 아래 recorder pod를 쓰세요.
+- **비어 있으면**: 학습이 실행 중이 아닌 것이니 [EC2 GRPO 학습](../handson/scenarios/a/grpo.md)부터 실행하거나, 아래 recorder pod를 쓰세요.
 
 **학습 Job 없이 기록하려면** recorder pod를 만듭니다. `scripts/config.env`의 `TRAINER_IMAGE_URI`와 `SANDBOX_AUDIENCE`로 템플릿을 렌더링합니다.
 
@@ -274,7 +274,7 @@ python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['schema'] 
 | `training` | `reward_batch`와 `sandbox_version_switch` 이벤트만 들어갑니다. 버전 이름과 routing revision을 공개해도 되는지 |
 
 - **`egress_blocked` 값이 없거나 `false`면**: 페이지에 "열림"으로 나옵니다. 그대로 공개하지 말고 pool부터 고치세요.
-- **status와 `expected_status`가 다르면**: verdict가 기대값과 다른 것이니 [04](../handson/04_sandbox_pools.md)의 pool 검증(`scripts/ops/verify.sh`)으로 원인부터 찾습니다.
+- **status와 `expected_status`가 다르면**: verdict가 기대값과 다른 것이니 [pool 설정과 검증](../handson/common/03_pools/details.md)의 pool 검증(`scripts/ops/verify.sh`)으로 원인부터 찾습니다.
 
 다음 스크립트가 요약을 출력합니다.
 
@@ -320,9 +320,9 @@ python3 -m http.server 8080 --bind 127.0.0.1 -d /tmp/demo-preview
 | EKS 결과표 | `bench.sh`의 JSONL과 실행 당시 pool별 노드 유형, Ready pod 수 | `--runtime-record docs/handson/data/runtime-benchmark-2026-11-22.meta.json` |
 | 이미지 캐시 전후 비교 | `scripts/ops/bench.sh 32`의 출력을 `tee`로 `bench.log`에 저장 | `--bench-log pass1=bench.log --bench-pass pass2`, 노드 정보는 `--node` (아래 예시) |
 | GRPO 학습 | `kubectl -n rl-trainer logs job/<job> > grpo.log`. reward 함수의 `reward_batch` JSON 줄과 trainer의 metric 줄(`{'loss': ...}`)을 읽습니다 | `--training-log grpo.log --model <model-id>` |
-| HyperPod B1 | B1 학습 로그 요약과 같은 커널로 측정한 채점 시간·처리량 | `--b1-record docs/handson/data/hyperpod-b1.json` |
+| HyperPod B1 | B1 학습 로그 요약과 같은 커널로 측정한 채점 시간과 처리량 | `--b1-record docs/handson/data/hyperpod-b1.json` |
 | HyperPod B2 | CPU와 GPU가 모두 HyperPod에 있는 클러스터의 GRPO 한 스텝과 32건씩의 두 벤치마크 | `--b2-record docs/handson/data/hyperpod-b2.json` |
-| 버전 전환 | `scripts/ops/simulate.sh 30 20`의 출력을 `simulate.log`에 저장하고, 그동안 [06](../handson/06_sandbox_update.md)의 `rollout.sh`로 버전을 바꿉니다 | `--simulation-log simulate.log` |
+| 버전 전환 | `scripts/ops/simulate.sh 30 20`의 출력을 `simulate.log`에 저장하고, 그동안 [학습 중 pool 교체](../handson/scenarios/a/pool_update.md)의 `rollout.sh`로 버전을 바꿉니다 | `--simulation-log simulate.log` |
 | 터미널 출력 | `scripts/ops/verify.sh gvisor v1` 같은 명령의 출력을 파일로 저장 | `--transcript verify-gvisor=verify-gvisor.txt` (반복 가능) |
 
 - **벤치마크를 두 번 측정했다면**: `bench.sh`는 구분 줄을 출력하지 않으므로, 각 실행 출력 앞에 `=== run 1`, `=== run 2` 줄을 직접 넣습니다.
@@ -361,7 +361,7 @@ python3 demo/build_extras.py --out demo/site/data/extras.json \
 
 ### 2.7 둘러보기 영상 다시 만들기 (선택)
 
-`demo/record_tour.py`는 Chromium에서 채점 재생, GRPO 학습, B2·B1·A 결과표, B2 클라이언트 비교, 배포 구성도를 차례로 녹화합니다. 언어별 MP4 영상에는 자막을 넣고, 표지로는 같은 언어의 B1 구성도를 캡처합니다.
+`demo/record_tour.py`는 Chromium에서 채점 재생, GRPO 학습, B2, B1, A 결과표, B2 클라이언트 비교, 배포 구성도를 차례로 녹화합니다. 언어별 MP4 영상에는 자막을 넣고, 표지로는 같은 언어의 B1 구성도를 캡처합니다.
 
 - **페이지 제공**: 페이지는 녹화하는 동안만 `127.0.0.1`에서 제공됩니다.
 - **녹화 전 검사**: `--site`의 데이터 파일에 2.6과 같은 검사를 하고, 문제가 있으면 녹화하지 않습니다.
@@ -409,7 +409,7 @@ python3 demo/check_arch_layout.py --shots /tmp/arch  # also saves one PNG per pa
 샘플 `demo/site/data/recording.json`을 GPU 없이 노트북에서 다시 만듭니다.
 
 !!! warning "Linux 호스트에서는 컨테이너 안에서 실행하세요"
-    `record_local.py`가 같은 프로세스 안에서 실행하는 샌드박스 서버는 평가마다 `/proc`에 보이는 프로세스 중 자신과 조상 프로세스를 제외한 모든 프로세스에 SIGKILL을 보냅니다. 그래서 Linux 호스트에서는 같은 사용자의 다른 프로세스까지 종료될 수 있습니다([시작하기](../getting_started.md)의 경고와 같은 이유). 별도 PID namespace를 쓰는 컨테이너에서 실행하세요. `/proc`가 없는 macOS에서는 이 동작이 꺼집니다.
+    `record_local.py`가 같은 프로세스 안에서 실행하는 샌드박스 서버는 평가마다 `/proc`에 보이는 프로세스 중 자신과 조상 프로세스를 제외한 모든 프로세스에 SIGKILL을 보냅니다. 그래서 Linux 호스트에서는 같은 사용자의 다른 프로세스까지 종료될 수 있습니다([시작하기](../handson/start.md)의 경고와 같은 이유). 별도 PID namespace를 쓰는 컨테이너에서 실행하세요. `/proc`가 없는 macOS에서는 이 동작이 꺼집니다.
 
 ```bash
 # Regenerate the shipped sample (repo root, local venv; on Linux inside a container with its own PID namespace)
@@ -431,7 +431,7 @@ python demo/record_local.py
 
 다시 만든 뒤에는 `python -m pytest -q tests/test_demo.py`로 스키마와 reward 일관성을 확인하세요.
 
-**문제가 생기면:** `ModuleNotFoundError`가 나오면 가상 환경을 활성화하지 않았거나 패키지 설치를 빠뜨린 것이니 [시작하기](../getting_started.md) 2장을 다시 실행하세요.
+**문제가 생기면:** `ModuleNotFoundError`가 나오면 가상 환경을 활성화하지 않았거나 패키지 설치를 빠뜨린 것이니 [시작하기](../handson/start.md) 2장을 다시 실행하세요.
 
 </details>
 
@@ -648,7 +648,7 @@ demo/teardown.sh
 
 로그 객체는 90일 뒤 만료되지만 버킷은 남습니다. 로그가 더 필요 없으면 출력된 `aws s3 rb` 명령으로 로그 버킷을 지우세요.
 
-GPU 노드와 클러스터 정리는 [99 정리](../handson/99_cleanup.md)에 있습니다.
+GPU 노드와 클러스터 정리는 [정리](../handson/cleanup.md)에 있습니다.
 
 ??? note "참고 자료"
     | 주제 | 링크 |

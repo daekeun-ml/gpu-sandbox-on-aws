@@ -1,5 +1,6 @@
 # Local configuration with account-specific values
 scripts/config.env
+.quickstart/
 .routing.json
 bench-*.jsonl
 

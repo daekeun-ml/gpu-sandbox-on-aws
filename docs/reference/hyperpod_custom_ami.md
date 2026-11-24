@@ -2,7 +2,7 @@
 
 <span id="기존-b2-custom-ami-경로"></span>
 
-CPU와 GPU 워커를 모두 HyperPod에서 운영하려면 [관리형 B2 실습](../handson/07_hyperpod_b2.md)을 따르세요.
+CPU와 GPU 워커를 모두 HyperPod에서 운영하려면 [관리형 B2 실습](../handson/scenarios/b/b2.md)을 따르세요.
 
 기존 CDK 구성은 시스템 노드를 EC2에 두고, HyperPod의 `sandbox` 그룹은 드라이버 580.178.04와 gVisor를 설치한 custom AMI로 시작합니다. EC2 빌더로 이미지를 만들고 HyperPod에 지정하는 이 절차는 AWS에서 실행하지 않았습니다. 아래 출력은 예상 예시입니다.
 

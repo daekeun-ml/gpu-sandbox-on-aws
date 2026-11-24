@@ -16,7 +16,7 @@ The trainer generates answers and updates the model. The sandbox executes submis
 | B2 | HyperPod `trainer` | HyperPod `sandbox` | Run system pods, training and grading on three dedicated HyperPod groups |
 | C | Simulator without a model | CPU pools on EC2 `c8i.2xlarge` | Compare runtimes, score submissions, and switch versions without GPUs |
 
-A, B1 and C ran in `us-west-2`. The [managed B2 walkthrough](../handson/07_hyperpod_b2.md) ran in `us-east-1`.
+A, B1 and C ran in `us-west-2`. The [managed B2 walkthrough](../handson/scenarios/b/b2.md) ran in `us-east-1`.
 
 B1 keeps the runtime requirements independent from trainer recovery. Its EC2 sandbox nodes can use a driver supported by gVisor or the virtualization setup required by Kata. Managed B2 installs a compatible NVIDIA driver on the two registered grading workers and activates it with a HyperPod reboot.
 
@@ -30,7 +30,7 @@ Select a tab to view the scenario.
 
     **Diagram** Follow `kubectl tunnel` from the workstation through SSM to the private EKS API. During training, the `GRPO trainer Job` sends submissions to the gVisor pool along the `kernel code` arrow. The pool checks correctness and speed on the GPU and returns a verdict, which the trainer uses to compute rewards.
 
-    **Difference** This is the baseline GPU configuration. Both training and scoring run on EC2. [Scenario A exercise](../handson/01_cluster_and_images.md)
+    **Difference** This is the baseline GPU configuration. Both training and scoring run on EC2. [Scenario A exercise](../handson/common/01_provision/cdk.md)
 
 === "B1: HyperPod training"
 
@@ -38,13 +38,13 @@ Select a tab to view the scenario.
 
     **Diagram** The training operator places the `HyperPodPyTorchJob` on a HyperPod trainer node. The `kernel code` arrow still leads to the EC2 pool in the same cluster, as in A. The sandbox executes the submission and returns the verdict over the same evaluation path.
 
-    **Difference** The trainer moves from EC2 to HyperPod for node recovery and Job restart. The scoring pool stays on EC2. [Scenario B1 exercise](../handson/07_hyperpod_b1.md)
+    **Difference** The trainer moves from EC2 to HyperPod for node recovery and Job restart. The scoring pool stays on EC2. [Scenario B1 exercise](../handson/scenarios/b/b1.md)
 
-=== "B2 · All workers on HyperPod"
+=== "B2 (All workers on HyperPod)"
 
     [![Amazon EKS schedules pods on the HyperPod system, trainer and sandbox instance groups](../images/architecture/scenario-b2.drawio.png?layout=aws)](../images/architecture/scenario-b2.drawio.png?layout=aws)
 
-    `system` runs CoreDNS, `trainer` runs the GRPO job and `sandbox` grades the code with gVisor. The Kubernetes API is provided by EKS. [B2 deployment](../handson/07_hyperpod_b2.md)
+    `system` runs CoreDNS, `trainer` runs the GRPO job and `sandbox` grades the code with gVisor. The Kubernetes API is provided by EKS. [B2 deployment](../handson/scenarios/b/b2.md)
 
 === "C: CPU only"
 
@@ -52,17 +52,17 @@ Select a tab to view the scenario.
 
     **Diagram** Follow `golden code` from `simulate and probe Jobs` on the system nodes to the Kata CPU v1 pool on the c8i node. The simulator sends examples with known verdicts and logs v2 results after routing changes. The gVisor and Kata with QEMU CPU pools on the same node also receive verification and benchmark requests.
 
-    **Difference** Use gVisor and Kata to practice scoring and version switches without GPUs or model training. [Scenario C exercise](../handson/10_cpu_only.md)
+    **Difference** Use gVisor and Kata to practice scoring and version switches without GPUs or model training. [Scenario C exercise](../handson/scenarios/c/index.md)
 
 ## Job recovery and checkpoints
 
-HyperPod can recover a faulty node and the training operator can restart a Job. Resuming from the previous training state requires a checkpoint accessible to the replacement pod. The exercise uses `emptyDir`, which is removed with the pod. See the [HyperPod exercise](../handson/07_hyperpod_b1.md) and [runtime comparison](02_isolation_runtimes.md).
+HyperPod can recover a faulty node and the training operator can restart a Job. Resuming from the previous training state requires a checkpoint accessible to the replacement pod. The exercise uses `emptyDir`, which is removed with the pod. See the [HyperPod exercise](../handson/scenarios/b/b1.md) and [runtime comparison](02_isolation_runtimes.md).
 
 ## Distinguish the training GPU from the grading GPUs in B1
 
-The A10G in an `ml.g5.2xlarge` generated answers and updated the model. Two separate gVisor sandboxes on EC2 `g5.xlarge` instances executed the 12 submissions. The trainer Job reached `Completed`. One submission was correct. Job completion and the verdicts answer different questions. [Placement and completion logs](../handson/07_hyperpod_b1.md#how-to-verify)
+The A10G in an `ml.g5.2xlarge` generated answers and updated the model. Two separate gVisor sandboxes on EC2 `g5.xlarge` instances executed the 12 submissions. The trainer Job reached `Completed`. One submission was correct. Job completion and the verdicts answer different questions. [Placement and completion logs](../handson/scenarios/b/b1.md#how-to-verify)
 
-What can you learn by changing only the client? With training stopped, an EKS system node and the HyperPod trainer each submitted the fixed kernel 32 times to the same pool. Their median grading times were 9.918 s and 9.937 s, with pool throughput of 0.199 evaluations/s for each client. This records successful scoring through both clients. Recovery after node replacement would require a separate checkpoint-and-resume test. [B1 client comparison](../handson/08_benchmark.md#hyperpod-b1)
+What can you learn by changing only the client? With training stopped, an EKS system node and the HyperPod trainer each submitted the fixed kernel 32 times to the same pool. Their median grading times were 9.918 s and 9.937 s, with pool throughput of 0.199 evaluations/s for each client. This records successful scoring through both clients. Recovery after node replacement would require a separate checkpoint-and-resume test. [B1 client comparison](../handson/benchmarks/index.md#hyperpod-b1)
 
 <a id="further-detail"></a>
 
@@ -115,7 +115,7 @@ On HyperPod nodes, by default only hostNetwork pods can reach IMDS. That default
 
 The gVisor GPU interface, nvproxy, supports specific driver versions. The default image in the B2 run shipped `595.112.07`, which gVisor `20261109.0` did not recognize. We installed `580.178.04` on the two grading workers, rebooted them through HyperPod and ran CUDA on the A10G in each gVisor pod. The training worker used its default driver.
 
-[Worker preparation and CUDA output](../handson/07_hyperpod_b2.md) · [Fixed-kernel benchmark](../handson/08_benchmark.md#hyperpod-b2)
+[Worker preparation and CUDA output](../handson/scenarios/b/b2.md), [Fixed-kernel benchmark](../handson/benchmarks/index.md#hyperpod-b2)
 
 ## Instance choice
 
@@ -123,7 +123,7 @@ The gVisor GPU interface, nvproxy, supports specific driver versions. The defaul
 |---|---|---|---|
 | Trainer (A) | `g5.2xlarge` (1 x A10G 24 GB, 8 vCPU, 32 GiB) | configured to fit a 1.5B model + LoRA + vLLM colocate on one A10G (`vllm_gpu_memory_utilization` 0.35). A 5-step GRPO run finished in the practice account | 1.212 |
 | Trainer (B) | `ml.g5.2xlarge` | the same hardware through HyperPod. About 25% higher at list prices (1.515 / 1.212 = 1.25) | 1.515 |
-| gVisor sandbox | `g5.xlarge` (1 x A10G), one sandbox per node | Tested on A10G. For the L4 alternative (`g6`) and driver compatibility, see the [gVisor lab](../handson/02_gvisor.md#driver-and-verification-scope-of-g5-nodes). | 1.006 |
+| gVisor sandbox | `g5.xlarge` (1 x A10G), one sandbox per node | Tested on A10G. For the L4 alternative (`g6`) and driver compatibility, see the [gVisor lab](../handson/common/02_runtimes/gvisor.md#driver-and-verification-scope-of-g5-nodes). | 1.006 |
 | Kata GPU sandbox | `g4dn.metal` (8 x T4, 96 vCPU, 384 GiB), one T4 per VM | the only `.metal` type with an x86 NVIDIA GPU | 7.824 (Seoul 9.624) |
 | Kata CPU sandbox | `c8i.2xlarge` (nested virtualization) | `/dev/kvm` without `.metal`. Kata rehearsal and the CPU tier | 0.37484 |
 | System | `m6i.large` x 2 | CoreDNS and controllers | 0.096 (each) |
@@ -173,16 +173,16 @@ The Standard quota needs more in these cases.
 - **If you practice Kata CPU**: it adds `c8i.2xlarge` 8 (14 in total).
 - **While the earlier CDK B2 or Kata GPU AMI is being built**: the builder `m6i.large` needs 2 more (8, or 16 with the Kata CPU node).
 
-`scripts/01_check_prereqs.sh` prints, read-only, the G and VT quota, nested virtualization support for `c8i.2xlarge` and which AZs offer each GPU type. How to run it and what to check are in section 5 of [Getting started](../getting_started.md).
+`scripts/01_check_prereqs.sh` prints, read-only, the G and VT quota, nested virtualization support for `c8i.2xlarge` and which AZs offer each GPU type. How to run it and what to check are in section 5 of [Getting started](../handson/start.md).
 
 ## Hourly cost of the hands-on setups (estimate)
 
 <span id="scope-and-limits"></span>
 
 ??? note "Runs behind the scenario estimates"
-    On the A10G, scenario A completed five GRPO steps using a 1.5B model, LoRA and colocated vLLM with one verified gVisor grader. A separate cluster ran four Kata + QEMU graders on `g4dn.metal` and benchmarked two GPU pools and three CPU pools with `scripts/ops/bench.sh 32`. Scenario A also switched grading versions during training. Managed B2 completed one step on HyperPod. [AWS run record](../reference/sources.md#aws-run-record) · [Switch record](../handson/06_sandbox_update.md#switch-batches)
+    On the A10G, scenario A completed five GRPO steps using a 1.5B model, LoRA and colocated vLLM with one verified gVisor grader. A separate cluster ran four Kata + QEMU graders on `g4dn.metal` and benchmarked two GPU pools and three CPU pools with `scripts/ops/bench.sh 32`. Scenario A also switched grading versions during training. Managed B2 completed one step on HyperPod. [AWS run record](../reference/sources.md#aws-run-record), [Switch record](../handson/scenarios/a/pool_update.md#switch-batches)
 
-    For the CPU lab, `c8i.2xlarge` costs USD 0.37484 per hour in us-east-1 and us-west-2, or USD 0.42336 in Seoul. [CPU lab](../handson/10_cpu_only.md)
+    For the CPU lab, `c8i.2xlarge` costs USD 0.37484 per hour in us-east-1 and us-west-2, or USD 0.42336 in Seoul. [CPU lab](../handson/scenarios/c/index.md)
 
 | Setup | Nodes | Node subtotal (USD/hour) |
 |---|---|---|
@@ -194,7 +194,7 @@ The Standard quota needs more in these cases.
 The table is an estimate from list prices and leaves out the EKS control plane, NAT gateway, the SSM access `t4g.nano`, EBS, data transfer, ECR and CloudWatch.
 
 !!! warning "Scale `g4dn.metal` to zero when you are not using it"
-    In the A + Kata GPU setup a single `g4dn.metal` is about 70% of the node cost (7.824 / 11.24). When you are not using it, scale the node group to zero with the command below, and run [99 Cleanup](../handson/99_cleanup.md) when you finish.
+    In the A + Kata GPU setup a single `g4dn.metal` is about 70% of the node cost (7.824 / 11.24). When you are not using it, scale the node group to zero with the command below, and run [Cleanup](../handson/cleanup.md) when you finish.
 
     ```bash
     aws eks update-nodegroup-config --cluster-name "$CLUSTER_NAME" --nodegroup-name sandbox-kata-gpu \

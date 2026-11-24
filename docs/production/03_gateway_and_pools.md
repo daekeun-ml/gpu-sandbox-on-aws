@@ -114,7 +114,7 @@ sequenceDiagram
 
 GPU 타이밍 측정이 다른 평가의 영향을 받지 않도록 pod당 요청을 하나로 제한합니다. 평가 하나가 GPU 하나를 독점하므로 동시 평가 수는 Ready 샌드박스 pod 수와 같습니다. 배치 하나에 걸리는 시간은 대략 ⌈항목 수 / pod 수⌉ × 평가 시간입니다.
 
-[08 런타임 벤치마크](../handson/08_benchmark.md)의 AWS 측정값은 gateway 없이 샌드박스 pool을 직접 호출한 결과입니다. gateway를 거친 배치 시간은 측정하지 않았으니 직접 측정하세요.
+[런타임 벤치마크](../handson/benchmarks/index.md)의 AWS 측정값은 gateway 없이 샌드박스 pool을 직접 호출한 결과입니다. gateway를 거친 배치 시간은 측정하지 않았으니 직접 측정하세요.
 
 ## Recycling
 

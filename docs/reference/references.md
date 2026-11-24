@@ -14,7 +14,8 @@
 
 - pod를 실행할 런타임을 지정하는 방법. [Kubernetes RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/)
 - nvproxy가 지원하는 드라이버와 GPU. [gVisor GPU 지원](https://gvisor.dev/docs/user_guide/gpu/)
-- QEMU와 Cloud Hypervisor의 기능 차이. [Kata hypervisor 지원 표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md)
+- Kata에서 QEMU와 Cloud Hypervisor를 쓸 때의 지원 범위. [Kata hypervisor 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types)
+- Cloud Hypervisor VM에 물리 장치를 직접 연결하는 방법. [Cloud Hypervisor VFIO 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md)
 - Kata CPU 샌드박스를 실행할 EC2 인스턴스의 조건. [EC2 nested virtualization](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nested-virtualization.html)
 
 <span id="ref-beginner-05-hands-on"></span>
@@ -84,4 +85,5 @@
 - 생성, reward, optimizer 설정. [TRL GRPOTrainer](https://huggingface.co/docs/trl/main/en/grpo_trainer)
 - 분산 RL 학습과 reward 연동. [veRL](https://github.com/verl-project/verl)
 - GPU 커널 과제와 성능 평가. [KernelBench](https://arxiv.org/abs/2502.10517)
+- GPU에서 검증한 커널의 정확도와 성능을 reward에 반영한 RL 사례. [CUDA Agent](https://cuda-agent.github.io/)
 - 측정 과정에서 관찰한 reward hacking 사례. [KernelBench v0.1](https://scalingintelligence.stanford.edu/blogs/kernelbenchv01/)

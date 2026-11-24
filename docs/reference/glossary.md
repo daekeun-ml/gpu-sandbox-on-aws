@@ -30,16 +30,16 @@
 ## C
 
 **CDI (Container Device Interface)**
-:   컨테이너에 연결할 장치 파일과 라이브러리를 명시하는 표준 형식입니다. 실습에서는 NVIDIA device plugin을 `deviceListStrategy: cdi-cri`로 설치합니다. gVisor(runsc)는 CDI로 전달받은 GPU 장치에 접근합니다. [02 gVisor GPU 샌드박스](../handson/02_gvisor.md)
+:   컨테이너에 연결할 장치 파일과 라이브러리를 명시하는 표준 형식입니다. 실습에서는 NVIDIA device plugin을 `deviceListStrategy: cdi-cri`로 설치합니다. gVisor(runsc)는 CDI로 전달받은 GPU 장치에 접근합니다. [gVisor GPU 샌드박스](../handson/common/02_runtimes/gvisor.md)
 
 **Checksum**
 :   데이터의 내용으로 계산하는 짧은 값입니다. 두 결과가 일치하는지 확인할 때 이용합니다. harness는 실행 시간을 잴 때마다 후보 출력의 checksum을 기준 출력의 checksum과 비교합니다. 이렇게 하면 측정할 때만 잘못된 결과를 내는 경우("벤치마크 때만 틀리기")도 찾아낼 수 있습니다. [04 Reward 무결성](../production/04_reward_integrity.md)
 
 **Cloud Hypervisor (CLH)**
-:   Kata와 함께 실행할 수 있는 경량 하이퍼바이저입니다. 이 실습에서는 GPU를 연결하지 않는 Kata CPU pool을 Cloud Hypervisor로 실행합니다. Kata upstream은 CLH의 GPU passthrough를 지원하지 않습니다.
+:   VM을 실행하는 하이퍼바이저입니다. Cloud Hypervisor로 직접 만드는 VM에는 VFIO로 물리 GPU를 연결할 수 있습니다. 이 실습에서는 Kata CPU pool에서 Cloud Hypervisor의 동작을 확인했습니다.
 
-    - **CPU pool을 만들 때**: 배포 스크립트에 넘기는 프로필은 `kata-clh-cpu`입니다. v1 Deployment 이름은 `sandbox-kata-clh-cpu-v1`이고, 프로필이 지정하는 RuntimeClass는 `kata-clh`입니다.
-    - **배포 스크립트에 `kata-clh`를 줄 때**: 실험용 GPU 프로필이 선택됩니다.
+    - **CPU pool**의 배포 프로필은 `kata-clh-cpu`, RuntimeClass는 `kata-clh`입니다. v1 Deployment 이름은 `sandbox-kata-clh-cpu-v1`입니다.
+    - **GPU 실험용 pool**의 배포 프로필은 `kata-clh`, RuntimeClass는 `kata-clh-nvidia-gpu`입니다. EKS 실험에서는 VM이 시작되지 않았습니다. [실험 기록](../handson/common/02_runtimes/kata.md#3단계-선택-실험-kata--cloud-hypervisor-gpu)
 
     [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
 
@@ -58,10 +58,10 @@
 ## D
 
 **Deep health check**
-:   SageMaker HyperPod가 GPU 인스턴스의 결함을 찾으려고 실행하는 검사(InstanceStress, InstanceConnectivity)입니다. 검사하는 동안 노드에 taint가 붙고, 이 검사를 켠 인스턴스 그룹의 노드에는 사용자 taint를 붙일 수 없습니다. [07 HyperPod 시나리오](../handson/07_hyperpod.md)
+:   SageMaker HyperPod가 GPU 인스턴스의 결함을 찾으려고 실행하는 검사(InstanceStress, InstanceConnectivity)입니다. 검사하는 동안 노드에 taint가 붙고, 이 검사를 켠 인스턴스 그룹의 노드에는 사용자 taint를 붙일 수 없습니다. [HyperPod 학습 경로](../handson/scenarios/b/index.md)
 
 **Device plugin**
-:   GPU처럼 노드에서 할당할 수 있는 장치를 kubelet에 알리는 Kubernetes 구성 요소입니다. pod가 `nvidia.com/gpu` 같은 리소스를 요청하면 스케줄러는 여유 장치가 있는 노드에 그 pod를 배치합니다. Kata에서 VM에 직접 할당할 GPU는 GPU Operator가 설치한 Kata sandbox device plugin이 `nvidia.com/pgpu`로 등록합니다. [02 gVisor GPU 샌드박스](../handson/02_gvisor.md)
+:   GPU처럼 노드에서 할당할 수 있는 장치를 kubelet에 알리는 Kubernetes 구성 요소입니다. pod가 `nvidia.com/gpu` 같은 리소스를 요청하면 스케줄러는 여유 장치가 있는 노드에 그 pod를 배치합니다. Kata에서 VM에 직접 할당할 GPU는 GPU Operator가 설치한 Kata sandbox device plugin이 `nvidia.com/pgpu`로 등록합니다. [gVisor GPU 샌드박스](../handson/common/02_runtimes/gvisor.md)
 
 **Draining, recycling**
 :   샌드박스가 정해진 평가 횟수(`SANDBOX_MAX_EVALS`)를 채우거나 GPU 오류를 내면 Ready 상태에서 빠집니다. 이를 draining이라고 합니다. 이어서 gateway가 해당 pod를 삭제하고 Deployment가 새 pod를 만드는 과정이 recycling입니다. Kata에서는 새 pod마다 새 VM도 시작합니다. [03 Gateway와 샌드박스 pool](../production/03_gateway_and_pools.md)
@@ -114,13 +114,13 @@
 :   후보 코드를 실행하고 정답 여부와 속도를 측정해서 verdict를 내는 평가 코드입니다. 실습용 harness는 신뢰하는 부모 프로세스(정책 검사, 레퍼런스, 타이밍, verdict)와 신뢰하지 않는 자식 프로세스(후보 실행)로 나뉩니다. [04 Reward 무결성](../production/04_reward_integrity.md)
 
 **Headless Service**
-:   가상 IP 없이(`clusterIP: None`) DNS 조회에 Ready 상태인 pod의 IP 목록을 그대로 반환하는 Kubernetes Service입니다. 클라이언트나 gateway가 pod를 직접 선택해 pod마다 평가를 하나씩 보낼 수 있습니다. [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)
+:   가상 IP 없이(`clusterIP: None`) DNS 조회에 Ready 상태인 pod의 IP 목록을 그대로 반환하는 Kubernetes Service입니다. 클라이언트나 gateway가 pod를 직접 선택해 pod마다 평가를 하나씩 보낼 수 있습니다. [샌드박스 pool 배포와 검증](../handson/common/03_pools/details.md)
 
 **HyperPod instance group**
-:   SageMaker HyperPod 클러스터 안에서 같은 인스턴스 유형과 설정을 공유하는 노드 묶음입니다. 시나리오 B에서는 trainer를 `ml.g5.2xlarge` 인스턴스 그룹에 두고, 그 노드를 샌드박스와 같은 EKS 클러스터에 연결합니다. [07 HyperPod 시나리오](../handson/07_hyperpod.md)
+:   SageMaker HyperPod 클러스터 안에서 같은 인스턴스 유형과 설정을 공유하는 노드 묶음입니다. 시나리오 B에서는 trainer를 `ml.g5.2xlarge` 인스턴스 그룹에 두고, 그 노드를 샌드박스와 같은 EKS 클러스터에 연결합니다. [HyperPod 학습 경로](../handson/scenarios/b/index.md)
 
 **HyperPodPyTorchJob**
-:   HyperPod training operator add-on이 제공하는 학습 job 리소스입니다. `hyperpodrun` 런처로 시작하고, `jobMaxRetryCount`에 따른 재시작과 로그 패턴 기반 정지 감지(`logMonitoringConfiguration`)를 지원합니다. [07 HyperPod 시나리오](../handson/07_hyperpod.md)
+:   HyperPod training operator add-on이 제공하는 학습 job 리소스입니다. `hyperpodrun` 런처로 시작하고, `jobMaxRetryCount`에 따른 재시작과 로그 패턴 기반 정지 감지(`logMonitoringConfiguration`)를 지원합니다. [HyperPod 학습 경로](../handson/scenarios/b/index.md)
 
 ## I
 
@@ -131,7 +131,7 @@
 :   프로그램이 장치 드라이버에 장치별 명령을 보내는 system call입니다. GPU 작업도 NVIDIA 장치 파일에 대한 ioctl로 드라이버에 전달되고, gVisor nvproxy는 이 ioctl을 허용 목록으로 필터링합니다. [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
 
 **IOMMU**
-:   장치가 DMA로 접근할 수 있는 메모리 범위를 제한하는 하드웨어입니다. VFIO passthrough에서 GPU의 메모리 접근을 VM 안으로 제한합니다. AL2023 커널에서는 `intel_iommu=on` 커널 인자가 있어야 켜집니다. [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)
+:   장치가 DMA로 접근할 수 있는 메모리 범위를 제한하는 하드웨어입니다. VFIO passthrough에서 GPU의 메모리 접근을 VM 안으로 제한합니다. AL2023 커널에서는 `intel_iommu=on` 커널 인자가 있어야 켜집니다. [Kata 샌드박스 (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
 
 ## J
 
@@ -150,7 +150,7 @@
 :   GPU 커널을 작성하는 능력을 측정하는 공개 벤치마크(MIT 라이선스)입니다. 실습용 과제와 채점 기준을 설계할 때 과제 형식(`Model`, `ModelNew`), 정확성 허용 오차, 타이밍 방식, `excessive_speedup_threshold` 10을 참고합니다. [01 GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md)
 
 **KL penalty (`beta`)**
-:   학습 중인 policy가 reference model과 크게 달라지지 않도록 loss에 더하는 KL divergence 항과 그 계수입니다. TRL 1.18.0 GRPO의 기본값은 `beta` 0.0이라 KL 항이 없고 reference model도 메모리에 로드하지 않습니다. 실습에서도 이 기본값을 유지합니다. [05 On-policy GRPO 학습](../handson/05_grpo_training.md)
+:   학습 중인 policy가 reference model과 크게 달라지지 않도록 loss에 더하는 KL divergence 항과 그 계수입니다. TRL 1.18.0 GRPO의 기본값은 `beta` 0.0이라 KL 항이 없고 reference model도 메모리에 로드하지 않습니다. 실습에서도 이 기본값을 유지합니다. [On-policy GRPO 학습](../handson/scenarios/a/grpo.md)
 
 **KVM**
 :   Linux 커널의 하드웨어 가상화 기능으로, 하이퍼바이저는 `/dev/kvm` 장치를 통해 이 기능에 접근합니다. Kata의 QEMU와 Cloud Hypervisor가 KVM을 사용해 VM을 실행하므로, Kata 노드에는 `/dev/kvm`이 있어야 합니다. [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
@@ -158,10 +158,10 @@
 ## L
 
 **Lifecycle script**
-:   HyperPod가 노드를 만들 때 S3에서 내려받아 실행하는 설정 스크립트입니다. trainer 그룹에서 실행하는 `infra/hyperpod/lifecycle/on_create.sh`는 아무것도 설치하지 않고, 기존 CDK 방식의 B2에서 sandbox 그룹에 쓰는 `on_create_sandbox.sh`는 드라이버를 확인한 뒤 `runsc` 등록과 node guard를 설치합니다. 버킷 이름은 `sagemaker-` 접두사를 유지합니다. [07 HyperPod 시나리오](../handson/07_hyperpod.md)
+:   HyperPod가 노드를 만들 때 S3에서 내려받아 실행하는 설정 스크립트입니다. trainer 그룹에서 실행하는 `infra/hyperpod/lifecycle/on_create.sh`는 아무것도 설치하지 않고, 기존 CDK 방식의 B2에서 sandbox 그룹에 쓰는 `on_create_sandbox.sh`는 드라이버를 확인한 뒤 `runsc` 등록과 node guard를 설치합니다. 버킷 이름은 `sagemaker-` 접두사를 유지합니다. [HyperPod 학습 경로](../handson/scenarios/b/index.md)
 
 **LoRA**
-:   모델 가중치 전체 대신 작은 저랭크(low-rank) 행렬만 학습하는 미세 조정 방식입니다. 학습할 파라미터와 optimizer 상태가 줄어들어, 핸즈온은 A10G 한 장에서 1.5B 모델을 학습하도록 설정되어 있습니다. 기본값은 `r` 32, `lora_alpha` 64, 모든 linear 층입니다. [05 On-policy GRPO 학습](../handson/05_grpo_training.md)
+:   모델 가중치 전체 대신 작은 저랭크(low-rank) 행렬만 학습하는 미세 조정 방식입니다. 학습할 파라미터와 optimizer 상태가 줄어들어, 핸즈온은 A10G 한 장에서 1.5B 모델을 학습하도록 설정되어 있습니다. 기본값은 `r` 32, `lora_alpha` 64, 모든 linear 층입니다. [On-policy GRPO 학습](../handson/scenarios/a/grpo.md)
 
 ## M
 
@@ -177,7 +177,7 @@
 :   pod가 주고받을 수 있는 트래픽을 namespace와 label로 정하는 Kubernetes 규칙입니다. EKS에서는 VPC CNI가 적용하고(`enableNetworkPolicy`), standard 모드에서는 정책이 적용되기 전까지 새 pod가 default allow로 시작합니다. [02 보안](../production/02_security.md)
 
 **NodeConfig, nodeadm**
-:   nodeadm은 EKS AL2023 노드를 클러스터에 등록하는 부트스트랩 도구이고, NodeConfig는 user data로 전달하는 nodeadm 설정입니다. EC2 gVisor 노드에서는 NodeConfig로 containerd에 `runsc` 런타임을 등록합니다. nodeadm은 노드가 부팅될 때마다 `/etc/containerd/config.toml`을 다시 생성합니다. [02 gVisor GPU 샌드박스](../handson/02_gvisor.md)
+:   nodeadm은 EKS AL2023 노드를 클러스터에 등록하는 부트스트랩 도구이고, NodeConfig는 user data로 전달하는 nodeadm 설정입니다. EC2 gVisor 노드에서는 NodeConfig로 containerd에 `runsc` 런타임을 등록합니다. nodeadm은 노드가 부팅될 때마다 `/etc/containerd/config.toml`을 다시 생성합니다. [gVisor GPU 샌드박스](../handson/common/02_runtimes/gvisor.md)
 
 **nvproxy**
 :   gVisor 샌드박스 안에서 NVIDIA GPU를 쓸 수 있게 하는 gVisor 구성 요소입니다. GPU 드라이버로 보내는 ioctl을 드라이버 버전별 허용 목록으로 필터링해 호스트 드라이버에 전달합니다. 호스트의 드라이버 버전이 지원 목록에 정확히 있어야 동작합니다. [02 격리 런타임 비교](../concepts/02_isolation_runtimes.md)
@@ -216,7 +216,7 @@
 ## Q
 
 **QEMU**
-:   Kata가 쓰는 하이퍼바이저 가운데 하나입니다. Kata에서 NVIDIA GPU passthrough를 공식 지원하는 하이퍼바이저는 QEMU뿐이라서, 이 실습에서는 Kata GPU pool의 RuntimeClass를 `kata-qemu-nvidia-gpu`로 지정합니다. [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)
+:   Kata가 쓰는 하이퍼바이저 가운데 하나입니다. Kata에서 NVIDIA GPU passthrough를 공식 지원하는 하이퍼바이저는 QEMU뿐이라서, 이 실습에서는 Kata GPU pool의 RuntimeClass를 `kata-qemu-nvidia-gpu`로 지정합니다. [Kata 샌드박스 (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
 
 ## R
 
@@ -256,7 +256,7 @@
 :   SandboxTemplate으로 샌드박스를 정해진 수만큼 미리 실행해 두는 Agent Sandbox 리소스입니다. claim이 생성되면 이미 준비된 샌드박스를 할당하므로 시작 대기 시간이 줄어듭니다. warm GPU 샌드박스는 요청이 없는 동안에도 GPU를 점유합니다. [06 Agent Sandbox로 확장](../concepts/06_agent_sandbox.md)
 
 **Speedup**
-:   레퍼런스 구현의 실행 시간을 후보 커널의 실행 시간으로 나눈 값입니다. 기본 설정에서는 정답인 custom kernel에만 speedup 점수를 주고, `--allow-torch-only`를 켜면 PyTorch만 쓴 정답도 같은 척도로 채점합니다. 점수는 log2 척도라 0.5배는 0, 1배는 0.5, 2배는 1.0이고 1.5(4배)가 상한입니다. [05 On-policy GRPO 학습](../handson/05_grpo_training.md)
+:   레퍼런스 구현의 실행 시간을 후보 커널의 실행 시간으로 나눈 값입니다. 기본 설정에서는 정답인 custom kernel에만 speedup 점수를 주고, `--allow-torch-only`를 켜면 PyTorch만 쓴 정답도 같은 척도로 채점합니다. 점수는 log2 척도라 0.5배는 0, 1배는 0.5, 2배는 1.0이고 1.5(4배)가 상한입니다. [On-policy GRPO 학습](../handson/scenarios/a/grpo.md)
 
 **SSM Session Manager 포트 포워딩**
 :   SSM agent가 있는 인스턴스를 거쳐 내 PC의 로컬 포트를 VPC 안의 주소로 연결하는 AWS Systems Manager 기능입니다. 인스턴스에 inbound 포트나 공인 IP가 없어도 되고, 로컬에는 AWS CLI용 Session Manager plugin이 필요합니다. `cdk/tunnel.sh`는 `127.0.0.1:8443`을 private API endpoint로 연결합니다. [09 CDK로 프로비저닝](../production/09_cdk.md)
@@ -264,7 +264,7 @@
 ## T
 
 **T4**
-:   NVIDIA의 GPU 모델입니다. EC2에서는 `g4dn` 인스턴스에 들어 있고, `g4dn.metal`에는 8개가 있습니다. EC2에서 VM에 직접 할당할 수 있는 x86 NVIDIA GPU는 이 T4뿐이라, Kata GPU 실습에서는 T4에서 실행한 결과로 reward를 계산합니다. [상황별 선택 가이드](../concepts/05_decision_guide.md), [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)
+:   NVIDIA의 GPU 모델입니다. EC2에서는 `g4dn` 인스턴스에 들어 있고, `g4dn.metal`에는 8개가 있습니다. EC2에서 VM에 직접 할당할 수 있는 x86 NVIDIA GPU는 이 T4뿐이라, Kata GPU 실습에서는 T4에서 실행한 결과로 reward를 계산합니다. [상황별 선택 가이드](../concepts/05_decision_guide.md), [Kata 샌드박스 (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
 
 **Taint, toleration**
 :   taint는 노드에 붙여 그 taint를 허용하지 않는 pod가 스케줄되지 못하게 하는 표시이고, toleration은 pod가 특정 taint가 있는 노드에도 스케줄될 수 있게 하는 설정입니다. 실습에서는 `gpusandbox/role=<역할>:NoSchedule` taint로 샌드박스 노드를 전용 노드로 지정합니다. [01 용량과 노드 관리](../production/01_capacity_and_nodes.md)
@@ -284,10 +284,10 @@
 :   harness가 후보 코드 하나를 채점해 반환하는 JSON 결과입니다. `status`(`ok`, `wrong_answer`, `policy_violation` 등), `speedup`, `flags`가 들어 있고, trainer가 이 값을 reward로 바꿉니다. [04 Reward 무결성](../production/04_reward_integrity.md)
 
 **VFIO**
-:   GPU 같은 PCI 장치를 사용자 공간이나 VM에 직접 할당하는 Linux 커널 기능입니다(`vfio-pci` 드라이버). Kata는 이 기능으로 GPU를 VM에 직접 연결합니다. VFIO는 VM 메모리 전체를 고정하므로 메모리 overcommit을 할 수 없습니다. [03 Kata 샌드박스 (CLH, QEMU)](../handson/03_kata.md)
+:   GPU 같은 PCI 장치를 사용자 공간이나 VM에 직접 할당하는 Linux 커널 기능입니다(`vfio-pci` 드라이버). Kata는 이 기능으로 GPU를 VM에 직접 연결합니다. VFIO는 VM 메모리 전체를 고정하므로 메모리 overcommit을 할 수 없습니다. [Kata 샌드박스 (CLH, QEMU)](../handson/common/02_runtimes/kata.md)
 
 **vLLM colocate mode**
-:   TRL GRPO에서 vLLM 생성 엔진을 학습 프로세스 안에 두고 같은 GPU를 나눠 쓰는 방식입니다(`vllm_mode="colocate"`). 실습의 trainer는 vLLM에 GPU 메모리의 35%를 할당하고(`--vllm-gpu-memory-utilization 0.35`), sleep mode로 optimizer step 동안 그 메모리를 해제합니다. [05 On-policy GRPO 학습](../handson/05_grpo_training.md)
+:   TRL GRPO에서 vLLM 생성 엔진을 학습 프로세스 안에 두고 같은 GPU를 나눠 쓰는 방식입니다(`vllm_mode="colocate"`). 실습의 trainer는 vLLM에 GPU 메모리의 35%를 할당하고(`--vllm-gpu-memory-utilization 0.35`), sleep mode로 optimizer step 동안 그 메모리를 해제합니다. [On-policy GRPO 학습](../handson/scenarios/a/grpo.md)
 
 ## W
 

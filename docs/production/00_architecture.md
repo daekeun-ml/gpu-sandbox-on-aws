@@ -25,7 +25,7 @@ gateway가 요청을 받아 빈 pod를 고르고 채점 버전을 기억합니�
     - **노드 수가 샌드박스 pod 수에 맞춰 바뀝니다.** Karpenter NodePool이 샌드박스 노드를 0대부터 띄우고, 부팅이 느린 `g4dn.metal`은 warm placeholder로 한 대를 미리 확보해 둡니다.
     - **학습 요청은 gateway를 거쳐서만 샌드박스에 닿습니다.** 운영 구성의 NetworkPolicy는 샌드박스 pod로 들어오는 연결 중 gateway pod만 허용합니다. 검증과 parity를 실행하는 `sandbox-probe` Job은 별도 정책으로 허용해야 합니다([03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)).
 
-**읽기 전에**　이 페이지는 핸즈온 구성과 비교하며 설명하므로 [핸즈온 00 전체 흐름](../handson/00_overview.md), [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md), [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)를 먼저 읽으세요.
+**읽기 전에**　이 페이지는 핸즈온 구성과 비교하며 설명하므로 [전체 흐름](../handson/index.md), [샌드박스 pool 배포와 검증](../handson/common/03_pools/details.md), [03 On-policy RL과 샌드박스](../concepts/03_onpolicy_rl_with_sandboxes.md)를 먼저 읽으세요.
 
 ??? note "용어"
     - **sandbox gateway**: trainer와 샌드박스 pod 사이에 있는 HTTP 서비스입니다. 호출자를 인증하고, 요청을 보낼 pod를 고르고, 샌드박스 버전을 고정합니다.
@@ -163,13 +163,13 @@ veRL은 샘플마다 `group_key`를 포함해 `POST /v1/evaluate`로 보냅니�
 ## 시나리오 B: HyperPod에서 학습할 때
 
 - **B1**: trainer만 HyperPod 인스턴스 그룹으로 옮기고, 샌드박스 pool은 같은 EKS 클러스터의 EC2 NodePool에 둡니다. veRL RayCluster 템플릿은 `VERL_NODE_SELECTOR`로 HyperPod 노드를 지정합니다.
-- **B2**는 시스템 Pod, 학습, gVisor 채점을 모두 HyperPod 워커에서 실행합니다. 두 채점 노드는 지원 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다. [관리형 B2 배포](../handson/07_hyperpod_b2.md)
+- **B2**는 시스템 Pod, 학습, gVisor 채점을 모두 HyperPod 워커에서 실행합니다. 두 채점 노드는 지원 드라이버를 설치한 뒤 HyperPod API로 재부팅합니다. [관리형 B2 배포](../handson/scenarios/b/b2.md)
 
 HyperPod의 노드 자동 확장과 별도로 설치한 Karpenter를 함께 사용하려면, 두 컨트롤러가 각각 어느 노드를 관리할지 먼저 확인하세요. 이 조합은 검증하지 않았습니다.
 
 ## 적용 순서
 
-1. 핸즈온 [01 클러스터와 이미지](../handson/01_cluster_and_images.md)로 EKS 클러스터와 이미지 세 개(`sandbox`, `trainer`, `control`)를 준비합니다.
+1. 핸즈온 [클러스터와 이미지](../handson/common/01_provision/cdk.md)로 EKS 클러스터와 이미지 세 개(`sandbox`, `trainer`, `control`)를 준비합니다.
 2. Karpenter를 공식 가이드대로 설치하고 EC2NodeClass와 NodePool을 적용합니다. ([01 용량과 노드 관리](01_capacity_and_nodes.md))
     - **IOMMU AMI가 먼저 필요**: EC2NodeClass 네 개를 한 템플릿에서 렌더링하므로 Kata GPU용 IOMMU AMI가 먼저 있어야 합니다.
     - **AMI가 없으면**: `infra/kata/build-iommu-ami.sh`로 만들고, 출력된 `export KATA_IOMMU_AMI_ID=...` 줄을 `scripts/config.env`에 넣으세요.

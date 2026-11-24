@@ -24,7 +24,7 @@ Keep the EKS pools and route Ray worker evaluations through the gateway. Assign 
     - **Keep on-policy consistency with per-sample scoring.** When the reward function attaches a `group_key` to every request, the gateway sends all samples of one group to the same sandbox version.
     - **Keep long runs going.** With checkpoints on a shared PVC and `trainer.resume_mode=auto`, resubmitting the job with the same `CKPT_DIR` after HyperPod replaces a node continues from the last checkpoint.
 
-**Before you start:** the TRL loop in [05 On-policy GRPO training](../handson/05_grpo_training.md) and the gateway API and group pins in [03 Gateway and pools](03_gateway_and_pools.md) help.
+**Before you start:** the TRL loop in [On-policy GRPO training](../handson/scenarios/a/grpo.md) and the gateway API and group pins in [03 Gateway and pools](03_gateway_and_pools.md) help.
 
 ??? note "Terms"
     - **veRL**: an open source framework that runs RL post-training across many GPUs and nodes. This page is based on 0.9.1.
@@ -347,7 +347,7 @@ The 8-GPU trainer node is most of the cost (prices and arithmetic in [08 Cost](0
 - **The old sandbox pool**: `--finish` from [05 Sandbox versioning](05_sandbox_updates.md) scales it to zero.
 - **If the active pool is no longer used after training**: scale it to zero replicas too.
 
-Related pages: [05 On-policy GRPO training](../handson/05_grpo_training.md), [07 HyperPod scenario](../handson/07_hyperpod.md), [01 Capacity and nodes](01_capacity_and_nodes.md), [02 Security](02_security.md).
+Related pages: [On-policy GRPO training](../handson/scenarios/a/grpo.md), [HyperPod training paths](../handson/scenarios/b/index.md), [01 Capacity and nodes](01_capacity_and_nodes.md), [02 Security](02_security.md).
 
 ??? note "References"
     | Topic | Link |

@@ -1,6 +1,6 @@
 # 09 CDK로 프로비저닝하고 삭제하기
 
-이 장의 B2 CDK 명령은 EC2에 시스템 노드를 두던 이전 구성에만 해당합니다. CPU와 GPU 워커를 모두 HyperPod에 두는 실습은 [관리형 B2](../handson/07_hyperpod_b2.md)를 따르세요.
+이 장의 B2 CDK 명령은 EC2에 시스템 노드를 두던 이전 구성에만 해당합니다. CPU와 GPU 워커를 모두 HyperPod에 두는 실습은 [관리형 B2](../handson/scenarios/b/b2.md)를 따르세요.
 
 !!! info "TL;DR"
     핸즈온에서 `02_create_cluster.sh`를 실행하면 이 CDK 앱이 VPC, EKS(기본 API endpoint는 private 전용), 시나리오별 노드 그룹, SSM 접속 인스턴스를 스택 하나로 만듭니다. 정리할 때도 명령 하나로 이 스택을 삭제합니다. synth할 때마다 cdk-nag가 보안 규칙을 검사하고, 템플릿 테스트(`cdk/tests`)는 따로 실행합니다.
@@ -25,7 +25,7 @@ CDK 스택은 VPC, EKS, 관리형 노드 그룹, SSM 접속 인스턴스를 함�
     - **기본값이 private이고, 보안 검사를 통과해야 배포됩니다.** EKS API endpoint는 인터넷에 노출하지 않습니다(접속은 SSM Session Manager 포트 포워딩). synth할 때마다 실행되는 cdk-nag(AwsSolutions 규칙)가 예외 처리하지 않은 지적을 발견하면 배포가 중단됩니다.
     - **핸즈온 스크립트도 이 스택을 배포합니다.** `scripts/02_create_cluster.sh`가 `cdk/deploy.sh`를 호출하고 둘 다 `scripts/config.env`를 읽으므로, 인스턴스 유형과 고정 버전이 서로 달라지지 않습니다.
 
-**읽기 전에**　[00 핸즈온 전체 흐름](../handson/00_overview.md)의 아키텍처와 [00 아키텍처](00_architecture.md)를 먼저 보세요. 가장 적은 비용으로 시험하려면 시나리오 C([10 GPU 없이 CPU로 실습하기](../handson/10_cpu_only.md))로 배포하세요.
+**읽기 전에**　[핸즈온 전체 흐름](../handson/index.md)의 아키텍처와 [00 아키텍처](00_architecture.md)를 먼저 보세요. 가장 적은 비용으로 시험하려면 시나리오 C([CPU 실습 (C)](../handson/scenarios/c/index.md))로 배포하세요.
 
 ??? note "용어 (처음 보는 단어가 있으면 펼치세요)"
     - **AWS CDK**: 코드(여기서는 Python)로 AWS 인프라를 정의하고 CloudFormation으로 배포하는 도구입니다.
@@ -36,7 +36,7 @@ CDK 스택은 VPC, EKS, 관리형 노드 그룹, SSM 접속 인스턴스를 함�
     - **SSM Session Manager 포트 포워딩**: SSM agent가 있는 인스턴스를 거쳐 내 PC의 로컬 포트를 VPC 안의 주소로 연결해 주는 기능입니다. 인스턴스에 inbound 포트나 공인 IP가 없어도 됩니다.
     - **access entry**: 어떤 IAM 역할이 EKS 클러스터에서 어떤 권한을 갖는지 정하는 EKS 리소스입니다.
 
-시나리오 A·C에서 CDK로 배포한 구성과 B1 학습 기록은 [AWS 실행 기록](../reference/sources.md#aws-실행-기록)에 나옵니다. 이전 B2 방식의 custom AMI 경로는 AWS에서 검증하지 않았습니다.
+시나리오 A와 C에서 CDK로 배포한 구성과 B1 학습 기록은 [AWS 실행 기록](../reference/sources.md#aws-실행-기록)에 나옵니다. 이전 B2 방식의 custom AMI 경로는 AWS에서 검증하지 않았습니다.
 
 ## 구성
 
@@ -117,7 +117,7 @@ flowchart LR
 
 ## 1단계: 배포 (cdk/deploy.sh)
 
-장기 운영 시 EKS 1.36의 표준 지원이 끝나는 2027-08-02 전에 업그레이드 일정을 잡으세요. 기본 정책에서는 이후 연장 지원 요금이 붙습니다. 노드·컨트롤 플레인 외에 접속용 `t4g.nano`, KMS 키, 로그 저장 비용도 발생합니다.
+장기 운영 시 EKS 1.36의 표준 지원이 끝나는 2027-08-02 전에 업그레이드 일정을 잡으세요. 기본 정책에서는 이후 연장 지원 요금이 붙습니다. 노드와 컨트롤 플레인 외에 접속용 `t4g.nano`, KMS 키, 로그 저장 비용도 발생합니다.
 
 다음 명령은 시나리오 C(system 노드와 c8i 노드)를 배포하며, 핸즈온의 `scripts/02_create_cluster.sh --cpu-only`와 같은 동작입니다.
 
@@ -194,19 +194,19 @@ aws ec2 describe-instances --region "$AWS_REGION" \
 | 시나리오 | 이어서 실행할 단계 |
 |---|---|
 | C | `KATA_CPU_REPLICAS` 설정, `scripts/kata/cpu_nodes.sh`, `scripts/05_setup_namespaces_auth.sh` 순서로 실행(표 아래 "시나리오 C" 목록) |
-| A | `scripts/04_install_gpu_stack.sh`, `scripts/05_setup_namespaces_auth.sh`, `scripts/06_deploy_sandboxes.sh gvisor v1`, `scripts/ops/verify.sh gvisor v1`, 그다음 [05 On-policy GRPO 학습](../handson/05_grpo_training.md) |
+| A | `scripts/04_install_gpu_stack.sh`, `scripts/05_setup_namespaces_auth.sh`, `scripts/06_deploy_sandboxes.sh gvisor v1`, `scripts/ops/verify.sh gvisor v1`, 그다음 [On-policy GRPO 학습](../handson/scenarios/a/grpo.md) |
 | B1, B2 | `scripts/hyperpod/create.sh`로 HyperPod 클러스터 생성. B2는 custom AMI를 먼저 준비(표 아래 "B1, B2" 목록) |
 
 - **시나리오 C**:
-    1. [10 GPU 없이 CPU로 실습하기](../handson/10_cpu_only.md)의 준비 2대로 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가합니다(CPU 프로필의 기본 replica 2로는 pool 4개가 `c8i.2xlarge` 한 대에 들어가지 않음).
+    1. [CPU 실습 (C)](../handson/scenarios/c/index.md)의 준비 2대로 `scripts/config.env`에 `export KATA_CPU_REPLICAS="1"`을 추가합니다(CPU 프로필의 기본 replica 2로는 pool 4개가 `c8i.2xlarge` 한 대에 들어가지 않음).
     2. `scripts/kata/cpu_nodes.sh`를 실행합니다(kata-deploy, `gvisor-cpu` RuntimeClass, smoke pod. 실습 계정에서 약 14분).
     3. `ACTIVE_RUNTIME=kata-clh-cpu scripts/05_setup_namespaces_auth.sh`를 실행합니다.
-    4. 그다음 [10 GPU 없이 CPU로 실습하기](../handson/10_cpu_only.md)의 6단계부터 이어 갑니다.
+    4. 그다음 [CPU 실습 (C)](../handson/scenarios/c/index.md)의 6단계부터 이어 갑니다.
 - **B1, B2**:
     - **B1**: `scripts/hyperpod/create.sh`를 실행합니다.
     - **B2**: `scripts/hyperpod/build_b2_ami.sh`가 출력한 `export HYPERPOD_B2_AMI_ID=...` 줄을 `scripts/config.env`에 넣은 뒤 `scripts/hyperpod/create.sh --b2`를 실행합니다(값이 비어 있으면 생성이 중단됨).
     - **subnet 선택**: HyperPod 스크립트는 CDK가 `kubernetes.io/role/internal-elb` 태그를 붙인 private subnet을 고릅니다.
-    - **이어지는 순서**: [07 HyperPod 시나리오](../handson/07_hyperpod.md)에 있습니다.
+    - **이어지는 순서**: [HyperPod 학습 경로](../handson/scenarios/b/index.md)에 있습니다.
 
 이미지는 핸즈온과 같이 `scripts/03_build_push_images.sh`로 만듭니다.
 

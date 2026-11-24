@@ -227,7 +227,7 @@ verdict의 `flags`는 아직 지표로 집계되지 않으니, reward hacking �
 
 ### 로컬 (AWS 없이)
 
-[시작하기](../getting_started.md)의 2장대로 Python 환경을 만든 뒤 프로젝트 최상위 폴더에서 실행합니다.
+[시작하기](../handson/start.md)의 2장대로 Python 환경을 만든 뒤 프로젝트 최상위 폴더에서 실행합니다.
 
 ```bash
 # Two-process harness on CPU (smoke-size inputs) and the static policy; no AWS, no GPU
@@ -255,7 +255,7 @@ verdict를 reward로 바꾸는 부분은 `tests/test_routing_and_rewards.py`가 
 
 **문제가 생기면:**
 
-- **import 오류나 torch 설치 문제**: [시작하기](../getting_started.md)의 환경 구성을 다시 보세요.
+- **import 오류나 torch 설치 문제**: [시작하기](../handson/start.md)의 환경 구성을 다시 보세요.
 - **그 밖의 증상**: [문제 해결](../reference/troubleshooting.md)을 보세요.
 
 ### 클러스터에서

@@ -23,7 +23,7 @@ Trace two paths during verification. Use tokens and ingress policy to check how 
     - **Each layer stops a different failure.** The runtime protects the kernel, NetworkPolicy closes the exits, the node guard covers the VPC CNI node-IP exception, and a pod becomes Ready only after it has checked that egress is actually blocked.
     - **What is not there cannot be stolen.** Sandbox pods get no API token and no secrets.
 
-**Before you start**: read how gVisor and Kata handle GPUs in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and how pools and tokens are deployed in [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md).
+**Before you start**: read how gVisor and Kata handle GPUs in [02 Isolation runtimes](../concepts/02_isolation_runtimes.md), and how pools and tokens are deployed in [Deploy and verify sandbox pools](../handson/common/03_pools/details.md).
 
 ??? note "Terms"
     - **runc, gVisor, Kata**: runc shares the host kernel. In gVisor a user-space kernel (the Sentry) receives system calls first, and Kata gives each pod its own VM (with its own guest kernel).
@@ -156,7 +156,7 @@ If it fails, see the 401 and 403 table in [Troubleshooting](../reference/trouble
 7. **Some combinations are outside upstream validation.**
     - **Kata**: NVIDIA's Kata CI covers A100 and H100, not T4 (`g4dn.metal`), and the GPU Operator's Kata path is validated on EKS with Ubuntu only; AL2023 is not listed.
     - **gVisor and the proprietary driver**: the gVisor documentation describes nvproxy against NVIDIA's open driver and does not mention the proprietary driver. On g5 (A10G), the gVisor pool's default, the AMI loads the proprietary kernel module (GSP off), so this combination is verified by this repository, not documented by gVisor.
-    - **After changing the driver, the AMI or the gVisor version**: re-run the smoke test and `scripts/ops/verify.sh`. If the sandbox pool holds every GPU on the nodes, the smoke pod stays `Pending`, so scale the pool down by one replica to free a GPU first ([02 gVisor](../handson/02_gvisor.md)).
+    - **After changing the driver, the AMI or the gVisor version**: re-run the smoke test and `scripts/ops/verify.sh`. If the sandbox pool holds every GPU on the nodes, the smoke pod stays `Pending`, so scale the pool down by one replica to free a GPU first ([gVisor](../handson/common/02_runtimes/gvisor.md)).
     - **T4 (g4dn) under gVisor**: it has the same driver condition as g5 but is not tested in this repository.
 
 ## Production options

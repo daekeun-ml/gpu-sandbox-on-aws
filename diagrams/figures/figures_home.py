@@ -12,11 +12,11 @@ TEXT = {
     'ko': dict(pc='운영자 PC', vpc='Amazon VPC', private='프라이빗 서브넷', relay='접속용 EC2',
                endpoint='프라이빗 엔드포인트', endpoint_short='프라이빗 전용', lookup='DNS로 Ready pod 조회', tunnel='SSM 터널', deploy='워크로드 배포', pull='이미지 pull',
                workers='Amazon EKS 워커 노드', trainer='학습 노드', sandbox='GPU 채점 pool',
-               submit='코드 채점 요청', result='채점 결과', metrics='판정 · 속도', default='기본', optional='선택'),
+               submit='코드 채점 요청', result='채점 결과', metrics='판정과 속도', default='기본', optional='선택'),
     'en': dict(pc='Operator', vpc='Amazon VPC', private='Private subnets', relay='Access EC2',
                endpoint='Private endpoint', endpoint_short='Private access', lookup='Resolve Ready pod IPs', tunnel='SSM tunnel', deploy='Deploy workloads', pull='Pull images',
                workers='Amazon EKS workers', trainer='Training node', sandbox='GPU grading pool',
-               submit='Submit code', result='Grading result', metrics='Verdict · Speedup', default='Default', optional='Optional'),
+               submit='Submit code', result='Grading result', metrics='Verdict and speedup', default='Default', optional='Optional'),
 }
 
 
@@ -53,11 +53,11 @@ def workload(f, x, y, width, t, sandbox=False, compact=False):
           color=SLATE, anchor='end')
     f.line([(x+10, y+31), (x+width-10, y+31)], color='#C9D5E0', width=1)
     if sandbox:
-        rows = [('ec2', f'{t["default"]} · gVisor', 'EC2 g5.xlarge × 2 · A10G'),
-                ('ec2', f'{t["optional"]} · Kata + QEMU', 'EC2 g4dn.metal · T4 passthrough')]
+        rows = [('ec2', f'gVisor ({t["default"]})', 'EC2 g5.xlarge × 2 (A10G)'),
+                ('ec2', f'Kata + QEMU ({t["optional"]})', 'EC2 g4dn.metal, T4 passthrough')]
     else:
-        rows = [('ec2', 'A · Amazon EC2', 'g5.2xlarge · GRPO Job'),
-                ('sagemaker', 'B1 · SageMaker HyperPod', 'ml.g5.2xlarge · HyperPodPyTorchJob')]
+        rows = [('ec2', 'Amazon EC2 (A)', 'g5.2xlarge, GRPO Job'),
+                ('sagemaker', 'SageMaker HyperPod (B1)', 'ml.g5.2xlarge, HyperPodPyTorchJob')]
     for i, (name, title, detail) in enumerate(rows):
         top = y + (40 if compact else 44) + i * (43 if compact else 51)
         size = 28 if compact else 32
@@ -78,7 +78,7 @@ def desktop(lang):
     label(f, 57, 86, 'AWS Cloud', 18, bold=True)
     icon(f, 'client', 10, 5, 33)
     label(f, 48, 20, t['pc'], 16, bold=True)
-    label(f, 48, 38, 'kubectl · Helm', 13, color=SLATE)
+    label(f, 48, 38, 'kubectl / Helm', 13, color=SLATE)
     admin(f, [(151, 24), (243, 24), (243, 63)])
     icon(f, 'ssm', 224, 65, 37)
     label(f, 269, 80, 'AWS Systems Manager', 16, bold=True)
@@ -117,7 +117,7 @@ def mobile(lang):
     t = TEXT[lang]
     f = Figure(360, 613)
     icon(f, 'client', 9, 6, 26)
-    label(f, 43, 24, t['pc']+' · kubectl', 14, bold=True)
+    label(f, 43, 24, t['pc']+' (kubectl)', 14, bold=True)
     boundary(f, 1, 44, 358, 567, '#44546A', '#FFFFFF')
     icon(f, 'aws-cloud', 9, 53, 27)
     label(f, 43, 73, 'AWS Cloud', 15, bold=True)
@@ -126,7 +126,7 @@ def mobile(lang):
     label(f, 224, 66, 'Systems Manager', 13, bold=True)
     label(f, 224, 82, 'Session Manager', 12, color=SLATE)
     boundary(f, 8, 100, 344, 461, GREEN, '#F6FAF6')
-    label(f, 18, 121, t['vpc']+' · '+t['private'], 14, bold=True, color=GREEN)
+    label(f, 18, 121, t['vpc']+' ('+t['private']+')', 14, bold=True, color=GREEN)
     admin(f, [(242, 85), (242, 134)])
     label(f, 251, 119, t['tunnel'], 12, color=SLATE)
     access_box(f, 185, 136, 156, 'ec2', t['relay'], 't4g.nano', True)

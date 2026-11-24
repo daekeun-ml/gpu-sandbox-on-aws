@@ -24,7 +24,7 @@ Correlate rising `sandbox_error` with the gateway state and the number of ready 
     - **Metrics endpoints are authenticated too.** `/metrics` goes through the same token verification as `/v1/evaluate`; the only unauthenticated routes are the kubelet probe routes `/healthz` and `/readyz`.
     - **Alarm on training signals.** Reward quality signals such as `sandbox_error` rate, pass rate and flags show the moment training breaks earlier than CPU or memory do.
 
-**Before you start:** the `reward_batch` log in [05 On-policy GRPO training](../handson/05_grpo_training.md), the authentication design in [02 Security](02_security.md) and the gateway behavior in [03 Gateway and pools](03_gateway_and_pools.md) help.
+**Before you start:** the `reward_batch` log in [On-policy GRPO training](../handson/scenarios/a/grpo.md), the authentication design in [02 Security](02_security.md) and the gateway behavior in [03 Gateway and pools](03_gateway_and_pools.md) help.
 
 ??? note "Terms"
     - **Counter, Gauge, Histogram**: Prometheus metric types. A counter only goes up, a gauge is a current value that goes up and down, and a histogram counts values per range (bucket) so that quantiles such as p95 can be computed.
@@ -298,4 +298,4 @@ kubectl -n sandbox-gateway get configmap sandbox-routing -o jsonpath='{.data.rou
 
     [Selected references on this topic](../reference/references.md#ref-production-07-observability-and-operations)
 
-Related pages: [02 Security](02_security.md), [03 Gateway and pools](03_gateway_and_pools.md), [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md), [Troubleshooting](../reference/troubleshooting.md)
+Related pages: [02 Security](02_security.md), [03 Gateway and pools](03_gateway_and_pools.md), [Deploy and verify sandbox pools](../handson/common/03_pools/details.md), [Troubleshooting](../reference/troubleshooting.md)

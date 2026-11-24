@@ -40,6 +40,6 @@ Suppose the grader starts checking five inputs instead of three. If one answer f
 
 ![Trainer logs showing the first four batches graded on v1 and the switch to v2](../images/terminal/rollout-batches-replay.png)
 
-In the 16-step run, batches 1–4 used `v1` and batches 5–16 used `v2`. Read `served_versions` in each batch to check that it finished on one version. [Per-batch record and switch](../handson/06_sandbox_update.md#switch-batches)
+In the 16-step run, batches 1–4 used `v1` and batches 5–16 used `v2`. Read `served_versions` in each batch to check that it finished on one version. [Per-batch record and switch](../handson/scenarios/a/pool_update.md#switch-batches)
 
 In [chapter 05](05_hands_on.md), you can check the scoring part locally.

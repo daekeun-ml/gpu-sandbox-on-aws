@@ -35,14 +35,14 @@ The top row shows the operator preparing v2 and switching routing. The bottom ro
 
 ## Infrastructure failures and missing scores
 
-The TRL exercise records a grading failure as `sandbox_error` and excludes that answer from the group baseline. Incorrect code still receives its normal score. See [GRPO training](../handson/05_grpo_training.md) for the logs and [updating the sandbox](../handson/06_sandbox_update.md) for switching pools.
+The TRL exercise records a grading failure as `sandbox_error` and excludes that answer from the group baseline. Incorrect code still receives its normal score. See [GRPO training](../handson/scenarios/a/grpo.md) for the logs and [updating the sandbox](../handson/scenarios/a/pool_update.md) for switching pools.
 
 ## Read a version switch in one `reward_batch`
 
 <span id="scope-and-limits"></span>
 
 ??? note "Local tests and cluster runs"
-    Local tests cover routing revisions, `sandbox_error` handling, group pins and parity between two CPU pools. A single-process TRL dry run checked the wiring. On AWS, one verified gVisor v1 pool served five GRPO steps on `g5.2xlarge`. In the switch run, v1 graded batches 1–4 and v2 graded batches 5–16. Routing returned to v1 after training. [Run record](../reference/sources.md#aws-run-record) · [Switch and rollback](../handson/06_sandbox_update.md#rollback-run)
+    Local tests cover routing revisions, `sandbox_error` handling, group pins and parity between two CPU pools. A single-process TRL dry run checked the wiring. On AWS, one verified gVisor v1 pool served five GRPO steps on `g5.2xlarge`. In the switch run, v1 graded batches 1–4 and v2 graded batches 5–16. Routing returned to v1 after training. [Run record](../reference/sources.md#aws-run-record), [Switch and rollback](../handson/scenarios/a/pool_update.md#rollback-run)
 
 These fields come from batch 5 of the 16-step scenario A run. `global_step` identifies the trainer step at the time. `batch` counts calls to the grader.
 
@@ -50,7 +50,7 @@ These fields come from batch 5 of the 16-step scenario A run. `global_step` iden
 {"batch": 5, "global_step": 4, "version": "v2", "served_versions": {"v2": 14}, "n": 14, "status": {"compile_error": 6, "runtime_error": 8}, "pass_rate": 0.0}
 ```
 
-All 14 `served_versions` entries belong to `v2`, so this batch reached the new pool. Six compilation errors and eight runtime errors account for every submission. The grader ran and the pass rate was zero. The logged `pass_rate` divides `ok` results by the number of evaluation results in this call (`n`). TRL's treatment of `sandbox_error` when computing a learning reward is described separately below. [Per-batch data](../handson/data/grpo-rollout-2026-11-22.json) · [Version switch in the lab](../handson/06_sandbox_update.md#switch-batches)
+All 14 `served_versions` entries belong to `v2`, so this batch reached the new pool. Six compilation errors and eight runtime errors account for every submission. The grader ran and the pass rate was zero. The logged `pass_rate` divides `ok` results by the number of evaluation results in this call (`n`). TRL's treatment of `sandbox_error` when computing a learning reward is described separately below. [Per-batch data](../handson/data/grpo-rollout-2026-11-22.json), [Version switch in the lab](../handson/scenarios/a/pool_update.md#switch-batches)
 
 <a id="further-detail"></a>
 
@@ -91,7 +91,7 @@ One request is answered by one pool, so a batch is always scored by one version.
     - **`--finish`**: it scales v1 to zero but keeps its Deployment. On the gateway path (veRL), run it only after `GATEWAY_GROUP_PIN_TTL_S` (default 900 s) has passed since the switch, so requests pinned to v1 have finished.
     - **Rollback**: swap the arguments to go back to the v1 settings. The script redeploys v1 with the current `SANDBOX_IMAGE_URI`, so if the update also changes the image, pin each version's image URI in its version file ([Production 05](../production/05_sandbox_updates.md)).
 
-In the default gVisor pool the two v1 pods already hold the GPUs of both `g5.xlarge` nodes. Run as is, the v2 pods stay Pending, step 1's `rollout status` fails after 30 minutes without progress (the Deployment `progressDeadlineSeconds` of 1800 seconds), and the switch never happens. Scale the `sandbox-gvisor` node group to 4 first; scenario A then needs 24 vCPU of G/VT quota (steps in [06 Updating the sandbox during training](../handson/06_sandbox_update.md)).
+In the default gVisor pool the two v1 pods already hold the GPUs of both `g5.xlarge` nodes. Run as is, the v2 pods stay Pending, step 1's `rollout status` fails after 30 minutes without progress (the Deployment `progressDeadlineSeconds` of 1800 seconds), and the switch never happens. Scale the `sandbox-gvisor` node group to 4 first; scenario A then needs 24 vCPU of G/VT quota (steps in [Updating the sandbox during training](../handson/scenarios/a/pool_update.md)).
 
 The first command covers steps 1 to 4, the second step 5, the third the rollback.
 
@@ -124,7 +124,7 @@ The v2 example switches to draining after 200 evaluations.
 - **With the production gateway**: replacing a draining pod is the job of the production gateway's recycler.
 - **In the hands-on's direct mode**: a draining pod stays NotReady.
 
-The hands-on procedure is in [06 Updating the sandbox during training](../handson/06_sandbox_update.md) and the operating design in [Production 05 Sandbox versioning](../production/05_sandbox_updates.md).
+The hands-on procedure is in [Updating the sandbox during training](../handson/scenarios/a/pool_update.md) and the operating design in [Production 05 Sandbox versioning](../production/05_sandbox_updates.md).
 
 **If it fails:** if parity fails or a switch does not take effect, see the "version switch (routing)" section of [Troubleshooting](../reference/troubleshooting.md).
 

@@ -7,7 +7,7 @@
 > [!NOTE]
 > **TL;DR** 표에서 하려는 작업을 고르세요. 각 항목에는 실행 방법, 성공했을 때의 출력, 같은 명령을 다시 실행했을 때의 동작을 정리했습니다.
 
-명령은 프로젝트 최상위 폴더에서 실행하세요. CDK로 만든 클러스터에 `kubectl`이나 Helm으로 접속할 때는 별도 터미널에서 `cdk/tunnel.sh`를 실행하고 터널을 열어 두세요. 처음부터 실습한다면 [핸즈온 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)에서 시나리오를 고르세요.
+명령은 프로젝트 최상위 폴더에서 실행하세요. CDK로 만든 클러스터에 `kubectl`이나 Helm으로 접속할 때는 별도 터미널에서 `cdk/tunnel.sh`를 실행하고 터널을 열어 두세요. 처음부터 실습한다면 [핸즈온 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/)에서 시나리오를 고르세요.
 
 | 하려는 작업 | 스크립트 |
 |---|---|
@@ -18,7 +18,21 @@
 | pool 검증, GPU 없는 시뮬레이션 (C), 버전 전환, 지연 측정 | [검증과 운영](#검증과-운영) |
 | 에피소드마다 샌드박스 할당 | [Agent Sandbox 확장](#확장) |
 | 평가 기록을 웹에 공개 | [데모 사이트](#데모-사이트) |
-| 실습 리소스 삭제 | [정리 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/99_cleanup/) |
+| 실습 리소스 삭제 | [정리 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/cleanup/) |
+
+<a name="quickstart"></a>
+
+## 빠른 시작
+
+프로젝트 폴더에서 `./scripts/quickstart.sh`를 실행하고 AWS 시나리오를 고르세요. 기본 구성이라면 미리 편집할 파일이 없습니다.
+
+- **AWS 계정**은 `aws sts get-caller-identity`로 확인하세요. 이름 있는 프로필을 사용한다면 실행 전에 `AWS_PROFILE`을 지정합니다.
+- **첫 실행**에서 `init`은 `.quickstart/<시나리오>/config.env`를 만들고, 다음 실행부터는 같은 파일을 사용합니다. 개별 스크립트를 직접 실행할 때 사용하는 `scripts/config.env`와 별도로 관리합니다.
+- **리전**은 새 파일을 만들 때 `AWS_REGION`, `AWS_DEFAULT_REGION` 순서로 확인합니다. 둘 다 비어 있으면 B2는 `us-east-1`, A, B1, C는 `us-west-2`입니다. 다른 리전을 쓸 때는 첫 `init` 전에 `AWS_REGION`을 지정하세요. B2를 `us-east-1` 이외의 리전에서 실행한다면 `init` 후 설정 파일의 `HYPERPOD_AZ_IDS`에 그 리전의 가용 영역 ID를 입력하세요.
+
+B2의 설정만 먼저 만들려면 `./scripts/quickstart.sh B2 init`을 실행하세요. 클러스터 이름이나 인스턴스 유형을 바꾸려면 생성된 파일을 수정한 뒤 `check`에서 쿼터를 확인합니다. `infra`에서 클러스터를 만듭니다.
+
+실행 순서만 보려면 `./scripts/quickstart.sh B2 plan`, 실습 후 컴퓨트 리소스를 정리하려면 `./scripts/quickstart.sh B2 cleanup`을 사용하세요. AWS 계정 없이 로컬 CPU 채점만 실행하는 명령은 `./scripts/quickstart.sh local`입니다.
 
 ## 기본 순서
 
@@ -26,11 +40,11 @@
 
 - **하는 일**: 로컬 도구, AWS identity, G and VT와 Standard vCPU 쿼터, `KATA_CPU_INSTANCE_TYPE`의 nested virtualization 지원, GPU 인스턴스 유형의 AZ별 제공 여부를 조회합니다. 아무것도 만들거나 바꾸지 않습니다.
 - **사용법**: `scripts/01_check_prereqs.sh` (인자 없음)
-- **실행 시점**: CDK 경로(A, B1, 기존 B2, C)에서는 `02_create_cluster.sh` 전에 실행하세요. 관리형 B2의 인스턴스 쿼터는 [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)에서 안내하는 대로 별도로 조회합니다.
+- **실행 시점**: CDK 경로(A, B1, 기존 B2, C)에서는 `02_create_cluster.sh` 전에 실행하세요. 관리형 B2의 인스턴스 쿼터는 [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b2/)에서 안내하는 대로 별도로 조회합니다.
 - **시간과 과금**: 짧음(조회만). 과금되는 리소스는 없습니다.
 - **다시 실행할 때**: 읽기 전용이라 몇 번을 실행해도 결과에 영향이 없습니다. 쿼터 증가를 요청한 뒤 다시 실행해 값을 확인하세요.
 - **성공 여부 확인**: 마지막 로그가 `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.`입니다. 쿼터가 충분한지는 스크립트가 판정하지 않으니 출력된 값을 필요한 값과 직접 비교하세요.
-- **막히면**: [문제 해결: 설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트), [01 클러스터와 이미지](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/01_cluster_and_images/)
+- **막히면**: [문제 해결: 설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트), [클러스터와 이미지](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/01_provision/cdk/)
 
 ### `scripts/02_create_cluster.sh`
 
@@ -38,7 +52,7 @@
 - **사용법**: `scripts/02_create_cluster.sh` (A, 또는 `config.env`의 `SCENARIO`), `--hyperpod` (B1), `--hyperpod-b2` (기존 CDK 방식의 B2), `--cpu-only` (C). Kata 노드 그룹은 `scripts/config.env`의 `WITH_KATA_CPU=1`, `WITH_KATA_GPU=1`(`KATA_IOMMU_AMI_ID` 필요)로 추가합니다.
 - **실행 시점**: CDK 경로에서는 `01_check_prereqs.sh` 다음에 실행합니다. 나중에 Kata 노드 그룹을 추가할 때는 처음과 같은 옵션으로 다시 실행하세요.
 - **시간과 과금**: 스크립트의 예상 시간은 20~30분입니다. 실습 계정에서 시나리오 C는 약 20분 걸렸습니다. EKS 컨트롤 플레인, NAT gateway, `m6i.large` x2, `t4g.nano`에 더해 A와 B1은 `g5.xlarge` x2, A는 `g5.2xlarge`, C나 `WITH_KATA_CPU=1`은 `c8i.2xlarge`, `WITH_KATA_GPU=1`은 `g4dn.metal`의 과금이 시작됩니다.
-- **다시 실행할 때**: CDK가 달라진 부분만 바꾸므로 설정이 같으면 변경이 없고, `WITH_KATA_*`를 바꾸면 그 노드 그룹만 바뀝니다. 배포된 시나리오와 다르면 `the stack runs scenario <X>, not <Y>`로 멈추며, 의도한 전환이라면 `CHANGE_SCENARIO=1`을 붙입니다(노드 그룹이 교체됨). `WITH_KATA_GPU=1`이면 실행할 때마다 `metal` 입력을 요구하고, CDK 밖에서 바꾼 노드 수는 먼저 되돌려야 합니다([06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/06_sandbox_update/)).
+- **다시 실행할 때**: CDK가 달라진 부분만 바꾸므로 설정이 같으면 변경이 없고, `WITH_KATA_*`를 바꾸면 그 노드 그룹만 바뀝니다. 배포된 시나리오와 다르면 `the stack runs scenario <X>, not <Y>`로 멈추며, 의도한 전환이라면 `CHANGE_SCENARIO=1`을 붙입니다(노드 그룹이 교체됨). `WITH_KATA_GPU=1`이면 실행할 때마다 `metal` 입력을 요구하고, CDK 밖에서 바꾼 노드 수는 먼저 되돌려야 합니다([학습 중 pool 교체](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/a/pool_update/)).
 - **성공 여부 확인**: CDK `Outputs`에 `EndpointPublicAccess = false`와 `Next:` 안내가 나옵니다. 터널을 연 뒤 `kubectl get nodes`에 system 2대와 시나리오의 노드(A: trainer 1대와 sandbox-gvisor 2대, C: sandbox-kata 1대)가 `Ready`입니다.
 - **막히면**: [문제 해결: CDK와 터널](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#cdk와-터널), [문제 해결: 클러스터와 노드](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#클러스터와-노드)
 
@@ -60,7 +74,7 @@
 - **시간과 과금**: 빌드 호스트와 네트워크에 따라 다릅니다. ECR 저장 용량이 과금됩니다.
 - **다시 실행할 때**: 태그가 IMMUTABLE이라 같은 `IMAGE_TAG`로 실행하면 첫 이미지(sandbox)의 push가 실패하고 멈춥니다. `scripts/config.env`의 `IMAGE_TAG`를 새 값으로 바꾼 뒤(명령 앞에 붙인 값은 `config.env`가 덮어씀) 다시 실행하고, 출력된 URI로 `config.env`를 갱신하세요.
 - **성공 여부 확인**: `Add to scripts/config.env:` 뒤에 `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI`, `CONTROL_IMAGE_URI`의 export 줄 3개(`--no-trainer`는 `TRAINER_IMAGE_URI`가 빠진 2개)가 나옵니다.
-- **막히면**: [문제 해결: 설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트), [01 클러스터와 이미지](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/01_cluster_and_images/)
+- **막히면**: [문제 해결: 설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트), [클러스터와 이미지](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/01_provision/cdk/)
 
 ### `scripts/04_install_gpu_stack.sh`
 
@@ -70,7 +84,7 @@
 - **시간과 과금**: device plugin은 Helm `--wait`, smoke pod timeout은 15분입니다. 새로 과금되는 리소스는 없습니다.
 - **다시 실행할 때**: `helm upgrade --install`과 `kubectl apply`로 다시 적용하고, smoke pod는 새 이름으로 만든 뒤 끝나면 지웁니다. sandbox-gvisor 노드의 GPU가 모두 쓰이고 있으면(`06_deploy_sandboxes.sh`의 pool) smoke pod를 만들기 전에 `every GPU on the sandbox-gvisor nodes is in use`로 멈추니, 안내된 `kubectl -n sandbox scale ... --replicas=0`으로 GPU를 비운 뒤 실행하고 `06_deploy_sandboxes.sh gvisor v1`로 pool을 되돌리세요.
 - **성공 여부 확인**: `gpusandbox/device-plugin=cdi` 노드마다 GPU 1(재시작 직후에는 잠시 `0`), 이어서 smoke pod 로그의 `cuda ok: NVIDIA A10G 2048.0`이 나옵니다. smoke pod가 실패해도 스크립트는 경고만 내고 끝나므로 이 줄을 직접 확인하세요(B2와 C는 `skipping the gvisor RuntimeClass and the smoke pod`로 끝남).
-- **막히면**: [문제 해결: gVisor](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#gvisor), [02 gVisor GPU 샌드박스](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/02_gvisor/)
+- **막히면**: [문제 해결: gVisor](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#gvisor), [gVisor GPU 샌드박스](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/02_runtimes/gvisor/)
 
 ### `scripts/05_setup_namespaces_auth.sh`
 
@@ -80,7 +94,7 @@
 - **시간과 과금**: 짧음. 과금되는 리소스는 없습니다.
 - **다시 실행할 때**: 모두 `kubectl apply`지만, routing 표의 active pool을 `ACTIVE_RUNTIME`과 `ACTIVE_VERSION`(없으면 `gvisor/v1`)으로 다시 쓰고 `sandbox`의 NetworkPolicy를 핸즈온 규칙으로 되돌립니다. 버전 교체 뒤나 시나리오 C에서는 지금 쓰는 값을 지정해 실행하고, 서명 키만 갱신할 때는 `ops/sync_jwks.sh`를 쓰세요(production gateway를 쓰면 gateway 매니페스트도 다시 적용).
 - **성공 여부 확인**: 마지막에 출력되는 routing.json 앞부분의 `"active"`가 처음 쓸 pool입니다. A와 B1은 `{"runtime": "gvisor", "version": "v1"}`입니다.
-- **막히면**: [문제 해결: 401, 403 응답](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답), [문제 해결: NetworkPolicy](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#networkpolicy), [04 샌드박스 pool 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/04_sandbox_pools/)
+- **막히면**: [문제 해결: 401, 403 응답](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#401-403-응답), [문제 해결: NetworkPolicy](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#networkpolicy), [샌드박스 pool 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/03_pools/details/)
 
 ### `scripts/06_deploy_sandboxes.sh`
 
@@ -90,7 +104,7 @@
 - **시간과 과금**: rollout timeout은 30분입니다. 기존 노드를 쓰므로 새로 과금되는 리소스는 없습니다.
 - **다시 실행할 때**: `kubectl apply`라 매니페스트가 같으면 바뀌지 않고, 이미지나 설정이 바뀌었으면 Deployment가 pod를 새로 만듭니다. replica 수가 인자나 프로필 값으로 돌아가므로, 0으로 줄인 pool(`ops/rollout.sh --finish`, `04_install_gpu_stack.sh`의 안내)을 다시 시작하려면 같은 명령을 실행하세요.
 - **성공 여부 확인**: rollout이 끝나고 pod가 `1/1 Running`입니다.
-- **막히면**: [문제 해결: 샌드박스 pool과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-pool과-readiness), [04 샌드박스 pool 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/04_sandbox_pools/)
+- **막히면**: [문제 해결: 샌드박스 pool과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-pool과-readiness), [샌드박스 pool 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/03_pools/details/)
 
 ### `scripts/07_run_grpo.sh`
 
@@ -100,17 +114,17 @@
 - **시간과 과금**: 실습 계정의 `g5.2xlarge`에서 기본 60스텝은 약 50분, 5스텝은 약 12분 걸렸습니다. 이미지와 모델을 내려받는 시간도 포함합니다. 새로 과금되는 리소스는 없습니다.
 - **다시 실행할 때**: `RUN_ID` 기본값이 실행 시각이라 실행할 때마다 새 Job이 생기고, 이전 Job은 끝난 뒤 하루 동안 남습니다. trainer 노드의 GPU는 하나이므로 이전 학습이 실행 중이면 새 pod는 Pending으로 남고, 스크립트는 30분 대기 뒤 실패합니다(Job은 남음).
 - **성공 여부 확인**: `routing  mode direct  runtime gvisor  version v1 ...` 뒤에 `batch`와 `train` 줄이 이어지고, 끝에 `train done ...`과 `done  output /outputs/grpo/final  reward_batches <int>`가 나옵니다.
-- **막히면**: [문제 해결: 학습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#학습), [05 On-policy GRPO 학습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/05_grpo_training/)
+- **막히면**: [문제 해결: 학습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#학습), [On-policy GRPO 학습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/a/grpo/)
 
 ### `scripts/08_cleanup.sh`
 
 - **하는 일**: 클러스터 이름을 입력받은 뒤 `cdk/destroy.sh --yes`로 pool, Job, CDK 스택을 지우고, `config.env`에 ID가 있는 AMI(`KATA_IOMMU_AMI_ID`, `HYPERPOD_B2_AMI_ID`)와 스냅샷을 하나씩 확인한 뒤 지웁니다. 마지막에 남은 인스턴스를 조회합니다.
 - **사용법**: `scripts/08_cleanup.sh`, ECR 리포지토리까지 지우려면 `--images`. B1과 기존 CDK 방식의 B2는 먼저 `scripts/hyperpod/delete.sh`를 실행합니다.
-- **실행 시점**: CDK로 만든 클러스터를 정리할 때 실행합니다. 터널을 켜 두면 클러스터 안의 워크로드부터 지웁니다. 관리형 B2는 [마법사 스택 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/#cleanup)를 따르세요.
+- **실행 시점**: CDK로 만든 클러스터를 정리할 때 실행합니다. 터널을 켜 두면 클러스터 안의 워크로드부터 지웁니다. 관리형 B2는 [마법사 스택 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b2/#cleanup)를 따르세요.
 - **시간과 과금**: 기록 없음(CloudFormation 삭제를 기다림). CDK 스택 리소스의 과금이 끝나고, secrets용 KMS 키는 7일 삭제 대기에 들어갑니다.
 - **다시 실행할 때**: 실행할 때마다 확인 단어를 묻고 `cdk/destroy.sh`부터 다시 실행합니다. 이미 지운 AMI의 ID가 `config.env`에 남아 있으면 AMI 단계에서 멈출 수 있으니, `--images`로 다시 실행하기 전에 그 ID를 지우세요.
 - **성공 여부 확인**: 마지막 표(`project=gpu-sandbox-on-aws` 태그가 붙은 인스턴스)가 비어 있습니다.
-- **막히면**: [문제 해결: 정리와 비용](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#정리와-비용), [99 정리](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/99_cleanup/)
+- **막히면**: [문제 해결: 정리와 비용](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#정리와-비용), [정리](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/cleanup/)
 
 ## CDK
 
@@ -132,7 +146,7 @@
 - **시간과 과금**: 기록 없음(CloudFormation 삭제를 기다림). 스택 리소스의 과금이 끝납니다.
 - **다시 실행할 때**: 클러스터 안의 삭제는 `--all`이라 지울 것이 없어도 안전하고, 터널이 꺼져 있으면 경고만 내고 스택 삭제로 넘어갑니다. 스택이 이미 없을 때 `cdk destroy`가 어떻게 끝나는지는 코드로 알 수 없습니다.
 - **성공 여부 확인**: 인스턴스 표가 비어 있고 `ECR repositories are kept. To delete them:` 안내가 나옵니다.
-- **막히면**: [문제 해결: 정리와 비용](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#정리와-비용), [99 정리](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/99_cleanup/)
+- **막히면**: [문제 해결: 정리와 비용](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#정리와-비용), [정리](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/cleanup/)
 
 ## Kata
 
@@ -144,17 +158,17 @@
 - **시간과 과금**: 실습에서는 약 14분 걸렸고, 대부분은 kata-deploy 설치 시간이었습니다. kata-deploy의 대기 한도는 20분입니다. 새로 과금되는 리소스는 없습니다(`c8i.2xlarge`는 `02_create_cluster.sh`에서 생김).
 - **다시 실행할 때**: `helm upgrade --install`과 `kubectl apply`로 다시 적용하고, smoke pod는 새 이름으로 만든 뒤 지웁니다. kata-deploy release를 `kata/gpu_nodes.sh`와 함께 쓰므로, 다시 실행하면 실험용 CLH GPU 값(`ENABLE_EXPERIMENTAL_CLH_GPU=1`)이 빠진 기본 값으로 돌아갑니다.
 - **성공 여부 확인**: `gvisor-cpu`, `kata-clh`, `kata-qemu`의 `kernel seen inside: ...` 커널이 모두 마지막 줄의 호스트 커널과 다릅니다. smoke pod가 실패해도 경고만 내므로 세 줄을 직접 확인하세요.
-- **막히면**: [문제 해결: Kata](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#kata), [문제 해결: 설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트), [03 Kata 샌드박스](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/03_kata/)
+- **막히면**: [문제 해결: Kata](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#kata), [문제 해결: 설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트), [Kata 샌드박스](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/02_runtimes/kata/)
 
 ### `scripts/kata/gpu_nodes.sh`
 
 - **하는 일**: `KATA_IOMMU_AMI_ID`가 비어 있으면 IOMMU를 켠 AMI를 빌드하고 멈춥니다. 값이 있으면 `sandbox-kata-gpu` 노드 그룹을 확인하고 GPU Operator와 kata-deploy를 설치한 뒤 `nvidia.com/pgpu`가 나타나기를 기다립니다.
-- **사용법**: `scripts/kata/gpu_nodes.sh`. 첫 실행이 출력한 `KATA_IOMMU_AMI_ID`와 `WITH_KATA_GPU=1`을 `config.env`에 넣고 `02_create_cluster.sh`, 이 스크립트 순으로 다시 실행합니다. 실험용 `kata-clh-nvidia-gpu`는 `ENABLE_EXPERIMENTAL_CLH_GPU=1`로 켭니다.
+- **사용법** `scripts/kata/gpu_nodes.sh`. 첫 실행이 출력한 `KATA_IOMMU_AMI_ID`와 `WITH_KATA_GPU=1`을 `config.env`에 넣고 `02_create_cluster.sh`, 이 스크립트 순으로 다시 실행합니다. `ENABLE_EXPERIMENTAL_CLH_GPU=1`은 실험용 RuntimeClass를 등록하는 옵션입니다. [Kata GPU 실험](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/02_runtimes/kata/#3단계-선택-실험-kata--cloud-hypervisor-gpu)
 - **실행 시점**: `kata/cpu_nodes.sh`로 리허설한 뒤, Kata GPU가 필요할 때(전체 경로) 실행합니다. 시나리오에 상관없이 추가할 수 있습니다.
 - **시간과 과금**: AMI 약 10분(안내값), pgpu 대기는 최대 20분입니다. AMI 빌더 `m6i.large`(잠시)와 AMI 스냅샷이 과금되고, `g4dn.metal`(시간당 7.824 USD)은 `02_create_cluster.sh`를 다시 실행할 때 시작됩니다.
 - **다시 실행할 때**: `KATA_IOMMU_AMI_ID`가 빈 채로 실행할 때마다 AMI를 새로 빌드하고, `08_cleanup.sh`는 `config.env`에 있는 AMI 하나만 지우니 첫 ID를 바로 넣으세요. ID가 있으면 두 Helm release를 `helm upgrade --install`로 다시 적용하며, `ENABLE_EXPERIMENTAL_CLH_GPU=1` 없이 실행하면 kata-deploy의 실험용 값이 빠집니다.
-- **성공 여부 확인**: `pgpu=8  cc.ready.state=false`, 이어서 `kata-qemu-nvidia-gpu` RuntimeClass 한 줄이 나옵니다.
-- **막히면**: [문제 해결: Kata](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#kata), [문제 해결: 설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트), [03 Kata 샌드박스](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/03_kata/)
+- **성공 여부 확인** `pgpu=8  cc.ready.state=false`와 `kata-qemu-nvidia-gpu` RuntimeClass가 표시되면 노드에 GPU 8장이 등록됐고 RuntimeClass가 생성된 상태입니다. pod에서 GPU를 쓸 수 있는지는 `kata-qemu` pool을 배포하고 확인합니다. [샌드박스 pool 배포와 검증](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/03_pools/details/)
+- **막히면**: [문제 해결: Kata](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#kata), [문제 해결: 설정과 스크립트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#설정과-스크립트), [Kata 샌드박스](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/common/02_runtimes/kata/)
 
 ## 검증과 운영
 
@@ -173,10 +187,10 @@
 - **하는 일**: 학습 중에 blue/green으로 샌드박스 버전을 바꿉니다. `<to>` pool 배포, 검증, `<from>`과의 parity 검사, routing 표 전환(`rl-trainer`와, 있으면 `sandbox-gateway`) 순서이고, `--finish`는 `<from>` pool을 0으로 줄입니다.
 - **사용법**: `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]`. 예: `scripts/ops/rollout.sh gvisor v1 v2`, 전환을 확인한 뒤 같은 명령에 `--finish`를 붙입니다. rollback은 `<from>`과 `<to>`를 바꿔 실행합니다.
 - **실행 시점**: `07_run_grpo.sh`(A), `hyperpod/run_grpo.sh`(B), `ops/simulate.sh`(C)가 실행되는 동안 버전을 전환할 때 호출합니다.
-- **시간과 과금**: [06](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/06_sandbox_update/) 참고. gVisor는 v2용 `g5.xlarge` 2대(시간당 2.012 USD, 노드 그룹을 4대로 늘린 동안)가 더 필요하고, Kata QEMU는 추가 노드가 없습니다.
+- **시간과 과금**: [학습 중 pool 교체](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/a/pool_update/) 참고. gVisor는 v2용 `g5.xlarge` 2대(시간당 2.012 USD, 노드 그룹을 4대로 늘린 동안)가 더 필요하고, Kata QEMU는 추가 노드가 없습니다.
 - **다시 실행할 때**: `--finish` 없이 다시 실행하면 1~4단계를 모두 다시 하며, 배포는 `kubectl apply`이고 전환 단계에서는 같은 라우팅 표를 다시 저장합니다. parity가 실패하면 전환하지 않아 `<from>`이 계속 요청을 받습니다. `--finish`는 배포와 전환을 건너뛰고 `<from>`을 0으로 줄이기만 하므로, trainer 로그에서 전환을 확인한 뒤에 실행하세요.
 - **성공 여부 확인**: `1) deploying`부터 `4) switching the routing table to <runtime>/<to>`까지 순서대로 나오고 parity 줄이 모두 `PASS`입니다. 그 뒤 trainer(또는 simulate) 로그에 `SWITCH  <runtime>/<from> -> <runtime>/<to>`가, `--finish`에는 `deployment.apps/sandbox-<runtime>-<from> scaled`가 나옵니다.
-- **막히면**: [문제 해결: 버전 전환 (routing)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing), [06 학습 중 샌드박스 업데이트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/06_sandbox_update/)
+- **막히면**: [문제 해결: 버전 전환 (routing)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing), [학습 중 샌드박스 업데이트](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/a/pool_update/)
 
 ### `scripts/ops/simulate.sh`
 
@@ -186,7 +200,7 @@
 - **시간과 과금**: 기본 30배치에 배치 사이 20초 대기가 29회입니다. 2026-11-17 실행(`kata-clh-cpu`)은 약 16분 걸렸습니다. 과금되는 리소스는 없습니다.
 - **다시 실행할 때**: 실행할 때마다 새 Job(`simulate-<시각>`)을 만들고 그 시점의 active pool을 읽습니다. 여러 개를 동시에 실행하면 같은 pool에 요청이 겹칩니다.
 - **성공 여부 확인**: 배치마다 `batch <n>  <runtime>/<version>  ...` 줄이 나옵니다. 버전 교체 뒤에는 `SWITCH ...` 한 줄과 `MIXED VERSIONS`가 없는 `batch` 줄이 이어집니다.
-- **막히면**: [문제 해결: 버전 전환 (routing)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing), [10 GPU 없이 CPU로 실습하기](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/10_cpu_only/)
+- **막히면**: [문제 해결: 버전 전환 (routing)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#버전-전환-routing), [CPU 실습 (C)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/c/)
 
 ### `scripts/ops/bench.sh`
 
@@ -194,11 +208,11 @@
 - **사용법**: `scripts/ops/bench.sh [requests]` (기본 32)
 - **실행 시점**: pool을 배포하고 검증한 뒤, 학습이 실행 중이 아닐 때 실행합니다. 모든 시나리오에서 선택 단계입니다.
 - **시간과 과금**: 2026-11-18 2차 측정에서 평가 구간은 pool마다 약 100~300 s, 다섯 pool 합계 약 13분이었습니다(Job 생성과 pool 재시작 제외). 새로 과금되는 리소스는 없고, 그동안의 노드 요금이 나갑니다.
-- **다시 실행할 때**: 실행할 때마다 새 결과 파일과 pool마다 새 bench Job을 만듭니다. cold start는 지금 있는 pod의 생성 시각으로 계산하므로, pod를 재시작하지 않으면 같은 값이 다시 나옵니다([08](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)의 재측정 방법).
+- **다시 실행할 때**: 실행할 때마다 새 결과 파일과 pool마다 새 bench Job을 만듭니다. cold start는 지금 있는 pod의 생성 시각으로 계산하므로, pod를 재시작하지 않으면 같은 값이 다시 나옵니다([런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/benchmarks/)의 재측정 방법).
 - **성공 여부 확인**: pool마다 `bench  <runtime>  ok <n>/<requests>  p50 ...` 한 줄이 나오고, 끝에 `results: <파일>`이 나옵니다.
-- **막히면**: [문제 해결: 샌드박스 pool과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-pool과-readiness), [08 런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/)
+- **막히면**: [문제 해결: 샌드박스 pool과 readiness](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#샌드박스-pool과-readiness), [런타임 벤치마크](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/benchmarks/)
 
-EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다. [결과표와 실행 조건](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/08_benchmark/#runtime-results)
+EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다. [결과표와 실행 조건](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/benchmarks/#runtime-results)
 
 ### `scripts/ops/sync_jwks.sh`
 
@@ -212,7 +226,9 @@ EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다
 
 ## HyperPod
 
-### 관리형 B2 · CPU와 GPU 워커를 모두 HyperPod에서 운영
+<span id="관리형-b2--cpu와-gpu-워커를-모두-hyperpod에서-운영"></span>
+
+### 관리형 B2에서 CPU와 GPU 워커 운영하기
 
 | 명령 | 하는 일 |
 |---|---|
@@ -221,7 +237,7 @@ EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다
 | `scripts/hyperpod/prepare_managed.sh` | VPC CNI NetworkPolicy를 켜고 CoreDNS를 `system`에 배치합니다. 학습 오퍼레이터와 인증서 웹훅도 확인합니다. |
 | `scripts/hyperpod/bench_b2.sh 32` | `system`과 `trainer`에서 같은 Triton 평가를 차례로 실행하고 요청 위치별로 JSONL 파일을 남깁니다. |
 
-리전 설정, 실행 화면과 정리 순서는 [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/)을 보세요. 아래 `create.sh`와 AMI 빌드 명령은 기존 CDK 경로에서 사용합니다.
+리전 설정, 실행 화면과 정리 순서는 [B2 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b2/)을 보세요. 아래 `create.sh`와 AMI 빌드 명령은 기존 CDK 경로에서 사용합니다.
 
 ### `scripts/hyperpod/create.sh`
 
@@ -229,9 +245,9 @@ EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다
 - **사용법**: `scripts/hyperpod/create.sh` (B1) 또는 `--b2` (기존 CDK 방식의 B2, `HYPERPOD_B2_AMI_ID` 필요). `git`과 `jq`가 있어야 합니다.
 - **실행 시점**: B1은 `02_create_cluster.sh --hyperpod`, `HYPERPOD=1 03_build_push_images.sh`, `04_install_gpu_stack.sh` 다음에 실행합니다. 기존 CDK 방식의 B2에서는 `hyperpod/build_b2_ami.sh` 다음에 실행합니다.
 - **시간과 과금**: InService까지 15~30분(안내값). HyperPod `ml.g5.2xlarge`(시간당 1.515 USD)의 과금이 시작되고, B2는 `ml.g5.xlarge` x2가 더해집니다.
-- **다시 실행할 때**: 1, 2단계(Helm chart, Block Public Access, lifecycle 업로드)는 다시 적용되고, 버킷과 역할은 없을 때만 만듭니다. 4단계 `create-cluster`는 같은 이름의 클러스터가 있으면 실패할 것으로 보며(추론), 5단계 add-on 생성도 이미 있으면 실패하니 5단계만 실패했다면 [07](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b1/)에 있는 두 명령만 실행하세요.
+- **다시 실행할 때**: 1, 2단계(Helm chart, Block Public Access, lifecycle 업로드)는 다시 적용되고, 버킷과 역할은 없을 때만 만듭니다. 4단계 `create-cluster`는 같은 이름의 클러스터가 있으면 실패할 것으로 보며(추론), 5단계 add-on 생성도 이미 있으면 실패하니 5단계만 실패했다면 [시나리오 B1](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b1/)에 있는 두 명령만 실행하세요.
 - **성공 여부 확인**: `status`가 `InService`이고 `failure`가 비어 있으며, 마지막 노드 표에 HyperPod 노드가 보입니다(B2는 `ml.g5.xlarge` 두 대가 `Schedulable`).
-- **막히면**: [문제 해결: HyperPod](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#hyperpod), [B1 · HyperPod 학습과 EC2 채점](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b1/)
+- **막히면**: [문제 해결: HyperPod](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#hyperpod), [HyperPod 학습과 EC2 채점 (B1)](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b1/)
 
 ### `scripts/hyperpod/build_b2_ami.sh`
 
@@ -258,7 +274,7 @@ EKS 실습에서 다섯 pool에 32건씩 보내 160건 모두 성공했습니다
 
 B1과 B2에서 **HyperPod trainer에 GRPO Job을 제출**합니다. 기존 샌드박스 pool은 모델이 생성한 코드를 채점하고, trainer는 그 점수로 모델을 업데이트합니다.
 
-**준비**　[HyperPod 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b1/)에서 training operator, trainer 노드, 샌드박스 pool을 준비하세요. `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드한 이미지에는 Job의 실행 명령인 `hyperpodrun`이 들어 있습니다. `scripts/config.env`에 `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, `HYPERPOD_TRAINER_INSTANCE_TYPE`이 필요합니다.
+**준비**　[HyperPod 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b1/)에서 training operator, trainer 노드, 샌드박스 pool을 준비하세요. `HYPERPOD=1 scripts/03_build_push_images.sh`로 빌드한 이미지에는 Job의 실행 명령인 `hyperpodrun`이 들어 있습니다. `scripts/config.env`에 `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, `HYPERPOD_TRAINER_INSTANCE_TYPE`이 필요합니다.
 
 ```bash
 scripts/hyperpod/run_grpo.sh 5
@@ -272,7 +288,7 @@ scripts/hyperpod/run_grpo.sh 5
 | `routing` 이벤트 | trainer가 샌드박스 경로를 읽었습니다. 템플릿은 시작 후 20분 안에 이 이벤트를 기대합니다. |
 | `reward_batch` 이벤트와 학습 step | 샌드박스가 요청을 채점하고 학습 step이 진행되는지 확인하세요. `sandbox_error`가 반복되면 pool을 점검하세요. |
 
-B1 trainer가 GRPO 한 스텝을 완료했고, EC2 gVisor 샌드박스 두 개가 제출 코드 12개를 채점했습니다. [Job 상태와 학습 로그](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b1/#확인-방법)
+B1 trainer가 GRPO 한 스텝을 완료했고, EC2 gVisor 샌드박스 두 개가 제출 코드 12개를 채점했습니다. [Job 상태와 학습 로그](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b1/#확인-방법)
 
 이번 실행의 pod를 찾으려면 스크립트가 출력한 Job 이름을 `HPJob` 라벨 값에 넣으세요.
 
@@ -289,11 +305,11 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](https://daekeun-ml
 
 - **하는 일**: HyperPod 클러스터 이름을 입력받은 뒤 HyperPodPyTorchJob, HyperPod 클러스터(사라질 때까지 대기), execution role을 지우고, 한 번 더 확인한 뒤 lifecycle 버킷을 비우고 지웁니다. EKS 클러스터는 남습니다.
 - **사용법**: `scripts/hyperpod/delete.sh` (인자 없음)
-- **실행 시점**: B1과 기존 CDK 방식의 B2를 정리할 때 `08_cleanup.sh`보다 먼저 실행합니다. 관리형 B2는 [마법사 스택 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b2/#cleanup)를 따르세요.
-- **시간과 과금**: 문서에 기록 없음([07](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/07_hyperpod_b1/) 참고). HyperPod 리소스의 과금이 끝납니다.
-- **다시 실행할 때**: HyperPod 클러스터가 이미 없으면 `delete-cluster`가 실패해 역할과 버킷을 삭제하기 전에 멈춥니다. 첫 실행을 버킷 확인에서 멈췄다면 남은 버킷은 직접 지우세요.
+- **실행 시점**: B1과 기존 CDK 방식의 B2를 정리할 때 `08_cleanup.sh`보다 먼저 실행합니다. 관리형 B2는 [마법사 스택 정리 절차](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b2/#cleanup)를 따르세요.
+- **시간과 과금**: 문서에 기록 없음([시나리오 B1](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/scenarios/b/b1/) 참고). HyperPod 리소스의 과금이 끝납니다.
+- **재실행**: 클러스터가 이미 삭제됐다면 남은 실행 역할과 전용 버킷을 정리합니다. 버킷을 비우기 전에 다시 확인합니다.
 - **성공 여부 확인**: `waiting for the cluster to disappear`, `deleted role <이름>-execution` 뒤에 마지막 줄 `HyperPod resources deleted`가 나옵니다.
-- **막히면**: [문제 해결: 정리와 비용](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#정리와-비용), [99 정리](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/99_cleanup/)
+- **막히면**: [문제 해결: 정리와 비용](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#정리와-비용), [정리](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/cleanup/)
 
 ## 확장
 
@@ -301,11 +317,11 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](https://daekeun-ml
 
 - **하는 일**: Agent Sandbox의 warm pool에서 에피소드마다 샌드박스를 하나씩 빌려 씁니다. `install`은 controller와 CRD(기본 v1.0.11), claim RBAC를, `pool`은 SandboxTemplate과 SandboxWarmPool을 만들고, `claim`은 샌드박스 하나를 빌려 주소를 출력한 뒤 돌려주며, `episodes`는 모델 없이 multi-turn 에피소드를 실행하는 Job을 만듭니다.
 - **사용법**: `scripts/extensions/agent_sandbox.sh install`, `pool <runtime> [n]` (기본 1, 버전 파일은 `VERSION_FILE`, 기본 `v1`), `claim <runtime>`, `episodes <runtime> [episodes] [max_turns]` (기본 2와 3, `max_turns` 1은 single-turn). 버전은 `AGENT_SANDBOX_VERSION`으로 바꿉니다.
-- **실행 시점**: 어느 시나리오에서든 선택 사항입니다. 실행하려면 pool을 먼저 검증하세요. 실습 기록은 시나리오 C의 `kata-clh-cpu`에서 얻었습니다([11](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/11_multi_turn/)).
+- **실행 시점**: 어느 시나리오에서든 선택 사항입니다. 실행하려면 pool을 먼저 검증하세요. 실습 기록은 시나리오 C의 `kata-clh-cpu`에서 얻었습니다([멀티턴 채점](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/extensions/multi_turn/)).
 - **시간과 과금**: 시나리오 C의 `kata-clh-cpu`에서 에피소드 두 개를 각각 3턴씩 실행하는 데 약 25초 걸렸습니다. 새 노드는 없지만 대기 중인 warm sandbox도 가속기를 하나씩 점유합니다.
 - **다시 실행할 때**: `install`은 `kubectl apply`라 안전합니다. `pool`은 템플릿을 다시 적용하지만 이미 떠 있는 warm sandbox는 시작할 때의 env를 유지하고(`OnReplenish`), 인자를 생략하면 replica 1과 `v1`로 다시 써집니다. `claim`과 `episodes`는 실행할 때마다 새 claim과 새 Job(`episodes-<시각>`)을 만들고, 쓴 샌드박스는 돌려주며 지워집니다.
 - **성공 여부 확인**: `install`은 CRD 4개, `pool`은 `warm pool kernel-eval-<runtime>: <n> sandbox(es); ...` 로그, `claim`은 `sandbox: ...  address: ...`, `episodes`는 `summary  solved <n>/<n> ...` 줄과 종료 코드 0입니다.
-- **막히면**: [문제 해결: Agent Sandbox와 multi-turn 에피소드](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#agent-sandbox와-multi-turn-에피소드), [11 multi-turn 에피소드 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/11_multi_turn/)
+- **막히면**: [문제 해결: Agent Sandbox와 multi-turn 에피소드](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/troubleshooting/#agent-sandbox와-multi-turn-에피소드), [multi-turn 에피소드 실습](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/extensions/multi_turn/)
 
 ## 데모 사이트
 
@@ -327,7 +343,7 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](https://daekeun-ml
 - **시간과 과금**: 기록 없음(스택 삭제를 기다림). S3, CloudFront, WAF의 과금이 끝나고, 로그 버킷은 지울 때까지 남습니다(로그 객체는 90일 뒤 만료).
 - **다시 실행할 때**: 스택이 이미 없으면 출력값 조회가 실패해 아무것도 지우지 않고 멈춥니다. 남은 로그 버킷은 첫 실행이 안내한 `aws s3 rb s3://<로그 버킷> --force`로 지웁니다.
 - **성공 여부 확인**: `deleted gpu-sandbox-demo` 다음에 `kept the access log bucket <로그 버킷>; ...`이 나옵니다.
-- **막히면**: [99 정리](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/99_cleanup/), [CloudFront 데모 배포](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/demo_site/)
+- **막히면**: [정리](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/cleanup/), [CloudFront 데모 배포](https://daekeun-ml.github.io/gpu-sandbox-on-aws/reference/demo_site/)
 
 ## 공통 파일
 
@@ -338,7 +354,7 @@ Job 종류를 찾을 수 없으면 [HyperPod operator 설정](https://daekeun-ml
 - **실행 시점**: `07_run_grpo.sh`와 `lib_jobs.sh`를 쓰는 스크립트(`ops/verify.sh`, `ops/rollout.sh`, `ops/simulate.sh`, `ops/bench.sh`, `agent_sandbox.sh episodes`)가 로그를 출력할 때 자동으로 호출합니다.
 - **다시 실행할 때**: 이 필터는 상태를 저장하지 않으므로 재실행하기 전에 초기화할 작업이 없습니다.
 - **성공 여부 확인**: `batch`, `SWITCH`, `PARITY PASS`, `bench` 같은 요약 줄이 나옵니다. JSON이 아닌 줄은 그대로 나오고 PASS, FAIL, 오류에만 색이 붙습니다.
-- **막히면**: [00 핸즈온 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/00_overview/)의 "확인 방법"
+- **막히면**: [핸즈온 전체 흐름](https://daekeun-ml.github.io/gpu-sandbox-on-aws/handson/)의 "확인 방법"
 
 ### `scripts/lib.sh`, `scripts/lib_jobs.sh`
 

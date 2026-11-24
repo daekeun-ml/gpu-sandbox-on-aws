@@ -1,6 +1,6 @@
 [한국어](scenario-b2.guide.md) | **English**
 
-# Scenario B2 · System services, training and grading on HyperPod
+# Scenario B2, System services, training and grading on HyperPod
 
 Amazon EKS supplies the Kubernetes API and scheduler. All four workers registered with this cluster in `us-east-1` belong to SageMaker HyperPod instance groups.
 
@@ -17,6 +17,6 @@ Amazon EKS supplies the Kubernetes API and scheduler. All four workers registere
 
 The default NVIDIA driver `595.112.07` was outside the support list for gVisor `20261109.0`. The two grading workers received `580.178.04` and rebooted through the HyperPod API. A CUDA operation inside a gVisor pod then confirmed access to the A10G. The trainer kept its default driver.
 
-After training, `system` and `trainer` took turns sending 32 requests each. Both clients sent the same fixed kernel to the same pool and all 64 requests succeeded. [Deployment and screenshots](../docs/handson/07_hyperpod_b2.en.md) · [Latency and throughput](../docs/handson/08_benchmark.en.md#hyperpod-b2) · [Editable draw.io file](scenario-b2.drawio)
+After training, `system` and `trainer` took turns sending 32 requests each. Both clients sent the same fixed kernel to the same pool and all 64 requests succeeded. [Deployment and screenshots](../docs/handson/scenarios/b/b2.en.md), [Latency and throughput](../docs/handson/benchmarks/index.en.md#hyperpod-b2), [Editable draw.io file](scenario-b2.drawio)
 
-[Earlier worker overview](variants/b2-worker-overview/scenario-b2.drawio.png) · [Editable worker overview](variants/b2-worker-overview/scenario-b2.drawio)
+[Earlier worker overview](variants/b2-worker-overview/scenario-b2.drawio.png), [Editable worker overview](variants/b2-worker-overview/scenario-b2.drawio)

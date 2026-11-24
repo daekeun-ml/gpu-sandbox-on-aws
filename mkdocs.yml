@@ -1,14 +1,13 @@
 site_name: GPU Sandbox on AWS
-site_description: On-policy RL post-training with GPU reward sandboxes (gVisor, Kata + Cloud Hypervisor, Kata + QEMU) on Amazon EKS and SageMaker HyperPod
+site_description: On-policy RL post-training on Amazon EKS and SageMaker HyperPod with gVisor and Kata + QEMU GPU sandboxes. The CPU lab includes Kata + Cloud Hypervisor.
 site_url: https://daekeun-ml.github.io/gpu-sandbox-on-aws/
 repo_url: https://github.com/daekeun-ml/gpu-sandbox-on-aws
 repo_name: daekeun-ml/gpu-sandbox-on-aws
 edit_uri: edit/main/docs/
 
 docs_dir: docs
-not_in_nav: |
-  /handson/09_demo_site.md
-  /handson/09_demo_site.en.md
+hooks:
+  - tools/handson_redirects.py
 
 theme:
   name: material
@@ -30,6 +29,7 @@ theme:
         name: Light mode
   features:
     # navigation.instant is left out: it breaks the i18n plugin's contextual language switch.
+    - navigation.indexes
     - navigation.tracking
     - navigation.top
     - navigation.footer
@@ -81,27 +81,31 @@ plugins:
             05 상황별 선택 가이드: 05 Decision guide
             06 Agent Sandbox로 확장: 06 Extending with Agent Sandbox
             핸즈온: Hands-on
-            00 전체 흐름: 00 Overview
-            01 클러스터와 이미지: 01 Cluster and images
-            02 gVisor GPU 샌드박스: 02 gVisor GPU sandboxes
-            03 Kata 샌드박스 (CLH, QEMU): 03 Kata sandboxes (CLH, QEMU)
-            04 샌드박스 pool 배포와 검증: 04 Deploy and verify sandbox pools
-            05 On-policy GRPO 학습: 05 On-policy GRPO training
-            06 학습 중 샌드박스 업데이트: 06 Updating the sandbox during training
-            07 HyperPod 시나리오: 07 HyperPod scenario
+            핸즈온 전체 흐름: Hands-on overview
+            공통 절차: Shared setup
+            01 클러스터 프로비저닝: 01 Provision the cluster
+            CDK로 EKS와 이미지 준비: Provision EKS with CDK and build the images
+            HyperPod로 EKS와 워커 구성 (B2): Provision EKS and workers through HyperPod (B2)
+            02 샌드박스 런타임 준비: 02 Prepare the sandbox runtime
+            EC2에서 gVisor GPU 확인: Verify gVisor GPU access on EC2
+            HyperPod 학습 노드 연결 (B1): Attach the HyperPod trainer (B1)
+            HyperPod 채점 워커 준비 (B2): Prepare HyperPod graders (B2)
+            EC2에서 Kata 실행: Run Kata on EC2
+            03 채점 pool 배포와 검증: 03 Deploy and verify grading pools
+            pool 설정과 검증 결과 읽기: Pool configuration and verification output
             시나리오별 실습: Scenario walkthroughs
-            A · EC2에서 GPU 학습과 채점: A · Train and grade on EC2
-            B1과 B2 비교: Compare B1 and B2
-            B1 · HyperPod 학습과 EC2 채점: B1 · Train on HyperPod and grade on EC2
-            B2 · 학습과 채점 모두 HyperPod: B2 · Train and grade on HyperPod
-            C · GPU 없이 CPU로 실습하기: C · Hands-on lab with CPUs only
-            공통 절차: Shared procedures
-            주제별 실습: Topic guides
+            시나리오 A (EC2 GPU): Scenario A (EC2 GPUs)
+            EC2에서 GRPO 학습하기: Train with GRPO on EC2
+            학습 중 채점 pool 교체하기: Switch grading pools during training
+            시나리오 B (HyperPod): Scenario B (HyperPod)
+            B1 (EC2에서 채점): B1 (grade on EC2)
+            B2 (HyperPod에서 채점): B2 (grade on HyperPod)
+            시나리오 C (CPU 전용): Scenario C (CPUs only)
+            런타임 벤치마크: Runtime benchmarks
+            여러 턴에 걸쳐 답안 채점하기 (C, A): Grade multi-turn episodes (C, A)
+            실습 리소스 정리: Clean up lab resources
             기존 HyperPod custom AMI 구성: Earlier HyperPod custom AMI configuration
-            08 런타임 벤치마크: 08 Runtime benchmark
             CloudFront로 데모 사이트 배포하기: Deploy the demo on CloudFront
-            11 multi-turn 에피소드 실습: 11 Multi-turn episodes
-            99 정리: 99 Cleanup
             Production Ready: Production ready
             00 아키텍처: 00 Architecture
             01 용량과 노드 관리: 01 Capacity and nodes
@@ -171,26 +175,36 @@ nav:
       - 05 상황별 선택 가이드: concepts/05_decision_guide.md
       - 06 Agent Sandbox로 확장: concepts/06_agent_sandbox.md
   - 핸즈온:
-      - 00 전체 흐름: handson/00_overview.md
-      - 시작하기: getting_started.md
-      - 시나리오별 실습:
-          - A · EC2에서 GPU 학습과 채점: handson/scenario_a.md
-          - 07 HyperPod 시나리오:
-              - B1과 B2 비교: handson/07_hyperpod.md
-              - B1 · HyperPod 학습과 EC2 채점: handson/07_hyperpod_b1.md
-              - B2 · 학습과 채점 모두 HyperPod: handson/07_hyperpod_b2.md
-          - C · GPU 없이 CPU로 실습하기: handson/10_cpu_only.md
+      - 핸즈온 전체 흐름: handson/index.md
+      - 시작하기: handson/start.md
       - 공통 절차:
-          - 01 클러스터와 이미지: handson/01_cluster_and_images.md
-          - 02 gVisor GPU 샌드박스: handson/02_gvisor.md
-          - 04 샌드박스 pool 배포와 검증: handson/04_sandbox_pools.md
-          - 08 런타임 벤치마크: handson/08_benchmark.md
-      - 주제별 실습:
-          - 03 Kata 샌드박스 (CLH, QEMU): handson/03_kata.md
-          - 05 On-policy GRPO 학습: handson/05_grpo_training.md
-          - 06 학습 중 샌드박스 업데이트: handson/06_sandbox_update.md
-          - 11 multi-turn 에피소드 실습: handson/11_multi_turn.md
-      - 99 정리: handson/99_cleanup.md
+          - 01 클러스터 프로비저닝:
+              - handson/common/01_provision/index.md
+              - CDK로 EKS와 이미지 준비: handson/common/01_provision/cdk.md
+              - HyperPod로 EKS와 워커 구성 (B2): handson/common/01_provision/hyperpod.md
+          - 02 샌드박스 런타임 준비:
+              - handson/common/02_runtimes/index.md
+              - EC2에서 gVisor GPU 확인: handson/common/02_runtimes/gvisor.md
+              - HyperPod 학습 노드 연결 (B1): handson/common/02_runtimes/b1_trainer.md
+              - HyperPod 채점 워커 준비 (B2): handson/common/02_runtimes/b2_workers.md
+              - EC2에서 Kata 실행: handson/common/02_runtimes/kata.md
+          - 03 채점 pool 배포와 검증:
+              - handson/common/03_pools/index.md
+              - pool 설정과 검증 결과 읽기: handson/common/03_pools/details.md
+      - 시나리오별 실습:
+          - 시나리오 A (EC2 GPU):
+              - handson/scenarios/a/index.md
+              - EC2에서 GRPO 학습하기: handson/scenarios/a/grpo.md
+              - 학습 중 채점 pool 교체하기: handson/scenarios/a/pool_update.md
+          - 시나리오 B (HyperPod):
+              - handson/scenarios/b/index.md
+              - B1 (EC2에서 채점): handson/scenarios/b/b1.md
+              - B2 (HyperPod에서 채점): handson/scenarios/b/b2.md
+          - 시나리오 C (CPU 전용):
+              - handson/scenarios/c/index.md
+      - 런타임 벤치마크: handson/benchmarks/index.md
+      - 여러 턴에 걸쳐 답안 채점하기 (C, A): handson/extensions/multi_turn.md
+      - 실습 리소스 정리: handson/cleanup.md
   - Production Ready:
       - 00 아키텍처: production/00_architecture.md
       - 01 용량과 노드 관리: production/01_capacity_and_nodes.md

@@ -5,7 +5,7 @@
 
 ## 세 질문으로 실습 경로 고르기
 
-1. **샌드박스 안에서 GPU 연산이 필요한가요?** CPU 테스트만 필요하다면 [CPU 경로](../handson/10_cpu_only.md)에서 시작하세요. trainer에 GPU가 있어도 채점이 CPU로 끝나면 샌드박스에 GPU를 붙일 필요는 없습니다.
+1. **샌드박스 안에서 GPU 연산이 필요한가요?** CPU 테스트만 필요하다면 [CPU 경로](../handson/scenarios/c/index.md)에서 시작하세요. trainer에 GPU가 있어도 채점이 CPU로 끝나면 샌드박스에 GPU를 붙일 필요는 없습니다.
 2. **생성한 코드를 어떤 GPU에서 돌릴 건가요?** 실행 속도를 점수에 반영한다면 목표 GPU에서 시간을 재세요. 기본 gVisor GPU 실습은 A10G에서 진행합니다.
 3. **pod마다 별도 VM이 필요한가요?** Kata GPU 실습에서는 `g4dn.metal`에 장착된 T4를 VM에 연결합니다. VM 경계와 목표 GPU를 둘 다 만족하는 구성을 먼저 확인하세요.
 
@@ -21,10 +21,10 @@ L4에서 시간을 재야 하고 샌드박스마다 별도 VM도 필요하다면
 
 | 경로 | 첫 확인 |
 |---|---|
-| [CPU 실습](../handson/10_cpu_only.md) | 기준 입력의 verdict가 예상과 맞습니다. |
-| [gVisor GPU](../handson/02_gvisor.md) | smoke pod가 GPU 이름과 `cuda ok:`를 출력합니다. |
-| [Kata GPU](../handson/03_kata.md) | pod가 VM 안에서 GPU 연산을 완료합니다. |
-| [에피소드마다 샌드박스 할당](../handson/11_multi_turn.md) | 같은 에피소드의 턴이 같은 샌드박스를 쓰고 끝나면 claim이 삭제됩니다. |
+| [CPU 실습](../handson/scenarios/c/index.md) | 기준 입력의 verdict가 예상과 맞습니다. |
+| [gVisor GPU](../handson/common/02_runtimes/gvisor.md) | smoke pod가 GPU 이름과 `cuda ok:`를 출력합니다. |
+| [Kata GPU](../handson/common/02_runtimes/kata.md) | pod가 VM 안에서 GPU 연산을 완료합니다. |
+| [에피소드마다 샌드박스 할당](../handson/extensions/multi_turn.md) | 같은 에피소드의 턴이 같은 샌드박스를 쓰고 끝나면 claim이 삭제됩니다. |
 
 런타임의 차이는 [격리 런타임 비교](02_isolation_runtimes.md), trainer를 어디에 둘지는 [플랫폼과 인스턴스 선택](04_platforms_and_instances.md)을 참고하세요.
 
@@ -36,7 +36,7 @@ L4에서 시간을 재야 하고 샌드박스마다 별도 VM도 필요하다면
 - 여러 요청이 빈 pod를 기다린다면 동시에 채점할 자리 수를 먼저 확인하세요. pod 하나가 GPU 한 장을 쓰므로 replica를 늘리려면 여유 GPU가 필요합니다.
 - 별도 VM 경계가 필수라면 그 경계에서 목표 GPU를 쓸 수 있는지 먼저 확인하세요. Kata에서 GPU 채점까지 확인한 조합은 QEMU와 T4입니다.
 
-이 순서로 보면 trainer를 HyperPod에 두는 결정과 채점 pool의 크기를 정하는 결정을 나누어 시험할 수 있습니다. [다섯 pool의 요청당 시간과 처리량](../handson/08_benchmark.md#runtime-results)
+이 순서로 보면 trainer를 HyperPod에 두는 결정과 채점 pool의 크기를 정하는 결정을 나누어 시험할 수 있습니다. [다섯 pool의 요청당 시간과 처리량](../handson/benchmarks/index.md#runtime-results)
 
 <a id="더-살펴보기"></a>
 
@@ -75,7 +75,7 @@ L4에서 시간을 재야 하고 샌드박스마다 별도 VM도 필요하다면
 
 | 달라질 수 있는 조건 | 런타임 선택에 미치는 영향 | 확인 방법 |
 |---|---|---|
-| 새 gVisor 릴리스가 HyperPod 기본 드라이버를 지원 | B2 채점 워커에서 드라이버 교체가 필요한지 다시 판단 | 기본 드라이버와 새 `GVISOR_RELEASE` 조합으로 gVisor Pod의 CUDA 연산과 기준 사례를 다시 확인합니다. [B2 검증 순서](../handson/07_hyperpod_b2.md) |
+| 새 gVisor 릴리스가 HyperPod 기본 드라이버를 지원 | B2 채점 워커에서 드라이버 교체가 필요한지 다시 판단 | 기본 드라이버와 새 `GVISOR_RELEASE` 조합으로 gVisor Pod의 CUDA 연산과 기준 사례를 다시 확인합니다. [B2 검증 순서](../handson/scenarios/b/b2.md) |
 | EKS NVIDIA AMI, NVIDIA 드라이버, gVisor 버전이 바뀜 | 기본값인 `g5`와 GSP를 끈 proprietary 모듈의 조합은 실습 계정에서 확인했지만 gVisor 공식 문서가 다루지 않으므로 재검증 필요 | 표 아래 목록의 순서 |
 | 사용할 가용 영역에서 `g6` On-Demand 용량을 확보할 수 있음 | open 드라이버를 써서 gVisor 문서와 맞고 요금도 낮은 `g6`를 선택할 수 있음 | 인스턴스를 시작했다가 바로 종료해 확인한 뒤 `scripts/config.env`의 `GVISOR_INSTANCE_TYPE`, `TRAINER_INSTANCE_TYPE` 변경 |
 | nested virtualization 지원 목록에 G나 P 계열이 추가 | `.metal` 없는 Kata + GPU 배치를 검토할 수 있음 (VFIO 지원은 따로 확인) | nested virtualization User Guide, `describe-instance-types` 필터 |
@@ -97,7 +97,7 @@ L4에서 시간을 재야 하고 샌드박스마다 별도 VM도 필요하다면
     - 런타임 구조와 AWS 배치 조건: [02 격리 런타임 비교](02_isolation_runtimes.md)
     - 인스턴스, quota, 시간당 비용: [04 플랫폼과 인스턴스 선택](04_platforms_and_instances.md)
     - 에피소드마다 warm pool에서 샌드박스 할당받기: [06 Agent Sandbox로 확장](06_agent_sandbox.md)
-    - 직접 구축: [핸즈온 00 전체 흐름](../handson/00_overview.md)
+    - 직접 구축: [전체 흐름](../handson/index.md)
     - 운영 설계와 위협 모델: [Production 00 아키텍처](../production/00_architecture.md), [Production 02 보안](../production/02_security.md)
 
 ??? note "참고 자료"

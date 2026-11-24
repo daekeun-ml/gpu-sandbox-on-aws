@@ -177,7 +177,7 @@ def _fits(label: str, gap: float, size: int = SMALL) -> None:
 
 
 def handson_00(lang: str) -> Figure:
-    """docs/handson/00_overview: order, G and VT quota, billable nodes and g4dn.metal debugging, and the guards."""
+    """docs/handson/index.md: order, G and VT quota, billable nodes and g4dn.metal debugging, and the guards."""
     t = T[lang]
     fig = Figure(760, 576)
     lx, lw, rx, rw = 16, 236, 470, 274
@@ -205,7 +205,7 @@ def handson_00(lang: str) -> Figure:
 
 
 def handson_01(lang: str) -> Figure:
-    """docs/handson/01_cluster_and_images: public endpoint and IMDS hop limit 2 vs the CDK stack defaults."""
+    """docs/handson/common/01_provision/cdk.md: public endpoint and IMDS hop limit 2 vs the CDK stack defaults."""
     t = T[lang]
     fig = Figure(760, 552)
     nx, nw, cx, px, pw, ax, aw = 16, 140, 180, 212, 150, 506, 206
@@ -242,7 +242,7 @@ def handson_01(lang: str) -> Figure:
 
 
 def handson_02(lang: str) -> Figure:
-    """docs/handson/02_gvisor: the runc hook and an unknown driver vs CDI and the supported driver."""
+    """docs/handson/common/02_runtimes/gvisor.md: the runc hook and an unknown driver vs CDI and the supported driver."""
     t = T[lang]
     fig = Figure(760, 556)
     lx, lw, rx, rw = 16, 220, 470, 274
@@ -291,7 +291,7 @@ def handson_02(lang: str) -> Figure:
 
 
 def handson_03(lang: str) -> Figure:
-    """docs/handson/03_kata: every check on g4dn.metal vs GPU-unrelated checks on c8i.2xlarge first."""
+    """docs/handson/common/02_runtimes/kata.md: every check on g4dn.metal vs GPU-unrelated checks on c8i.2xlarge first."""
     t = T[lang]
     fig = Figure(760, 584)
     gx, bx, bw, rx, rw = 16, 30, 248, 500, 244
@@ -318,7 +318,7 @@ def handson_03(lang: str) -> Figure:
 
 
 def handson_04(lang: str) -> Figure:
-    """docs/handson/04_sandbox_pools: secrets in the pod, default-allow and the node IP exception, and the layers."""
+    """docs/handson/common/03_pools/details.md: secrets in the pod, default-allow and the node IP exception, and the layers."""
     t = T[lang]
     fig = Figure(760, 572)
     cx, cw, sx, sw, tx, tw, edge = 32, 156, 312, 170, 566, 178, 500
@@ -358,7 +358,7 @@ def handson_04(lang: str) -> Figure:
 
 
 def handson_05(lang: str) -> Figure:
-    """docs/handson/05_grpo_training: a 0-or-1 reward and failures scored 0 vs partial credit and None."""
+    """docs/handson/scenarios/a/grpo.md: a 0-or-1 reward and failures scored 0 vs partial credit and None."""
     t = T[lang]
     fig = Figure(760, 500)
     ax, aw, sx, sw, rx, rw, ox, ow = 16, 96, 146, 104, 394, 148, 572, 172

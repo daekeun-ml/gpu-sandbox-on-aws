@@ -23,7 +23,7 @@
 
 <a id="이-저장소에서-확인한-것"></a>
 
-아래 첫 명령은 AWS와 GPU 없이 로컬 테스트 전체를 실행하고, 두 번째 명령은 CDK 라이브러리를 설치한 가상 환경에서 CDK 스택 테스트를 따로 실행합니다. 환경 구성은 [시작하기](../getting_started.md)를 따르세요.
+아래 첫 명령은 AWS와 GPU 없이 로컬 테스트 전체를 실행하고, 두 번째 명령은 CDK 라이브러리를 설치한 가상 환경에서 CDK 스택 테스트를 따로 실행합니다. 환경 구성은 [시작하기](../handson/start.md)를 따르세요.
 
 - **테스트를 실행할 때**: 테스트는 서버의 프로세스 정리 동작을 끈 채로 실행되므로 Linux 호스트에서도 안전합니다.
 - **Linux 호스트에서 서버를 직접 띄울 때**: 같은 사용자의 다른 프로세스가 종료될 수 있으니, 그 전에 그 페이지의 경고를 읽으세요.
@@ -71,16 +71,16 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 | 2026-11-14 | us-west-2 | 시나리오 C(EKS 1.36) | `02_create_cluster.sh --cpu-only`(CDK 배포, 약 20분), `cdk/tunnel.sh`, `kata/cpu_nodes.sh`(약 14분, 대부분 kata-deploy 설치), 스택 삭제. 배포와 삭제를 두 번 함. [05 직접 해 보기](../beginner/05_hands_on.md)의 2부도 이 순서로 실행함(같은 노드의 runc 비교 컨테이너 포함) | 성공. 클러스터와 노드 상태, private endpoint, c8i 노드의 nested virtualization과 `/dev/kvm`, gVisor와 node guard, `127.0.0.1`에서만 열리는 터널, `gvisor-cpu` RuntimeClass, 세 런타임의 smoke pod, 삭제 뒤 남은 리소스를 확인 |
 | 2026-11-17 | us-west-2 | 시나리오 C(c8i) | `ops/rollout.sh kata-clh-cpu v1 v2`, 함께 실행한 모델 없는 reward 루프 `ops/simulate.sh`(30배치, 약 16분) | 성공. 배포, 검증, parity, 전환 네 단계가 통과했고 8번째 배치에서 `sandbox_version_switch`가 기록됨. `rollout.sh --finish`는 실행하지 않음. 출력은 `demo/site/data/extras.json`에 있음 |
 | 2026-11-18 | us-west-2 | 시나리오 A(gVisor) | `02_create_cluster.sh`: GPU 노드 그룹을 포함한 첫 생성이 `InsufficientInstanceCapacity`로 롤백되어, system 노드만 있는 `--hyperpod-b2`로 만든 뒤 `CHANGE_SCENARIO=1`로 B1(gVisor 노드 그룹 추가)과 A(trainer 추가)로 차례로 업데이트. 이어서 `03_build_push_images.sh`(이미지 세 개), `04_install_gpu_stack.sh`(`g5.xlarge`), `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`(replica 1개), `ops/verify.sh gvisor v1`, `g5.2xlarge`에서 `07_run_grpo.sh 5`, `08_cleanup.sh --images` | 성공. smoke pod `cuda ok: NVIDIA A10G 2048.0`, 드라이버 580.178.04(proprietary, GSP 꺼짐). pool 검증은 golden verdict 6개 PASS, egress 대상 4개 차단, `default` 네임스페이스 차단. GRPO Job은 Complete(약 12분, `train_runtime` 약 401초). `08_cleanup.sh`의 AMI 삭제 단계가 돌았는지는 기록에 없음 |
-| 2026-11-18 | us-west-2 | Kata GPU와 Kata CPU(다른 클러스터, EKS 1.36) | system 노드만 있는 구성으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가. `kata/gpu_nodes.sh`(IOMMU AMI 빌드, GPU Operator), `kata/cpu_nodes.sh`, `06_deploy_sandboxes.sh kata-qemu`(replica 4개), `kata-qemu`와 CPU pool 세 개의 `ops/verify.sh` | 성공. `pgpu=8`, `kata-qemu` pod 4개 Ready(T4), pool 검증 통과. 실행 중에 `vfio_iommu_type1` 모듈 문제와 AMI 빌더 문제를 찾아 스크립트를 고침([03 Kata 샌드박스](../handson/03_kata.md)) |
+| 2026-11-18 | us-west-2 | Kata GPU와 Kata CPU(다른 클러스터, EKS 1.36) | system 노드만 있는 구성으로 만든 뒤 `CHANGE_SCENARIO=1`로 Kata CPU, Kata GPU, gVisor 노드 그룹 추가. `kata/gpu_nodes.sh`(IOMMU AMI 빌드, GPU Operator), `kata/cpu_nodes.sh`, `06_deploy_sandboxes.sh kata-qemu`(replica 4개), `kata-qemu`와 CPU pool 세 개의 `ops/verify.sh` | 성공. `pgpu=8`, `kata-qemu` pod 4개 Ready(T4), pool 검증 통과. 실행 중에 `vfio_iommu_type1` 모듈 문제와 AMI 빌더 문제를 찾아 스크립트를 고침([Kata 샌드박스](../handson/common/02_runtimes/kata.md)) |
 | 2026-11-18 | us-west-2 | 실험용 Kata CLH GPU(`kata-clh`) | `ENABLE_EXPERIMENTAL_CLH_GPU=1`로 실험용 pool 배포 | 실패. artifact 경로를 채운 뒤에도 VM이 시작되지 않음(`create container timeout`). 벤치마크에서 빠짐 |
-| 2026-11-18 | us-west-2 | 런타임 벤치마크 | 위 Kata 클러스터에서 다섯 pool(`gvisor`, `kata-qemu`, CPU pool 세 개)에 `ops/bench.sh 32`를 배포 직후와 pool 재시작 뒤 두 번. 이 클러스터의 gVisor 노드는 `g5.2xlarge` 한 대 | 성공. 다섯 pool 모두 32개 중 32개 `ok`. 결과 표는 [08 런타임 벤치마크](../handson/08_benchmark.md) |
+| 2026-11-18 | us-west-2 | 런타임 벤치마크 | 위 Kata 클러스터에서 다섯 pool(`gvisor`, `kata-qemu`, CPU pool 세 개)에 `ops/bench.sh 32`를 배포 직후와 pool 재시작 뒤 두 번. 이 클러스터의 gVisor 노드는 `g5.2xlarge` 한 대 | 성공. 다섯 pool 모두 32개 중 32개 `ok`. 결과 표는 [런타임 벤치마크](../handson/benchmarks/index.md) |
 | 2026-11-18 | us-east-1(클러스터는 us-west-2) | 데모 사이트 | recorder pod에서 `record`(gVisor A10G pool, Kata QEMU T4 pool), 클러스터 로그로 `extras.json` 생성, `demo/deploy.sh`, 배포 뒤 외부 점검 | 성공. 보안 헤더, 허용 메서드, 버킷 설정, 로그 전송을 확인. 기본 인증서에서 TLS 1.0과 1.1 handshake가 받아들여짐([CloudFront 데모 배포](demo_site.md)의 보안 설계) |
 | 2026-11-20 | us-west-2 | 시나리오 C(c8i) | `ops/rollout.sh kata-clh-cpu`(v1에서 v2, v2에서 v1), 함께 실행한 `ops/simulate.sh`, `extensions/agent_sandbox.sh install`, `pool kata-clh-cpu 1`, `claim kata-clh-cpu`, `episodes kata-clh-cpu 2 3` | 성공. 전환이 배치 경계에서 한 번 일어났고 batch마다 버전이 하나였음. v2에서 v1 방향 한 번은 CPU 측정 노이즈로 parity가 speedup 조건에서 실패(0.8979에서 0.5365, 판정은 같음). Agent Sandbox는 claim이 샌드박스 주소를 받고 반납했으며 warm pool이 새 샌드박스를 채움. `episodes`는 에피소드 2개가 모두 3 turn에 solved, 에피소드마다 claim과 샌드박스가 하나, 끝난 뒤 남은 claim 없음 |
 | 2026-11-20 | us-west-2 | 시나리오 A(gVisor) | `01_check_prereqs.sh`, `02_create_cluster.sh`(GPU 노드 그룹 포함 첫 생성, CDK 배포 약 15분), `03_build_push_images.sh`, `04_install_gpu_stack.sh`, `05_setup_namespaces_auth.sh`, `06_deploy_sandboxes.sh gvisor v1`, `ops/verify.sh gvisor v1`, `07_run_grpo.sh`(기본 60 step) | 성공. 이번에는 용량 부족 없이 첫 생성이 끝남. 접속 인스턴스의 SSM 연결이 등록 직후 끊겨(`ConnectionLost`) 재부팅 뒤 터널이 연결됨. 검증 6개 제출물 모두 PASS. 학습은 `reward_batch` 60개, `sandbox_error` 0건, 한 batch의 버전 혼합 0건, `train_runtime` 2697초, Job 약 50분 Complete. `ok` 비율은 처음 20 step 5.3%, 마지막 20 step 6.0% |
-| 2026-11-22 | us-west-2 | HyperPod B1, EKS 1.36 | `ml.g5.2xlarge` trainer, EC2 `g5.xlarge` 샌드박스 2대, training operator `v1.3.0-eksbuild.1`, `hyperpod/run_grpo.sh 1` | `Completed=True`. probe 검사 6/6 통과, 제출 코드 12개 채점, 정답 1개. HyperPod·EKS 클러스터, 테스트 GPU 노드, lifecycle 버킷, 테스트용 trainer 이미지의 ECR 리포지토리를 삭제했습니다. EKS용 KMS 키는 7일 후 삭제 예약 상태를 확인했습니다. [콘솔과 trainer 실행 화면](../handson/07_hyperpod_b1.md#확인-방법) |
-| 2026-11-22 | us-west-2 | HyperPod B1 벤치마크 | `relu_bias_triton`, gVisor v1, EC2 `g5.xlarge` 샌드박스 2대 | EKS 시스템 노드와 HyperPod 학습 노드에서 각각 32/32 성공. HyperPod에서 요청했을 때 pool 처리량은 0.199 eval/s. [측정값과 실행 화면](../handson/08_benchmark.md#hyperpod-b1) |
-| 2026-11-22 | us-west-2 | 시나리오 A, Kata CPU/GPU, EKS 1.36 | `g5.2xlarge`에서 GRPO 16스텝, v1→v2 전환 및 롤백, 5개 v1 pool에서 `ops/bench.sh 32` | 학습 중 5번째 배치부터 v2로 전환, 207개 제출물, 버전이 섞인 배치 0개. 벤치마크 160/160 성공. [학습 로그](../handson/06_sandbox_update.md#switch-batches) · [측정 표와 원본 JSONL](../handson/08_benchmark.md#runtime-results) |
-| 2026-11-23 | us-east-1 | 관리형 HyperPod B2, EKS 1.36 | `system` `ml.m5.xlarge` 1대, `trainer` `ml.g5.2xlarge` 1대, gVisor `ml.g5.xlarge` 2대. 네 워커 모두 HyperPod 소속 | GRPO `Completed=True`, 코드 12개 채점. 기준 사례 6개 통과. CPU·학습 노드 벤치마크 각 32/32 성공. [실행 화면](../handson/07_hyperpod_b2.md) · [결과 표](../handson/08_benchmark.md#hyperpod-b2) |
+| 2026-11-22 | us-west-2 | HyperPod B1, EKS 1.36 | `ml.g5.2xlarge` trainer, EC2 `g5.xlarge` 샌드박스 2대, training operator `v1.3.0-eksbuild.1`, `hyperpod/run_grpo.sh 1` | `Completed=True`. probe 검사 6/6 통과, 제출 코드 12개 채점, 정답 1개. HyperPod와 EKS 클러스터, 테스트 GPU 노드, lifecycle 버킷, 테스트용 trainer 이미지의 ECR 리포지토리를 삭제했습니다. EKS용 KMS 키는 7일 후 삭제 예약 상태를 확인했습니다. [콘솔과 trainer 실행 화면](../handson/scenarios/b/b1.md#확인-방법) |
+| 2026-11-22 | us-west-2 | HyperPod B1 벤치마크 | `relu_bias_triton`, gVisor v1, EC2 `g5.xlarge` 샌드박스 2대 | EKS 시스템 노드와 HyperPod 학습 노드에서 각각 32/32 성공. HyperPod에서 요청했을 때 pool 처리량은 0.199 eval/s. [측정값과 실행 화면](../handson/benchmarks/index.md#hyperpod-b1) |
+| 2026-11-22 | us-west-2 | 시나리오 A, Kata CPU/GPU, EKS 1.36 | `g5.2xlarge`에서 GRPO 16스텝, v1→v2 전환 및 롤백, 5개 v1 pool에서 `ops/bench.sh 32` | 학습 중 5번째 배치부터 v2로 전환, 207개 제출물, 버전이 섞인 배치 0개. 벤치마크 160/160 성공. [학습 로그](../handson/scenarios/a/pool_update.md#switch-batches), [측정 표와 원본 JSONL](../handson/benchmarks/index.md#runtime-results) |
+| 2026-11-23 | us-east-1 | 관리형 HyperPod B2, EKS 1.36 | `system` `ml.m5.xlarge` 1대, `trainer` `ml.g5.2xlarge` 1대, gVisor `ml.g5.xlarge` 2대. 네 워커 모두 HyperPod 소속 | GRPO `Completed=True`, 코드 12개 채점. 기준 사례 6개 통과. CPU와 학습 노드 벤치마크 각 32/32 성공. [실행 화면](../handson/scenarios/b/b2.md), [결과 표](../handson/benchmarks/index.md#hyperpod-b2) |
 
 2026-11-14에는 ap-south-1 콘솔에서 Service Quotas 화면과 EC2 AMI Catalog의 HyperPod AMI 검색 결과도 캡처했습니다. 조회만 했고 스크립트는 실행하지 않았습니다.
 
@@ -88,7 +88,7 @@ TRL 1.18.0 GRPO dry run(SmolLM2-135M, CPU, vLLM 없음)은 2 step을 마쳤고, 
 
 - 기존 B2 CDK 경로의 샌드박스용 custom AMI, 자동 노드 교체와 체크포인트 복구.
 - `demo/teardown.sh`(shellcheck만 통과)
-- [11 multi-turn 에피소드 실습](../handson/11_multi_turn.md)의 `gvisor-cpu` warm pool과 GPU 절(`kata-clh-cpu` warm pool로는 실행함)
+- [multi-turn 에피소드 실습](../handson/extensions/multi_turn.md)의 `gvisor-cpu` warm pool과 GPU 절(`kata-clh-cpu` warm pool로는 실행함)
 - 운영 가이드가 핸즈온에 더하는 구성: Karpenter NodePool, gateway, jwks-sync CronJob, pool hardening, warm capacity
 
 나머지는 각 핸즈온 페이지의 확인 단계로 직접 검증하세요.
@@ -191,12 +191,15 @@ scripts/01_check_prereqs.sh
 | [google/gvisor](https://github.com/google/gvisor) | gVisor 소스 코드 |
 | [GKE Sandbox](https://cloud.google.com/kubernetes-engine/docs/concepts/sandbox-pods) | "Don't use GPU time-sharing in sandboxed Pods" |
 | [Kata 4.3.1 NVIDIA GPU passthrough](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/use-cases/NVIDIA-GPU-passthrough-and-Kata-QEMU.md) | "Cold-plug is by design the only supported mode for NVIDIA GPU passthrough", QEMU 경로 |
-| [Kata 4.3.1 hypervisors.md](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md) | Cloud Hypervisor의 GPU 지원은 not supported |
+| [Cloud Hypervisor v55.0 VFIO 안내](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md), [Tesla T4 테스트](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/scripts/run_integration_tests_vfio.sh#L5-L9) | Cloud Hypervisor VM에 물리 PCI 장치를 직접 연결할 수 있음. NVIDIA GPU 설정 예시와 Tesla T4를 사용하는 통합 테스트 제공 |
+| Kata의 hypervisor 지원표 [4.3.1](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types), [4.4.0](https://github.com/kata-containers/kata-containers/blob/4.4.0/docs/hypervisors.md#types) | 두 버전 모두 Kata의 NVIDIA GPU pod 구성에서 QEMU는 지원, Cloud Hypervisor는 미지원 |
 | [Kata issue #11687](https://github.com/kata-containers/kata-containers/issues/11687) | maintainer 답변(2025-08): "You should use the QEMU GPU runtime class." |
+| [Kata issue #13992](https://github.com/kata-containers/kata-containers/issues/13992) | `runtime-rs`에서 Cloud Hypervisor로 NVIDIA GPU를 넘기는 경로에 남은 작업. 새 VFIO 인터페이스의 장치를 VM 부팅 시 전달하는 문제 포함 |
 | [kata-containers/kata-containers](https://github.com/kata-containers/kata-containers) | 4.3.1(2026-10-21), runtime-rs 기본(4.0.0부터), Go runtime은 deprecated지만 지원, Helm chart `oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy`의 `deploymentMode` 기본 `job`, RuntimeClass `overhead.podFixed` |
-| [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/main/FAQ.md), [CHANGELOG](https://github.com/firecracker-microvm/firecracker/blob/main/CHANGELOG.md) | 최소 장치 모델, 1.13.0의 PCI 지원 추가, 변경 이력에 VFIO GPU passthrough 없음 |
+| [Firecracker v1.18.0 FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md), [변경 이력](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/CHANGELOG.md) | 최소 장치 모델, 1.13.0부터 virtio 장치용 PCI 지원, GPU passthrough 경로 없음 |
+| [E2B GPU 지원 범위](https://docs.e2b.dev/faq/gpu-support) | CPU 전용 샌드박스, vCPU와 RAM 할당 |
 | [Modal Sandboxes](https://modal.com/docs/guide/sandbox) | "GPU Sandboxes are only supported with `runtime="gvisor"`" |
-| [NVIDIA GPU Operator with Kata](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/deploy-kata-containers.html), [NVIDIA/gpu-operator](https://github.com/NVIDIA/gpu-operator) | v26.7.2의 sandbox 모드 값, `nvidia.com/pgpu`, "A node can only run one container runtime at a time", EKS 검증은 Ubuntu(AL2023은 목록에 없음) |
+| [NVIDIA GPU Operator with Kata](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-operator-kata.html), [NVIDIA/gpu-operator](https://github.com/NVIDIA/gpu-operator) | QEMU를 사용하는 `kata-qemu-nvidia-gpu` RuntimeClass, `nvidia.com/pgpu`, "A node can only run one container runtime at a time", EKS 검증은 Ubuntu(AL2023은 목록에 없음) |
 | [NVIDIA/k8s-device-plugin](https://github.com/NVIDIA/k8s-device-plugin), [NVIDIA/nvidia-container-toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) | `deviceListStrategy: cdi-cri`, 호스트에 필요한 container toolkit |
 | [awslabs/amazon-eks-ami v20261107](https://github.com/awslabs/amazon-eks-ami/releases/tag/v20261107) | AL2023 NVIDIA AMI: 드라이버 580.178.04 기본(595.91.07은 g7 전용), toolkit 1.20.1, containerd 2.3.7, device plugin 없음, kubelet 1.32 이상에서 CDI, user data는 nodeadm-config와 nodeadm-run 사이에 실행 |
 | [aws/aws-network-policy-agent](https://github.com/aws/aws-network-policy-agent) | 노드 IP는 ingress와 egress 맵 모두에서 허용("ensures kubelet liveness/readiness probes are never blocked") |
@@ -227,6 +230,7 @@ scripts/01_check_prereqs.sh
 |---|---|
 | [KernelBench](https://github.com/ScalingIntelligence/KernelBench) | MIT, `ModelNew` 계약, allclose(fp32 1e-4, fp16/bf16 1e-2), 정확성 5회와 성능 100회, L2 flush를 포함한 cuda_event timing, `excessive_speedup_threshold` 10, 추가 stream으로 생기는 측정 허점과 모든 stream을 측정하는 host_time 모드 |
 | [KernelBench v0.1 블로그](https://scalingintelligence.stanford.edu/blogs/kernelbenchv01/) | reward hacking 유형: torch와 cuBLAS 호출, 커널을 호출하지 않음, 메모리를 재사용하는 no-op 커널, stream timing 불일치 |
+| [CUDA Agent](https://cuda-agent.github.io/), [논문](https://arxiv.org/abs/2602.24286) | ByteDance Seed와 칭화대 연구진이 CUDA 커널의 정확도와 `torch.compile` 대비 성능을 reward에 반영한 RL 사례 |
 | [Sakana AI CUDA Engineer](https://sakana.ai/ai-cuda-engineer/) | 메모리 exploit으로 정확성 검사를 건너뛴 사례 |
 | [Kevin-32B (Cognition)](https://cognition.com/blog/kevin-32b) | reference 복사, try/except fallback, reference 클래스 상속, PyTorch만 쓴 completion에 0점 |
 | [CUDA-L1 (arXiv 2507.14111)](https://arxiv.org/abs/2507.14111) | 추가 stream이 250건 중 82건(32.8%)에서 timing을 속임, lazy evaluation, caching |

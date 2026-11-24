@@ -19,7 +19,7 @@ KernelBench는 PyTorch 기준 구현을 주고, 모델이 작성한 GPU 커널�
 
 <span id="적용-범위와-한계"></span>
 
-학습 서버가 GPU를 써도 보상이 단위 테스트 통과 여부라면 CPU에서 채점할 수 있습니다. 커널 과제를 채점할 때도 trainer는 먼저 CPU에서 답안의 코드를 추출하고 정책을 검사합니다. 이 검사를 통과한 코드를 GPU 샌드박스에서 실행해 정확도와 속도를 비교합니다. GPU 없이 채점을 연습할 때는 [별도의 CPU pool](../handson/10_cpu_only.md)을 사용합니다.
+학습 서버가 GPU를 써도 보상이 단위 테스트 통과 여부라면 CPU에서 채점할 수 있습니다. 커널 과제를 채점할 때도 trainer는 먼저 CPU에서 답안의 코드를 추출하고 정책을 검사합니다. 이 검사를 통과한 코드를 GPU 샌드박스에서 실행해 정확도와 속도를 비교합니다. GPU 없이 채점을 연습할 때는 [별도의 CPU pool](../handson/scenarios/c/index.md)을 사용합니다.
 
 **Speedup**은 기준 구현의 실행 시간을 제출 코드의 실행 시간으로 나눈 값입니다. 같은 GPU에서 기준 구현이 4 ms, 제출한 정답 코드가 2 ms 걸렸다면 speedup은 2배입니다.
 
@@ -28,7 +28,7 @@ KernelBench는 PyTorch 기준 구현을 주고, 모델이 작성한 GPU 커널�
 ## GPU를 격리할 때의 운영 조건
 
 - **장치 연결**　Firecracker v1.18.0은 물리 GPU를 VM에 직접 연결하는 GPU passthrough를 지원하지 않습니다. E2B의 샌드박스도 CPU 전용입니다. GPU 채점 실습에서는 gVisor와 Kata + QEMU로 물리 GPU를 연결합니다. [Firecracker FAQ](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/FAQ.md) [E2B GPU 지원](https://docs.e2b.dev/faq/gpu-support) [격리 런타임 비교](02_isolation_runtimes.md)
-- **측정 일관성**　같은 GPU에서 다른 작업이 겹치면 같은 코드도 실행 시간이 달라져 속도 점수가 흔들릴 수 있습니다. 이 실습에서는 GPU 한 장을 pod 하나에 할당하고, pod마다 한 번에 제출 하나만 채점합니다. [샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md)
+- **측정 일관성**　같은 GPU에서 다른 작업이 겹치면 같은 코드도 실행 시간이 달라져 속도 점수가 흔들릴 수 있습니다. 이 실습에서는 GPU 한 장을 pod 하나에 할당하고, pod마다 한 번에 제출 하나만 채점합니다. [샌드박스 pool 배포와 검증](../handson/common/03_pools/details.md)
 - **동시 실행 비용**　이 구성에서 pod 10개를 동시에 띄우려면 GPU 10장이 필요합니다. 요청을 기다리는 pod도 GPU 한 장을 계속 점유합니다. 그래서 한꺼번에 띄울 pod 수만큼 GPU를 확보해야 합니다. [용량과 노드 관리](../production/01_capacity_and_nodes.md)
 
 ??? note "CUDA 오류와 다음 채점"
@@ -36,13 +36,13 @@ KernelBench는 PyTorch 기준 구현을 주고, 모델이 작성한 GPU 커널�
 
     채점 서버는 답안을 받을 때마다 새 프로세스에서 후보 코드를 실행합니다. 기준 구현에서도 CUDA 오류가 감지되면 해당 샌드박스는 `sandbox_error`를 반환하고 새 요청을 받지 않습니다. TRL 학습에서는 이렇게 실패한 평가를 제외합니다. [On-policy RL과 오류 처리](03_onpolicy_rl_with_sandboxes.md)
 
-채점 점수가 모델 업데이트에 어떻게 반영되는지는 [On-policy RL과 샌드박스](03_onpolicy_rl_with_sandboxes.md)에서 살펴봅니다. GPU 없이 채점 흐름을 실습하려면 [CPU 핸즈온](../handson/10_cpu_only.md)부터 시작하세요.
+채점 점수가 모델 업데이트에 어떻게 반영되는지는 [On-policy RL과 샌드박스](03_onpolicy_rl_with_sandboxes.md)에서 살펴봅니다. GPU 없이 채점 흐름을 실습하려면 [CPU 핸즈온](../handson/scenarios/c/index.md)부터 시작하세요.
 
 ## 커널 실행 시간과 채점 시간을 구별하기
 
 GPU pool에 `relu_bias_triton`을 보냈을 때 `ref_ms_median`은 **기준 커널 한 번**의 실행 시간을 나타냅니다. `eval_p50_s`는 **요청 하나**에 대해 샌드박스가 코드를 준비하고 정확성을 검사하고 성능을 측정해 판정을 내리기까지 걸린 시간의 중앙값입니다. 단위도 각각 밀리초와 초입니다.
 
-예를 들어 A10G 두 장을 둔 gVisor pool에서 기준 커널은 0.5833 ms, 커널 speedup 중앙값은 1.743배였고, 요청당 채점 시간 중앙값은 9.984초였습니다. 커널이 빨라져도 코드 준비와 정확성 검사 시간은 여전히 듭니다. 모델이 낸 커널의 성능을 보려면 speedup을, 학습이 다음 배치를 얼마나 기다리는지 보려면 채점 시간과 pool 처리량을 읽으세요. [벤치마크 표와 원본 JSONL](../handson/08_benchmark.md#runtime-results)
+예를 들어 A10G 두 장을 둔 gVisor pool에서 기준 커널은 0.5833 ms, 커널 speedup 중앙값은 1.743배였고, 요청당 채점 시간 중앙값은 9.984초였습니다. 커널이 빨라져도 코드 준비와 정확성 검사 시간은 여전히 듭니다. 모델이 낸 커널의 성능을 보려면 speedup을, 학습이 다음 배치를 얼마나 기다리는지 보려면 채점 시간과 pool 처리량을 읽으세요. [벤치마크 표와 원본 JSONL](../handson/benchmarks/index.md#runtime-results)
 
 <a id="더-살펴보기"></a>
 

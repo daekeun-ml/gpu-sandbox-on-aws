@@ -1,6 +1,6 @@
 {
   "handson-11_multi_turn": {
-    "page": "docs/handson/11_multi_turn.md",
+    "page": "docs/handson/extensions/multi_turn.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
     "alt_ko": "두 패널 그림입니다. a 에피소드 단위 샌드박스가 없는 경우: 에피소드 하나의 turn 1 제출은 reward pool(Deployment)의 pod A로, turn 2 수정 제출은 pod B로 전송되고, 두 pod는 요청이 끝나면 그 요청의 작업 디렉터리와 남은 프로세스를 정리합니다. 에피소드마다 새 샌드박스를 만드는 점선 경로(빨간색)에서는 Ready까지 기다려야 하고, Kata GPU VM은 몇 분이 걸릴 수 있습니다. b 시나리오 C의 Agent Sandbox: c8i.2xlarge 노드(nested virtualization)에서 SandboxWarmPool kernel-eval-gvisor-cpu가 대기 샌드박스 2개를 실행합니다. rl-trainer 네임스페이스의 Job episodes(ServiceAccount sandbox-episode)가 에피소드마다 SandboxClaim을 만들면(1) 대기 샌드박스 하나가 할당됩니다(2). Job은 turn 1, 2, 3을 그 샌드박스에 제출하고(3) verdict를 피드백으로 받습니다(4). 세 turn은 같은 pod에서 채점되지만, 작업 디렉터리는 제출마다 삭제됩니다. 에피소드가 끝나면 Job이 claim을 삭제하고(5), 샌드박스도 함께 삭제됩니다.",

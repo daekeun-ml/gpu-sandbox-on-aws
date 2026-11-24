@@ -1,10 +1,8 @@
-# EXPERIMENTAL, NOT SUPPORTED UPSTREAM (as of Kata 4.3.1, 2026-11).
+# Experimental Kata + Cloud Hypervisor RuntimeClass for NVIDIA GPU pods (Kata 4.3.1).
 #
-# Kata + Cloud Hypervisor + NVIDIA GPU passthrough. Upstream lists GPU support for Cloud
-# Hypervisor as unsupported, the maintainers recommend the QEMU NVIDIA runtime class, and no
-# CI covers this path. The Go CLH shim does have VFIO cold-plug code (since 3.29.0) that is
-# disabled in the shipped configuration. Use this only to evaluate; keep kata-qemu-nvidia-gpu
-# for anything that matters.
+# Cloud Hypervisor supports VFIO device assignment. Kata lists QEMU as the supported
+# hypervisor for NVIDIA GPU pods. These values enable the Go CLH shim's VFIO cold-plug
+# path. VM startup timed out in the 2026-11-18 EKS run (see docs/handson/common/02_runtimes/kata.md).
 #
 # Apply on top of the main values:
 #   helm upgrade kata-deploy oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy \

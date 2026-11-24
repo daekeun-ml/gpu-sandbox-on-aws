@@ -14,13 +14,13 @@ On EKS, Kubernetes picks a node for the pod. If you select **Kata** as the runti
 
 | Configuration | What you do in this repository |
 |---|---|
-| gVisor | `nvproxy` forwards supported GPU requests to the node's NVIDIA driver. A regular GPU instance works with a supported driver version. [gVisor GPU exercise](../handson/02_gvisor.md) |
-| Kata + QEMU | Assign a physical GPU to the VM using **GPU passthrough**. In this exercise, the driver inside the VM controls one T4 on `g4dn.metal`. [Kata GPU exercise](../handson/03_kata.md) |
-| Kata + Cloud Hypervisor | Check isolation by starting a VM for each pod on `c8i` without a GPU. [CPU-only exercise](../handson/10_cpu_only.md) |
+| gVisor | `nvproxy` forwards supported GPU requests to the node's NVIDIA driver. A regular GPU instance works with a supported driver version. [gVisor GPU exercise](../handson/common/02_runtimes/gvisor.md) |
+| Kata + QEMU | Assign a physical GPU to the VM using **GPU passthrough**. In this exercise, the driver inside the VM controls one T4 on `g4dn.metal`. [Kata GPU exercise](../handson/common/02_runtimes/kata.md) |
+| Kata + Cloud Hypervisor | Check isolation by starting a VM for each pod on `c8i` without a GPU. [CPU-only exercise](../handson/scenarios/c/index.md) |
 
 ### GPU support in Cloud Hypervisor
 
-When you manage a VM directly with Cloud Hypervisor, you can specify a physical GPU to attach. When you run a GPU pod with Kata on EKS, Kata has to attach the allocated GPU to the VM and make it available to the container. Kata's supported NVIDIA GPU configuration uses QEMU. The Kata + Cloud Hypervisor GPU experiment in this repository timed out while starting the VM. [Cloud Hypervisor documentation](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md) [Kata support table](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [GPU experiment](../handson/03_kata.md#stage-3-optional-experimental-kata--cloud-hypervisor-gpu)
+When you manage a VM directly with Cloud Hypervisor, you can specify a physical GPU to attach. When you run a GPU pod with Kata on EKS, Kata has to attach the allocated GPU to the VM and make it available to the container. Kata's supported NVIDIA GPU configuration uses QEMU. The Kata + Cloud Hypervisor GPU experiment in this repository timed out while starting the VM. [Cloud Hypervisor documentation](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md) [Kata support table](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [GPU experiment](../handson/common/02_runtimes/kata.md#stage-3-optional-experimental-kata--cloud-hypervisor-gpu)
 
 ## GPU request path
 
@@ -44,6 +44,6 @@ On `g5.xlarge`, gVisor checks GPU device requests and passes supported ones to t
 
 ![A Kata guest identifying its T4 and completing a GPU operation](../images/terminal/kata-gpu-replay.png)
 
-In the EKS lab the gVisor pool processed 0.198 submissions/s on two A10Gs. The Kata QEMU pool processed 0.349/s on four T4s. Both received the same kernel, but the latter had twice as many slots for concurrent grading. To compare **code speed**, run the reference and candidate on the same GPU. To size a **pool**, read throughput alongside its ready pod count. [Conditions and original results](../handson/08_benchmark.md#runtime-results)
+In the EKS lab the gVisor pool processed 0.198 submissions/s on two A10Gs. The Kata QEMU pool processed 0.349/s on four T4s. Both received the same kernel, but the latter had twice as many slots for concurrent grading. To compare **code speed**, run the reference and candidate on the same GPU. To size a **pool**, read throughput alongside its ready pod count. [Conditions and original results](../handson/benchmarks/index.md#runtime-results)
 
 See [when the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md) for other GPU workloads and [isolation runtimes](../concepts/02_isolation_runtimes.md) for node requirements. [Chapter 04](04_rl_and_sandbox.md) shows how execution results become a training reward.

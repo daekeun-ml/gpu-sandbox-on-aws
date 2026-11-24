@@ -110,7 +110,7 @@ sequenceDiagram
 
 GPU timing is clean only with one GPU to itself, so requests are limited to one per pod: concurrent evaluations equal the number of Ready sandbox pods, and one batch takes roughly ⌈items / pods⌉ × evaluation time.
 
-The AWS numbers in [08 Runtime benchmark](../handson/08_benchmark.md) come from calling the sandbox pools directly, without the gateway. Batch time through the gateway was not measured, so measure it yourself.
+The AWS numbers in [Runtime benchmark](../handson/benchmarks/index.md) come from calling the sandbox pools directly, without the gateway. Batch time through the gateway was not measured, so measure it yourself.
 
 ## Recycling
 

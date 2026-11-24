@@ -52,9 +52,9 @@ See the [architecture brief](scenario-b1.brief.md) for the component evidence an
 
 ## Outside the diagram
 
-- WITH_KATA_GPU=1: sandbox-kata-gpu node group (g4dn.metal, Kata QEMU with GPU passthrough), optional Kata pools for B1 (stack.py:243-255, docs/handson/07_hyperpod.md:57).
+- WITH_KATA_GPU=1: sandbox-kata-gpu node group (g4dn.metal, Kata QEMU with GPU passthrough), optional Kata pools for B1 (stack.py:243-255, docs/handson/scenarios/b/index.md).
 - WITH_KATA_CPU=1: adds the c8i sandbox-kata-cpu node group drawn in scenario-c (stack.py:233-242).
-- Kata on HyperPod nodes: not possible (docs/handson/07_hyperpod.md:495).
+- Kata on HyperPod nodes: not possible (docs/handson/scenarios/b/index.md).
 - Demo site (hands-on page 09): private S3 + CloudFront replaying recorded verdicts, demo/infra/site.yaml; no path to the cluster.
 - Agent Sandbox extension: scripts/extensions/agent_sandbox.sh and k8s/extensions/agent-sandbox/ (unit tested only).
 - Production reference (docs/production/): sandbox gateway (k8s/production/gateway.yaml.tpl), jwks-sync CronJob, Karpenter NodePools (infra/karpenter/nodepools.yaml), veRL RayCluster.

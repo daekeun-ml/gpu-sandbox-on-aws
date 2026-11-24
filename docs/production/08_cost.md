@@ -145,7 +145,7 @@ GPU당 단가만으로 고르지는 마세요. A10G와 T4는 speedup을 서로 �
 
 ### CPU 계층과 Spot
 
-- **Kata CPU 계층 (c8i)**: nested virtualization으로 `.metal` 없이 Kata를 실행합니다. 핸즈온에서는 `g4dn.metal`을 띄우기 전에 적은 비용으로 Kata를 연습하는 용도로 쓰고, Production에서는 GPU가 필요 없는 작업(정적 검사, nvcc 컴파일)을 GPU 계층보다 먼저 처리할 수 있습니다. CPU pool(`gvisor-cpu`, `kata-*-cpu`)은 routing 표에 있고 시나리오 C의 reward 루프([10 GPU 없이 CPU로 실습하기](../handson/10_cpu_only.md))가 사용하지만, CPU 계층과 GPU 계층을 잇는 2단 구성은 구현하지 않았습니다.
+- **Kata CPU 계층 (c8i)**: nested virtualization으로 `.metal` 없이 Kata를 실행합니다. 핸즈온에서는 `g4dn.metal`을 띄우기 전에 적은 비용으로 Kata를 연습하는 용도로 쓰고, Production에서는 GPU가 필요 없는 작업(정적 검사, nvcc 컴파일)을 GPU 계층보다 먼저 처리할 수 있습니다. CPU pool(`gvisor-cpu`, `kata-*-cpu`)은 routing 표에 있고 시나리오 C의 reward 루프([CPU 실습 (C)](../handson/scenarios/c/index.md))가 사용하지만, CPU 계층과 GPU 계층을 잇는 2단 구성은 구현하지 않았습니다.
 - **이미 구현된 절감 방법**: `KernelRewards`의 세 reward 함수는 샌드박스 평가 결과를 공유합니다.
     - **보내지 않는 것**: 이미 캐시에 있는 completion과, 코드가 없거나 정적 정책을 위반한 completion은 샌드박스로 보내지 않습니다.
     - **한 호출 안의 동일한 completion**: 한 번만 전송됩니다.
@@ -203,7 +203,7 @@ HyperPod에 적용되는 "ml.<type> for cluster usage" 한도는 EC2 한도와 �
 | EKS control plane, NAT gateway, EBS gp3, SSM access instance(`t4g.nano`), KMS 키 | | 각 요금 페이지 | 별도 |
 
 - 시나리오 B1은 `g5.2xlarge` 대신 `ml.g5.2xlarge`를 쓰므로 최소 경로 3.719, 전체 경로 11.91784 USD/시간입니다.
-- [관리형 B2](../handson/07_hyperpod_b2.md)는 `ml.m5.xlarge` CPU 한 대(0.230), `ml.g5.2xlarge` 학습 노드 한 대(1.515), `ml.g5.xlarge` 채점 노드 두 대(2 × 1.408)를 사용합니다. `us-east-1` 온디맨드 단가를 합하면 HyperPod 워커 네 대가 **시간당 4.561 USD**입니다. EKS, 스토리지와 네트워크 비용은 별도입니다.
+- [관리형 B2](../handson/scenarios/b/b2.md)는 `ml.m5.xlarge` CPU 한 대(0.230), `ml.g5.2xlarge` 학습 노드 한 대(1.515), `ml.g5.xlarge` 채점 노드 두 대(2 × 1.408)를 사용합니다. `us-east-1` 온디맨드 단가를 합하면 HyperPod 워커 네 대가 **시간당 4.561 USD**입니다. EKS, 스토리지와 네트워크 비용은 별도입니다.
 - 계산 예시: 최소 경로 8시간에 `g4dn.metal` 2시간을 더하면 3.416 × 8 + 7.824 × 2 = 42.976 USD입니다(EC2만, 소요 시간은 가정).
 - 클러스터를 삭제한 뒤에도 Kata용 AMI의 EBS snapshot과 ECR 이미지는 남아 과금될 수 있습니다. `scripts/08_cleanup.sh`는 AMI 등록 해제 여부를 묻고, `--images`를 지정하면 ECR 리포지토리도 삭제합니다.
 
@@ -229,7 +229,7 @@ aws ec2 describe-instances --region "${AWS_REGION}" \
 
 **문제가 생기면:** 정리한 뒤에도 과금이 계속되면 [문제 해결](../reference/troubleshooting.md)의 "정리와 비용" 표를 보세요.
 
-실습을 마치면 [99 정리](../handson/99_cleanup.md)를 실행하세요(시나리오 B라면 `scripts/hyperpod/delete.sh`를 먼저). 관련 페이지: [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md), [01 용량과 노드 관리](01_capacity_and_nodes.md), [06 veRL로 확장](06_scaling_with_verl.md).
+실습을 마치면 [정리](../handson/cleanup.md)를 실행하세요(시나리오 B라면 `scripts/hyperpod/delete.sh`를 먼저). 관련 페이지: [04 플랫폼과 인스턴스 선택](../concepts/04_platforms_and_instances.md), [01 용량과 노드 관리](01_capacity_and_nodes.md), [06 veRL로 확장](06_scaling_with_verl.md).
 
 ??? note "참고 자료"
     | 주제 | 링크 |

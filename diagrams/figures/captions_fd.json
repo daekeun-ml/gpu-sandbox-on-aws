@@ -1,6 +1,6 @@
 {
   "handson-07_hyperpod": {
-    "page": "docs/handson/07_hyperpod_b1.md",
+    "page": "docs/handson/scenarios/b/b1.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
     "alt_ko": "두 패널 그림입니다. a: 며칠 걸리는 on-policy 학습 중 GPU 노드가 고장 나면, 사람이 노드를 교체하고 job을 다시 시작할 때까지 기다려야 합니다. 생성이나 샌드박스 pool이 멈추면(hang) 프로세스는 살아 있지만 학습이 진행되지 않아 겉으로는 정상처럼 보입니다. HyperPod 노드에 둔 gVisor GPU pool은 기본 AMI의 드라이버 595.112.07이 nvproxy 목록에 없어 실행되지 않습니다. b: NodeRecovery: Automatic이 노드를 재부팅하거나 교체하고, training operator가 job을 재시작합니다. 로그 패턴으로 hang을 감지하면 elastic agent와 training operator가 job을 재시작합니다. B2는 채점 워커 두 대에 드라이버 580.178.04를 설치하고 재부팅한 뒤 gVisor pool을 시작합니다.",
@@ -9,7 +9,7 @@
     "takeaway_en": "A node failure waits for a human and a stalled run does not show from the outside, but on HyperPod NodeRecovery and the training operator take over recovery, and B2 prepares compatible drivers on its grading workers to run gVisor."
   },
   "handson-08_benchmark": {
-    "page": "docs/handson/08_benchmark.md",
+    "page": "docs/handson/benchmarks/index.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
     "alt_ko": "두 패널 그림입니다. a: 벤치마크 harness가 relu_bias_triton을 gVisor pool(g5.xlarge, A10G)과 Kata QEMU pool(g4dn.metal, T4)에 보냅니다. 두 pool의 숫자 차이에는 런타임 차이와 GPU 차이가 섞여 있어 분리할 수 없습니다. b: 같은 harness가 relu_bias_torch_only를 같은 c8i.2xlarge 노드의 Kata CLH CPU pool(Cloud Hypervisor)과 Kata QEMU CPU pool(QEMU)에 보냅니다. 노드, 이미지, golden이 같고 RuntimeClass만 다르므로, 숫자 차이는 RuntimeClass에 따라 함께 달라지는 hypervisor와 pod당 예약량(overhead.podFixed)의 차이입니다. 입력 seed는 요청마다 새로 뽑고 nested virtualization에서 얻은 값이므로, 이 노드 안의 상대 비교로만 씁니다.",
@@ -27,7 +27,7 @@
     "takeaway_en": "A live demo lets visitors reach a GPU, and misconfigured static hosting bypasses CloudFront or turns record strings into script, but replaying a record, OAC with AWS:SourceArn, and text-only insertion close the three paths one by one."
   },
   "handson-10_cpu_only": {
-    "page": "docs/handson/10_cpu_only.md",
+    "page": "docs/handson/scenarios/c/index.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
     "alt_ko": "두 패널 그림입니다. a: G and VT 쿼터가 0이면(0인 계정이 많습니다) 승인을 기다리는 동안 실습을 시작할 수 없습니다. 승인되면 시나리오 A(컴퓨트 시간당 약 3.42 USD, Kata GPU까지 포함하면 11 USD 초과)의 gVisor pool은 g5.xlarge(A10G)에, Kata GPU pool은 g4dn.metal(T4)에 배치됩니다. 노드와 GPU가 다르므로 런타임 차이만 분리하기 어렵습니다. b: 시나리오 C는 Standard 쿼터만 있으면 되고(컴퓨트 시간당 약 0.57 USD, A의 약 6분의 1, 추정), c8i.2xlarge 한 대에 gVisor, Kata CLH, Kata QEMU pool을 모두 배치합니다. CPU, 메모리, 커널이 같으므로 측정 차이를 런타임 차이로 해석하기 쉽습니다.",
@@ -36,7 +36,7 @@
     "takeaway_en": "Scenario A cannot start without GPU quota, costs more, and puts the two runtimes on different nodes and GPUs, while scenario C runs all three runtimes on one c8i.2xlarge at about a sixth of the compute cost and compares them under the same conditions."
   },
   "handson-99_cleanup": {
-    "page": "docs/handson/99_cleanup.md",
+    "page": "docs/handson/cleanup.md",
     "section": "기존 Pain Point",
     "replaces": "pain",
     "alt_ko": "두 패널 그림입니다. a: CDK 스택 삭제(cdk destroy)는 클러스터, 노드 그룹, VPC, NAT gateway만 함께 삭제합니다. AMI와 snapshot, ECR 이미지, HyperPod의 S3 버킷과 IAM 역할, 데모 사이트 stack, CDK bootstrap 스택(CDKToolkit)은 남습니다. b: 08_cleanup.sh는 클러스터 이름을 입력받아 CDK 스택을 삭제하고, ami와 images를 입력받아 AMI와 snapshot, ECR 이미지(--images일 때)를 삭제합니다. hyperpod/delete.sh는 HyperPod 이름과 bucket을 입력받아 S3 버킷과 IAM 역할을 삭제합니다. demo/teardown.sh는 stack 이름을 입력받아 데모 사이트 stack을 삭제합니다. CDKToolkit은 더 쓰지 않을 계정에서만 직접 삭제합니다.",

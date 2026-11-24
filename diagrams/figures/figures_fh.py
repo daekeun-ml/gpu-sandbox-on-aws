@@ -65,7 +65,7 @@ def _label(fig: Figure, x0: float, x1: float, y: float, lines: list[str], *, ste
 
 
 def handson_11(lang: str) -> Figure:
-    """docs/handson/11_multi_turn Pain point: a reward pool may answer each turn from another pod and removes
+    """docs/handson/extensions/multi_turn.md Pain point: a reward pool may answer each turn from another pod and removes
     state after every request, and a fresh sandbox per episode means waiting for Ready; on the scenario C node
     the episodes Job claims one gvisor-cpu sandbox per episode from a SandboxWarmPool, sends turns 1 to 3 to it,
     and deletes the claim when the episode ends."""

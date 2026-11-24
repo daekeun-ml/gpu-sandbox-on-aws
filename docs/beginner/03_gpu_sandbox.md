@@ -14,13 +14,13 @@ EKS에서는 Kubernetes가 pod를 실행할 노드를 고릅니다. **Kata**를 
 
 | 구성 | 실습에서 확인할 내용 |
 |---|---|
-| gVisor | `nvproxy`가 지원하는 GPU 요청만 노드의 NVIDIA 드라이버에 전달합니다. 드라이버 버전이 맞으면 일반 GPU 인스턴스에서 시작할 수 있습니다. [gVisor GPU 실습](../handson/02_gvisor.md) |
-| Kata + QEMU | 물리 GPU를 VM에 직접 할당합니다. 이 방식을 **GPU passthrough**라고 합니다. 실습에서는 VM 안의 드라이버가 `g4dn.metal`의 T4 한 장을 제어합니다. [Kata GPU 실습](../handson/03_kata.md) |
-| Kata + Cloud Hypervisor | GPU 없이 `c8i`에서 pod마다 VM을 띄워 격리를 확인합니다. [CPU 전용 실습](../handson/10_cpu_only.md) |
+| gVisor | `nvproxy`가 지원하는 GPU 요청만 노드의 NVIDIA 드라이버에 전달합니다. 드라이버 버전이 맞으면 일반 GPU 인스턴스에서 시작할 수 있습니다. [gVisor GPU 실습](../handson/common/02_runtimes/gvisor.md) |
+| Kata + QEMU | 물리 GPU를 VM에 직접 할당합니다. 이 방식을 **GPU passthrough**라고 합니다. 실습에서는 VM 안의 드라이버가 `g4dn.metal`의 T4 한 장을 제어합니다. [Kata GPU 실습](../handson/common/02_runtimes/kata.md) |
+| Kata + Cloud Hypervisor | GPU 없이 `c8i`에서 pod마다 VM을 띄워 격리를 확인합니다. [CPU 전용 실습](../handson/scenarios/c/index.md) |
 
 ### Cloud Hypervisor의 GPU 지원 범위
 
-Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지정해 VM에 연결할 수 있습니다. EKS에서 Kata로 GPU pod를 띄울 때는 Kata가 그 pod에 할당된 GPU를 VM에 연결하고 컨테이너가 쓸 수 있게 해야 합니다. Kata가 지원하는 NVIDIA GPU 구성은 QEMU를 사용합니다. Kata와 Cloud Hypervisor로 GPU를 연결해 봤지만, 제한 시간 안에 VM이 부팅되지 않았습니다. [Cloud Hypervisor 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md) [Kata 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [GPU 실험 기록](../handson/03_kata.md#3단계-선택-실험-kata--cloud-hypervisor-gpu)
+Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지정해 VM에 연결할 수 있습니다. EKS에서 Kata로 GPU pod를 띄울 때는 Kata가 그 pod에 할당된 GPU를 VM에 연결하고 컨테이너가 쓸 수 있게 해야 합니다. Kata가 지원하는 NVIDIA GPU 구성은 QEMU를 사용합니다. Kata와 Cloud Hypervisor로 GPU를 연결해 봤지만, 제한 시간 안에 VM이 부팅되지 않았습니다. [Cloud Hypervisor 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md) [Kata 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [GPU 실험 기록](../handson/common/02_runtimes/kata.md#3단계-선택-실험-kata--cloud-hypervisor-gpu)
 
 ## GPU 요청을 전달하는 경로
 
@@ -34,7 +34,7 @@ Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지
 |---|---|---|
 | 누가 GPU 요청을 처리하나요? | nvproxy가 허용한 요청을 노드의 NVIDIA 드라이버가 처리합니다. | 게스트의 NVIDIA 드라이버가 할당받은 GPU를 제어합니다. |
 | 어떤 조건을 먼저 확인하나요? | 노드 드라이버 버전이 설치한 gVisor에서 지원되는지 확인합니다. | 노드가 VM을 띄울 수 있고 IOMMU를 통해 물리 GPU를 게스트에 할당할 수 있어야 합니다. |
-| pod를 하나 더 띄우려면? | 기본 `g5.xlarge`에는 A10G가 한 장이어서 이미 사용 중이면 노드가 더 필요합니다. | `g4dn.metal`의 T4 중 한 장과 VM용 CPU·메모리가 비어 있어야 합니다. |
+| pod를 하나 더 띄우려면? | 기본 `g5.xlarge`에는 A10G가 한 장이어서 이미 사용 중이면 노드가 더 필요합니다. | `g4dn.metal`의 T4 중 한 장과 VM용 CPU와 메모리가 비어 있어야 합니다. |
 
 그래서 GPU 요청이 `Pending`이면 어떤 런타임을 골랐는지와 남은 장치 수를 함께 봅니다. 반대로 `Running`인 pod에서 첫 GPU 연산이 실패했다면, 어느 쪽 드라이버와 장치 연결을 살필지가 위 표에서 달라집니다.
 
@@ -44,6 +44,6 @@ Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지
 
 ![Kata 게스트 안에서 확인한 T4와 GPU 연산 결과](../images/terminal/kata-gpu-replay.png)
 
-같은 커널을 두 pool에 보내도 처리량은 달라질 수 있습니다. EKS 실습에서 gVisor pool은 A10G 두 장으로 초당 0.198건, Kata QEMU pool은 T4 네 장으로 초당 0.349건을 처리했습니다. Kata QEMU pool은 gVisor pool보다 동시에 채점할 수 있는 답안 수가 두 배였습니다. **코드 자체의 속도**를 비교하려면 같은 GPU에서 기준 구현과 제출 코드를 돌려 보고, **pool 용량**을 정하려면 전체 처리량과 Ready pod 수를 함께 보세요. [측정 조건과 원본 결과](../handson/08_benchmark.md#runtime-results)
+같은 커널을 두 pool에 보내도 처리량은 달라질 수 있습니다. EKS 실습에서 gVisor pool은 A10G 두 장으로 초당 0.198건, Kata QEMU pool은 T4 네 장으로 초당 0.349건을 처리했습니다. Kata QEMU pool은 gVisor pool보다 동시에 채점할 수 있는 답안 수가 두 배였습니다. **코드 자체의 속도**를 비교하려면 같은 GPU에서 기준 구현과 제출 코드를 돌려 보고, **pool 용량**을 정하려면 전체 처리량과 Ready pod 수를 함께 보세요. [측정 조건과 원본 결과](../handson/benchmarks/index.md#runtime-results)
 
 다른 GPU 작업의 예는 [GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), 노드별 GPU 연결 조건은 [격리 런타임 비교](../concepts/02_isolation_runtimes.md)에 정리했습니다. [다음 편](04_rl_and_sandbox.md)에서는 실행 결과를 학습 점수로 바꿉니다.

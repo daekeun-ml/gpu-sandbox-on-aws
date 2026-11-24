@@ -42,7 +42,7 @@ T = {
         "lp.cost": "시간당 몇 달러", "lp.cost_sub": "노드를 켜 둔 동안",
         "lp.c1": "코스 1: 읽기", "lp.c2": "코스 2: 로컬 실행", "lp.free": "0원",
         "lp.paid": "코스 3~6: AWS", "lp.paid_sub": "무료 코스 다음에", "lp.paid_sub2": "쿼터, 비용 먼저 확인",
-        # docs/getting_started.md
+        # docs/handson/start.md
         "gs.a": "GPU 노드부터 띄울 때",
         "gs.b": "로컬 CPU에서 파이프라인부터 확인할 때",
         "gs.start": "GPU 노드 기동", "gs.start_sub": "과금 시작",
@@ -377,7 +377,7 @@ def learning_paths_pain(lang: str) -> Figure:
 
 
 def getting_started_pain(lang: str) -> Figure:
-    """docs/getting_started.md: errors found after GPU nodes start keep billing; local CPU check first (Why)."""
+    """docs/handson/start.md: errors found after GPU nodes start keep billing; local CPU check first (Why)."""
     t = T[lang]
     fig = Figure(760, 422)
     w, gap, h = 158, 32, 104

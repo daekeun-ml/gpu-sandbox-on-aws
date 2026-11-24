@@ -42,6 +42,6 @@
 
 ![trainer 로그에서 첫 네 배치는 v1로, 다음 배치는 v2로 채점한 기록](../images/terminal/rollout-batches-replay.png)
 
-16스텝 학습에서 배치 1~4는 `v1`, 배치 5~16은 `v2`를 사용했습니다. 한 배치의 답안을 모두 같은 버전에서 채점했는지는 로그의 `served_versions`를 확인하세요. [배치별 버전과 전환 과정](../handson/06_sandbox_update.md#switch-batches)
+16스텝 학습에서 배치 1~4는 `v1`, 배치 5~16은 `v2`를 사용했습니다. 한 배치의 답안을 모두 같은 버전에서 채점했는지는 로그의 `served_versions`를 확인하세요. [배치별 버전과 전환 과정](../handson/scenarios/a/pool_update.md#switch-batches)
 
 [다음 편](05_hands_on.md)에서는 준비된 답안으로 채점 부분을 확인합니다.

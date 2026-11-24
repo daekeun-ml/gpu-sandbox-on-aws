@@ -6,11 +6,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export REPO_ROOT
 
-if [[ -f "${REPO_ROOT}/scripts/config.env" ]]; then
-  # shellcheck disable=SC1091
-  source "${REPO_ROOT}/scripts/config.env"
+# Quickstart runs each scenario with its own configuration. Other callers use the usual file.
+config_file="${GPUSANDBOX_CONFIG:-${REPO_ROOT}/scripts/config.env}"
+if [[ -f "${config_file}" ]]; then
+  # shellcheck disable=SC1090
+  source "${config_file}"
 else
-  echo "scripts/config.env not found. Copy scripts/config.env.example and edit it." >&2
+  echo "${GPUSANDBOX_CONFIG:-scripts/config.env} not found. Copy scripts/config.env.example and edit it." >&2
   exit 1
 fi
 
@@ -37,7 +39,7 @@ logview() { python3 "${REPO_ROOT}/scripts/logview.py"; }
 require_vars() {
   local name
   for name in "$@"; do
-    [[ -n "${!name:-}" && "${!name}" != *__SET_ME__* ]] || die "set ${name} in scripts/config.env"
+    [[ -n "${!name:-}" && "${!name}" != *__SET_ME__* ]] || die "set ${name} in ${GPUSANDBOX_CONFIG:-scripts/config.env}"
   done
 }
 

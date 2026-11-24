@@ -226,7 +226,7 @@ Verdict `flags` are not aggregated as metrics yet; to alert on reward hacking, s
 
 ### Locally (without AWS)
 
-Set up the Python environment as in section 2 of [Getting started](../getting_started.md), then run this from the repository root.
+Set up the Python environment as in section 2 of [Getting started](../handson/start.md), then run this from the repository root.
 
 ```bash
 # Two-process harness on CPU (smoke-size inputs) and the static policy; no AWS, no GPU
@@ -254,7 +254,7 @@ python -m pytest tests/test_harness_cpu.py tests/test_policy.py -q
 
 **If it fails:**
 
-- **Import errors or torch installation problems**: recheck the environment setup in [Getting started](../getting_started.md).
+- **Import errors or torch installation problems**: recheck the environment setup in [Getting started](../handson/start.md).
 - **Other symptoms**: see [Troubleshooting](../reference/troubleshooting.md).
 
 ### On a cluster

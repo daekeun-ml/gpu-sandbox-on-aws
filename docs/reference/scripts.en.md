@@ -3,7 +3,7 @@
 !!! info "TL;DR"
     Choose a task below. Each entry explains how to run the script, how to recognize success, and what happens if you run it again.
 
-Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for steps that use `kubectl` or Helm. See the [hands-on overview](../handson/00_overview.md) to choose a scenario.
+Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for steps that use `kubectl` or Helm. See the [hands-on overview](../handson/index.md) to choose a scenario.
 
 | Task | Script |
 |---|---|
@@ -14,7 +14,19 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 | Verify, simulate, switch versions, or measure latency | [Verification and operations](#verification-and-operations) |
 | Assign sandboxes per episode | [Extensions](#extensions) |
 | Publish a recording | [Demo site](#demo-site) |
-| Remove exercise resources | [Cleanup exercise](../handson/99_cleanup.md) |
+| Remove exercise resources | [Cleanup exercise](../handson/cleanup.md) |
+
+## Guided quickstart { #quickstart }
+
+Run `./scripts/quickstart.sh` from the project directory and choose an AWS scenario. The default configuration needs no advance edits.
+
+- **AWS account.** Check the active account with `aws sts get-caller-identity`. Set `AWS_PROFILE` before starting if you use a named profile.
+- **First run.** The `init` step creates `.quickstart/<scenario>/config.env` and subsequent runs reuse it. Individual scripts run manually use `scripts/config.env` by default.
+- **Region.** When creating the file, `init` checks `AWS_REGION`, then `AWS_DEFAULT_REGION`. If both are empty, B2 defaults to `us-east-1` and A, B1 and C to `us-west-2`. To choose a different Region, set `AWS_REGION` before the first `init`. For B2 outside `us-east-1`, set `HYPERPOD_AZ_IDS` in the generated file to availability zone IDs for that Region.
+
+To prepare just the B2 configuration, run `./scripts/quickstart.sh B2 init`. To change the cluster name or instance types, edit the generated file before checking quotas with `check`. The `infra` step provisions the cluster.
+
+Use `./scripts/quickstart.sh B2 plan` to preview the steps and `./scripts/quickstart.sh B2 cleanup` to remove compute resources after the lab. For CPU grading on your computer without an AWS account, use `./scripts/quickstart.sh local`.
 
 ## Main order
 
@@ -26,7 +38,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: Short (lookups only). Nothing is billed.
 - **Running it again**: Read-only, so running it again changes nothing. Run it again after a quota increase to see the new values.
 - **Success signal**: The last log line is `Done. Request quota increases before 02_create_cluster.sh if any value above is too low.` The script does not judge whether a quota is enough, so compare the printed values with what you need.
-- **If it fails**: [Troubleshooting: Configuration and scripts](troubleshooting.md#configuration-and-scripts), [01 Cluster and images](../handson/01_cluster_and_images.md)
+- **If it fails**: [Troubleshooting: Configuration and scripts](troubleshooting.md#configuration-and-scripts), [Cluster and images](../handson/common/01_provision/cdk.md)
 
 ### `scripts/02_create_cluster.sh`
 
@@ -34,7 +46,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Usage**: `scripts/02_create_cluster.sh` (A, or `SCENARIO` from `config.env`), `--hyperpod` (B1), `--hyperpod-b2` (B2), `--cpu-only` (C). Add the Kata node groups with `WITH_KATA_CPU=1` and `WITH_KATA_GPU=1` (needs `KATA_IOMMU_AMI_ID`) in `scripts/config.env`.
 - **When**: After `01_check_prereqs.sh`, and again with the same option when you add Kata node groups. All scenarios.
 - **Time and cost**: 20-30 min (script estimate), about 20 min for scenario C (measured). Billing starts for the EKS control plane, the NAT gateway, 2x `m6i.large` and `t4g.nano`, plus 2x `g5.xlarge` (A, B1), `g5.2xlarge` (A), `c8i.2xlarge` (C or `WITH_KATA_CPU=1`) and `g4dn.metal` (`WITH_KATA_GPU=1`).
-- **Running it again**: CDK changes only what differs, so the same settings change nothing, and a changed `WITH_KATA_*` changes only that node group. A scenario different from the deployed one stops with `the stack runs scenario <X>, not <Y>`; to switch on purpose, add `CHANGE_SCENARIO=1` (node groups are replaced). With `WITH_KATA_GPU=1` every run asks you to type `metal`, and a node count you changed outside CDK must be put back first ([06](../handson/06_sandbox_update.md)).
+- **Running it again**: CDK changes only what differs, so the same settings change nothing, and a changed `WITH_KATA_*` changes only that node group. A scenario different from the deployed one stops with `the stack runs scenario <X>, not <Y>`; to switch on purpose, add `CHANGE_SCENARIO=1` (node groups are replaced). With `WITH_KATA_GPU=1` every run asks you to type `metal`, and a node count you changed outside CDK must be put back first ([switching grading pools](../handson/scenarios/a/pool_update.md)).
 - **Success signal**: The CDK `Outputs` show `EndpointPublicAccess = false`, followed by the `Next:` hints. With the tunnel open, `kubectl get nodes` shows 2 system nodes and the scenario's nodes `Ready` (A: 1 trainer and 2 sandbox-gvisor, C: 1 sandbox-kata).
 - **If it fails**: [Troubleshooting: CDK and the tunnel](troubleshooting.md#cdk-and-the-tunnel), [Troubleshooting: Cluster and nodes](troubleshooting.md#cluster-and-nodes)
 
@@ -56,7 +68,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: Depends on the build host and the network. ECR storage is billed.
 - **Running it again**: Tags are IMMUTABLE, so with the same `IMAGE_TAG` the push of the first image (sandbox) fails and the script stops. Change `IMAGE_TAG` in `scripts/config.env` (a value set in front of the command is overridden by `config.env`), run it again, and update `config.env` with the printed URIs.
 - **Success signal**: After `Add to scripts/config.env:`, three export lines for `SANDBOX_IMAGE_URI`, `TRAINER_IMAGE_URI` and `CONTROL_IMAGE_URI` (two with `--no-trainer`, without `TRAINER_IMAGE_URI`).
-- **If it fails**: [Troubleshooting: Configuration and scripts](troubleshooting.md#configuration-and-scripts), [01 Cluster and images](../handson/01_cluster_and_images.md)
+- **If it fails**: [Troubleshooting: Configuration and scripts](troubleshooting.md#configuration-and-scripts), [Cluster and images](../handson/common/01_provision/cdk.md)
 
 ### `scripts/04_install_gpu_stack.sh`
 
@@ -66,7 +78,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: Helm `--wait` for the device plugin, 15 min timeout for the smoke pod. Nothing new is billed.
 - **Running it again**: `helm upgrade --install` and `kubectl apply` re-apply, and the smoke pod gets a new name and is deleted at the end. If every GPU on the sandbox-gvisor nodes is in use (the pool from `06_deploy_sandboxes.sh`), it stops before the smoke pod with `every GPU on the sandbox-gvisor nodes is in use`; free them with the printed `kubectl -n sandbox scale ... --replicas=0`, run it again, then bring the pool back with `06_deploy_sandboxes.sh gvisor v1`.
 - **Success signal**: GPU 1 for each `gpusandbox/device-plugin=cdi` node (briefly `0` right after a restart), then `cuda ok: NVIDIA A10G 2048.0` from the smoke pod. If the smoke pod fails the script only warns, so look for this line yourself (B2 and C end with `skipping the gvisor RuntimeClass and the smoke pod`).
-- **If it fails**: [Troubleshooting: gVisor](troubleshooting.md#gvisor), [02 gVisor GPU sandboxes](../handson/02_gvisor.md)
+- **If it fails**: [Troubleshooting: gVisor](troubleshooting.md#gvisor), [gVisor GPU sandboxes](../handson/common/02_runtimes/gvisor.md)
 
 ### `scripts/05_setup_namespaces_auth.sh`
 
@@ -76,7 +88,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: Short. Nothing is billed.
 - **Running it again**: Everything is `kubectl apply`, but it rewrites the active pool of the routing table to `ACTIVE_RUNTIME` and `ACTIVE_VERSION` (`gvisor/v1` if unset) and puts the `sandbox` NetworkPolicies back to the hands-on rules. After a version switch or in scenario C, pass the values in use; to refresh only the signing keys, use `ops/sync_jwks.sh` (with the production gateway, re-apply the gateway manifests too).
 - **Success signal**: The `"active"` entry at the top of the printed routing.json is the first pool. For A and B1 it is `{"runtime": "gvisor", "version": "v1"}`.
-- **If it fails**: [Troubleshooting: 401 and 403 responses](troubleshooting.md#401-and-403-responses), [Troubleshooting: NetworkPolicy](troubleshooting.md#networkpolicy), [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md)
+- **If it fails**: [Troubleshooting: 401 and 403 responses](troubleshooting.md#401-and-403-responses), [Troubleshooting: NetworkPolicy](troubleshooting.md#networkpolicy), [Deploy and verify sandbox pools](../handson/common/03_pools/details.md)
 
 ### `scripts/06_deploy_sandboxes.sh`
 
@@ -86,7 +98,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: 30 min rollout timeout. It uses existing nodes, so nothing new is billed.
 - **Running it again**: `kubectl apply` changes nothing if the manifest is the same; if the image or settings changed, the Deployment replaces its pods. The replica count goes back to the argument or the profile value, so this is also how you bring back a pool scaled to zero (`ops/rollout.sh --finish`, the hint of `04_install_gpu_stack.sh`).
 - **Success signal**: The rollout finishes and the pods are `1/1 Running`.
-- **If it fails**: [Troubleshooting: Sandbox pools and readiness](troubleshooting.md#sandbox-pools-and-readiness), [04 Deploy and verify sandbox pools](../handson/04_sandbox_pools.md)
+- **If it fails**: [Troubleshooting: Sandbox pools and readiness](troubleshooting.md#sandbox-pools-and-readiness), [Deploy and verify sandbox pools](../handson/common/03_pools/details.md)
 
 ### `scripts/07_run_grpo.sh`
 
@@ -96,17 +108,17 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: About 50 min for the default 60 steps and about 12 min for 5 steps (measured, including image pull and model download, `g5.2xlarge`). Nothing new is billed.
 - **Running it again**: `RUN_ID` defaults to the current time, so every run creates a new Job; finished Jobs stay for a day. The trainer node has one GPU, so while an earlier run is still training the new pod stays Pending and the script fails after its 30 min wait (the Job stays).
 - **Success signal**: `routing  mode direct  runtime gvisor  version v1 ...`, then `batch` and `train` lines, and at the end `train done ...` and `done  output /outputs/grpo/final  reward_batches <int>`.
-- **If it fails**: [Troubleshooting: Training](troubleshooting.md#training), [05 On-policy GRPO training](../handson/05_grpo_training.md)
+- **If it fails**: [Troubleshooting: Training](troubleshooting.md#training), [On-policy GRPO training](../handson/scenarios/a/grpo.md)
 
 ### `scripts/08_cleanup.sh`
 
 - **What it does**: Asks for the cluster name, deletes the pools, Jobs and the CDK stack with `cdk/destroy.sh --yes`, then deletes the AMIs whose IDs are in `config.env` (`KATA_IOMMU_AMI_ID`, `HYPERPOD_B2_AMI_ID`) and their snapshots, asking for each. At the end it lists the remaining instances.
-- **Usage**: `scripts/08_cleanup.sh`, or `--images` to delete the ECR repositories too. In scenario B run `scripts/hyperpod/delete.sh` first.
+- **Usage**: `scripts/08_cleanup.sh`, or `--images` to delete the ECR repositories too. For B1 or legacy CDK B2, run `scripts/hyperpod/delete.sh` first. Managed B2 uses its wizard stack.
 - **When**: When you finish. All scenarios; with the tunnel open, the workloads in the cluster go first.
 - **Time and cost**: Not recorded (it waits for the CloudFormation deletion). Billing for the stack's resources ends, and the secrets KMS key enters its 7-day deletion window.
 - **Running it again**: Every run asks for the confirmation word and starts again with `cdk/destroy.sh`. If the ID of an AMI you already deleted is still in `config.env`, it can stop at the AMI step, so remove that ID before you run it again with `--images`.
 - **Success signal**: The last table (instances tagged `project=gpu-sandbox-on-aws`) is empty.
-- **If it fails**: [Troubleshooting: Cleanup and cost](troubleshooting.md#cleanup-and-cost), [99 Cleanup](../handson/99_cleanup.md)
+- **If it fails**: [Troubleshooting: Cleanup and cost](troubleshooting.md#cleanup-and-cost), [Cleanup](../handson/cleanup.md)
 
 ## CDK
 
@@ -128,7 +140,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: Not recorded (it waits for the CloudFormation deletion). Billing for the stack's resources ends.
 - **Running it again**: The in-cluster deletes use `--all`, so they are safe when nothing is left, and without the tunnel it only warns and goes on to delete the stack. How `cdk destroy` ends when the stack is already gone cannot be told from the code.
 - **Success signal**: The instance table is empty, followed by `ECR repositories are kept. To delete them:`.
-- **If it fails**: [Troubleshooting: Cleanup and cost](troubleshooting.md#cleanup-and-cost), [99 Cleanup](../handson/99_cleanup.md)
+- **If it fails**: [Troubleshooting: Cleanup and cost](troubleshooting.md#cleanup-and-cost), [Cleanup](../handson/cleanup.md)
 
 ## Kata
 
@@ -140,17 +152,17 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: About 14 min (measured, mostly kata-deploy), 20 min kata-deploy timeout. Nothing new is billed (`c8i.2xlarge` comes from `02_create_cluster.sh`).
 - **Running it again**: `helm upgrade --install` and `kubectl apply` re-apply, and the smoke pods get new names and are deleted. It shares the kata-deploy release with `kata/gpu_nodes.sh`, so running it again resets the release to the base values without the experimental CLH GPU values (`ENABLE_EXPERIMENTAL_CLH_GPU=1`).
 - **Success signal**: The `kernel seen inside: ...` kernels of `gvisor-cpu`, `kata-clh` and `kata-qemu` all differ from the host kernel on the last line. A failed smoke pod only warns, so check the three lines yourself.
-- **If it fails**: [Troubleshooting: Kata](troubleshooting.md#kata), [Troubleshooting: Configuration and scripts](troubleshooting.md#configuration-and-scripts), [03 Kata sandboxes](../handson/03_kata.md)
+- **If it fails**: [Troubleshooting: Kata](troubleshooting.md#kata), [Troubleshooting: Configuration and scripts](troubleshooting.md#configuration-and-scripts), [Kata sandboxes](../handson/common/02_runtimes/kata.md)
 
 ### `scripts/kata/gpu_nodes.sh`
 
 - **What it does**: With `KATA_IOMMU_AMI_ID` empty, builds an AMI with the IOMMU enabled and stops. With the ID set, it checks the `sandbox-kata-gpu` node group, installs the GPU Operator and kata-deploy, and waits for `nvidia.com/pgpu` to appear.
-- **Usage**: `scripts/kata/gpu_nodes.sh`. Put the `KATA_IOMMU_AMI_ID` printed by the first run and `WITH_KATA_GPU=1` in `config.env`, then run `02_create_cluster.sh` and this script again. Turn on the experimental `kata-clh-nvidia-gpu` with `ENABLE_EXPERIMENTAL_CLH_GPU=1`.
+- **Usage** `scripts/kata/gpu_nodes.sh`. Put the `KATA_IOMMU_AMI_ID` printed by the first run and `WITH_KATA_GPU=1` in `config.env`, then run `02_create_cluster.sh` and this script again. `ENABLE_EXPERIMENTAL_CLH_GPU=1` registers the experimental RuntimeClass. [Kata GPU experiment](../handson/common/02_runtimes/kata.md#stage-3-optional-experimental-kata--cloud-hypervisor-gpu)
 - **When**: After rehearsing with `kata/cpu_nodes.sh`, when you need Kata with a GPU (full path). It can be added to any scenario.
 - **Time and cost**: About 10 min for the AMI (script estimate), up to 20 min waiting for pgpu. The AMI builder `m6i.large` (briefly) and the AMI snapshot are billed; `g4dn.metal` (7.824 USD/hour) starts when you run `02_create_cluster.sh` again.
 - **Running it again**: Every run with `KATA_IOMMU_AMI_ID` empty builds another AMI, and `08_cleanup.sh` deletes only the one AMI in `config.env`, so put the first ID in right away. With the ID set, it re-applies both Helm releases with `helm upgrade --install`; running without `ENABLE_EXPERIMENTAL_CLH_GPU=1` drops the experimental kata-deploy values.
-- **Success signal**: `pgpu=8  cc.ready.state=false`, then one line for the `kata-qemu-nvidia-gpu` RuntimeClass.
-- **If it fails**: [Troubleshooting: Kata](troubleshooting.md#kata), [Troubleshooting: Configuration and scripts](troubleshooting.md#configuration-and-scripts), [03 Kata sandboxes](../handson/03_kata.md)
+- **Success signal** `pgpu=8  cc.ready.state=false` and the `kata-qemu-nvidia-gpu` RuntimeClass show that the node advertises eight GPUs and the RuntimeClass exists. Deploy the `kata-qemu` pool to check GPU access from the pod. [Deploy and verify sandbox pools](../handson/common/03_pools/details.md)
+- **If it fails**: [Troubleshooting: Kata](troubleshooting.md#kata), [Troubleshooting: Configuration and scripts](troubleshooting.md#configuration-and-scripts), [Kata sandboxes](../handson/common/02_runtimes/kata.md)
 
 ## Verification and operations
 
@@ -169,10 +181,10 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **What it does**: Switches the sandbox version blue/green while training runs: deploy the `<to>` pool, verify it, check parity with `<from>`, and switch the routing table (`rl-trainer`, and `sandbox-gateway` if it exists). `--finish` scales the `<from>` pool to zero.
 - **Usage**: `scripts/ops/rollout.sh <runtime> <from> <to> [--finish]`. For example `scripts/ops/rollout.sh gvisor v1 v2`, then the same command with `--finish` once you see the switch. Roll back by swapping `<from>` and `<to>`.
 - **When**: While `07_run_grpo.sh` (A), `hyperpod/run_grpo.sh` (B) or `ops/simulate.sh` (C) runs.
-- **Time and cost**: See [06](../handson/06_sandbox_update.md). gVisor needs 2 more `g5.xlarge` for v2 (2.012 USD/hour while the node group has 4 nodes); Kata QEMU needs no extra node.
+- **Time and cost**: See [switching grading pools](../handson/scenarios/a/pool_update.md). gVisor needs 2 more `g5.xlarge` for v2 (2.012 USD/hour while the node group has 4 nodes); Kata QEMU needs no extra node.
 - **Running it again**: Without `--finish` it repeats steps 1 to 4: the deploy is `kubectl apply` and the switch writes the same table again. If parity fails it does not switch, and `<from>` keeps receiving requests. `--finish` skips the deploy and the switch and only scales `<from>` to zero, so run it after you see the switch in the trainer log.
 - **Success signal**: `1) deploying` through `4) switching the routing table to <runtime>/<to>` in order, with every parity line `PASS`. Then the trainer (or simulate) log shows `SWITCH  <runtime>/<from> -> <runtime>/<to>`; `--finish` prints `deployment.apps/sandbox-<runtime>-<from> scaled`.
-- **If it fails**: [Troubleshooting: Version switches (routing)](troubleshooting.md#version-switches-routing), [06 Updating the sandbox during training](../handson/06_sandbox_update.md)
+- **If it fails**: [Troubleshooting: Version switches (routing)](troubleshooting.md#version-switches-routing), [Updating the sandbox during training](../handson/scenarios/a/pool_update.md)
 
 ### `scripts/ops/simulate.sh`
 
@@ -182,7 +194,7 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Time and cost**: By default 30 batches with 29 waits of 20 s. The 2026-11-17 run (`kata-clh-cpu`) took about 16 min. Nothing is billed.
 - **Running it again**: Every run creates a new Job (`simulate-<time>`) and reads the active pool at that moment. Several runs at once send overlapping requests to the same pool.
 - **Success signal**: A `batch <n>  <runtime>/<version>  ...` line per batch. After a version switch, one `SWITCH ...` line and `batch` lines without `MIXED VERSIONS`.
-- **If it fails**: [Troubleshooting: Version switches (routing)](troubleshooting.md#version-switches-routing), [10 Hands-on lab with CPUs only](../handson/10_cpu_only.md)
+- **If it fails**: [Troubleshooting: Version switches (routing)](troubleshooting.md#version-switches-routing), [CPU lab (C)](../handson/scenarios/c/index.md)
 
 ### `scripts/ops/bench.sh`
 
@@ -190,11 +202,11 @@ Run from the repository root. Keep `cdk/tunnel.sh` open in another terminal for 
 - **Usage**: `scripts/ops/bench.sh [requests]` (default 32)
 - **When**: After the pools are deployed and verified, while no training runs. Optional in all scenarios.
 - **Time and cost**: In the second pass on 2026-11-18 the evaluation phase took about 100-300 s per pool, about 13 min for five pools (Job creation and pool restarts not included). Nothing new is billed; the nodes bill while it runs.
-- **Running it again**: Every run writes a new results file and creates a new bench Job per pool. Cold start is computed from the creation time of the current pods, so without restarting them you get the same values again (see the re-measuring steps in [08](../handson/08_benchmark.md)).
+- **Running it again**: Every run writes a new results file and creates a new bench Job per pool. Cold start is computed from the creation time of the current pods, so without restarting them you get the same values again (see the re-measuring steps in [runtime benchmarks](../handson/benchmarks/index.md)).
 - **Success signal**: One `bench  <runtime>  ok <n>/<requests>  p50 ...` line per pool, and `results: <file>` at the end.
-- **If it fails**: [Troubleshooting: Sandbox pools and readiness](troubleshooting.md#sandbox-pools-and-readiness), [08 Runtime benchmark](../handson/08_benchmark.md)
+- **If it fails**: [Troubleshooting: Sandbox pools and readiness](troubleshooting.md#sandbox-pools-and-readiness), [Runtime benchmark](../handson/benchmarks/index.md)
 
-All five EKS pools completed 32 requests each (160/160). [Results and run conditions](../handson/08_benchmark.md#runtime-results)
+All five EKS pools completed 32 requests each (160/160). [Results and run conditions](../handson/benchmarks/index.md#runtime-results)
 
 ### `scripts/ops/sync_jwks.sh`
 
@@ -217,7 +229,7 @@ All five EKS pools completed 32 requests each (160/160). [Results and run condit
 | `scripts/hyperpod/prepare_managed.sh` | Enables VPC CNI NetworkPolicy, places CoreDNS on `system` and checks the training operator and its certificate webhook. |
 | `scripts/hyperpod/bench_b2.sh 32` | Runs the same Triton evaluation from the `system` and `trainer` groups in sequence. Writes one JSONL file per client. |
 
-See the [B2 lab](../handson/07_hyperpod_b2.md) for regional settings, screenshots and cleanup. The `create.sh` and AMI build commands below belong to the separate CDK deployment.
+See the [B2 lab](../handson/scenarios/b/b2.md) for regional settings, screenshots and cleanup. The `create.sh` and AMI build commands below belong to the separate CDK deployment.
 
 ### `scripts/hyperpod/create.sh`
 
@@ -225,9 +237,9 @@ See the [B2 lab](../handson/07_hyperpod_b2.md) for regional settings, screenshot
 - **Usage**: `scripts/hyperpod/create.sh` (B1) or `--b2` (B2, needs `HYPERPOD_B2_AMI_ID`). Needs `git` and `jq`.
 - **When**: B1 after `02_create_cluster.sh --hyperpod`, `HYPERPOD=1 03_build_push_images.sh` and `04_install_gpu_stack.sh`. B2 after `hyperpod/build_b2_ami.sh`.
 - **Time and cost**: 15-30 min until InService (script estimate). Billing starts for HyperPod `ml.g5.2xlarge` (1.515 USD/hour); B2 adds 2x `ml.g5.xlarge`.
-- **Running it again**: Steps 1 and 2 (Helm chart, Block Public Access, lifecycle upload) are applied again, and the bucket and role are created only if missing. Step 4 `create-cluster` is expected to fail when a cluster with that name exists (inferred), and step 5 fails too when the add-on exists; if only step 5 failed, run just the two commands in [07](../handson/07_hyperpod_b1.md).
+- **Running it again**: Steps 1 and 2 (Helm chart, Block Public Access, lifecycle upload) are applied again, and the bucket and role are created only if missing. Step 4 `create-cluster` is expected to fail when a cluster with that name exists (inferred), and step 5 fails too when the add-on exists; if only step 5 failed, run just the two commands in [Scenario B1](../handson/scenarios/b/b1.md).
 - **Success signal**: `status` is `InService` and `failure` is empty, and the final node table shows the HyperPod nodes (B2: two `ml.g5.xlarge` nodes `Schedulable`).
-- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [B1 · Train on HyperPod and grade on EC2](../handson/07_hyperpod_b1.md)
+- **If it fails**: [Troubleshooting: HyperPod](troubleshooting.md#hyperpod), [Train on HyperPod and grade on EC2 (B1)](../handson/scenarios/b/b1.md)
 
 ### `scripts/hyperpod/build_b2_ami.sh`
 
@@ -252,7 +264,7 @@ See the [B2 lab](../handson/07_hyperpod_b2.md) for regional settings, screenshot
 
 Submit a GRPO Job to a HyperPod trainer in B1 or B2. The existing sandbox pool grades the model-generated code, and the trainer updates the model from those scores.
 
-**Before you run it**　Prepare the training operator, trainer node, and sandbox pool in the [HyperPod exercise](../handson/07_hyperpod_b1.md). `HYPERPOD=1 scripts/03_build_push_images.sh` builds a trainer image with `hyperpodrun`. Set `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, and `HYPERPOD_TRAINER_INSTANCE_TYPE` in `scripts/config.env`.
+**Before you run it**　Prepare the training operator, trainer node, and sandbox pool in the [HyperPod exercise](../handson/scenarios/b/b1.md). `HYPERPOD=1 scripts/03_build_push_images.sh` builds a trainer image with `hyperpodrun`. Set `TRAINER_IMAGE_URI`, `SANDBOX_AUDIENCE`, and `HYPERPOD_TRAINER_INSTANCE_TYPE` in `scripts/config.env`.
 
 ```bash
 scripts/hyperpod/run_grpo.sh 5
@@ -266,7 +278,7 @@ The argument is the number of optimizer steps. It defaults to 60. The default mo
 | `routing` | The trainer read the pool route. The template expects this event within 20 minutes. |
 | `reward_batch` and advancing steps | Check the sample verdicts and training progress. Investigate repeated `sandbox_error`. |
 
-The B1 trainer completed one GRPO step and two EC2 gVisor sandboxes scored 12 submissions. [Job status and logs](../handson/07_hyperpod_b1.md#how-to-verify)
+The B1 trainer completed one GRPO step and two EC2 gVisor sandboxes scored 12 submissions. [Job status and logs](../handson/scenarios/b/b1.md#how-to-verify)
 
 The script prints the Job name. Use it as the `HPJob` label value to find this run’s pod.
 
@@ -284,10 +296,10 @@ See [HyperPod troubleshooting](troubleshooting.md#hyperpod) for operator and sch
 - **What it does**: Asks for the HyperPod cluster name, deletes the HyperPodPyTorchJobs, the HyperPod cluster (waiting until it is gone) and the execution role, then asks again and empties and deletes the lifecycle bucket. The EKS cluster stays.
 - **Usage**: `scripts/hyperpod/delete.sh` (no arguments)
 - **When**: At cleanup in scenario B, before `08_cleanup.sh`.
-- **Time and cost**: Not recorded in the docs (see [07](../handson/07_hyperpod_b1.md)). Billing for the HyperPod resources ends.
-- **Running it again**: If the HyperPod cluster is already gone, `delete-cluster` fails and the script stops before the role and bucket steps. If the first run stopped at the bucket prompt, delete the remaining bucket yourself.
+- **Time and cost**: Not recorded in the docs (see [Scenario B1](../handson/scenarios/b/b1.md)). Billing for the HyperPod resources ends.
+- **On a rerun**: if the cluster has already been deleted, the script checks for its execution role and dedicated bucket. It asks for confirmation before emptying the bucket.
 - **Success signal**: `waiting for the cluster to disappear`, `deleted role <name>-execution`, then the last line `HyperPod resources deleted`.
-- **If it fails**: [Troubleshooting: Cleanup and cost](troubleshooting.md#cleanup-and-cost), [99 Cleanup](../handson/99_cleanup.md)
+- **If it fails**: [Troubleshooting: Cleanup and cost](troubleshooting.md#cleanup-and-cost), [Cleanup](../handson/cleanup.md)
 
 ## Extensions
 
@@ -295,11 +307,11 @@ See [HyperPod troubleshooting](troubleshooting.md#hyperpod) for operator and sch
 
 - **What it does**: Gives each episode its own sandbox from an Agent Sandbox warm pool. `install` sets up the controller and CRDs (default v1.0.11) and the claim RBAC, `pool` creates a SandboxTemplate and SandboxWarmPool, `claim` borrows one sandbox, prints its address and releases it, and `episodes` creates a Job that runs multi-turn episodes without a model.
 - **Usage**: `scripts/extensions/agent_sandbox.sh install`, `pool <runtime> [n]` (default 1; version file from `VERSION_FILE`, default `v1`), `claim <runtime>`, `episodes <runtime> [episodes] [max_turns]` (default 2 and 3; `max_turns` 1 is single-turn). Change the release with `AGENT_SANDBOX_VERSION`.
-- **When**: Optional, after the pools are verified. It works in any scenario; the recorded run used `kata-clh-cpu` in scenario C ([11](../handson/11_multi_turn.md)).
+- **When**: Optional, after the pools are verified. It works in any scenario; the recorded run used `kata-clh-cpu` in scenario C ([multi-turn grading](../handson/extensions/multi_turn.md)).
 - **Time and cost**: About 25 s for 2 episodes of 3 turns (measured, `kata-clh-cpu` in scenario C). No new nodes, but every idle warm sandbox holds an accelerator.
 - **Running it again**: `install` is `kubectl apply`, so it is safe. `pool` re-applies the template, but warm sandboxes that are already running keep the env they started with (`OnReplenish`), and without arguments it rewrites the pool to 1 replica and `v1`. `claim` and `episodes` create a new claim and a new Job (`episodes-<time>`) on every run, and a sandbox is deleted once it is released.
 - **Success signal**: `install` shows 4 CRDs, `pool` logs `warm pool kernel-eval-<runtime>: <n> sandbox(es); ...`, `claim` prints `sandbox: ...  address: ...`, and `episodes` ends with a `summary  solved <n>/<n> ...` line and exit code 0.
-- **If it fails**: [Troubleshooting: Agent Sandbox and multi-turn episodes](troubleshooting.md#agent-sandbox-and-multi-turn-episodes), [11 Multi-turn episodes](../handson/11_multi_turn.md)
+- **If it fails**: [Troubleshooting: Agent Sandbox and multi-turn episodes](troubleshooting.md#agent-sandbox-and-multi-turn-episodes), [Multi-turn episodes](../handson/extensions/multi_turn.md)
 
 ## Demo site
 
@@ -321,7 +333,7 @@ See [HyperPod troubleshooting](troubleshooting.md#hyperpod) for operator and sch
 - **Time and cost**: Not recorded (it waits for the stack deletion). Billing for S3, CloudFront and WAF ends; the log bucket stays until you delete it (log objects expire after 90 days).
 - **Running it again**: If the stack is already gone, reading its outputs fails and the script stops without deleting anything. Delete the remaining log bucket with the `aws s3 rb s3://<log bucket> --force` the first run printed.
 - **Success signal**: `deleted gpu-sandbox-demo`, then `kept the access log bucket <log bucket>; ...`.
-- **If it fails**: [99 Cleanup](../handson/99_cleanup.md), [CloudFront demo deployment](demo_site.md)
+- **If it fails**: [Cleanup](../handson/cleanup.md), [CloudFront demo deployment](demo_site.md)
 
 ## Shared files
 
@@ -332,7 +344,7 @@ See [HyperPod troubleshooting](troubleshooting.md#hyperpod) for operator and sch
 - **When**: Used automatically by `07_run_grpo.sh` and the scripts that use `lib_jobs.sh` (`ops/verify.sh`, `ops/rollout.sh`, `ops/simulate.sh`, `ops/bench.sh`, `agent_sandbox.sh episodes`).
 - **Running it again**: A filter that keeps no state, so you can run it again at any time.
 - **Success signal**: Summary lines such as `batch`, `SWITCH`, `PARITY PASS` and `bench`. Lines that are not JSON pass through, and only PASS, FAIL and errors get a color.
-- **If it fails**: "How to verify" in [00 Hands-on overview](../handson/00_overview.md)
+- **If it fails**: "How to verify" in [Hands-on overview](../handson/index.md)
 
 ### `scripts/lib.sh`, `scripts/lib_jobs.sh`
 

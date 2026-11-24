@@ -24,7 +24,7 @@ step 번호는 계속 올라가는데 모델 성능은 그대로이거나 배치
     - **지표 엔드포인트도 인증합니다.** `/metrics`도 `/v1/evaluate`와 같은 토큰 검증을 거치며, 인증 없이 호출할 수 있는 경로는 kubelet probe용 `/healthz`, `/readyz`뿐입니다.
     - **채점 결과의 변화에도 경보를 설정합니다.** 학습에 문제가 생기면 CPU나 메모리 사용량보다 `sandbox_error` 비율이나 pass rate, verdict의 flag가 먼저 달라집니다. flag 발생 빈도까지 감시하려면 집계 기능을 추가해야 합니다.
 
-**읽기 전에**　[05 On-policy GRPO 학습](../handson/05_grpo_training.md)의 `reward_batch` 로그, [02 보안](02_security.md)의 인증 설계, [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)의 gateway 동작을 먼저 보세요.
+**읽기 전에**　[On-policy GRPO 학습](../handson/scenarios/a/grpo.md)의 `reward_batch` 로그, [02 보안](02_security.md)의 인증 설계, [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md)의 gateway 동작을 먼저 보세요.
 
 ??? note "용어"
     - **Counter, Gauge, Histogram**: Prometheus 지표 종류입니다. Counter는 계속 늘기만 하는 누적 값, Gauge는 오르내리는 현재 값, Histogram은 값을 구간(bucket)별로 집계해 분위수(p95 등)를 계산할 수 있게 하는 지표입니다.
@@ -299,4 +299,4 @@ kubectl -n sandbox-gateway get configmap sandbox-routing -o jsonpath='{.data.rou
 
     [관련 대표 자료](../reference/references.md#ref-production-07-observability-and-operations)
 
-관련 페이지: [02 보안](02_security.md), [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md), [04 샌드박스 pool 배포와 검증](../handson/04_sandbox_pools.md), [문제 해결](../reference/troubleshooting.md)
+관련 페이지: [02 보안](02_security.md), [03 Gateway와 샌드박스 pool](03_gateway_and_pools.md), [샌드박스 pool 배포와 검증](../handson/common/03_pools/details.md), [문제 해결](../reference/troubleshooting.md)
