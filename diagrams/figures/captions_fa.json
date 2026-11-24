@@ -89,6 +89,24 @@
     "takeaway_ko": "gVisor는 노드의 드라이버로 요청을 전달합니다. Kata VM은 배정받은 GPU를 자체 드라이버로 제어합니다.",
     "takeaway_en": "gVisor forwards requests to the node driver. A Kata VM uses its own driver to control its assigned GPU."
   },
+  "beginner-03_gpu_sandbox--gvisor": {
+    "page": "docs/beginner/03_gpu_sandbox.md",
+    "section": "샌드박스에서 GPU까지 어떻게 연결할까요?",
+    "replaces": "beginner-03_gpu_sandbox--gpu-path",
+    "alt_ko": "gVisor의 nvproxy에서 출발한 GPU 요청 화살표가 샌드박스 테두리를 지나 노드의 NVIDIA 드라이버에 닿습니다.",
+    "alt_en": "Inside the gVisor sandbox, nvproxy checks GPU requests. Its arrow crosses the boundary to reach the node’s NVIDIA driver.",
+    "takeaway_ko": "gVisor는 허용된 GPU 요청만 노드의 NVIDIA 드라이버로 전달합니다.",
+    "takeaway_en": "gVisor forwards only supported GPU requests to the node’s NVIDIA driver."
+  },
+  "beginner-03_gpu_sandbox--kata-qemu": {
+    "page": "docs/beginner/03_gpu_sandbox.md",
+    "section": "샌드박스에서 GPU까지 어떻게 연결할까요?",
+    "replaces": "beginner-03_gpu_sandbox--gpu-path",
+    "alt_ko": "Kata VM의 테두리 안에 Linux 커널과 NVIDIA 드라이버가 함께 있습니다. 드라이버는 이 VM에 할당된 물리 GPU를 제어합니다.",
+    "alt_en": "The Kata VM boundary encloses both its Linux kernel and its NVIDIA driver. The driver controls the physical GPU assigned to this VM.",
+    "takeaway_ko": "Kata에서는 VM 안의 NVIDIA 드라이버가 VM에 직접 할당된 GPU를 제어합니다.",
+    "takeaway_en": "With Kata, the NVIDIA driver inside the VM controls the physical GPU assigned to it."
+  },
   "beginner-04_rl_and_sandbox": {
     "page": "docs/beginner/04_rl_and_sandbox.md",
     "section": "기존 Pain Point",

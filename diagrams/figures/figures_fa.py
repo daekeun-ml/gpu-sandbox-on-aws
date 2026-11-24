@@ -99,6 +99,13 @@ T = {
         "gp.title": "샌드박스에서 GPU까지",
         "gp.rows": (("gVisor", "nvproxy가 허용한 요청을 노드 드라이버로 전달합니다.", ("코드", "요청 검사", "노드 드라이버", "A10G")),
                     ("Kata + QEMU", "VM 안의 드라이버가 배정받은 물리 GPU를 사용합니다.", ("VM 안의 코드", "VM 안의 드라이버", "T4"))),
+        "gp.gvisor": "gVisor 샌드박스", "gp.kata": "Kata + QEMU 가상 머신",
+        "gp.gvisor_desc": "Sentry가 코드의 요청을 받습니다. GPU 요청은 nvproxy를 거쳐 샌드박스 밖에 있는 노드의 NVIDIA 드라이버로 전달됩니다.",
+        "gp.kata_desc": "가상 머신의 Linux 커널이 코드의 요청을 받습니다. VM 안의 NVIDIA 드라이버가 이 VM에 배정된 GPU를 제어합니다.",
+        "gp.code": "제출한 코드", "gp.guest": "VM의 Linux 커널",
+        "gp.file": "파일", "gp.network": "네트워크", "gp.request": "GPU 요청",
+        "gp.node": "샌드박스 밖의 노드", "gp.driver": "NVIDIA 드라이버",
+        "gp.node_gpu": "노드의 GPU", "gp.vm_gpu": "VM에 할당된 GPU",
         # docs/beginner/04_rl_and_sandbox.md, Pain point
         "b04.a": "채점을 속인 답과 섞인 채점 기준",
         "b04.b": "속임수 차단, 한 배치에 한 버전",
@@ -207,6 +214,13 @@ T = {
         "gp.title": "From the sandbox to the GPU",
         "gp.rows": (("gVisor", "nvproxy forwards supported requests to the node driver.", ("Code", "nvproxy", "Node driver", "A10G")),
                     ("Kata + QEMU", "The VM’s driver controls the physical GPU assigned to it.", ("Code in VM", "Driver in VM", "T4"))),
+        "gp.gvisor": "gVisor sandbox", "gp.kata": "Kata + QEMU virtual machine",
+        "gp.gvisor_desc": "Sentry receives the code’s requests. GPU requests go through nvproxy to the node’s NVIDIA driver outside the sandbox.",
+        "gp.kata_desc": "The VM’s Linux kernel receives the code’s requests. The NVIDIA driver inside the VM controls the GPU assigned to it.",
+        "gp.code": "Submitted code", "gp.guest": "VM’s Linux kernel",
+        "gp.file": "File", "gp.network": "Network", "gp.request": "GPU request",
+        "gp.node": "Outside the sandbox", "gp.driver": "NVIDIA driver",
+        "gp.node_gpu": "Node GPU", "gp.vm_gpu": "Assigned GPU",
         "b04.a": "A fooled grader and mixed standards",
         "b04.b": "Cheating blocked, one version per batch",
         "b04.hack": "Answer that fooled the grader", "b04.hack_sub": "raises the score through a gap",
@@ -686,6 +700,44 @@ def beginner_03_gpu_path(lang: str) -> Figure:
     return fig
 
 
+def beginner_03_runtime_path(lang: str, *, kata: bool) -> Figure:
+    """Use the same landmarks in both drawings and move the boundary around the guest driver."""
+    t = T[lang]
+    fig = Figure(544, 302)
+    heading = t["gp.kata"] if kata else t["gp.gvisor"]
+    description = t["gp.kata_desc"] if kata else t["gp.gvisor_desc"]
+    fig.parts.append(f"<title>{escape(heading)}</title><desc>{escape(description)}</desc>")
+
+    fig.rect(6, 5, 532 if kata else 330, 237, fill="#FFFFFF", stroke=ACCENT, width=2, rx=12)
+    fig.icon("shield-lock", 19, 14, 22, ACCENT)
+    fig.text(48, 32, heading, size=20, bold=True, color=ACCENT, anchor="start")
+    beginner_label(fig, 74, 44, 180, t["gp.code"])
+    fig.arrow([(164, 90), (164, 106)])
+    beginner_label(fig, 64, 109, 200, t["gp.guest"] if kata else "Sentry")
+
+    # Keep file and network requests visible, but only follow the GPU branch to a device.
+    for left, width, label, start_x in ((16, 70, t["gp.file"], 116), (97, 102, t["gp.network"], 148)):
+        center = left + width / 2
+        fig.arrow([(start_x, 155), (center, 176)], color=MUTED_STROKE)
+        beginner_label(fig, left, 179, width, label)
+    fig.arrow([(215, 155), (268, 176 if kata else 170)], color=ACCENT, width=2)
+    if kata:
+        beginner_label(fig, 210, 179, 116, t["gp.request"], highlight=True)
+    else:
+        beginner_label(fig, 210, 173, 116, t["gp.request"], "nvproxy", highlight=True)
+        fig.text(439, 165, t["gp.node"], size=17, anchor="middle")
+
+    fig.arrow([(326, 202), (354, 202)], color=ACCENT, width=2)
+    beginner_label(fig, 357, 179, 164, t["gp.driver"], highlight=True)
+    fig.arrow([(439, 225), (439, 254)], color=ACCENT, width=2)
+    fig.rect(344, 257, 190, 39, fill=GREY_FILL, stroke=CONTAINER)
+    fig.icon("cpu", 352, 266, 21)
+    gpu = t["gp.vm_gpu"] if kata else t["gp.node_gpu"]
+    fig.text(451, 283, gpu, size=17, bold=True)
+    _fits(gpu, 17, 158, "GPU label")
+    return fig
+
+
 def beginner_04_rl_loop(lang: str) -> Figure:
     """The sandbox returns results; the trainer turns those results into rewards."""
     t = T[lang]
@@ -714,6 +766,8 @@ FIGURES = {
     "beginner-02_container_vs_sandbox--three-walls": beginner_02_three_walls,
     "beginner-03_gpu_sandbox": beginner_03_pain,
     "beginner-03_gpu_sandbox--gpu-path": beginner_03_gpu_path,
+    "beginner-03_gpu_sandbox--gvisor": lambda lang: beginner_03_runtime_path(lang, kata=False),
+    "beginner-03_gpu_sandbox--kata-qemu": lambda lang: beginner_03_runtime_path(lang, kata=True),
     "beginner-04_rl_and_sandbox": beginner_04_pain,
     "beginner-04_rl_and_sandbox--rl-loop": beginner_04_rl_loop,
     "beginner-05_hands_on": beginner_05_pain,

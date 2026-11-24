@@ -2,15 +2,17 @@
 
 In chapter 05 you checked that an incorrect submission received `wrong_answer`. Now imagine an **agent** that can read the feedback and submit a revision. If it skipped the step that replaces negative numbers with zero, for example, it can add that step and try again. One submission and its result are a **turn**. All the turns spent attempting one problem make up an **episode**.
 
-## Why keep one sandbox while revising an answer? { #one-sandbox-for-the-episode }
+## When do you need Agent Sandbox? { #one-sandbox-for-the-episode }
 
-Sending the first answer and the revision to the same sandbox keeps the runtime and grading rules the same. For GPU tasks, both runs also measure time on the same GPU. Independent answers that only need one evaluation each can go to whichever sandbox is free.
+When each answer needs a single, independent evaluation, any free sandbox in the grading pool will do. Now suppose a coding agent creates `solution.py` on its first turn. A test fails on a negative input, so on its next turn the agent edits one line in that file. If the second request goes to a different sandbox, the file it needs to edit is missing.
+
+**Agent Sandbox** manages a dedicated sandbox on Kubernetes for each episode. Even when several agents work at once, each can return to its assigned address to pick up where it left off. The agent releases its sandbox when the episode ends. A runtime such as gVisor or Kata isolates the code running inside it. [Agent Sandbox documentation](https://agent-sandbox.sigs.k8s.io/docs/)
 
 ![Independent answers can go to any free sandbox. Revisions within one episode go to the same sandbox.](../images/figures/beginner-06_multi_turn_agent.en.svg?v=2)
 
 <span id="what-carries-over-to-the-next-turn"></span>
 
-**Does the same sandbox keep files written by the previous submission?** In this lab the grading server cleans up the working directory and remaining processes after each submission. The agent keeps the previous answer and its feedback, then sends the **entire revised program** on the next turn.
+**What carries over between turns in this grading lab?** The same grader version evaluates the first answer and its revision. For GPU tasks, both runs are timed on the same GPU. The grading server cleans up the working directory and remaining processes after each submission. The agent keeps its previous answer and feedback, then sends the **entire revised program** on the next turn.
 
 ## Read the three attempts in a lab run { #reading-one-episode-in-the-logs }
 
@@ -30,7 +32,7 @@ At the bottom, `solved 2/2` means both episodes reached a correct answer. `mean 
 
 ## What happens to the sandbox when the episode ends? { #prepare-assign-and-clean-up }
 
-In this lab **Agent Sandbox** assigns a sandbox to an episode. A **warm pool** is a group of sandboxes already running and ready for the next allocation.
+A **warm pool** is a group of running sandboxes ready to be assigned. Here’s how the lab borrows one for an episode and releases it afterward.
 
 1. At the start, the episode runner creates a `SandboxClaim` to request a ready sandbox.
 2. The runner sends the initial answer and every revision to the assigned address.
