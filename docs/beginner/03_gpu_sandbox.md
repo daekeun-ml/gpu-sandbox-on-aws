@@ -1,49 +1,41 @@
-# 03 GPU까지 격리하려면
+# 03 샌드박스에서 GPU를 쓰는 방법 { #03-gpu까지-격리하려면 }
 
-모델에게 두 배열을 더하는 함수를 작성하게 했다고 해 봅시다. CPU용 함수는 샌드박스에서 단위 테스트로 채점합니다. 같은 계산을 GPU에서 얼마나 빠르게 끝내는지가 과제라면, 코드를 실행하는 샌드박스에도 GPU가 필요합니다.
+두 숫자 목록 `[-3, 2]`와 `[1, 1]`에서 같은 자리에 있는 수끼리 더하고, 음수는 0으로 바꾸는 문제를 생각해 봅시다. 기대하는 답은 `[0, 3]`입니다. CPU에서도 정답을 계산할 수 있습니다. 그런데 과제가 **GPU에서 이 계산을 더 빨리 끝내는 코드를 만드는 것**이라면, 샌드박스 안에서도 GPU로 코드를 실행해야 합니다.
 
-## GPU 커널과 드라이버
+## 같은 GPU에서 두 코드의 실행 시간을 측정합니다 { #gpu-커널과-드라이버 }
 
-**GPU 커널**은 GPU에서 실행되는 계산 코드입니다. [앞 편](02_container_vs_sandbox.md)에서 파일 접근을 처리하던 운영체제 커널과는 이름만 같습니다. Python 프로그램이 GPU에 계산을 요청하면 **GPU 드라이버**가 해당 요청을 장치에 전달합니다.
+GPU가 실행하는 계산 코드를 **GPU 커널**이라고 합니다. 2편에서 본 **운영체제 커널**은 파일과 장치에 대한 요청을 처리합니다. 여기서 모델에게 작성해 달라는 것은 두 목록을 더하는 GPU 커널입니다.
 
-두 구현이 같은 정답을 냈다고 가정해 봅시다. A10G에서 기존 코드가 4 ms, 새 코드가 2 ms 걸렸다면 그 조건에서 새 코드가 2배 빠릅니다. 배포할 GPU가 L4라면 같은 입력으로 두 구현을 L4에서 다시 측정합니다. GPU에 따라 계산 속도와 메모리 접근 속도가 달라져 두 구현의 순위도 바뀔 수 있기 때문입니다.
+예를 들어 같은 A10G GPU에 같은 입력을 주었을 때 기존 코드가 4밀리초(ms), 모델이 만든 코드가 2밀리초 걸렸다고 해 봅시다. 두 코드의 답이 모두 맞다면 새 코드는 이 조건에서 **2배** 빠릅니다(4 ÷ 2). 이 숫자는 계산 방법을 보여 주는 예입니다. 다른 GPU에서 쓸 코드라면 그 GPU에서 두 코드의 실행 시간을 다시 측정합니다.
 
-## EKS에서 샌드박스 구성 고르기
+<span id="eks에서-샌드박스-구성-고르기"></span>
 
-EKS에서는 Kubernetes가 pod를 실행할 노드를 고릅니다. **Kata**를 런타임으로 지정하면 그 노드에 가상 머신(VM)을 띄우고 그 안에서 pod의 컨테이너를 실행합니다. VM을 띄우는 프로그램을 **hypervisor**라고 합니다. Kata는 이 역할을 QEMU나 Cloud Hypervisor에 맡깁니다.
+## 샌드박스에서 GPU까지 어떻게 연결할까요? { #gpu-요청을-전달하는-경로 }
 
-| 구성 | 실습에서 확인할 내용 |
-|---|---|
-| gVisor | `nvproxy`가 지원하는 GPU 요청만 노드의 NVIDIA 드라이버에 전달합니다. 드라이버 버전이 맞으면 일반 GPU 인스턴스에서 시작할 수 있습니다. [gVisor GPU 실습](../handson/common/02_runtimes/gvisor.md) |
-| Kata + QEMU | 물리 GPU를 VM에 직접 할당합니다. 이 방식을 **GPU passthrough**라고 합니다. 실습에서는 VM 안의 드라이버가 `g4dn.metal`의 T4 한 장을 제어합니다. [Kata GPU 실습](../handson/common/02_runtimes/kata.md) |
-| Kata + Cloud Hypervisor | GPU 없이 `c8i`에서 pod마다 VM을 띄워 격리를 확인합니다. [CPU 전용 실습](../handson/scenarios/c/index.md) |
+**드라이버**는 프로그램이 장치를 사용하도록 운영체제에서 요청을 처리하는 소프트웨어입니다. 이 실습에서 gVisor와 Kata는 서로 다른 위치의 NVIDIA 드라이버를 사용합니다.
 
-### Cloud Hypervisor의 GPU 지원 범위
+![gVisor의 nvproxy는 요청을 노드 드라이버로 전달하고, Kata의 가상 머신은 자체 드라이버로 배정받은 GPU를 사용합니다.](../images/figures/beginner-03_gpu_sandbox--gpu-path.ko.svg?v=2)
 
-Cloud Hypervisor로 VM을 직접 관리할 때는 운영자가 물리 GPU를 지정해 VM에 연결할 수 있습니다. EKS에서 Kata로 GPU pod를 띄울 때는 Kata가 그 pod에 할당된 GPU를 VM에 연결하고 컨테이너가 쓸 수 있게 해야 합니다. Kata가 지원하는 NVIDIA GPU 구성은 QEMU를 사용합니다. Kata와 Cloud Hypervisor로 GPU를 연결해 봤지만, 제한 시간 안에 VM이 부팅되지 않았습니다. [Cloud Hypervisor 문서](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md) [Kata 지원표](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [GPU 실험 기록](../handson/common/02_runtimes/kata.md#3단계-선택-실험-kata--cloud-hypervisor-gpu)
+- **gVisor**에서는 `nvproxy`가 샌드박스 안에서 보낸 GPU 요청을 검사합니다. 허용된 요청은 GPU가 장착된 노드의 NVIDIA 드라이버로 전달합니다. 이 실습에서는 `g5.xlarge`의 A10G를 사용합니다. [gVisor에서 GPU 확인하기](../handson/common/02_runtimes/gvisor.md)
+- **Kata + QEMU**에서는 물리 GPU 한 장을 가상 머신(VM)에 직접 할당합니다. 이를 **GPU passthrough**라고 합니다. 실습에서는 VM 안의 NVIDIA 드라이버가 `g4dn.metal`의 T4 한 장을 사용합니다. [Kata VM에 GPU 연결하기](../handson/common/02_runtimes/kata.md#kata-gpu)
 
-## GPU 요청을 전달하는 경로
+## 샌드박스에서 GPU가 보이는지 확인하기 { #gpu-한-장에-답-하나를-보내면 }
 
-![gVisor는 GPU 요청을 노드 드라이버로 전달하고, Kata + QEMU는 VM 내부 드라이버로 GPU를 사용합니다.](../images/figures/beginner-03_gpu_sandbox--gpu-path.ko.svg)
+아래는 Kata VM에서 확인한 화면입니다. 마지막 명령은 PyTorch에 첫 번째 GPU의 이름을 묻습니다. `Tesla T4`가 출력됐으므로 **VM 안에서도 배정된 GPU가 보입니다.** 그 GPU에서 실제 코드가 올바르게 실행되는지는 시험용 답안을 보내 확인합니다. [GPU 샌드박스의 실행 결과](../handson/common/03_pools/details.md#gpu-verdicts)
 
-`ioctl`은 프로그램이 드라이버에 장치 관련 요청을 보내는 시스템 호출입니다. 여기서는 gVisor가 그 요청을 확인하는 위치를 보면 됩니다.
+![Kata VM에서 uname -r로 확인한 게스트 커널과 PyTorch가 출력한 GPU 이름 Tesla T4](../images/terminal/kata-gpu-replay.png)
 
-### 드라이버가 있는 위치가 중요한 이유
+<span id="드라이버가-있는-위치가-중요한-이유"></span>
 
-| 질문 | gVisor + nvproxy | Kata + QEMU |
-|---|---|---|
-| 누가 GPU 요청을 처리하나요? | nvproxy가 허용한 요청을 노드의 NVIDIA 드라이버가 처리합니다. | 게스트의 NVIDIA 드라이버가 할당받은 GPU를 제어합니다. |
-| 어떤 조건을 먼저 확인하나요? | 노드 드라이버 버전이 설치한 gVisor에서 지원되는지 확인합니다. | 노드가 VM을 띄울 수 있고 IOMMU를 통해 물리 GPU를 게스트에 할당할 수 있어야 합니다. |
-| pod를 하나 더 띄우려면? | 기본 `g5.xlarge`에는 A10G가 한 장이어서 이미 사용 중이면 노드가 더 필요합니다. | `g4dn.metal`의 T4 중 한 장과 VM용 CPU와 메모리가 비어 있어야 합니다. |
+??? note "GPU를 요청했는데 작업이 시작되지 않는다면"
+    먼저 비어 있는 GPU가 있는지 확인하세요. 기본 `g5.xlarge`에는 A10G가 한 장입니다. 이미 다른 샌드박스가 쓰고 있다면 다음 샌드박스는 기다립니다. 실행은 시작됐는데 첫 연산에서 실패한다면 gVisor는 노드 드라이버의 지원 버전을, Kata는 VM에 장치가 배정됐는지와 VM 안의 드라이버를 확인합니다.
 
-그래서 GPU 요청이 `Pending`이면 어떤 런타임을 골랐는지와 남은 장치 수를 함께 봅니다. 반대로 `Running`인 pod에서 첫 GPU 연산이 실패했다면, 어느 쪽 드라이버와 장치 연결을 살필지가 위 표에서 달라집니다.
+<span id="cloud-hypervisor의-gpu-지원-범위"></span>
 
-## GPU 한 장에 답 하나를 보내면
+??? note "Kata의 CPU 실습에서는 무엇이 달라지나요?"
+    QEMU와 Cloud Hypervisor는 가상 머신을 실행하는 프로그램입니다. 이 가이드의 CPU 실습에서는 둘 다 `c8i` 노드에서 GPU 없이 비교합니다. NVIDIA GPU를 연결하는 Kata 실습에는 QEMU를 사용합니다. [CPU로 실습하기](../handson/scenarios/c/index.md) / [Kata의 GPU 지원 범위와 실험 기록](../handson/common/02_runtimes/kata.md#clh-gpu)
 
-`g5.xlarge`에서는 gVisor가 GPU 장치 요청을 검사하고 노드의 NVIDIA 드라이버에 전달합니다. 노드의 드라이버 버전이 `nvproxy`의 지원 목록에 있는지 확인하세요. `g4dn.metal`에서 Kata + QEMU를 쓰면 물리 GPU 한 장을 게스트 VM에 연결하고, 게스트 안의 드라이버가 연산을 실행합니다. VM에서 어떤 GPU가 보이는지, 그 GPU에서 첫 연산이 끝나는지 확인합니다. IOMMU는 그 장치가 접근할 수 있는 메모리 주소 범위를 제한합니다.
+??? note "코드 한 번의 실행 시간과 여러 요청의 처리량"
+    실행 시간은 한 답안의 코드가 얼마나 빨리 계산하는지 알려 줍니다. **처리량**은 샌드박스 여러 개가 함께 초당 몇 건의 채점을 끝내는지 나타냅니다. 이 실습의 gVisor 구성은 A10G 두 장으로 초당 0.198건, Kata + QEMU 구성은 T4 네 장으로 초당 0.349건을 처리했습니다. GPU 종류와 동시에 일한 샌드박스 수가 달라 이 값만으로 코드나 런타임의 속도를 비교하기는 어렵습니다. [벤치마크 조건과 결과](../handson/benchmarks/index.md#runtime-results)
 
-![Kata 게스트 안에서 확인한 T4와 GPU 연산 결과](../images/terminal/kata-gpu-replay.png)
-
-같은 커널을 두 pool에 보내도 처리량은 달라질 수 있습니다. EKS 실습에서 gVisor pool은 A10G 두 장으로 초당 0.198건, Kata QEMU pool은 T4 네 장으로 초당 0.349건을 처리했습니다. Kata QEMU pool은 gVisor pool보다 동시에 채점할 수 있는 답안 수가 두 배였습니다. **코드 자체의 속도**를 비교하려면 같은 GPU에서 기준 구현과 제출 코드를 돌려 보고, **pool 용량**을 정하려면 전체 처리량과 Ready pod 수를 함께 보세요. [측정 조건과 원본 결과](../handson/benchmarks/index.md#runtime-results)
-
-다른 GPU 작업의 예는 [GPU 샌드박스가 필요한 경우](../concepts/01_why_gpu_sandbox.md), 노드별 GPU 연결 조건은 [격리 런타임 비교](../concepts/02_isolation_runtimes.md)에 정리했습니다. [다음 편](04_rl_and_sandbox.md)에서는 실행 결과를 학습 점수로 바꿉니다.
+다음 편에서는 두 코드가 모두 정답이더라도 학습 프로그램이 왜 서로 다른 점수를 주는지 살펴봅니다. [04 강화학습과 샌드박스](04_rl_and_sandbox.md)

@@ -46,12 +46,12 @@
   },
   "beginner-01_why_sandbox--layers": {
     "page": "docs/beginner/01_why_sandbox.md",
-    "section": "여러 층의 방어",
+    "section": "실행 시간과 파일 접근을 따로 제한하는 이유",
     "replaces": "CODE[\"모델이 쓴 코드\"] --> L1",
-    "alt_ko": "여섯 개 층과 각 층이 막는 위험을 표로 나타낸 그림입니다. 행은 1 pod 보안 설정(root가 아닌 사용자, 권한 제거), 2 격리 런타임(gVisor 또는 Kata), 3 네트워크 규칙(NetworkPolicy, 나가는 연결은 기본 차단. pod가 자기 노드로 여는 새 연결은 4의 node guard가 막음), 4 노드 설정(IMDSv2 필수, hop limit 1, node guard), 5 자격 증명 없음(샌드박스 pod에 AWS 키와 자체 서비스 계정 토큰을 넣지 않음. 호출자가 보낸 토큰은 서버가 검증에 씀), 6 자원과 시간 한도(CPU, 메모리, 실행 시간)입니다. 점은 그 층이 막는 위험입니다. 서버 파일 읽기는 1과 2, 자격 증명 빼내기는 3과 4, 다른 곳으로 퍼지기는 3과 5, 커널 공격은 2, 자원 독차지는 6, 데이터 빼돌리기는 3이 막습니다. 한 위험을 여러 층이 함께 막기도 합니다.",
-    "alt_en": "A table of the six layers and the risks each one blocks. The rows are 1 pod security settings (non-root user, dropped privileges), 2 isolation runtime (gVisor or Kata), 3 network rules (NetworkPolicy, outbound denied by default; new connections a pod opens to its own node are blocked by the node guard in 4), 4 node settings (IMDSv2 required, hop limit 1, node guard), 5 no credentials (no AWS keys and no service account token of its own in the sandbox pod; the server uses the token the caller sends to verify the caller), 6 resource and time limits (CPU, memory, execution time). A dot marks a risk the layer blocks: reading server files by 1 and 2, stealing credentials by 3 and 4, spreading elsewhere by 3 and 5, kernel attack by 2, hogging resources by 6, exfiltrating data by 3. Some risks are blocked by several layers",
-    "takeaway_ko": "여섯 개 층은 각각 주로 막는 위험이 다릅니다. 파일 접근은 pod의 권한과 격리 런타임이 제한하고, 외부 연결은 네트워크 규칙이 차단합니다. 한 위험에 여러 층이 함께 작동하기도 합니다.",
-    "takeaway_en": "To reach the server's files, credentials or network, code has to pass all six layers, and each layer handles a different risk."
+    "alt_ko": "끝나지 않는 함수는 시간 제한으로 중단합니다. 모델 파일은 학습 서버에만 두고, 샌드박스에서 외부 서버로 나가는 연결은 기본으로 차단합니다.",
+    "alt_en": "A time limit stops a function that keeps running. Model files stay on the training server, and new connections from the sandbox to external servers are blocked by default.",
+    "takeaway_ko": "실행 시간은 함수가 얼마나 오래 돌지를 정합니다. 함수가 열 수 있는 파일과 접속할 수 있는 서버는 별도로 제한합니다.",
+    "takeaway_en": "The time limit determines how long a function can run. Separate settings control which files it can open and which servers it can reach."
   },
   "beginner-02_container_vs_sandbox": {
     "page": "docs/beginner/02_container_vs_sandbox.md",
@@ -64,12 +64,12 @@
   },
   "beginner-02_container_vs_sandbox--three-walls": {
     "page": "docs/beginner/02_container_vs_sandbox.md",
-    "section": "세 가지 격리 방식",
+    "section": "같은 파일을 열어도 요청을 받는 곳이 다릅니다",
     "replaces": "subgraph R[\"runc (일반 컨테이너)\"]",
-    "alt_ko": "같은 구조로 그린 세 패널입니다. a runc: pod 안의 코드가 시스템 호출로 서버 커널을 직접 호출합니다(격리 경계: namespace, cgroup). b gVisor: pod마다 하나씩 있는 Sentry가 pod 안에서 시스템 호출을 받아 처리하고, 꼭 필요한 일부만 서버 커널로 보냅니다. c Kata: pod마다 VM이 하나씩 있고, VM 안의 커널이 시스템 호출을 받습니다. 서버 커널에는 KVM 경계를 거쳐야 접근합니다(격리 경계: 하드웨어 가상화).",
-    "alt_en": "Three panels with the same structure. a runc: code in the pod reaches the server kernel directly with system calls (wall: namespace, cgroup). b gVisor: a Sentry, one per pod, takes the system calls inside the pod and passes only a necessary few to the server kernel. c Kata: the kernel inside the VM, one per pod, takes them, and the path to the server kernel crosses the KVM boundary (wall: hardware virtualization)",
-    "takeaway_ko": "runc에서는 코드가 서버 커널을 직접 호출합니다. gVisor에서는 pod마다 있는 Sentry가 시스템 호출을 대신 처리하고, Kata에서는 pod마다 있는 VM과 그 안의 커널이 처리합니다.",
-    "takeaway_en": "runc reaches the server kernel directly, gVisor has a Sentry kept for each pod take the calls instead, and Kata keeps a separate VM, with its own kernel, for each pod."
+    "alt_ko": "파일을 여는 코드는 runc에서 노드 커널에, gVisor에서 Sentry에, Kata에서 가상 머신의 커널에 요청합니다.",
+    "alt_en": "A file request goes to the node kernel under runc, to Sentry under gVisor, or to a virtual machine’s kernel under Kata.",
+    "takeaway_ko": "일반 컨테이너는 노드 커널을 사용합니다. gVisor에서는 Sentry가, Kata에서는 VM 안의 커널이 요청을 받습니다.",
+    "takeaway_en": "The first handler is the node kernel for runc, Sentry for gVisor and the guest kernel for Kata."
   },
   "beginner-03_gpu_sandbox": {
     "page": "docs/beginner/03_gpu_sandbox.md",
@@ -82,12 +82,12 @@
   },
   "beginner-03_gpu_sandbox--gpu-path": {
     "page": "docs/beginner/03_gpu_sandbox.md",
-    "section": "GPU 접근 경로",
+    "section": "샌드박스에서 GPU까지 어떻게 연결할까요?",
     "replaces": "P[\"PyTorch 코드\"] --> C[\"CUDA 라이브러리\"]",
-    "alt_ko": "GPU 접근 경로는 PyTorch 코드, CUDA 라이브러리, ioctl(장치 명령), 커널 안의 NVIDIA 드라이버, GPU 순서로 이어집니다. gVisor + nvproxy는 드라이버 앞의 ioctl 단계에 격리 경계를 두고, 명령을 검사해 허용 목록에 있는 것만 전달합니다. 아래 괄호는 Kata + VFIO passthrough의 범위로, 코드부터 드라이버와 GPU까지 모두 pod의 VM 안에 있습니다.",
-    "alt_en": "The path runs PyTorch code, CUDA library, ioctl (order form), NVIDIA driver inside the kernel, GPU. gVisor + nvproxy puts a wall on the ioctl path in front of the driver and passes only allowlisted commands. A bracket below shows Kata + VFIO passthrough, which puts the code, the driver and the GPU whole inside the pod's VM",
-    "takeaway_ko": "GPU로 보내는 모든 명령은 커널 안의 드라이버를 거칩니다. gVisor는 드라이버 앞에서 명령을 검사하고, Kata는 코드부터 GPU까지 전체 경로를 VM 안에 둡니다.",
-    "takeaway_en": "Every command that gives the GPU work goes through the driver inside the kernel, so the key question is where on this path you put up the wall. gVisor checks the commands in front of the driver, and Kata puts the whole path inside the VM."
+    "alt_ko": "gVisor의 nvproxy는 요청을 노드 드라이버로 전달하고, Kata의 가상 머신은 자체 드라이버로 배정받은 GPU를 사용합니다.",
+    "alt_en": "gVisor’s nvproxy forwards requests to the node driver. A Kata VM uses its own driver to control the GPU assigned to it.",
+    "takeaway_ko": "gVisor는 노드의 드라이버로 요청을 전달합니다. Kata VM은 배정받은 GPU를 자체 드라이버로 제어합니다.",
+    "takeaway_en": "gVisor forwards requests to the node driver. A Kata VM uses its own driver to control its assigned GPU."
   },
   "beginner-04_rl_and_sandbox": {
     "page": "docs/beginner/04_rl_and_sandbox.md",
@@ -100,12 +100,12 @@
   },
   "beginner-04_rl_and_sandbox--rl-loop": {
     "page": "docs/beginner/04_rl_and_sandbox.md",
-    "section": "학습 루프에서 샌드박스의 자리",
+    "section": "한 문제에 낸 답들을 함께 비교하는 이유",
     "replaces": "M[\"모델<br/>(GPU에서 학습)\"]",
-    "alt_ko": "문제(PyTorch 연산을 더 빠른 GPU 커널로 다시 쓰기)가 GPU에서 학습하는 모델에 입력됩니다. 1 모델이 문제를 보고 코드를 작성해 샌드박스로 보냅니다. 샌드박스는 코드 실행, 채점, 속도 측정에 GPU를 씁니다. 2 샌드박스가 코드를 실행해 정확성과 speedup을 측정하고, trainer가 이 결과로 점수(reward)를 계산합니다. 3 점수가 높은 답을 더 자주 쓰도록 모델을 조정합니다. 가운데 표시는 이 루프가 학습 step마다 반복된다는 뜻입니다(기본 60 step).",
-    "alt_en": "A problem (rewrite a PyTorch op as a faster GPU kernel) goes into the model, which is trained on GPU. 1 The model reads the problem and writes code for the sandbox (exam room and grader, with a GPU to measure speed), 2 the sandbox runs it and measures correctness and speedup, and the trainer computes the score (reward) from them, 3 the model is adjusted to write more high-scoring answers. The mark in the middle shows that the loop repeats every training step (60 steps by default)",
-    "takeaway_ko": "모델이 코드를 작성하면 샌드박스가 그 코드를 실행해 채점하고, trainer가 그 결과로 모델을 조정합니다. 이 과정이 학습 단계(step)마다 반복됩니다. 학습 스크립트의 기본값은 60스텝이며 실행 인자로 조정할 수 있습니다.",
-    "takeaway_en": "The model writes code, the sandbox runs and grades it, and the trainer adjusts the model from the result. This repeats at every training step."
+    "alt_ko": "모델이 여러 답을 내면 샌드박스가 실행 결과를 돌려주고 학습 프로그램이 계산한 보상으로 모델을 조정합니다.",
+    "alt_en": "The model generates several answers, the sandbox evaluates them and the training program uses their rewards to adjust the model.",
+    "takeaway_ko": "샌드박스가 정답 여부와 실행 시간을 확인합니다. 학습 프로그램은 보상을 계산하고 모델을 조정합니다.",
+    "takeaway_en": "The sandbox evaluates the answers. The trainer computes rewards and adjusts the model."
   },
   "beginner-05_hands_on": {
     "page": "docs/beginner/05_hands_on.md",

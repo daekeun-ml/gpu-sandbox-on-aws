@@ -1,49 +1,41 @@
 # 03 GPU access in a sandbox
 
-Suppose you ask a model to write a function that adds two arrays. A CPU sandbox can run unit tests for a CPU implementation. If the task is to make the calculation faster on a GPU, the sandbox needs a GPU to run the code and measure its performance.
+Take two lists, `[-3, 2]` and `[1, 1]`. Add the numbers at matching positions, then replace any negative result with zero. The expected answer is `[0, 3]`. A CPU can calculate it. If the task is to **write code that runs this calculation faster on a GPU**, the sandbox needs access to a GPU to test that claim.
 
-## GPU kernels and drivers
+## Time both implementations on the same GPU { #gpu-kernels-and-drivers }
 
-A **GPU kernel** is code that performs a calculation on the GPU. The **GPU driver** provides the interface for programs to request GPU work.
+A **GPU kernel** is code the GPU runs to perform a calculation. The **operating system kernel** from chapter 02 handles requests for files and devices. Here we want the model to write a GPU kernel that adds the lists.
 
-Suppose both implementations give the same correct answer. On an A10G, the reference takes 4 ms and the new implementation takes 2 ms, so the new one is twice as fast under those conditions. If you deploy on an L4, measure both there with the same input. The balance between compute and memory access can differ across GPUs and change which implementation is faster.
+Suppose the reference code takes 4 milliseconds (ms) and the model’s code takes 2 ms on the same A10G GPU with the same input. If both give the right output, the new code is **twice as fast** under those conditions (4 ÷ 2). These are example timings. If you plan to use another GPU, time both implementations on that GPU as well.
 
-## Choosing a sandbox on EKS
+<span id="choosing-a-sandbox-on-eks"></span>
 
-On EKS, Kubernetes picks a node for the pod. If you select **Kata** as the runtime, Kata runs the pod's containers inside a virtual machine (VM) on that node. The program that starts the VM is called a **hypervisor**. Kata can use QEMU or Cloud Hypervisor for this role.
+## How does the sandbox reach the GPU? { #gpu-request-path }
 
-| Configuration | What you do in this repository |
-|---|---|
-| gVisor | `nvproxy` forwards supported GPU requests to the node's NVIDIA driver. A regular GPU instance works with a supported driver version. [gVisor GPU exercise](../handson/common/02_runtimes/gvisor.md) |
-| Kata + QEMU | Assign a physical GPU to the VM using **GPU passthrough**. In this exercise, the driver inside the VM controls one T4 on `g4dn.metal`. [Kata GPU exercise](../handson/common/02_runtimes/kata.md) |
-| Kata + Cloud Hypervisor | Check isolation by starting a VM for each pod on `c8i` without a GPU. [CPU-only exercise](../handson/scenarios/c/index.md) |
+A **driver** handles a program’s requests to use a device. Both paths in the figure use an NVIDIA driver. Where that driver runs depends on the sandbox runtime.
 
-### GPU support in Cloud Hypervisor
+![gVisor’s nvproxy forwards requests to the node driver. A Kata VM uses its own driver to control the GPU assigned to it.](../images/figures/beginner-03_gpu_sandbox--gpu-path.en.svg?v=2)
 
-When you manage a VM directly with Cloud Hypervisor, you can specify a physical GPU to attach. When you run a GPU pod with Kata on EKS, Kata has to attach the allocated GPU to the VM and make it available to the container. Kata's supported NVIDIA GPU configuration uses QEMU. The Kata + Cloud Hypervisor GPU experiment in this repository timed out while starting the VM. [Cloud Hypervisor documentation](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/v55.0/docs/vfio.md) [Kata support table](https://github.com/kata-containers/kata-containers/blob/4.3.1/docs/hypervisors.md#types) [GPU experiment](../handson/common/02_runtimes/kata.md#stage-3-optional-experimental-kata--cloud-hypervisor-gpu)
+- **gVisor.** `nvproxy` checks GPU requests from inside the sandbox. It forwards supported requests to the NVIDIA driver on the node that holds the GPU. This lab uses the A10G on a `g5.xlarge`. [Check the GPU under gVisor](../handson/common/02_runtimes/gvisor.md)
+- **Kata + QEMU.** The node assigns a physical GPU directly to a virtual machine (VM). This is called **GPU passthrough**. The NVIDIA driver inside the VM controls one T4 on the lab’s `g4dn.metal`. [Attach a GPU to a Kata VM](../handson/common/02_runtimes/kata.md#kata-gpu)
 
-## GPU request path
+## Check which GPU the sandbox sees { #follow-one-submission-to-one-gpu }
 
-![gVisor forwards requests to the node driver. Kata + QEMU uses a driver inside the VM.](../images/figures/beginner-03_gpu_sandbox--gpu-path.en.svg)
+The screenshot shows a Kata VM. The last command asks PyTorch for the name of the first GPU. The `Tesla T4` output tells us **the assigned GPU is visible inside the VM**. To check that code actually runs correctly on it, send a submission with a known answer. [GPU sandbox results](../handson/common/03_pools/details.md#gpu-verdicts)
 
-An `ioctl` is a system call that lets a program send a device-specific request to a driver.
+![Inside a Kata VM, uname -r reports the guest kernel and PyTorch identifies a Tesla T4](../images/terminal/kata-gpu-replay.png)
 
-### Why the location of the driver matters
+<span id="why-the-location-of-the-driver-matters"></span>
 
-| Question | gVisor + nvproxy | Kata + QEMU |
-|---|---|---|
-| Who handles device requests? | The node's NVIDIA driver handles requests that nvproxy permits. | The guest's NVIDIA driver controls the assigned physical GPU. |
-| What must the node support? | The installed gVisor release must support the node driver version. | The node must boot VMs and assign a physical device using the IOMMU. |
-| What does another pod need? | A default `g5.xlarge` has one A10G. If that card is in use, the next pod needs another node. | It needs one free T4 on `g4dn.metal` and enough CPU and memory for its guest. |
+??? note "What if a job requests a GPU and never starts?"
+    Check for a free GPU first. The default `g5.xlarge` has one A10G. If another sandbox holds it, the next one waits. If the sandbox starts but its first GPU operation fails, check the supported node driver version for gVisor. For Kata, check the device assignment and the driver inside the VM.
 
-For a `Pending` GPU pod, check the runtime and available devices. If a running pod fails on its first GPU operation, the table identifies which driver and device connection to examine.
+<span id="gpu-support-in-cloud-hypervisor"></span>
 
-## Follow one submission to one GPU
+??? note "How does the Kata CPU exercise differ?"
+    QEMU and Cloud Hypervisor both run virtual machines. The CPU lab compares both on a `c8i` node without a GPU. The Kata exercise with an NVIDIA GPU uses QEMU. [CPU lab](../handson/scenarios/c/index.md) / [Kata GPU support and experiment notes](../handson/common/02_runtimes/kata.md#clh-gpu)
 
-On `g5.xlarge`, gVisor checks GPU device requests and passes supported ones to the node's NVIDIA driver. Check that driver version against the versions `nvproxy` supports. With Kata and QEMU on `g4dn.metal`, a physical GPU is assigned to the guest VM. Its guest driver runs the computation. Check the device reported inside the VM and whether its first operation completes. The IOMMU restricts which memory addresses the device may access.
+??? note "Time per calculation and throughput across sandboxes"
+    Execution time tells you how long one submission’s calculation takes. **Throughput** counts how many evaluations a group of sandboxes completes per second. In the lab, gVisor on two A10Gs completed 0.198 evaluations/s, and Kata + QEMU on four T4s completed 0.349/s. The GPU models and number of sandboxes working at once differed. These numbers alone cannot rank the speed of a kernel or runtime. [Benchmark conditions and results](../handson/benchmarks/index.md#runtime-results)
 
-![A Kata guest identifying its T4 and completing a GPU operation](../images/terminal/kata-gpu-replay.png)
-
-In the EKS lab the gVisor pool processed 0.198 submissions/s on two A10Gs. The Kata QEMU pool processed 0.349/s on four T4s. Both received the same kernel, but the latter had twice as many slots for concurrent grading. To compare **code speed**, run the reference and candidate on the same GPU. To size a **pool**, read throughput alongside its ready pod count. [Conditions and original results](../handson/benchmarks/index.md#runtime-results)
-
-See [when the sandbox needs a GPU](../concepts/01_why_gpu_sandbox.md) for other GPU workloads and [isolation runtimes](../concepts/02_isolation_runtimes.md) for node requirements. [Chapter 04](04_rl_and_sandbox.md) shows how execution results become a training reward.
+The next chapter shows why two correct implementations can earn different training rewards. [04 Reinforcement learning and sandboxes](04_rl_and_sandbox.md)

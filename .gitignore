@@ -15,6 +15,11 @@ dist/
 # MkDocs output
 /site/
 
+# Local LinkedIn drafts
+/drafts/linkedin.ko.md
+/drafts/linkedin.en.md
+/drafts/linkedin.bilingual.md
+
 # Tool state
 .omc/state/
 .omc/sessions/
